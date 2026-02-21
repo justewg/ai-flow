@@ -11,6 +11,8 @@ const LAYOUTS = {
   ],
 };
 
+const NUMBER_ROW = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
+
 const state = {
   lang: "RU",
   text: "",
@@ -133,6 +135,11 @@ function appendSpacers(count) {
 
 function renderKeyboard() {
   keyboardEl.innerHTML = "";
+
+  for (const symbol of NUMBER_ROW) {
+    keyboardEl.appendChild(createLetterKey(symbol));
+  }
+  appendSpacers(fillRowToGridSize(NUMBER_ROW.length));
 
   for (const [rowIndex, row] of LAYOUTS[state.lang].entries()) {
     for (const symbol of row) {

@@ -140,7 +140,7 @@ body {
 .keyboard {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  grid-template-rows: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(5, minmax(0, 1fr));
   gap: clamp(3px, 0.5vw, 6px);
   height: 100%;
 }

@@ -1,25 +1,26 @@
-name: Notify Telegram on Main Merge
+name: Notify Telegram on Post-Merge Workflow Status
 
 on:
-  pull_request:
+  workflow_run:
     types:
-      - closed
-    branches:
-      - main
+      - completed
+    workflows:
+      - Deploy Main to Hosting
+      - Project Auto Close Tasks
 
 jobs:
   notify_telegram:
-    if: ${{ github.event.pull_request.merged == true }}
     runs-on: ubuntu-latest
     env:
       TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
       TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-      PR_TITLE: ${{ github.event.pull_request.title }}
-      PR_BODY: ${{ github.event.pull_request.body }}
-      PR_NUMBER: ${{ github.event.pull_request.number }}
-      PR_URL: ${{ github.event.pull_request.html_url }}
-      PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-      PR_MERGED_BY: ${{ github.event.pull_request.merged_by.login }}
+      WF_NAME: ${{ github.event.workflow_run.name }}
+      WF_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+      WF_URL: ${{ github.event.workflow_run.html_url }}
+      WF_EVENT: ${{ github.event.workflow_run.event }}
+      WF_BRANCH: ${{ github.event.workflow_run.head_branch }}
+      WF_SHA: ${{ github.event.workflow_run.head_sha }}
+      WF_ACTOR: ${{ github.event.workflow_run.actor.login }}
 
     steps:
       - name: Validate required secrets
@@ -27,27 +28,37 @@ jobs:
           : "${TG_BOT_TOKEN:?TG_BOT_TOKEN is required}"
           : "${TG_CHAT_ID:?TG_CHAT_ID is required}"
 
-      - name: Extract task IDs from PR title/body
+      - name: Extract linked PRs
         id: extract
         run: |
-          TASK_IDS="$(printf '%s\n%s\n' "${PR_TITLE}" "${PR_BODY}" | grep -Eo 'PL-[0-9]{3}' | sort -u | xargs || true)"
-          if [[ -z "${TASK_IDS}" ]]; then
-            TASK_IDS="none"
+          PR_NUMBERS="$(jq -r '.workflow_run.pull_requests[]?.number' "$GITHUB_EVENT_PATH" | xargs || true)"
+          if [[ -z "${PR_NUMBERS}" ]]; then
+            PR_NUMBERS="none"
           fi
-          echo "task_ids=${TASK_IDS}" >> "${GITHUB_OUTPUT}"
+          echo "pr_numbers=${PR_NUMBERS}" >> "${GITHUB_OUTPUT}"
+          echo "short_sha=${WF_SHA:0:8}" >> "${GITHUB_OUTPUT}"
 
       - name: Send Telegram push
         env:
-          TASK_IDS: ${{ steps.extract.outputs.task_ids }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PR_NUMBERS: ${{ steps.extract.outputs.pr_numbers }}
+          SHORT_SHA: ${{ steps.extract.outputs.short_sha }}
+          REPO: ${{ github.repository }}
         run: |
-          MESSAGE=$'PLANKA: merged PR in main\n'
-          MESSAGE+="PR #${PR_NUMBER}: ${PR_TITLE}"$'\n'
-          MESSAGE+="Tasks: ${TASK_IDS}"$'\n'
-          MESSAGE+="Author: @${PR_AUTHOR}"$'\n'
-          MESSAGE+="Merged by: @${PR_MERGED_BY}"$'\n'
-          MESSAGE+="PR: ${PR_URL}"$'\n'
-          MESSAGE+="Run: ${RUN_URL}"
+          STATUS_LINE="SUCCESS"
+          if [[ "${WF_CONCLUSION}" != "success" ]]; then
+            STATUS_LINE="FAIL: ${WF_CONCLUSION}"
+          fi
+
+          MESSAGE=$'PLANKA: post-merge workflow\n'
+          MESSAGE+="Workflow: ${WF_NAME}"$'\n'
+          MESSAGE+="Status: ${STATUS_LINE}"$'\n'
+          MESSAGE+="Repo: ${REPO}"$'\n'
+          MESSAGE+="Branch: ${WF_BRANCH}"$'\n'
+          MESSAGE+="SHA: ${SHORT_SHA}"$'\n'
+          MESSAGE+="Linked PRs: ${PR_NUMBERS}"$'\n'
+          MESSAGE+="Event: ${WF_EVENT}"$'\n'
+          MESSAGE+="Actor: @${WF_ACTOR}"$'\n'
+          MESSAGE+="Run: ${WF_URL}"
 
           payload="$(
             jq -n \

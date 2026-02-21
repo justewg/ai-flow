@@ -177,6 +177,10 @@ body {
   grid-column: span 1;
 }
 
+.key.enter {
+  grid-column: span 1;
+}
+
 .key.backspace {
   grid-column: span 4;
 }
@@ -194,6 +198,11 @@ body {
 .key.backspace .key-label {
   font-size: 1.25em;
   transform: translateY(0.02em);
+}
+
+.key.enter .key-label {
+  font-size: 1.22em;
+  transform: translateY(0.09em);
 }
 
 .portrait-warning {

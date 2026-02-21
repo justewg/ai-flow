@@ -124,19 +124,30 @@ function fillRowToGridSize(rowLength, totalColumns = 12) {
   return Math.max(0, totalColumns - rowLength);
 }
 
+function appendSpacers(count) {
+  for (let i = 0; i < count; i += 1) {
+    const spacer = document.createElement("div");
+    keyboardEl.appendChild(spacer);
+  }
+}
+
 function renderKeyboard() {
   keyboardEl.innerHTML = "";
 
-  for (const row of LAYOUTS[state.lang]) {
+  for (const [rowIndex, row] of LAYOUTS[state.lang].entries()) {
     for (const symbol of row) {
       keyboardEl.appendChild(createLetterKey(symbol));
     }
 
-    const spacerCount = fillRowToGridSize(row.length);
-    for (let i = 0; i < spacerCount; i += 1) {
-      const spacer = document.createElement("div");
-      keyboardEl.appendChild(spacer);
+    if (rowIndex === 2) {
+      appendSpacers(fillRowToGridSize(row.length + 1));
+      keyboardEl.appendChild(
+        createControlKey("↵", "enter", () => appendText("\n"), "Новая строка"),
+      );
+      continue;
     }
+
+    appendSpacers(fillRowToGridSize(row.length));
   }
 
   keyboardEl.appendChild(
@@ -235,6 +246,12 @@ document.addEventListener("keydown", (event) => {
   if (event.key === " ") {
     event.preventDefault();
     appendText(" ");
+    return;
+  }
+
+  if (event.key === "Enter") {
+    event.preventDefault();
+    appendText("\n");
   }
 });
 

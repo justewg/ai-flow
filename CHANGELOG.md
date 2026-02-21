@@ -26,3 +26,4 @@
 - `[PL-017]` Включен автодеплой `main` на hosting по `GitHub Actions + rsync/ssh`, добавлен manual fallback-скрипт и инструкция настройки секретов.
 - `[PL-018]` Добавлен верхний цифровой ряд `1..0` над буквенными кнопками в клавиатуре прототипа.
 - `[PL-019]` Добавлен workflow автозакрытия задач по merged PR: `PL-xxx` из title/body автоматически переводятся в `Done` в GitHub Project (`Status` и `Flow`).
+- `[PL-019]` Устранена нестабильность `unknown owner type` в Actions: перевод карточек в `Done` переведен на GraphQL (`updateProjectV2ItemFieldValue`) с fail-fast поведением workflow.

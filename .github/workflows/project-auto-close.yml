@@ -43,10 +43,15 @@ jobs:
       - name: Update project statuses to Done
         if: ${{ steps.extract.outputs.has_tasks == 'true' }}
         run: |
-          printf '%s\n' "${{ steps.extract.outputs.task_ids }}" | while IFS= read -r task_id; do
+          failed=0
+          while IFS= read -r task_id; do
             [[ -z "${task_id}" ]] && continue
             echo "Updating ${task_id} -> Done"
             if ! scripts/codex/project_set_status.sh "${task_id}" "Done" "Done"; then
-              echo "::warning::Failed to update ${task_id} in project"
+              echo "::error::Failed to update ${task_id} in project"
+              failed=1
             fi
-          done
+          done <<'EOF'
+          ${{ steps.extract.outputs.task_ids }}
+          EOF
+          exit "${failed}"

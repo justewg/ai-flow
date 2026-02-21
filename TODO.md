@@ -17,7 +17,7 @@
 
 | ID | Задача | Scope | Приоритет | Статус | Критерий готовности |
 | --- | --- | --- | --- | --- | --- |
-| PL-001 | Подготовить презентацию проекта/продукта для ABA-куратора (первый артефакт продукта) | MVP | P0 | Done | Подготовлен артефакт `docs/aba-curator-presentation-v1.md` с миссией, сценарием, ограничениями и блоком обратной связи |
+| PL-001 | Подготовить презентацию проекта/продукта для ABA-куратора (первый артефакт продукта) | MVP | P0 | Done | Подготовлены артефакты: `docs/aba-curator-presentation-v1.md` и графичная v2 в `presentations/aba-v2/` (web-deck + mermaid для PDF) |
 | PL-013 | Настроить GitHub Project dashboard и импортировать backlog задач с полями workflow | MVP | P0 | Done | Создан проект, добавлены поля (`Task ID`, `Priority`, `Scope`, `Flow`) и импортированы задачи `PL-001..PL-012` |
 | PL-002 | Зафиксировать архитектурный выбор прототипа (`Native Android` vs `WebView + native shell`) через короткий spike | MVP | P0 | Done | Зафиксировано решение в `docs/pl-002-architecture-spike.md`, критерии в `docs/pl-002-validation-matrix.md`, выбран путь `WebView + Native Shell` с fallback в `Native Android` |
 | PL-003 | Реализовать базовый экран 50/50 (верх: текст, низ: клавиатура), landscape-lock | MVP | P0 | In Progress | На запуске всегда открыт один и тот же экран, ориентация фиксирована |

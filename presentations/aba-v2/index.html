@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>PLANKA — Презентация для ABA-куратора (v2)</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="deck" id="deck">
+      <section class="slide hero is-active" data-title="Миссия">
+        <p class="kicker">PLANKA / Коммуникационное устройство</p>
+        <h1>Надежный цифровой голос для Андрюши</h1>
+        <p class="lead">
+          Не приложение на планшете. Отдельный инструмент, где главная ценность — предсказуемость и устойчивость.
+        </p>
+      </section>
+
+      <section class="slide" data-title="Кому и зачем">
+        <h2>Контекст пользователя</h2>
+        <div class="grid two">
+          <article class="card">
+            <h3>Андрюша, 12 лет</h3>
+            <ul>
+              <li>неговорящий, РАС</li>
+              <li>знает буквы и формы слов</li>
+              <li>высокая визуальная память</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Задача продукта</h3>
+            <ul>
+              <li>снизить фрустрацию в коммуникации</li>
+              <li>ускорить путь от намерения к фразе</li>
+              <li>дать стабильный сценарий "всегда готов"</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="slide" data-title="Преемственность">
+        <h2>Мы не ломаем привычный способ общения</h2>
+        <div class="timeline">
+          <div class="node">Бумага</div>
+          <div class="arrow">→</div>
+          <div class="node">Магнитные буквы</div>
+          <div class="arrow">→</div>
+          <div class="node active">Цифровой ввод (PLANKA)</div>
+        </div>
+        <p class="note">PLANKA оцифровывает уже освоенную практику, а не навязывает новую.</p>
+      </section>
+
+      <section class="slide" data-title="Принципы">
+        <h2>Принципы, которые нельзя нарушать</h2>
+        <div class="grid three">
+          <article class="pill">Предсказуемость</article>
+          <article class="pill">Нулевая случайность</article>
+          <article class="pill">Без скрытых жестов</article>
+          <article class="pill">Без автокоррекции</article>
+          <article class="pill">Kiosk-защита</article>
+          <article class="pill">Надежность > фичи</article>
+        </div>
+      </section>
+
+      <section class="slide" data-title="Сценарий MVP">
+        <h2>Ключевой сценарий использования</h2>
+        <ol class="flow">
+          <li>Устройство включается и сразу открывает PLANKA.</li>
+          <li>Экран 50/50: верх — текст, низ — клавиатура.</li>
+          <li>Андрюша печатает и показывает текст.</li>
+          <li>При необходимости нажимает "Сказать".</li>
+        </ol>
+      </section>
+
+      <section class="slide" data-title="Что уже готово">
+        <h2>Текущий прогресс</h2>
+        <div class="grid two">
+          <article class="card success">
+            <h3>Сделано</h3>
+            <ul>
+              <li>PL-001: продуктовая презентационная база</li>
+              <li>PL-002: архитектурное решение + gate-критерии</li>
+              <li>PL-003: рабочий прототип экрана 50/50</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Режим разработки</h3>
+            <ul>
+              <li>roadmap + changelog + board синхронизированы</li>
+              <li>контролируемый flow development → main</li>
+              <li>каждый шаг фиксируется артефактом</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="slide" data-title="Роль ABA">
+        <h2>Почему нужен ABA-куратор прямо сейчас</h2>
+        <div class="grid two">
+          <article class="card">
+            <h3>Экспертная оценка</h3>
+            <ul>
+              <li>когнитивная нагрузка интерфейса</li>
+              <li>триггеры фрустрации</li>
+              <li>порог сложности для самостоятельного старта</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Результат встречи</h3>
+            <ul>
+              <li>что оставляем в MVP</li>
+              <li>что переносим в V1+</li>
+              <li>как измеряем успех пилота</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="slide" data-title="Риски и защита">
+        <h2>Главные риски и как мы их закрываем</h2>
+        <table class="risk-table">
+          <thead>
+            <tr>
+              <th>Риск</th>
+              <th>Контроль</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Случайный выход из режима</td>
+              <td>kiosk-ограничения + gate-проверки</td>
+            </tr>
+            <tr>
+              <td>Потеря текста после сбоя</td>
+              <td>автосохранение и восстановление состояния</td>
+            </tr>
+            <tr>
+              <td>Непредсказуемость интерфейса</td>
+              <td>фиксированная раскладка, минимум магии</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="slide" data-title="Пилот">
+        <h2>План пилота на 3 этапа</h2>
+        <div class="timeline vertical">
+          <div class="node">Этап 1: MVP-прототип и gate-проверки</div>
+          <div class="node">Этап 2: домашнее использование в реальных сценариях</div>
+          <div class="node">Этап 3: корректировки по обратной связи ABA-куратора</div>
+        </div>
+      </section>
+
+      <section class="slide final" data-title="Решение">
+        <h2>Что нужно от куратора сейчас</h2>
+        <ul class="checklist">
+          <li>Подтвердить корректность MVP-сценария для Андрюши.</li>
+          <li>Дать список критичных правок до выхода на устройство.</li>
+          <li>Согласовать метрики первых 2–4 недель пилота.</li>
+        </ul>
+        <p class="lead">Цель общая: сделать коммуникацию устойчивой, самостоятельной и без срывов.</p>
+      </section>
+    </main>
+
+    <footer class="controls">
+      <button id="prev-btn" type="button">← Назад</button>
+      <div id="meta" class="meta">1 / 10</div>
+      <button id="next-btn" type="button">Вперед →</button>
+    </footer>
+
+    <script src="./slides.js"></script>
+  </body>
+</html>
+

@@ -16,5 +16,6 @@
 - `[PL-002]` Зафиксирован архитектурный выбор для MVP: `WebView + Native Shell` с обязательным fallback в `Native Android` по gate-критериям.
 - `[PL-002]` Добавлена матрица валидации и протокол прогонов: `docs/pl-002-validation-matrix.md`.
 - `[PL-001]` Добавлена графичная презентация v2: `presentations/aba-v2/index.html` + `presentations/aba-v2/mermaid/*.mmd`.
+- `[PL-015]` В prototype/web заменен текстовый portrait-fallback на визуальную мнемонику поворота (иконка), без текстовых предупреждений.
 - `[PL-003]` Усилен web-прототип 50/50: добавлены shell-бар, стабильный split-layout и fallback-экран для portrait.
 - `[PL-003]` Добавлены попытка фиксации landscape, сохранение/восстановление состояния (`localStorage`) и обновленная документация `prototype/web/README.md`.

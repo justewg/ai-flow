@@ -20,6 +20,7 @@ const state = {
 };
 
 const STORAGE_KEY = "planka-prototype-state-v1";
+let orientationLockState = "pending";
 
 const displayTextEl = document.getElementById("display-text");
 const keyboardEl = document.getElementById("keyboard");
@@ -183,24 +184,33 @@ function toggleTheme() {
 function applyOrientationClass() {
   const isLandscape = window.matchMedia("(orientation: landscape)").matches;
   document.body.classList.toggle("is-portrait", !isLandscape);
+  updateOrientationHint();
 }
 
 function setOrientationStateLabel(label) {
   orientationStateEl.textContent = label;
 }
 
-async function tryLockLandscape() {
-  applyOrientationClass();
+function updateOrientationHint() {
+  const isPortrait = window.matchMedia("(orientation: portrait)").matches;
+  const needHint = isPortrait && orientationLockState !== "active";
+  document.body.classList.toggle("needs-orientation-hint", needHint);
+}
 
+async function tryLockLandscape() {
   if (!window.screen.orientation || !window.screen.orientation.lock) {
+    orientationLockState = "not-supported";
     setOrientationStateLabel("landscape lock: not supported");
+    applyOrientationClass();
     return;
   }
 
   try {
     await window.screen.orientation.lock("landscape");
+    orientationLockState = "active";
     setOrientationStateLabel("landscape lock: active");
   } catch {
+    orientationLockState = "blocked";
     setOrientationStateLabel("landscape lock: blocked");
   } finally {
     applyOrientationClass();

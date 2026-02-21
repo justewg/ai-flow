@@ -8,8 +8,11 @@
   </head>
   <body>
     <div id="orientation-warning" class="portrait-warning" role="status" aria-live="polite">
-      <p>Поверни устройство в ландшафтную ориентацию.</p>
-      <button id="retry-orientation-btn" type="button">Повторить фиксацию</button>
+      <div class="rotate-glyph" aria-hidden="true">↻</div>
+      <button id="retry-orientation-btn" class="rotate-btn" type="button" aria-label="Повторить фиксацию ориентации">
+        <span aria-hidden="true">⟳</span>
+        <span class="sr-only">Повторить фиксацию ориентации</span>
+      </button>
     </div>
 
     <main class="app">

@@ -15,7 +15,12 @@
     <main class="app">
       <header class="shell-bar">
         <strong class="brand">PLANKA Prototype</strong>
-        <span id="orientation-state" class="state-pill">landscape lock: pending</span>
+        <div class="shell-controls">
+          <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Переключить тему">
+            <span id="theme-icon" aria-hidden="true">☾</span>
+          </button>
+          <span id="orientation-state" class="state-pill">landscape lock: pending</span>
+        </div>
       </header>
 
       <div class="split-layout">

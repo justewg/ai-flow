@@ -14,6 +14,7 @@ const LAYOUTS = {
 const state = {
   lang: "RU",
   text: "",
+  theme: "light",
   clearArmed: false,
   clearTimerId: null,
 };
@@ -26,6 +27,8 @@ const langToggleEl = document.getElementById("lang-toggle");
 const clearButtonEl = document.getElementById("clear-btn");
 const orientationStateEl = document.getElementById("orientation-state");
 const retryOrientationBtn = document.getElementById("retry-orientation-btn");
+const themeToggleEl = document.getElementById("theme-toggle");
+const themeIconEl = document.getElementById("theme-icon");
 
 function renderDisplay() {
   displayTextEl.textContent = state.text;
@@ -136,6 +139,7 @@ function persistState() {
   const snapshot = {
     text: state.text,
     lang: state.lang,
+    theme: state.theme,
   };
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
 }
@@ -154,10 +158,26 @@ function restoreState() {
     if (saved.lang === "RU" || saved.lang === "EN") {
       state.lang = saved.lang;
     }
+    if (saved.theme === "light" || saved.theme === "dark") {
+      state.theme = saved.theme;
+    }
   } catch {
     state.text = "";
     state.lang = "RU";
+    state.theme = "light";
   }
+}
+
+function renderTheme() {
+  const isDark = state.theme === "dark";
+  document.body.classList.toggle("theme-dark", isDark);
+  themeIconEl.textContent = isDark ? "☀" : "☾";
+}
+
+function toggleTheme() {
+  state.theme = state.theme === "dark" ? "light" : "dark";
+  renderTheme();
+  persistState();
 }
 
 function applyOrientationClass() {
@@ -192,6 +212,7 @@ clearButtonEl.addEventListener("click", handleClear);
 retryOrientationBtn.addEventListener("click", () => {
   tryLockLandscape();
 });
+themeToggleEl.addEventListener("click", toggleTheme);
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Backspace") {
@@ -210,6 +231,7 @@ window.addEventListener("resize", applyOrientationClass);
 window.addEventListener("orientationchange", applyOrientationClass);
 
 restoreState();
+renderTheme();
 langToggleEl.textContent = state.lang;
 renderDisplay();
 renderKeyboard();

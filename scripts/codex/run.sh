@@ -12,11 +12,17 @@ Usage: scripts/codex/run.sh <command>
 
 Commands:
   help
+  clear
+  write
+  append
+  copy
+  sync_branches
   pr_list_open
   pr_view
   pr_create
   pr_edit
   commit_push
+  project_add_task
   project_set_status
 
 Fixed input files in .tmp/codex:
@@ -28,6 +34,12 @@ Fixed input files in .tmp/codex:
   project_task_id.txt
   project_status.txt
   project_flow.txt (optional; defaults to project_status.txt)
+  project_new_task_id.txt
+  project_new_title.txt
+  project_new_scope.txt
+  project_new_priority.txt
+  project_new_status.txt (optional; defaults to Todo)
+  project_new_flow.txt (optional; defaults to Backlog)
 EOF
 }
 
@@ -46,11 +58,82 @@ read_required_file() {
   printf '%s' "$content"
 }
 
+key_to_file() {
+  local key="$1"
+  case "$key" in
+    pr_number) echo "${CODEX_DIR}/pr_number.txt" ;;
+    pr_title) echo "${CODEX_DIR}/pr_title.txt" ;;
+    pr_body) echo "${CODEX_DIR}/pr_body.txt" ;;
+    commit_message) echo "${CODEX_DIR}/commit_message.txt" ;;
+    stage_paths) echo "${CODEX_DIR}/stage_paths.txt" ;;
+    project_task_id) echo "${CODEX_DIR}/project_task_id.txt" ;;
+    project_status) echo "${CODEX_DIR}/project_status.txt" ;;
+    project_flow) echo "${CODEX_DIR}/project_flow.txt" ;;
+    project_new_task_id) echo "${CODEX_DIR}/project_new_task_id.txt" ;;
+    project_new_title) echo "${CODEX_DIR}/project_new_title.txt" ;;
+    project_new_scope) echo "${CODEX_DIR}/project_new_scope.txt" ;;
+    project_new_priority) echo "${CODEX_DIR}/project_new_priority.txt" ;;
+    project_new_status) echo "${CODEX_DIR}/project_new_status.txt" ;;
+    project_new_flow) echo "${CODEX_DIR}/project_new_flow.txt" ;;
+    *)
+      echo "Unknown key: $key"
+      exit 1
+      ;;
+  esac
+}
+
 cmd="${1:-help}"
 
 case "$cmd" in
   help)
     usage
+    ;;
+
+  clear)
+    if [[ $# -ne 2 ]]; then
+      echo "Usage: scripts/codex/run.sh clear <key>"
+      exit 1
+    fi
+    file_path="$(key_to_file "$2")"
+    : > "$file_path"
+    ;;
+
+  write)
+    if [[ $# -lt 3 ]]; then
+      echo "Usage: scripts/codex/run.sh write <key> <value...>"
+      exit 1
+    fi
+    file_path="$(key_to_file "$2")"
+    shift 2
+    printf '%s\n' "$*" > "$file_path"
+    ;;
+
+  append)
+    if [[ $# -lt 3 ]]; then
+      echo "Usage: scripts/codex/run.sh append <key> <value...>"
+      exit 1
+    fi
+    file_path="$(key_to_file "$2")"
+    shift 2
+    printf '%s\n' "$*" >> "$file_path"
+    ;;
+
+  copy)
+    if [[ $# -ne 3 ]]; then
+      echo "Usage: scripts/codex/run.sh copy <key> <source-file>"
+      exit 1
+    fi
+    file_path="$(key_to_file "$2")"
+    source_file="$3"
+    if [[ ! -f "$source_file" ]]; then
+      echo "Source file not found: $source_file"
+      exit 1
+    fi
+    cp "$source_file" "$file_path"
+    ;;
+
+  sync_branches)
+    "${ROOT_DIR}/scripts/codex/sync_branches.sh"
     ;;
 
   pr_list_open)
@@ -88,6 +171,23 @@ case "$cmd" in
       exit 1
     fi
     "${ROOT_DIR}/scripts/codex/dev_commit_push.sh" "$commit_message" "${stage_paths[@]}"
+    ;;
+
+  project_add_task)
+    new_task_id="$(read_required_file "${CODEX_DIR}/project_new_task_id.txt")"
+    new_scope="$(read_required_file "${CODEX_DIR}/project_new_scope.txt")"
+    new_priority="$(read_required_file "${CODEX_DIR}/project_new_priority.txt")"
+    new_status="Todo"
+    new_flow="Backlog"
+    [[ -f "${CODEX_DIR}/project_new_status.txt" ]] && new_status="$(read_required_file "${CODEX_DIR}/project_new_status.txt")"
+    [[ -f "${CODEX_DIR}/project_new_flow.txt" ]] && new_flow="$(read_required_file "${CODEX_DIR}/project_new_flow.txt")"
+    "${ROOT_DIR}/scripts/codex/project_add_task.sh" \
+      "$new_task_id" \
+      "${CODEX_DIR}/project_new_title.txt" \
+      "$new_scope" \
+      "$new_priority" \
+      "$new_status" \
+      "$new_flow"
     ;;
 
   project_set_status)

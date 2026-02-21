@@ -1,0 +1,284 @@
+:root {
+  --bg: #ece8df;
+  --ink: #181612;
+  --muted: #595347;
+  --panel: #fffdf8;
+  --line: #c8bfad;
+  --accent: #1e6f50;
+  --accent-soft: #d8efe5;
+  --danger-soft: #f5e3df;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: radial-gradient(circle at 15% 15%, #f5efe3 0%, var(--bg) 50%, #ded8cb 100%);
+  color: var(--ink);
+  font-family: "Avenir Next", "Trebuchet MS", sans-serif;
+}
+
+.deck {
+  position: relative;
+  min-height: calc(100vh - 64px);
+  padding: 32px;
+}
+
+.slide {
+  display: none;
+  max-width: 1100px;
+  min-height: calc(100vh - 140px);
+  margin: 0 auto;
+  border: 2px solid var(--line);
+  background: var(--panel);
+  border-radius: 22px;
+  padding: 36px;
+  box-shadow: 0 24px 50px rgba(24, 22, 18, 0.08);
+}
+
+.slide.is-active {
+  display: block;
+}
+
+.kicker {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+
+h1 {
+  margin: 0 0 16px;
+  font-size: clamp(36px, 4vw, 66px);
+  line-height: 1.05;
+}
+
+h2 {
+  margin: 0 0 18px;
+  font-size: clamp(30px, 3vw, 48px);
+}
+
+h3 {
+  margin: 0 0 10px;
+  font-size: 24px;
+}
+
+.lead {
+  margin: 0;
+  max-width: 900px;
+  color: #2f2b23;
+  font-size: clamp(20px, 2.1vw, 30px);
+  line-height: 1.35;
+}
+
+.hero {
+  background:
+    linear-gradient(135deg, #fffdf8 0%, #f7f3ea 50%, #ece4d3 100%);
+}
+
+.grid {
+  display: grid;
+  gap: 16px;
+}
+
+.grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.card {
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  padding: 16px 18px;
+  background: #fff;
+}
+
+.card.success {
+  background: var(--accent-soft);
+  border-color: #8fcfb2;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+li {
+  margin-bottom: 8px;
+  font-size: 20px;
+  line-height: 1.35;
+}
+
+.pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 110px;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  text-align: center;
+  font-size: 24px;
+  font-weight: 700;
+  padding: 8px;
+}
+
+.timeline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.timeline .node {
+  border: 2px solid var(--line);
+  background: #fff;
+  border-radius: 14px;
+  padding: 16px;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.timeline .node.active {
+  background: var(--accent-soft);
+  border-color: #8fcfb2;
+}
+
+.timeline .arrow {
+  font-size: 32px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.timeline.vertical {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.note {
+  margin-top: 20px;
+  color: var(--muted);
+  font-size: 24px;
+}
+
+.flow li {
+  margin-bottom: 12px;
+}
+
+.risk-table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 14px;
+}
+
+.risk-table th,
+.risk-table td {
+  border: 2px solid var(--line);
+  padding: 12px 14px;
+  font-size: 20px;
+}
+
+.risk-table th {
+  text-align: left;
+  background: #f8f2e4;
+}
+
+.final {
+  background: linear-gradient(160deg, #fffdf8 0%, #f7f1e3 100%);
+}
+
+.checklist {
+  list-style: "✓ ";
+  padding-left: 26px;
+}
+
+.controls {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 10px 16px;
+  border-top: 2px solid var(--line);
+  background: rgba(236, 232, 223, 0.95);
+  backdrop-filter: blur(4px);
+}
+
+.controls button {
+  border: 2px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.controls button:active {
+  transform: translateY(1px);
+}
+
+.meta {
+  min-width: 96px;
+  text-align: center;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 16px;
+}
+
+@media (max-width: 900px) {
+  .deck {
+    padding: 14px;
+  }
+
+  .slide {
+    min-height: calc(100vh - 120px);
+    padding: 18px;
+  }
+
+  .grid.two,
+  .grid.three {
+    grid-template-columns: 1fr;
+  }
+
+  li,
+  .risk-table th,
+  .risk-table td {
+    font-size: 18px;
+  }
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .slide {
+    display: block;
+    min-height: auto;
+    box-shadow: none;
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .slide:last-child {
+    page-break-after: auto;
+  }
+
+  .controls {
+    display: none;
+  }
+}
+

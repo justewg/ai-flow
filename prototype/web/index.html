@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>PLANKA Prototype - PL-003</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="orientation-warning" class="portrait-warning" role="status" aria-live="polite">
+      <p>Поверни устройство в ландшафтную ориентацию.</p>
+      <button id="retry-orientation-btn" type="button">Повторить фиксацию</button>
+    </div>
+
+    <main class="app">
+      <header class="shell-bar">
+        <strong class="brand">PLANKA Prototype</strong>
+        <span id="orientation-state" class="state-pill">landscape lock: pending</span>
+      </header>
+
+      <div class="split-layout">
+        <section class="display-zone">
+          <header class="display-toolbar">
+            <button id="lang-toggle" class="toolbar-btn" type="button">RU</button>
+            <button id="clear-btn" class="toolbar-btn danger" type="button">Очистить</button>
+          </header>
+          <div id="display-text" class="display-text" aria-live="polite"></div>
+        </section>
+
+        <section class="keyboard-zone">
+          <div id="keyboard" class="keyboard"></div>
+        </section>
+      </div>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

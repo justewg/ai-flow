@@ -13,18 +13,20 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      DEPLOY_POST_COMMAND: ${{ secrets.DEPLOY_POST_COMMAND }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Validate required secrets
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
           : "${DEPLOY_HOST:?DEPLOY_HOST is required}"
           : "${DEPLOY_PORT:?DEPLOY_PORT is required}"
@@ -33,11 +35,6 @@ jobs:
           : "${DEPLOY_SSH_KEY:?DEPLOY_SSH_KEY is required}"
 
       - name: Prepare SSH
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
@@ -51,11 +48,6 @@ jobs:
           chmod 644 ~/.ssh/known_hosts
 
       - name: Deploy snapshot via rsync
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH'"
           rsync -az --delete \
@@ -69,13 +61,7 @@ jobs:
             ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
 
       - name: Optional post-deploy command
-        if: ${{ secrets.DEPLOY_POST_COMMAND != '' }}
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-          DEPLOY_POST_COMMAND: ${{ secrets.DEPLOY_POST_COMMAND }}
+        if: ${{ env.DEPLOY_POST_COMMAND != '' }}
         run: |
           ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
             "cd '$DEPLOY_PATH' && $DEPLOY_POST_COMMAND"

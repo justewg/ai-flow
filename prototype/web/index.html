@@ -10,8 +10,27 @@
     <div id="orientation-warning" class="portrait-warning" role="status" aria-live="polite">
       <div class="rotate-glyph" aria-hidden="true">
         <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
-          <path d="M95 60a35 35 0 1 1-31-34" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round"/>
-          <path d="M74 10h20v20" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+          <defs>
+            <marker
+              id="rotate-arrow-head"
+              markerWidth="6"
+              markerHeight="6"
+              refX="3"
+              refY="3"
+              orient="auto"
+              markerUnits="strokeWidth"
+            >
+              <path d="M0 0L0 6L6 3Z" fill="currentColor" />
+            </marker>
+          </defs>
+          <path
+            d="M90 60a30 30 0 1 1-24-29"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="10"
+            stroke-linecap="round"
+            marker-end="url(#rotate-arrow-head)"
+          />
         </svg>
       </div>
     </div>

@@ -105,7 +105,8 @@ case "$cmd" in
     fi
     file_path="$(key_to_file "$2")"
     shift 2
-    printf '%s\n' "$*" > "$file_path"
+    # Interpret escaped sequences (for example: \n -> newline) for PR bodies.
+    printf '%b\n' "$*" > "$file_path"
     ;;
 
   append)
@@ -115,7 +116,8 @@ case "$cmd" in
     fi
     file_path="$(key_to_file "$2")"
     shift 2
-    printf '%s\n' "$*" >> "$file_path"
+    # Interpret escaped sequences (for example: \n -> newline) for multiline payloads.
+    printf '%b\n' "$*" >> "$file_path"
     ;;
 
   copy)

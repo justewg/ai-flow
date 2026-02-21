@@ -1,0 +1,52 @@
+name: Project Auto Close Tasks
+
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+
+jobs:
+  close_project_tasks:
+    if: ${{ github.event.pull_request.merged == true }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.PROJECT_AUTOMATION_TOKEN }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      PR_BODY: ${{ github.event.pull_request.body }}
+
+    steps:
+      - name: Validate token
+        run: |
+          : "${GH_TOKEN:?PROJECT_AUTOMATION_TOKEN is required}"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract task ids from PR title/body
+        id: extract
+        run: |
+          TASK_IDS="$(printf '%s\n%s\n' "${PR_TITLE}" "${PR_BODY}" | grep -Eo 'PL-[0-9]{3}' | sort -u || true)"
+          if [[ -z "${TASK_IDS}" ]]; then
+            echo "has_tasks=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          {
+            echo "has_tasks=true"
+            echo "task_ids<<EOF"
+            printf '%s\n' "${TASK_IDS}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Update project statuses to Done
+        if: ${{ steps.extract.outputs.has_tasks == 'true' }}
+        run: |
+          printf '%s\n' "${{ steps.extract.outputs.task_ids }}" | while IFS= read -r task_id; do
+            [[ -z "${task_id}" ]] && continue
+            echo "Updating ${task_id} -> Done"
+            if ! scripts/codex/project_set_status.sh "${task_id}" "Done" "Done"; then
+              echo "::warning::Failed to update ${task_id} in project"
+            fi
+          done

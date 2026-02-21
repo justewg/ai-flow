@@ -42,6 +42,10 @@
 - `project_task_id`, `project_status`, `project_flow`
 - `project_new_task_id`, `project_new_title`, `project_new_scope`, `project_new_priority`, `project_new_status`, `project_new_flow`
 
+Поведение `write`/`append`:
+- Поддерживаются escape-последовательности, например `\n` для многострочного текста.
+- Если нужен буквальный `\n`, передавайте `\\n`.
+
 ## Рекомендация по снижению confirm-окон
 - Не использовать `&&`, `;`, heredoc и цепочки команд для подготовки данных.
 - Делать отдельные вызовы `scripts/codex/run.sh write/append/clear`.

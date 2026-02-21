@@ -1,0 +1,157 @@
+:root {
+  --bg: #f4f1e9;
+  --panel: #fffdf8;
+  --line: #d7d0c3;
+  --text: #1f1d1a;
+  --muted: #625b4f;
+  --key: #f7f3ea;
+  --key-active: #e6dcc7;
+  --danger: #9b2c2c;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.display-zone,
+.keyboard-zone {
+  flex: 1;
+  min-height: 0;
+}
+
+.display-zone {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  border-bottom: 2px solid var(--line);
+  background: var(--panel);
+}
+
+.display-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.toolbar-btn {
+  border: 2px solid var(--line);
+  background: var(--key);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.toolbar-btn:active {
+  background: var(--key-active);
+}
+
+.toolbar-btn.danger {
+  color: var(--danger);
+}
+
+.display-text {
+  flex: 1;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  overflow: auto;
+  font-size: clamp(28px, 4.2vw, 56px);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  white-space: pre-wrap;
+}
+
+.display-text.empty::before {
+  content: "Текст появится здесь";
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.keyboard-zone {
+  padding: 10px;
+}
+
+.keyboard {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 8px;
+  height: 100%;
+}
+
+.key {
+  border: 2px solid var(--line);
+  background: var(--key);
+  color: var(--text);
+  border-radius: 10px;
+  font-size: clamp(18px, 2.2vw, 28px);
+  font-weight: 700;
+  min-height: 0;
+  user-select: none;
+}
+
+.key:active {
+  background: var(--key-active);
+}
+
+.key.letter {
+  grid-column: span 1;
+}
+
+.key.backspace {
+  grid-column: span 3;
+}
+
+.key.space {
+  grid-column: span 6;
+}
+
+.key.lang {
+  grid-column: span 3;
+}
+
+.portrait-warning {
+  display: none;
+}
+
+@media (orientation: portrait) {
+  .portrait-warning {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    inset: 0;
+    padding: 24px;
+    background: #111;
+    color: #fff;
+    font-size: 28px;
+    font-weight: 700;
+    text-align: center;
+    z-index: 1000;
+  }
+
+  .app {
+    visibility: hidden;
+  }
+}
+

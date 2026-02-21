@@ -18,10 +18,14 @@ const state = {
   clearTimerId: null,
 };
 
+const STORAGE_KEY = "planka-prototype-state-v1";
+
 const displayTextEl = document.getElementById("display-text");
 const keyboardEl = document.getElementById("keyboard");
 const langToggleEl = document.getElementById("lang-toggle");
 const clearButtonEl = document.getElementById("clear-btn");
+const orientationStateEl = document.getElementById("orientation-state");
+const retryOrientationBtn = document.getElementById("retry-orientation-btn");
 
 function renderDisplay() {
   displayTextEl.textContent = state.text;
@@ -47,6 +51,7 @@ function appendText(symbol) {
   state.text += symbol;
   renderDisplay();
   disarmClear();
+  persistState();
 }
 
 function backspace() {
@@ -56,6 +61,7 @@ function backspace() {
   state.text = state.text.slice(0, -1);
   renderDisplay();
   disarmClear();
+  persistState();
 }
 
 function handleClear() {
@@ -67,6 +73,7 @@ function handleClear() {
   state.text = "";
   renderDisplay();
   disarmClear();
+  persistState();
 }
 
 function switchLanguage() {
@@ -74,6 +81,7 @@ function switchLanguage() {
   langToggleEl.textContent = state.lang;
   renderKeyboard();
   disarmClear();
+  persistState();
 }
 
 function createLetterKey(symbol) {
@@ -124,8 +132,66 @@ function renderKeyboard() {
   );
 }
 
+function persistState() {
+  const snapshot = {
+    text: state.text,
+    lang: state.lang,
+  };
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+}
+
+function restoreState() {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return;
+    }
+
+    const saved = JSON.parse(raw);
+    if (typeof saved.text === "string") {
+      state.text = saved.text;
+    }
+    if (saved.lang === "RU" || saved.lang === "EN") {
+      state.lang = saved.lang;
+    }
+  } catch {
+    state.text = "";
+    state.lang = "RU";
+  }
+}
+
+function applyOrientationClass() {
+  const isLandscape = window.matchMedia("(orientation: landscape)").matches;
+  document.body.classList.toggle("is-portrait", !isLandscape);
+}
+
+function setOrientationStateLabel(label) {
+  orientationStateEl.textContent = label;
+}
+
+async function tryLockLandscape() {
+  applyOrientationClass();
+
+  if (!window.screen.orientation || !window.screen.orientation.lock) {
+    setOrientationStateLabel("landscape lock: not supported");
+    return;
+  }
+
+  try {
+    await window.screen.orientation.lock("landscape");
+    setOrientationStateLabel("landscape lock: active");
+  } catch {
+    setOrientationStateLabel("landscape lock: blocked");
+  } finally {
+    applyOrientationClass();
+  }
+}
+
 langToggleEl.addEventListener("click", switchLanguage);
 clearButtonEl.addEventListener("click", handleClear);
+retryOrientationBtn.addEventListener("click", () => {
+  tryLockLandscape();
+});
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Backspace") {
@@ -140,6 +206,11 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+window.addEventListener("resize", applyOrientationClass);
+window.addEventListener("orientationchange", applyOrientationClass);
+
+restoreState();
+langToggleEl.textContent = state.lang;
 renderDisplay();
 renderKeyboard();
-
+tryLockLandscape();

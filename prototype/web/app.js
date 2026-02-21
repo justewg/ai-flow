@@ -29,6 +29,14 @@ const clearButtonEl = document.getElementById("clear-btn");
 const themeToggleEl = document.getElementById("theme-toggle");
 const themeIconEl = document.getElementById("theme-icon");
 
+function renderClearButtonState() {
+  clearButtonEl.classList.toggle("is-armed", state.clearArmed);
+  clearButtonEl.setAttribute(
+    "aria-label",
+    state.clearArmed ? "Подтвердить очистку" : "Очистить текст",
+  );
+}
+
 function renderDisplay() {
   displayTextEl.textContent = state.text;
   displayTextEl.classList.toggle("empty", state.text.length === 0);
@@ -36,7 +44,7 @@ function renderDisplay() {
 
 function disarmClear() {
   state.clearArmed = false;
-  clearButtonEl.textContent = "Очистить";
+  renderClearButtonState();
   if (state.clearTimerId) {
     window.clearTimeout(state.clearTimerId);
     state.clearTimerId = null;
@@ -45,7 +53,7 @@ function disarmClear() {
 
 function armClear() {
   state.clearArmed = true;
-  clearButtonEl.textContent = "Подтвердить";
+  renderClearButtonState();
   state.clearTimerId = window.setTimeout(disarmClear, 1800);
 }
 
@@ -230,6 +238,7 @@ window.addEventListener("orientationchange", applyOrientationClass);
 
 restoreState();
 renderTheme();
+renderClearButtonState();
 langToggleEl.textContent = state.lang;
 renderDisplay();
 renderKeyboard();

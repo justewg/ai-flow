@@ -9,6 +9,17 @@
   --danger: #9b2c2c;
 }
 
+body.theme-dark {
+  --bg: #1f2328;
+  --panel: #2a3037;
+  --line: #4a5663;
+  --text: #e9edf1;
+  --muted: #b8c2cc;
+  --key: #333b45;
+  --key-active: #434e5b;
+  --danger: #ff8d8d;
+}
+
 * {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
@@ -53,6 +64,28 @@ body {
   font-weight: 700;
   color: var(--muted);
   padding: 3px 10px;
+}
+
+.shell-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.theme-toggle {
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  min-width: 44px;
+  height: 34px;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.theme-toggle:active {
+  background: var(--key-active);
 }
 
 .split-layout {

@@ -12,11 +12,13 @@ Usage: scripts/codex/run.sh <command>
 
 Commands:
   help
+  sync_branches
   pr_list_open
   pr_view
   pr_create
   pr_edit
   commit_push
+  project_add_task
   project_set_status
 
 Fixed input files in .tmp/codex:
@@ -28,6 +30,12 @@ Fixed input files in .tmp/codex:
   project_task_id.txt
   project_status.txt
   project_flow.txt (optional; defaults to project_status.txt)
+  project_new_task_id.txt
+  project_new_title.txt
+  project_new_scope.txt
+  project_new_priority.txt
+  project_new_status.txt (optional; defaults to Todo)
+  project_new_flow.txt (optional; defaults to Backlog)
 EOF
 }
 
@@ -51,6 +59,10 @@ cmd="${1:-help}"
 case "$cmd" in
   help)
     usage
+    ;;
+
+  sync_branches)
+    "${ROOT_DIR}/scripts/codex/sync_branches.sh"
     ;;
 
   pr_list_open)
@@ -88,6 +100,23 @@ case "$cmd" in
       exit 1
     fi
     "${ROOT_DIR}/scripts/codex/dev_commit_push.sh" "$commit_message" "${stage_paths[@]}"
+    ;;
+
+  project_add_task)
+    new_task_id="$(read_required_file "${CODEX_DIR}/project_new_task_id.txt")"
+    new_scope="$(read_required_file "${CODEX_DIR}/project_new_scope.txt")"
+    new_priority="$(read_required_file "${CODEX_DIR}/project_new_priority.txt")"
+    new_status="Todo"
+    new_flow="Backlog"
+    [[ -f "${CODEX_DIR}/project_new_status.txt" ]] && new_status="$(read_required_file "${CODEX_DIR}/project_new_status.txt")"
+    [[ -f "${CODEX_DIR}/project_new_flow.txt" ]] && new_flow="$(read_required_file "${CODEX_DIR}/project_new_flow.txt")"
+    "${ROOT_DIR}/scripts/codex/project_add_task.sh" \
+      "$new_task_id" \
+      "${CODEX_DIR}/project_new_title.txt" \
+      "$new_scope" \
+      "$new_priority" \
+      "$new_status" \
+      "$new_flow"
     ;;
 
   project_set_status)

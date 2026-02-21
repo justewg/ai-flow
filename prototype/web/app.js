@@ -27,7 +27,6 @@ const keyboardEl = document.getElementById("keyboard");
 const langToggleEl = document.getElementById("lang-toggle");
 const clearButtonEl = document.getElementById("clear-btn");
 const orientationStateEl = document.getElementById("orientation-state");
-const retryOrientationBtn = document.getElementById("retry-orientation-btn");
 const themeToggleEl = document.getElementById("theme-toggle");
 const themeIconEl = document.getElementById("theme-icon");
 
@@ -219,9 +218,6 @@ async function tryLockLandscape() {
 
 langToggleEl.addEventListener("click", switchLanguage);
 clearButtonEl.addEventListener("click", handleClear);
-retryOrientationBtn.addEventListener("click", () => {
-  tryLockLandscape();
-});
 themeToggleEl.addEventListener("click", toggleTheme);
 
 document.addEventListener("keydown", (event) => {

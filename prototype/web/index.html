@@ -8,11 +8,12 @@
   </head>
   <body>
     <div id="orientation-warning" class="portrait-warning" role="status" aria-live="polite">
-      <div class="rotate-glyph" aria-hidden="true">↻</div>
-      <button id="retry-orientation-btn" class="rotate-btn" type="button" aria-label="Повторить фиксацию ориентации">
-        <span aria-hidden="true">⟳</span>
-        <span class="sr-only">Повторить фиксацию ориентации</span>
-      </button>
+      <div class="rotate-glyph" aria-hidden="true">
+        <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+          <path d="M95 60a35 35 0 1 1-31-34" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round"/>
+          <path d="M74 10h20v20" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
     </div>
 
     <main class="app">

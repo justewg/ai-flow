@@ -215,7 +215,7 @@ body.is-portrait.needs-orientation-hint .portrait-warning {
 }
 
 .rotate-glyph {
-  width: clamp(110px, 30vw, 170px);
+  width: clamp(136px, 34vw, 210px);
   aspect-ratio: 1 / 1;
   display: grid;
   place-items: center;
@@ -223,13 +223,11 @@ body.is-portrait.needs-orientation-hint .portrait-warning {
   animation: spin 1.8s linear infinite;
 }
 
-.rotate-emoji {
-  font-size: clamp(84px, 22vw, 132px);
-  line-height: 1;
-  font-family: "Noto Sans Symbols 2", "Segoe UI Symbol", "Apple Symbols", sans-serif;
-  font-weight: 700;
+.rotate-icon {
+  width: 100%;
+  height: 100%;
+  display: block;
   color: #fff;
-  transform-origin: 50% 50%;
 }
 
 body.is-portrait.needs-orientation-hint .app {

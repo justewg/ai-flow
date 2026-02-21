@@ -132,9 +132,6 @@ function renderKeyboard() {
   }
 
   keyboardEl.appendChild(
-    createControlKey("Язык", "lang", switchLanguage),
-  );
-  keyboardEl.appendChild(
     createControlKey("Пробел", "space", () => appendText(" ")),
   );
   keyboardEl.appendChild(

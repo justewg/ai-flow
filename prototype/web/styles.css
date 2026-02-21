@@ -130,23 +130,30 @@ body {
 }
 
 .keyboard-zone {
-  padding: 10px;
+  padding: 6px;
 }
 
 .keyboard {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: clamp(3px, 0.5vw, 6px);
   height: 100%;
 }
 
 .key {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 2px solid var(--line);
   background: var(--key);
   color: var(--text);
   border-radius: 10px;
   font-size: clamp(18px, 2.2vw, 28px);
   font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  padding: 0;
   min-height: 0;
   user-select: none;
 }
@@ -160,15 +167,11 @@ body {
 }
 
 .key.backspace {
-  grid-column: span 3;
+  grid-column: span 4;
 }
 
 .key.space {
-  grid-column: span 6;
-}
-
-.key.lang {
-  grid-column: span 3;
+  grid-column: span 8;
 }
 
 .portrait-warning {

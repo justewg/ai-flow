@@ -7,6 +7,10 @@
 
 Команды:
 - `scripts/codex/run.sh help`
+- `scripts/codex/run.sh clear <key>`
+- `scripts/codex/run.sh write <key> <value...>`
+- `scripts/codex/run.sh append <key> <value...>`
+- `scripts/codex/run.sh copy <key> <source-file>`
 - `scripts/codex/run.sh sync_branches`
 - `scripts/codex/run.sh pr_list_open`
 - `scripts/codex/run.sh pr_view`
@@ -31,6 +35,17 @@
 - `project_new_priority.txt`
 - `project_new_status.txt` (опционально)
 - `project_new_flow.txt` (опционально)
+
+Ключи для `clear/write/append/copy`:
+- `pr_number`, `pr_title`, `pr_body`
+- `commit_message`, `stage_paths`
+- `project_task_id`, `project_status`, `project_flow`
+- `project_new_task_id`, `project_new_title`, `project_new_scope`, `project_new_priority`, `project_new_status`, `project_new_flow`
+
+## Рекомендация по снижению confirm-окон
+- Не использовать `&&`, `;`, heredoc и цепочки команд для подготовки данных.
+- Делать отдельные вызовы `scripts/codex/run.sh write/append/clear`.
+- Затем отдельно вызывать `scripts/codex/run.sh <action>`.
 
 ## Команды
 - `dev_commit_push.sh "message" <path...>`

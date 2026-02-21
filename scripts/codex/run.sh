@@ -12,6 +12,10 @@ Usage: scripts/codex/run.sh <command>
 
 Commands:
   help
+  clear
+  write
+  append
+  copy
   sync_branches
   pr_list_open
   pr_view
@@ -54,11 +58,78 @@ read_required_file() {
   printf '%s' "$content"
 }
 
+key_to_file() {
+  local key="$1"
+  case "$key" in
+    pr_number) echo "${CODEX_DIR}/pr_number.txt" ;;
+    pr_title) echo "${CODEX_DIR}/pr_title.txt" ;;
+    pr_body) echo "${CODEX_DIR}/pr_body.txt" ;;
+    commit_message) echo "${CODEX_DIR}/commit_message.txt" ;;
+    stage_paths) echo "${CODEX_DIR}/stage_paths.txt" ;;
+    project_task_id) echo "${CODEX_DIR}/project_task_id.txt" ;;
+    project_status) echo "${CODEX_DIR}/project_status.txt" ;;
+    project_flow) echo "${CODEX_DIR}/project_flow.txt" ;;
+    project_new_task_id) echo "${CODEX_DIR}/project_new_task_id.txt" ;;
+    project_new_title) echo "${CODEX_DIR}/project_new_title.txt" ;;
+    project_new_scope) echo "${CODEX_DIR}/project_new_scope.txt" ;;
+    project_new_priority) echo "${CODEX_DIR}/project_new_priority.txt" ;;
+    project_new_status) echo "${CODEX_DIR}/project_new_status.txt" ;;
+    project_new_flow) echo "${CODEX_DIR}/project_new_flow.txt" ;;
+    *)
+      echo "Unknown key: $key"
+      exit 1
+      ;;
+  esac
+}
+
 cmd="${1:-help}"
 
 case "$cmd" in
   help)
     usage
+    ;;
+
+  clear)
+    if [[ $# -ne 2 ]]; then
+      echo "Usage: scripts/codex/run.sh clear <key>"
+      exit 1
+    fi
+    file_path="$(key_to_file "$2")"
+    : > "$file_path"
+    ;;
+
+  write)
+    if [[ $# -lt 3 ]]; then
+      echo "Usage: scripts/codex/run.sh write <key> <value...>"
+      exit 1
+    fi
+    file_path="$(key_to_file "$2")"
+    shift 2
+    printf '%s\n' "$*" > "$file_path"
+    ;;
+
+  append)
+    if [[ $# -lt 3 ]]; then
+      echo "Usage: scripts/codex/run.sh append <key> <value...>"
+      exit 1
+    fi
+    file_path="$(key_to_file "$2")"
+    shift 2
+    printf '%s\n' "$*" >> "$file_path"
+    ;;
+
+  copy)
+    if [[ $# -ne 3 ]]; then
+      echo "Usage: scripts/codex/run.sh copy <key> <source-file>"
+      exit 1
+    fi
+    file_path="$(key_to_file "$2")"
+    source_file="$3"
+    if [[ ! -f "$source_file" ]]; then
+      echo "Source file not found: $source_file"
+      exit 1
+    fi
+    cp "$source_file" "$file_path"
     ;;
 
   sync_branches)

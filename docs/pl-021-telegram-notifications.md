@@ -4,14 +4,10 @@
 Получать пуш на мобильник после каждого merge PR в `main`.
 
 ## Реализация
-- Workflow: `.github/workflows/notify-telegram-main-merge.yml`
-- Trigger: `pull_request.closed` для ветки `main`
-- Gate: выполняется только при `merged == true`
-- Формат сообщения:
-  - номер и title PR
-  - связанные задачи `PL-xxx` (из title/body PR)
-  - автор PR и кто смержил
-  - ссылка на PR и на run workflow
+- Базовый Telegram-канал уведомлений реализован через GitHub Actions и secrets:
+  - `TG_BOT_TOKEN`
+  - `TG_CHAT_ID`
+- Дальнейшее расширение сценариев уведомлений вынесено в `PL-022`.
 
 ## Что нужно добавить в GitHub Secrets
 - `TG_BOT_TOKEN` - токен из BotFather
@@ -27,7 +23,5 @@
 
 ## Проверка
 1. Убедиться, что секреты сохранены в repo settings.
-2. Сделать тестовый PR `development -> main` с `PL-021` в title/body.
-3. После merge проверить:
-   - run `Notify Telegram on Main Merge` зеленый;
-   - на мобильник пришло сообщение от бота.
+2. Сделать тестовый merge в `main`.
+3. Убедиться, что от бота приходит уведомление.

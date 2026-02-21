@@ -56,16 +56,6 @@ body {
   letter-spacing: 0.03em;
 }
 
-.state-pill {
-  border: 2px solid var(--line);
-  border-radius: 999px;
-  background: var(--panel);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--muted);
-  padding: 3px 10px;
-}
-
 .shell-controls {
   display: flex;
   align-items: center;

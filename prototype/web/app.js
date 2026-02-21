@@ -26,7 +26,6 @@ const displayTextEl = document.getElementById("display-text");
 const keyboardEl = document.getElementById("keyboard");
 const langToggleEl = document.getElementById("lang-toggle");
 const clearButtonEl = document.getElementById("clear-btn");
-const orientationStateEl = document.getElementById("orientation-state");
 const themeToggleEl = document.getElementById("theme-toggle");
 const themeIconEl = document.getElementById("theme-icon");
 
@@ -186,10 +185,6 @@ function applyOrientationClass() {
   updateOrientationHint();
 }
 
-function setOrientationStateLabel(label) {
-  orientationStateEl.textContent = label;
-}
-
 function updateOrientationHint() {
   const isPortrait = window.matchMedia("(orientation: portrait)").matches;
   const needHint = isPortrait && orientationLockState !== "active";
@@ -199,7 +194,6 @@ function updateOrientationHint() {
 async function tryLockLandscape() {
   if (!window.screen.orientation || !window.screen.orientation.lock) {
     orientationLockState = "not-supported";
-    setOrientationStateLabel("landscape lock: not supported");
     applyOrientationClass();
     return;
   }
@@ -207,10 +201,8 @@ async function tryLockLandscape() {
   try {
     await window.screen.orientation.lock("landscape");
     orientationLockState = "active";
-    setOrientationStateLabel("landscape lock: active");
   } catch {
     orientationLockState = "blocked";
-    setOrientationStateLabel("landscape lock: blocked");
   } finally {
     applyOrientationClass();
   }

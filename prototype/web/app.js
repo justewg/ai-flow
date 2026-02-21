@@ -20,13 +20,12 @@ const state = {
 };
 
 const STORAGE_KEY = "planka-prototype-state-v1";
+let orientationLockState = "pending";
 
 const displayTextEl = document.getElementById("display-text");
 const keyboardEl = document.getElementById("keyboard");
 const langToggleEl = document.getElementById("lang-toggle");
 const clearButtonEl = document.getElementById("clear-btn");
-const orientationStateEl = document.getElementById("orientation-state");
-const retryOrientationBtn = document.getElementById("retry-orientation-btn");
 const themeToggleEl = document.getElementById("theme-toggle");
 const themeIconEl = document.getElementById("theme-icon");
 
@@ -183,25 +182,27 @@ function toggleTheme() {
 function applyOrientationClass() {
   const isLandscape = window.matchMedia("(orientation: landscape)").matches;
   document.body.classList.toggle("is-portrait", !isLandscape);
+  updateOrientationHint();
 }
 
-function setOrientationStateLabel(label) {
-  orientationStateEl.textContent = label;
+function updateOrientationHint() {
+  const isPortrait = window.matchMedia("(orientation: portrait)").matches;
+  const needHint = isPortrait && orientationLockState !== "active";
+  document.body.classList.toggle("needs-orientation-hint", needHint);
 }
 
 async function tryLockLandscape() {
-  applyOrientationClass();
-
   if (!window.screen.orientation || !window.screen.orientation.lock) {
-    setOrientationStateLabel("landscape lock: not supported");
+    orientationLockState = "not-supported";
+    applyOrientationClass();
     return;
   }
 
   try {
     await window.screen.orientation.lock("landscape");
-    setOrientationStateLabel("landscape lock: active");
+    orientationLockState = "active";
   } catch {
-    setOrientationStateLabel("landscape lock: blocked");
+    orientationLockState = "blocked";
   } finally {
     applyOrientationClass();
   }
@@ -209,9 +210,6 @@ async function tryLockLandscape() {
 
 langToggleEl.addEventListener("click", switchLanguage);
 clearButtonEl.addEventListener("click", handleClear);
-retryOrientationBtn.addEventListener("click", () => {
-  tryLockLandscape();
-});
 themeToggleEl.addEventListener("click", toggleTheme);
 
 document.addEventListener("keydown", (event) => {

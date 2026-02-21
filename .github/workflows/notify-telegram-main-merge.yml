@@ -1,0 +1,62 @@
+name: Notify Telegram on Main Merge
+
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+
+jobs:
+  notify_telegram:
+    if: ${{ github.event.pull_request.merged == true }}
+    runs-on: ubuntu-latest
+    env:
+      TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+      TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      PR_BODY: ${{ github.event.pull_request.body }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_URL: ${{ github.event.pull_request.html_url }}
+      PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+      PR_MERGED_BY: ${{ github.event.pull_request.merged_by.login }}
+
+    steps:
+      - name: Validate required secrets
+        run: |
+          : "${TG_BOT_TOKEN:?TG_BOT_TOKEN is required}"
+          : "${TG_CHAT_ID:?TG_CHAT_ID is required}"
+
+      - name: Extract task IDs from PR title/body
+        id: extract
+        run: |
+          TASK_IDS="$(printf '%s\n%s\n' "${PR_TITLE}" "${PR_BODY}" | grep -Eo 'PL-[0-9]{3}' | sort -u | xargs || true)"
+          if [[ -z "${TASK_IDS}" ]]; then
+            TASK_IDS="none"
+          fi
+          echo "task_ids=${TASK_IDS}" >> "${GITHUB_OUTPUT}"
+
+      - name: Send Telegram push
+        env:
+          TASK_IDS: ${{ steps.extract.outputs.task_ids }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          MESSAGE=$'PLANKA: merged PR in main\n'
+          MESSAGE+="PR #${PR_NUMBER}: ${PR_TITLE}"$'\n'
+          MESSAGE+="Tasks: ${TASK_IDS}"$'\n'
+          MESSAGE+="Author: @${PR_AUTHOR}"$'\n'
+          MESSAGE+="Merged by: @${PR_MERGED_BY}"$'\n'
+          MESSAGE+="PR: ${PR_URL}"$'\n'
+          MESSAGE+="Run: ${RUN_URL}"
+
+          payload="$(
+            jq -n \
+              --arg chat_id "${TG_CHAT_ID}" \
+              --arg text "${MESSAGE}" \
+              '{chat_id: $chat_id, text: $text, disable_web_page_preview: true}'
+          )"
+
+          curl -fsS \
+            -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            --data "${payload}" >/dev/null

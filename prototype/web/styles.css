@@ -219,8 +219,6 @@ body.is-portrait.needs-orientation-hint .portrait-warning {
   aspect-ratio: 1 / 1;
   display: grid;
   place-items: center;
-  transform-origin: 50% 50%;
-  animation: spin 1.8s linear infinite;
 }
 
 .rotate-icon {
@@ -228,6 +226,10 @@ body.is-portrait.needs-orientation-hint .portrait-warning {
   height: 100%;
   display: block;
   color: #fff;
+  transform-box: view-box;
+  transform-origin: center;
+  animation: spin 1.8s linear infinite;
+  will-change: transform;
 }
 
 body.is-portrait.needs-orientation-hint .app {

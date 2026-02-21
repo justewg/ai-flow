@@ -60,7 +60,7 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
 ' \
     -f projectId="$project_id" \
     -F fieldsFirst=100 \
-    -F itemsFirst=200
+    -F itemsFirst=100
 )"
 
 item_id="$(

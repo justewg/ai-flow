@@ -11,29 +11,81 @@ task_id="$1"
 status_name="$2"
 flow_name="${3:-$2}"
 
-owner="justewg"
-project_number="2"
 project_id="PVT_kwHOAPt_Q84BPyyr"
 
-fields_json="$(gh project field-list "$project_number" --owner "$owner" --format json)"
-items_json="$(gh project item-list "$project_number" --owner "$owner" --limit 100 --format json)"
+project_json="$(
+  gh api graphql \
+    -f query='
+query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
+  node(id: $projectId) {
+    ... on ProjectV2 {
+      fields(first: $fieldsFirst) {
+        nodes {
+          __typename
+          ... on ProjectV2Field {
+            id
+            name
+            dataType
+          }
+          ... on ProjectV2IterationField {
+            id
+            name
+            dataType
+          }
+          ... on ProjectV2SingleSelectField {
+            id
+            name
+            dataType
+            options {
+              id
+              name
+            }
+          }
+        }
+      }
+      items(first: $itemsFirst) {
+        nodes {
+          id
+          fieldValueByName(name: "Task ID") {
+            __typename
+            ... on ProjectV2ItemFieldTextValue {
+              text
+            }
+          }
+        }
+      }
+    }
+  }
+}
+' \
+    -f projectId="$project_id" \
+    -F fieldsFirst=100 \
+    -F itemsFirst=200
+)"
 
-item_id="$(printf '%s' "$items_json" | jq -r --arg task "$task_id" '.items[] | select(."task ID" == $task) | .id')"
+item_id="$(
+  printf '%s' "$project_json" |
+    jq -r --arg task "$task_id" '
+      .data.node.items.nodes[]
+      | select(.fieldValueByName.text == $task)
+      | .id
+    '
+)"
 if [[ -z "$item_id" || "$item_id" == "null" ]]; then
   echo "Task not found in project: $task_id"
   exit 1
 fi
 
-status_field_id="$(printf '%s' "$fields_json" | jq -r '.fields[] | select(.name=="Status") | .id')"
-flow_field_id="$(printf '%s' "$fields_json" | jq -r '.fields[] | select(.name=="Flow") | .id')"
+status_field_id="$(printf '%s' "$project_json" | jq -r '.data.node.fields.nodes[] | select(.name=="Status") | .id')"
+flow_field_id="$(printf '%s' "$project_json" | jq -r '.data.node.fields.nodes[] | select(.name=="Flow") | .id')"
 
 status_option_id="$(
-  printf '%s' "$fields_json" |
-    jq -r --arg name "$status_name" '.fields[] | select(.name=="Status") | .options[] | select(.name==$name) | .id'
+  printf '%s' "$project_json" |
+    jq -r --arg name "$status_name" '.data.node.fields.nodes[] | select(.name=="Status") | .options[] | select(.name==$name) | .id'
 )"
 flow_option_id="$(
-  printf '%s' "$fields_json" |
-    jq -r --arg name "$flow_name" '.fields[] | select(.name=="Flow") | .options[] | select(.name==$name) | .id'
+  printf '%s' "$project_json" |
+    jq -r --arg name "$flow_name" '.data.node.fields.nodes[] | select(.name=="Flow") | .options[] | select(.name==$name) | .id'
 )"
 
 if [[ -z "$status_option_id" || "$status_option_id" == "null" ]]; then
@@ -46,17 +98,48 @@ if [[ -z "$flow_option_id" || "$flow_option_id" == "null" ]]; then
   exit 1
 fi
 
-gh project item-edit \
-  --id "$item_id" \
-  --project-id "$project_id" \
-  --field-id "$status_field_id" \
-  --single-select-option-id "$status_option_id" >/dev/null
+gh api graphql \
+  -f query='
+mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+  updateProjectV2ItemFieldValue(
+    input: {
+      projectId: $projectId
+      itemId: $itemId
+      fieldId: $fieldId
+      value: { singleSelectOptionId: $optionId }
+    }
+  ) {
+    projectV2Item {
+      id
+    }
+  }
+}
+' \
+  -f projectId="$project_id" \
+  -f itemId="$item_id" \
+  -f fieldId="$status_field_id" \
+  -f optionId="$status_option_id" >/dev/null
 
-gh project item-edit \
-  --id "$item_id" \
-  --project-id "$project_id" \
-  --field-id "$flow_field_id" \
-  --single-select-option-id "$flow_option_id" >/dev/null
+gh api graphql \
+  -f query='
+mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+  updateProjectV2ItemFieldValue(
+    input: {
+      projectId: $projectId
+      itemId: $itemId
+      fieldId: $fieldId
+      value: { singleSelectOptionId: $optionId }
+    }
+  ) {
+    projectV2Item {
+      id
+    }
+  }
+}
+' \
+  -f projectId="$project_id" \
+  -f itemId="$item_id" \
+  -f fieldId="$flow_field_id" \
+  -f optionId="$flow_option_id" >/dev/null
 
 echo "Updated $task_id: Status=$status_name, Flow=$flow_name"
-

@@ -29,6 +29,13 @@ const clearButtonEl = document.getElementById("clear-btn");
 const themeToggleEl = document.getElementById("theme-toggle");
 const themeIconEl = document.getElementById("theme-icon");
 
+function setKeyLabel(keyEl, label) {
+  const labelEl = document.createElement("span");
+  labelEl.className = "key-label";
+  labelEl.textContent = label;
+  keyEl.replaceChildren(labelEl);
+}
+
 function renderClearButtonState() {
   clearButtonEl.classList.toggle("is-armed", state.clearArmed);
   clearButtonEl.setAttribute(
@@ -98,7 +105,7 @@ function createLetterKey(symbol) {
   const keyEl = document.createElement("button");
   keyEl.type = "button";
   keyEl.className = "key letter";
-  keyEl.textContent = symbol;
+  setKeyLabel(keyEl, symbol);
   keyEl.addEventListener("click", () => appendText(symbol));
   return keyEl;
 }
@@ -107,7 +114,7 @@ function createControlKey(label, className, onClick) {
   const keyEl = document.createElement("button");
   keyEl.type = "button";
   keyEl.className = `key ${className}`;
-  keyEl.textContent = label;
+  setKeyLabel(keyEl, label);
   keyEl.addEventListener("click", onClick);
   return keyEl;
 }

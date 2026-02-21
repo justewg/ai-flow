@@ -158,6 +158,13 @@ body {
   user-select: none;
 }
 
+.key-label {
+  display: inline-block;
+  transform: translateY(0.08em);
+  line-height: 1;
+  pointer-events: none;
+}
+
 .key:active {
   background: var(--key-active);
 }

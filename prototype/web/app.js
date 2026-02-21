@@ -110,10 +110,11 @@ function createLetterKey(symbol) {
   return keyEl;
 }
 
-function createControlKey(label, className, onClick) {
+function createControlKey(label, className, onClick, ariaLabel = label) {
   const keyEl = document.createElement("button");
   keyEl.type = "button";
   keyEl.className = `key ${className}`;
+  keyEl.setAttribute("aria-label", ariaLabel);
   setKeyLabel(keyEl, label);
   keyEl.addEventListener("click", onClick);
   return keyEl;
@@ -139,10 +140,10 @@ function renderKeyboard() {
   }
 
   keyboardEl.appendChild(
-    createControlKey("Пробел", "space", () => appendText(" ")),
+    createControlKey("⎵", "space", () => appendText(" "), "Пробел"),
   );
   keyboardEl.appendChild(
-    createControlKey("Backspace", "backspace", backspace),
+    createControlKey("←", "backspace", backspace, "Удалить символ"),
   );
 }
 

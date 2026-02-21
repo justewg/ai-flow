@@ -181,6 +181,17 @@ body {
   grid-column: span 8;
 }
 
+.key.space .key-label {
+  font-family: "Noto Sans Symbols 2", "Segoe UI Symbol", "Apple Symbols", sans-serif;
+  font-size: 1.35em;
+  transform: translateY(0.02em);
+}
+
+.key.backspace .key-label {
+  font-size: 1.25em;
+  transform: translateY(0.02em);
+}
+
 .portrait-warning {
   display: none;
 }

@@ -20,6 +20,10 @@
 - Я выполняю команды только в рамках allowlist-масок из этого файла.
 
 ## Wrapper-first (рекомендуемый режим)
+- Префикс: `scripts/codex/run.sh`
+  - Шаблон: `scripts/codex/run.sh <command>`
+  - Regex mask: `^scripts/codex/run\.sh(?:\s+.+)?$`
+  - UI mask: `scripts/codex/run.sh`
 - Префикс: `scripts/codex/dev_commit_push.sh`
   - Шаблон: `scripts/codex/dev_commit_push.sh "<message>" <path...>`
   - Regex mask: `^scripts/codex/dev_commit_push\.sh(?:\s+.+)?$`

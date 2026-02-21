@@ -215,7 +215,7 @@ body.is-portrait.needs-orientation-hint .portrait-warning {
 }
 
 .rotate-glyph {
-  width: min(52vw, 210px);
+  width: clamp(86px, 24vw, 132px);
   aspect-ratio: 1 / 1;
   display: grid;
   place-items: center;

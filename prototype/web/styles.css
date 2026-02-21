@@ -1,4 +1,5 @@
 :root {
+  --layout-gap: 8px;
   --bg: #f4f1e9;
   --panel: #fffdf8;
   --line: #d7d0c3;
@@ -39,22 +40,25 @@ body {
   display: flex;
   flex-direction: column;
   height: 100dvh;
-  padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right))
-    max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  padding:
+    calc(var(--layout-gap) + env(safe-area-inset-top))
+    calc(var(--layout-gap) + env(safe-area-inset-right))
+    calc(var(--layout-gap) + env(safe-area-inset-bottom))
+    calc(var(--layout-gap) + env(safe-area-inset-left));
 }
 
 .shell-bar {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
-  padding: 4px 2px 10px;
+  gap: var(--layout-gap);
+  margin: 0 0 var(--layout-gap);
 }
 
 .shell-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--layout-gap);
 }
 
 .shell-btn {
@@ -95,7 +99,8 @@ body {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  grid-template-rows: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  row-gap: var(--layout-gap);
 }
 
 .display-zone,
@@ -106,8 +111,7 @@ body {
 .display-zone {
   display: flex;
   flex-direction: column;
-  padding: 0 10px 10px;
-  border-bottom: 2px solid var(--line);
+  padding: 0;
 }
 
 .display-text {
@@ -130,25 +134,39 @@ body {
 }
 
 .keyboard-zone {
-  padding: 10px;
+  padding: 0;
 }
 
 .keyboard {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: clamp(3px, 0.5vw, 6px);
   height: 100%;
 }
 
 .key {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 2px solid var(--line);
   background: var(--key);
   color: var(--text);
   border-radius: 10px;
   font-size: clamp(18px, 2.2vw, 28px);
   font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  padding: 0;
   min-height: 0;
   user-select: none;
+}
+
+.key-label {
+  display: inline-block;
+  transform: translateY(0.08em);
+  line-height: 1;
+  pointer-events: none;
 }
 
 .key:active {
@@ -160,15 +178,22 @@ body {
 }
 
 .key.backspace {
-  grid-column: span 3;
+  grid-column: span 4;
 }
 
 .key.space {
-  grid-column: span 6;
+  grid-column: span 8;
 }
 
-.key.lang {
-  grid-column: span 3;
+.key.space .key-label {
+  font-family: "Noto Sans Symbols 2", "Segoe UI Symbol", "Apple Symbols", sans-serif;
+  font-size: 1.35em;
+  transform: translateY(0.02em);
+}
+
+.key.backspace .key-label {
+  font-size: 1.25em;
+  transform: translateY(0.02em);
 }
 
 .portrait-warning {

@@ -219,7 +219,7 @@ body.is-portrait.needs-orientation-hint .portrait-warning {
   aspect-ratio: 1 / 1;
   display: grid;
   place-items: center;
-  transform-origin: 50% 50%;
+  transform-origin: 50% 44%;
   animation: spin 1.8s linear infinite;
 }
 

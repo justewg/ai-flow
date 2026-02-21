@@ -27,9 +27,14 @@
 
     <main class="app">
       <header class="shell-bar">
-        <strong class="brand">PLANKA Prototype</strong>
         <div class="shell-controls">
-          <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Переключить тему">
+          <button id="clear-btn" class="shell-btn shell-btn-danger" type="button" aria-label="Очистить текст">
+            ×
+          </button>
+          <button id="lang-toggle" class="shell-btn shell-btn-lang" type="button" aria-label="Переключить язык">
+            RU
+          </button>
+          <button id="theme-toggle" class="shell-btn" type="button" aria-label="Переключить тему">
             <span id="theme-icon" aria-hidden="true">☾</span>
           </button>
         </div>
@@ -37,10 +42,6 @@
 
       <div class="split-layout">
         <section class="display-zone">
-          <header class="display-toolbar">
-            <button id="lang-toggle" class="toolbar-btn" type="button">RU</button>
-            <button id="clear-btn" class="toolbar-btn danger" type="button">Очистить</button>
-          </header>
           <div id="display-text" class="display-text" aria-live="polite"></div>
         </section>
 

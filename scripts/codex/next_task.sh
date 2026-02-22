@@ -44,7 +44,7 @@ query($projectId: ID!, $itemsFirst: Int!) {
 }
 '
 
-json="$(gh api graphql -f query="$query" -F projectId="$project_id" -F itemsFirst=200)"
+json="$(gh api graphql -f query="$query" -F projectId="$project_id" -F itemsFirst=100)"
 
 # jq: фильтруем Planned и сортируем
 candidate="$(
@@ -75,4 +75,3 @@ title="$(printf '%s' "$candidate" | jq -r '.title')"
 
 echo "NEXT_TASK_ID=$task_id"
 echo "NEXT_TITLE=$title"
-

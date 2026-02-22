@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>PLANKA — Web Narrative</title>
+    <meta name="description" content="Инженерный манифест PLANKA: эволюция, среда, проектирование, жест, принципы и предмет." />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- System font stack to stay minimal and robust -->
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./print.css" media="print" />
+  </head>
+  <body>
+    <main id="narrative" class="narrative">
+      <!-- SECTION 0 — Intro -->
+      <section id="intro" class="section section-0 is-dark">
+        <!-- Placeholder: Lifestyle photo of Andryusha (no tech). Subtle parallax in web; static in PDF. -->
+        <!-- scenario: static portrait; slow parallax translateY(10–20px) on scroll -->
+        <div class="media hero-photo parallax" data-parallax="0.18" aria-hidden="true">
+          <div class="ph ph-photo">PHOTO • ANDRYUSHA LIFESTYLE</div>
+        </div>
+        <div class="container v-center">
+          <p class="kicker">PLANKA / ИНЖЕНЕРНЫЙ МАНИФЕСТ</p>
+          <h1 class="display">Андрюша уже умеет говорить.<br/>Просто не голосом.</h1>
+        </div>
+      </section>
+
+      <!-- SECTION 1 — Эволюция -->
+      <section id="evolution" class="section section-1">
+        <div class="container">
+          <h2 class="title">Эволюция формы общения</h2>
+          <div class="screens">
+            <!-- Each screen fades in on scroll; PDF uses large image + caption. -->
+            <figure class="screen reveal" data-animate="fade">
+              <!-- placeholder: documentary photo of PECS cards -->
+              <!-- comment: show texture, labeling clarity -->
+              <div class="ph ph-photo">PECS • DOCUMENTARY PHOTO</div>
+              <figcaption>PECS — визуальная опора</figcaption>
+            </figure>
+            <figure class="screen reveal" data-animate="fade">
+              <div class="ph ph-photo">МАГНИТНЫЕ БУКВЫ • DOCUMENTARY</div>
+              <figcaption>Магнитные буквы — сборка слов</figcaption>
+            </figure>
+            <figure class="screen reveal" data-animate="fade">
+              <div class="ph ph-photo">ПЛАСТИЛИН • DOCUMENTARY</div>
+              <figcaption>Пластилин — моторная вовлечённость</figcaption>
+            </figure>
+            <figure class="screen reveal" data-animate="fade">
+              <div class="ph ph-photo">ТЕЛЕВИЗОР • DOCUMENTARY</div>
+              <figcaption>Телевизор — общие сюжеты</figcaption>
+            </figure>
+            <figure class="screen reveal" data-animate="fade">
+              <div class="ph ph-photo">ЭРУДИТ • DOCUMENTARY</div>
+              <figcaption>Эрудит — буквенная структура</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 2 — Требования к среде -->
+      <section id="environment" class="section section-2 is-dark">
+        <div class="container">
+          <h2 class="title">Требования к среде</h2>
+          <div class="grid-12 gap">
+            <!-- Right slide-in theses; semi-transparent references to previous forms as background motifs -->
+            <div class="col-span-7 refs">
+              <!-- placeholder ghosts of previous forms -->
+              <div class="ghost-row">
+                <div class="ghost">PECS</div>
+                <div class="ghost">БУКВЫ</div>
+                <div class="ghost">ПЛАСТИЛИН</div>
+              </div>
+            </div>
+            <div class="col-span-5">
+              <ul class="theses">
+                <!-- Keep phrasing minimal; refine with exact copy later. -->
+                <li class="reveal" data-animate="slide">Нулевая случайность интерфейса</li>
+                <li class="reveal" data-animate="slide">Прозрачная обратная связь</li>
+                <li class="reveal" data-animate="slide">Стабильность «всегда готов»</li>
+                <li class="reveal" data-animate="slide">Без скрытых жестов</li>
+                <li class="reveal" data-animate="slide">Без автокоррекции</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 3 — Проектирование -->
+      <section id="designing" class="section section-3">
+        <div class="container">
+          <h2 class="title">Проектирование</h2>
+          <p class="subtitle">Мы начали с проектирования. Изучения. Чертежа.</p>
+          <div class="grid-12 gap row">
+            <figure class="col-span-4 reveal" data-animate="fade">
+              <!-- placeholder: hand-drawn sketch photo -->
+              <!-- comment: paper sketch, pencil, proportions -->
+              <div class="ph ph-photo">ЧЕРТЁЖ ОТ РУКИ</div>
+              <figcaption>Чертёж от руки</figcaption>
+            </figure>
+            <figure class="col-span-4 reveal" data-animate="fade">
+              <!-- placeholder: device wireframe -->
+              <div class="ph ph-wire">WIREFRAME • DEVICE</div>
+              <figcaption>Wireframe устройства</figcaption>
+            </figure>
+            <figure class="col-span-4 reveal" data-animate="fade">
+              <!-- placeholder: webview prototype screenshot -->
+              <div class="ph ph-screen">WEBVIEW ПРОТОТИП</div>
+              <figcaption>Webview‑прототип</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 4 — Жест (сердце проекта) -->
+      <section id="gesture" class="section section-4 is-dark">
+        <div class="container">
+          <h2 class="title">Жест</h2>
+
+          <!-- Экран 1 — Письмо -->
+          <article class="stage">
+            <!-- scenario: finger types ВИННИПУХ; switch hand R→L; visceral tactile feel -->
+            <header class="stage-title">Письмо</header>
+            <div class="media-row">
+              <div class="ph ph-video reveal" data-animate="fade">VIDEO • НАБОР «ВИННИПУХ»</div>
+              <p class="note">Палец набирает «ВИННИПУХ». Смена руки. Телесность.</p>
+            </div>
+            <div class="only-print alt">
+              <!-- PDF alternative: still photo + partial text "ВИННИПУ" -->
+              <div class="ph ph-photo">PRINT • СТАТИКА «ВИННИПУ»</div>
+            </div>
+          </article>
+
+          <!-- Экран 2 — Намерение -->
+          <article class="stage">
+            <!-- scenario: device tilts; side view; screen not visible -->
+            <header class="stage-title">Намерение</header>
+            <div class="media-row">
+              <div class="ph ph-video reveal" data-animate="fade">VIDEO • НАКЛОН УСТРОЙСТВА</div>
+              <p class="note">Устройство наклоняется. Вид сбоку. Экран скрыт.</p>
+            </div>
+            <div class="only-print alt">
+              <!-- PDF alternative: intermediate tilt + dotted arrow -->
+              <div class="ph ph-diagram">PRINT • НАКЛОН + ПУНКТИР</div>
+            </div>
+          </article>
+
+          <!-- Экран 3 — Показ -->
+          <article class="stage">
+            <!-- scenario: text flips; adult balloon: «Хорошо, посмотри.» -->
+            <header class="stage-title">Показ</header>
+            <div class="media-row">
+              <div class="ph ph-video reveal" data-animate="fade">VIDEO • РАЗВОРОТ ТЕКСТА</div>
+              <p class="note">Текст разворачивается. Взрослый: «Хорошо, посмотри.»</p>
+            </div>
+            <div class="only-print alt">
+              <!-- PDF alternative: flipped text + trajectory arrow -->
+              <div class="ph ph-diagram">PRINT • ПОВОРОТ + ТРАЕКТОРИЯ</div>
+            </div>
+          </article>
+
+          <!-- Экран 4 — Продолжение -->
+          <article class="stage">
+            <!-- scenario: print returns text to personal mode; cursor appears -->
+            <header class="stage-title">Продолжение</header>
+            <div class="media-row">
+              <div class="ph ph-video reveal" data-animate="fade">VIDEO • ВОЗВРАТ В ПЕРСОНАЛЬНЫЙ РЕЖИМ</div>
+              <p class="note">Текст возвращается. Курсор готов к вводу.</p>
+            </div>
+            <div class="only-print alt">
+              <div class="ph ph-photo">PRINT • ДВА КАДРА: ПОКАЗ / ВОЗВРАТ</div>
+            </div>
+          </article>
+
+          <p class="lead center">Написал → Показал → Получил реакцию → Продолжил.</p>
+        </div>
+      </section>
+
+      <!-- SECTION 5 — Принципы -->
+      <section id="principles" class="section section-5">
+        <div class="container">
+          <h2 class="title">Принципы</h2>
+          <ul class="principles grid-12">
+            <!-- Keep exact phrasing once approved; current are placeholders from deck. -->
+            <li class="pill col-span-3 reveal" data-animate="slide">Предсказуемость</li>
+            <li class="pill col-span-3 reveal" data-animate="slide">Нулевая случайность</li>
+            <li class="pill col-span-3 reveal" data-animate="slide">Без скрытых жестов</li>
+            <li class="pill col-span-3 reveal" data-animate="slide">Без автокоррекции</li>
+            <li class="pill col-span-3 reveal" data-animate="slide">Kiosk‑защита</li>
+            <li class="pill col-span-3 reveal" data-animate="slide">Надежность > фичи</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- SECTION 6 — Предмет -->
+      <section id="object" class="section section-6 is-dark">
+        <div class="container">
+          <h2 class="title">Предмет</h2>
+          <div class="screens">
+            <!-- Screen 1: front view; Screen 2: back view. Crossfade on scroll. -->
+            <figure class="screen reveal" data-animate="fade">
+              <div class="ph ph-render">RENDER • ФРОНТ</div>
+              <figcaption>Фронт устройства</figcaption>
+            </figure>
+            <figure class="screen reveal" data-animate="fade">
+              <div class="ph ph-render">RENDER • ЗАДНИК</div>
+              <figcaption>Задняя сторона</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 7 — Разделение слоёв -->
+      <section id="layers" class="section section-7">
+        <div class="container">
+          <h2 class="title">Разделение слоёв</h2>
+          <div class="screens">
+            <figure class="screen reveal" data-animate="fade">
+              <div class="ph ph-photo">РУКИ С УСТРОЙСТВОМ</div>
+              <figcaption>Для него — инструмент.</figcaption>
+            </figure>
+            <figure class="screen reveal" data-animate="fade">
+              <div class="ph ph-screen">ИНТЕРФЕЙС ВЗРОСЛОГО ДАШБОРДА</div>
+              <figcaption>Для взрослого — отдельный аналитический контур.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 8 — Пространство роста -->
+      <section id="growth" class="section section-8 is-dark">
+        <div class="container">
+          <h2 class="title">Пространство роста</h2>
+          <!-- Word field: central strong phrases; periphery lighter; gentle pulsing. -->
+          <div class="word-field">
+            <span class="word core">ХОЧУ ГУЛЯТЬ</span>
+            <span class="word core">БОЛИТ ЖИВОТ</span>
+            <span class="word core">Я НЕ ХОЧУ ЭТО</span>
+            <span class="word core">МНЕ НУЖЕН ПУЛЬТ</span>
+            <!-- peripheral -->
+            <span class="word soft">ПОЙДЁМ НА УЛИЦУ</span>
+            <span class="word soft">УСТАЛ</span>
+            <span class="word soft">ЗАКРОЙ ДВЕРЬ</span>
+            <span class="word soft">ХОЧУ ПИТЬ</span>
+            <span class="word soft">ВКЛЮЧИ МУЛЬТИК</span>
+            <span class="word soft">ГРОМКО</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 9 — Финал -->
+      <section id="final" class="section section-9">
+        <div class="container v-center">
+          <div class="stack">
+            <p class="lead center">PLANKA — среда, в которой его мысль становится видимой.</p>
+            <div class="final-line only-screen" aria-hidden="true">
+              <div class="plank"></div>
+              <div class="keys-rhythm" aria-hidden="true"></div>
+            </div>
+            <div class="logo">PLANKA</div>
+            <footer class="footnote">
+              <em>Постоянная Планка связывает энергию кванта с его частотой. Коммуникация тоже состоит из «квантов» — предъявленных мыслей.</em>
+            </footer>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="./main.js"></script>
+  </body>
+  </html>
+

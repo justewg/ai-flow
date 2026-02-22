@@ -1,0 +1,62 @@
+/* Print styles for PDF export
+   Goal: static, grid-based pages, dark theme preserved. */
+
+@media print {
+  :root {
+    /* reduce motion and enforce solid colors in print */
+    --dur-1: 0ms; --dur-2: 0ms;
+  }
+
+  html { background: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { background: #000; color: #fff; }
+
+  /* Page setup */
+  @page { size: A4; margin: 14mm; }
+
+  .section {
+    min-height: auto !important;
+    height: auto !important;
+    break-after: page;
+    background: #0b0c10 !important;
+  }
+  .container { padding: 0; }
+
+  /* Remove animations and parallax */
+  .reveal, .reveal.slide { opacity: 1 !important; transform: none !important; }
+  .parallax { transform: none !important; position: static !important; height: auto !important; }
+  .hero-photo .ph { opacity: 1 !important; height: 120mm; }
+
+  /* Layout tweaks per section */
+  #intro .display { font-size: 28pt !important; }
+
+  #evolution .screens { grid-template-columns: 1fr; gap: 10mm; }
+  #evolution .ph { min-height: 60mm; }
+  #evolution figcaption { font-size: 11pt; }
+
+  #environment .grid-12 { grid-template-columns: repeat(12, 1fr); }
+  #environment .refs { opacity: .25; }
+
+  #designing .grid-12 { grid-template-columns: repeat(3, 1fr); gap: 6mm; }
+  #designing .ph { min-height: 50mm; }
+
+  #gesture .stage { break-inside: avoid; }
+  #gesture .media-row { grid-template-columns: 2fr 1fr; }
+  #gesture .only-print { display: block !important; }
+  #gesture .only-screen { display: none !important; }
+
+  #principles .principles { grid-template-columns: repeat(3, 1fr); gap: 6mm; }
+  #principles .pill { padding: 6mm; text-align: center; }
+
+  #object .screens { grid-template-columns: 1fr 1fr; gap: 8mm; }
+  #object .ph { min-height: 60mm; }
+
+  #layers .screens { grid-template-columns: 1fr 1fr; gap: 8mm; }
+
+  #growth .word-field { display: grid; grid-auto-rows: min-content; min-height: auto; }
+  #growth .word { position: static; opacity: 0.7; margin: 2mm 0; animation: none !important; }
+
+  #final .final-line, #final .only-screen { display: none !important; }
+  #final .logo { font-size: 14pt; text-align: left; margin: 4mm 0; }
+  #final .footnote { font-size: 10pt; color: #bbb; }
+}
+

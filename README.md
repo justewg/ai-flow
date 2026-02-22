@@ -13,3 +13,8 @@
 
 ## Презентация для стейкхолдеров
 - `presentations/aba-v2/` — графичный deck для ABA-куратора и лиц, принимающих решение.
+
+## Веб-нарратив + PDF экспорт
+- `narrative/` — web-first лендинг в духе инженерного манифеста (задача из `docs/PRESENTATION_IMPLEMENTATION_BRIEF.md`).
+  - Открыть: `narrative/index.html` в браузере.
+  - PDF: использовать печать в PDF — стили в `narrative/print.css` превращают секции в страницы.

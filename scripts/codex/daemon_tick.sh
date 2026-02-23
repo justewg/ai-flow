@@ -29,14 +29,15 @@ run_gh_retry_capture() {
     rm -f "$err_file"
     printf '%s' "$out"
     return 0
+  else
+    local rc=$?
+    if [[ -s "$err_file" ]]; then
+      cat "$err_file" >&2
+    fi
+    rm -f "$err_file"
+    printf '%s\n' "$out" >&2
+    return "$rc"
   fi
-  local rc=$?
-  if [[ -s "$err_file" ]]; then
-    cat "$err_file" >&2
-  fi
-  rm -f "$err_file"
-  printf '%s\n' "$out" >&2
-  return "$rc"
 }
 
 if ! git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- ||

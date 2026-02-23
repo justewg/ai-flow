@@ -93,7 +93,9 @@ if [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]]; then
   exit 0
 fi
 
-if ! health_out="$("${ROOT_DIR}/scripts/codex/github_health_check.sh" 2>&1)"; then
+if health_out="$("${ROOT_DIR}/scripts/codex/github_health_check.sh" 2>&1)"; then
+  :
+else
   rc=$?
   emit_lines "$health_out"
   if [[ "$rc" -eq 75 ]]; then
@@ -105,7 +107,7 @@ if ! health_out="$("${ROOT_DIR}/scripts/codex/github_health_check.sh" 2>&1)"; th
 fi
 
 open_prs_json=""
-if ! open_prs_json="$(
+if open_prs_json="$(
   run_gh_retry_capture \
     gh pr list \
     --repo "$repo" \
@@ -115,6 +117,8 @@ if ! open_prs_json="$(
     --json number,title,url \
     --jq '.'
 )"; then
+  :
+else
   rc=$?
   if [[ "$rc" -eq 75 ]]; then
     echo "WAIT_GITHUB_API_UNSTABLE=1"
@@ -132,7 +136,7 @@ if (( open_pr_count > 0 )); then
 fi
 
 project_json=""
-if ! project_json="$(
+if project_json="$(
   run_gh_retry_capture \
     gh api graphql \
     -f query='
@@ -187,6 +191,8 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
     -F fieldsFirst=100 \
     -F itemsFirst=100
 )"; then
+  :
+else
   rc=$?
   if [[ "$rc" -eq 75 ]]; then
     echo "WAIT_GITHUB_API_UNSTABLE=1"
@@ -300,7 +306,9 @@ if [[ -z "$issue_number" || "$issue_number" == "null" ]]; then
   exit 1
 fi
 
-if ! sync_out="$("${ROOT_DIR}/scripts/codex/sync_branches.sh" 2>&1)"; then
+if sync_out="$("${ROOT_DIR}/scripts/codex/sync_branches.sh" 2>&1)"; then
+  :
+else
   rc=$?
   emit_lines "$sync_out"
   if printf '%s' "$sync_out" | grep -Eiq 'Could not resolve host|api\.github\.com|github\.com|failed to connect|timed out|TLS'; then
@@ -312,7 +320,9 @@ if ! sync_out="$("${ROOT_DIR}/scripts/codex/sync_branches.sh" 2>&1)"; then
 fi
 emit_lines "$sync_out"
 
-if ! status_out="$("${ROOT_DIR}/scripts/codex/project_set_status.sh" "$item_id" "$target_status" "$target_flow" 2>&1)"; then
+if status_out="$("${ROOT_DIR}/scripts/codex/project_set_status.sh" "$item_id" "$target_status" "$target_flow" 2>&1)"; then
+  :
+else
   rc=$?
   emit_lines "$status_out"
   if printf '%s' "$status_out" | grep -Eiq 'api\.github\.com|Could not resolve host|failed to connect|timed out|TLS'; then

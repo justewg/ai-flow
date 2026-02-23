@@ -21,6 +21,12 @@ emit_lines() {
   done <<< "$text"
 }
 
+is_github_network_error() {
+  local text="$1"
+  printf '%s' "$text" | grep -Eiq \
+    'error connecting to api\.github\.com|could not resolve host: api\.github\.com|could not resolve host: github\.com|could not resolve hostname github\.com|temporary failure in name resolution|connection timed out|operation timed out|tls handshake timeout|failed to connect'
+}
+
 run_gh_retry_capture() {
   local out=""
   local err_file
@@ -388,9 +394,15 @@ if sync_out="$("${ROOT_DIR}/scripts/codex/sync_branches.sh" 2>&1)"; then
 else
   rc=$?
   emit_lines "$sync_out"
-  if printf '%s' "$sync_out" | grep -Eiq 'Could not resolve host|api\.github\.com|github\.com|failed to connect|timed out|TLS'; then
+  if is_github_network_error "$sync_out"; then
     echo "WAIT_GITHUB_API_UNSTABLE=1"
     echo "WAIT_GITHUB_STAGE=SYNC_BRANCHES"
+    exit 0
+  fi
+  if [[ "$rc" -eq 78 ]] ||
+    printf '%s' "$sync_out" | grep -Eq 'BRANCH_SYNC_CONFLICT=1|Not possible to fast-forward, aborting.|Automatic merge failed'; then
+    echo "WAIT_BRANCH_SYNC_REQUIRED=1"
+    echo "WAIT_BRANCH_STAGE=SYNC_BRANCHES"
     exit 0
   fi
   exit "$rc"
@@ -402,7 +414,7 @@ if status_out="$("${ROOT_DIR}/scripts/codex/project_set_status.sh" "$item_id" "$
 else
   rc=$?
   emit_lines "$status_out"
-  if printf '%s' "$status_out" | grep -Eiq 'api\.github\.com|Could not resolve host|failed to connect|timed out|TLS'; then
+  if is_github_network_error "$status_out"; then
     echo "WAIT_GITHUB_API_UNSTABLE=1"
     echo "WAIT_GITHUB_STAGE=PROJECT_STATUS_UPDATE"
     exit 0

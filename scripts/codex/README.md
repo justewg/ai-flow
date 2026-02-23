@@ -36,7 +36,7 @@
 - `scripts/codex/run.sh executor_build_prompt <task-id> <issue-number> <output-file>` — сбор prompt для executor из Issue.
 - `scripts/codex/run.sh task_ask <question|blocker> <message-file>` — отправить вопрос/блокер в comment Issue и включить режим ожидания ответа.
 - `scripts/codex/run.sh daemon_check_replies` — проверить ответы в Issue-комментах для ожидающего вопроса.
-- `scripts/codex/run.sh task_finalize` — финализация задачи: commit+push, create/update PR, перевод задачи в `In Review`.
+- `scripts/codex/run.sh task_finalize` — финализация задачи: commit+push, create/update PR, перевод задачи в `Status=Done`, `Flow=In Review`.
 - `scripts/codex/run.sh gh_retry <command> [args...]` — выполнить GitHub-команду с retry/backoff.
 - `scripts/codex/run.sh github_health_check` — быстрый preflight GitHub API (`healthy/unstable`).
 - `scripts/codex/run.sh github_outbox <enqueue_issue_comment|flush|count|list> ...` — управление отложенными GitHub-действиями.
@@ -83,7 +83,9 @@
 - `dev_commit_push.sh "message" <path...>`
   - `git add` + `git commit` + `git push origin development`
 - `sync_branches.sh`
-  - `fetch/pull/ff-merge/push` для выравнивания `main` и `development` после merge PR
+  - `fetch/pull/merge/push` для выравнивания `main` и `development` после merge PR
+  - если `main` уже включен в `development`, merge пропускается
+  - при merge-конфликте возвращает `BRANCH_SYNC_CONFLICT=1` (код 78)
 - `pr_list_open.sh`
   - список открытых PR `development -> main`
 - `pr_view.sh <pr-number>`
@@ -119,6 +121,8 @@
   - сохраняет текущий `Task ID` в `.tmp/codex/project_task_id.txt` для последующего `task_finalize`
 - `daemon_loop.sh [interval-sec]`
   - крутит `daemon_tick.sh` в цикле с lock-файлом и heartbeat-логом
+  - пишет в `daemon_state_detail` явные health-маркеры: `GITHUB_STATUS=<...>` и `TELEGRAM_STATUS=<...>`
+  - различает сетевую деградацию и веточный блокер синхронизации (`WAIT_BRANCH_SYNC`)
   - отправляет локальные Telegram-алерты по деградации без спама:
     - вход в деградацию (`ENTER_DEGRADED`)
     - смена причины деградации (`DEGRADED_CHANGED`)
@@ -158,7 +162,7 @@
   - читает `commit_message.txt`, `stage_paths.txt`, `project_task_id.txt` (или `daemon_active_task.txt`)
   - выполняет commit/push в `development`
   - создает PR `development -> main` или обновляет существующий
-  - переводит задачу в `Status=In Progress`, `Flow=In Review`
+  - переводит задачу в `Status=Done`, `Flow=In Review` (можно переопределить через `FINAL_STATUS` и `FINAL_FLOW`)
   - очищает входные файлы commit/PR и активный daemon-state (active/waiting), чтобы избежать повторного использования старых данных
 - `executor_build_prompt.sh <task-id> <issue-number> <output-file>`
   - собирает prompt executor из текста Issue и последнего ответа пользователя

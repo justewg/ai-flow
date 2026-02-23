@@ -271,6 +271,7 @@ if [[ ${#stage_paths[@]} -eq 0 ]]; then
 fi
 
 task_id="$(read_if_present "$task_file" || true)"
+active_item_id="$(read_if_present "$active_item_file" || true)"
 if [[ -z "$task_id" ]]; then
   task_id="$(read_if_present "$active_task_file" || true)"
 fi
@@ -341,7 +342,11 @@ mark_pr_ready_if_draft "$pr_number"
 post_in_review_issue_comment "$task_id" "$pr_number" "$pr_url"
 
 printf '%s\n' "$pr_number" > "$pr_number_file"
-"${ROOT_DIR}/scripts/codex/project_set_status.sh" "$task_id" "In Progress" "In Review"
+if [[ -n "$active_item_id" ]]; then
+  "${ROOT_DIR}/scripts/codex/project_set_status.sh" "$active_item_id" "In Progress" "In Review"
+else
+  "${ROOT_DIR}/scripts/codex/project_set_status.sh" "$task_id" "In Progress" "In Review"
+fi
 
 : > "$commit_file"
 : > "$stage_file"

@@ -113,7 +113,8 @@
   - берет задачу только из `Status=To Progress`
   - для автоподхвата учитывает только `Issue`; `DraftIssue` игнорируется
   - для перевода статуса использует `project item id`, поэтому не зависит от ручного заполнения поля `Task ID`
-  - `Task ID` берет из поля или извлекает из title по маске `PL-xxx`
+  - `Task ID` берет из поля, либо извлекает `PL-xxx` из title
+  - если `PL-xxx` отсутствует, использует fallback `ISSUE-<number>` по номеру Issue
   - при единственной задаче переводит ее в `Status/Flow=In Progress`
   - сохраняет текущий `Task ID` в `.tmp/codex/project_task_id.txt` для последующего `task_finalize`
 - `daemon_loop.sh [interval-sec]`

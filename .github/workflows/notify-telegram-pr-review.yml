@@ -38,7 +38,11 @@ jobs:
       - name: Extract task IDs
         id: extract
         run: |
-          TASK_IDS="$(printf '%s\n%s\n' "${PR_TITLE}" "${PR_BODY}" | grep -Eo 'PL-[0-9]{3}' | sort -u | xargs || true)"
+          TASK_IDS="$(
+            printf '%s\n%s\n' "${PR_TITLE}" "${PR_BODY}" \
+              | grep -Eo 'PL-[0-9]{3}|ISSUE-[0-9]+' \
+              | sort -u | xargs || true
+          )"
           if [[ -z "${TASK_IDS}" ]]; then
             TASK_IDS="none"
           fi

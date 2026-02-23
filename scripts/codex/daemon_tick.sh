@@ -209,8 +209,21 @@ matched_json="$(
           issue_number: (.content.number // ""),
           title: (.content.title // ""),
           task_id: (
-            .taskId.text
-            // (try ((.content.title // "") | capture("(?<id>PL-[0-9]{3})").id) catch "")
+            (.taskId.text // "")
+            | gsub("^\\s+|\\s+$";"")
+            | if . != "" then .
+              else (
+                (try ((.content.title // "") | capture("(?<id>PL-[0-9]{3})").id) catch "")
+                | if . != "" then .
+                  else (
+                    if (.content.__typename // "") == "Issue" and (.content.number != null)
+                    then ("ISSUE-" + ((.content.number | tostring)))
+                    else ""
+                    end
+                  )
+                  end
+              )
+              end
           ),
           status_name: (.status.name // ""),
           status_option_id: (.status.optionId // ""),
@@ -231,10 +244,7 @@ matched_json="$(
           else 9
           end
         )
-      | .num = (
-          (try (.task_id | capture("PL-(?<n>[0-9]+)").n) catch "999999")
-          | tonumber
-        )
+      | .num = ((try (.issue_number | tonumber) catch 999999))
     ]
     | sort_by(.pri_w, .num)
   '
@@ -276,7 +286,7 @@ task_id="$(printf '%s' "$valid_queue_json" | jq -r '.[0].task_id')"
 title="$(printf '%s' "$valid_queue_json" | jq -r '.[0].title')"
 
 if [[ -z "$task_id" || "$task_id" == "null" ]]; then
-  echo "Task in trigger status has no PL-xxx id in Task ID/title"
+  echo "Task in trigger status has no resolvable task id"
   exit 1
 fi
 

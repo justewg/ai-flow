@@ -27,7 +27,11 @@ jobs:
       - name: Extract task ids from PR title/body
         id: extract
         run: |
-          TASK_IDS="$(printf '%s\n%s\n' "${PR_TITLE}" "${PR_BODY}" | grep -Eo 'PL-[0-9]{3}' | sort -u || true)"
+          TASK_IDS="$(
+            printf '%s\n%s\n' "${PR_TITLE}" "${PR_BODY}" \
+              | grep -Eo 'PL-[0-9]{3}|ISSUE-[0-9]+' \
+              | sort -u || true
+          )"
           if [[ -z "${TASK_IDS}" ]]; then
             echo "has_tasks=false" >> "${GITHUB_OUTPUT}"
             exit 0

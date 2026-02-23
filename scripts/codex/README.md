@@ -158,7 +158,7 @@
   - читает `commit_message.txt`, `stage_paths.txt`, `project_task_id.txt` (или `daemon_active_task.txt`)
   - выполняет commit/push в `development`
   - создает PR `development -> main` или обновляет существующий
-  - переводит задачу в `Status=In Progress`, `Flow=In Review`
+  - переводит задачу в `Status=Done`, `Flow=In Review` (можно переопределить через `FINAL_STATUS` и `FINAL_FLOW`)
   - очищает входные файлы commit/PR и активный daemon-state (active/waiting), чтобы избежать повторного использования старых данных
 - `executor_build_prompt.sh <task-id> <issue-number> <output-file>`
   - собирает prompt executor из текста Issue и последнего ответа пользователя

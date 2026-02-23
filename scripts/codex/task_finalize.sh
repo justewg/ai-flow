@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CODEX_DIR="${ROOT_DIR}/.tmp/codex"
 REPO="${GITHUB_REPO:-justewg/planka}"
+FINAL_STATUS="${FINAL_STATUS:-Done}"
+FINAL_FLOW="${FINAL_FLOW:-In Review}"
 
 commit_file="${CODEX_DIR}/commit_message.txt"
 stage_file="${CODEX_DIR}/stage_paths.txt"
@@ -343,9 +345,9 @@ post_in_review_issue_comment "$task_id" "$pr_number" "$pr_url"
 
 printf '%s\n' "$pr_number" > "$pr_number_file"
 if [[ -n "$active_item_id" ]]; then
-  "${ROOT_DIR}/scripts/codex/project_set_status.sh" "$active_item_id" "In Progress" "In Review"
+  "${ROOT_DIR}/scripts/codex/project_set_status.sh" "$active_item_id" "$FINAL_STATUS" "$FINAL_FLOW"
 else
-  "${ROOT_DIR}/scripts/codex/project_set_status.sh" "$task_id" "In Progress" "In Review"
+  "${ROOT_DIR}/scripts/codex/project_set_status.sh" "$task_id" "$FINAL_STATUS" "$FINAL_FLOW"
 fi
 
 : > "$commit_file"
@@ -365,5 +367,5 @@ fi
 "${ROOT_DIR}/scripts/codex/executor_reset.sh" >/dev/null
 
 echo "FINALIZED_TASK_ID=$task_id"
-echo "FINALIZED_STATUS=In Progress"
-echo "FINALIZED_FLOW=In Review"
+echo "FINALIZED_STATUS=$FINAL_STATUS"
+echo "FINALIZED_FLOW=$FINAL_FLOW"

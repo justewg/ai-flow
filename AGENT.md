@@ -103,7 +103,7 @@
    - если executor завершил прогон, но не финализировал задачу, публикую `AGENT_BLOCKER` в Issue и перехожу в ожидание твоего решения;
    - жду ответ в Issue-комментариях; daemon читает ответ и фиксирует `AGENT_RESUMED`.
 5) По готовности:
-   - выполняю `scripts/codex/run.sh task_finalize` (commit+push, create/update PR, `Flow=In Review`);
+   - выполняю `scripts/codex/run.sh task_finalize` (commit+push, create/update PR, `Status=Done`, `Flow=In Review`);
    - отправляю PR на ревью и прошу ревью;
    - двигаю статус задачи по flow.
 

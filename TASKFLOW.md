@@ -98,6 +98,7 @@
 Telegram-сигналы по PR:
 - `Signal: TEMP_PROGRESS` — промежуточные изменения, проверка не требуется.
 - `Signal: FINAL_REVIEW` (`Action: ready_for_review`) — финальная отсечка: нужно идти проверять и принимать.
+- Backward-compatible правило: если PR открыт/переоткрыт сразу как non-draft, `Signal: FINAL_REVIEW` отправляется на `opened/reopened`.
 
 ## 6. Политика языка и оформления
 - Общение: русский.

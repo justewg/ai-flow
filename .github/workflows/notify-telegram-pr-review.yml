@@ -69,6 +69,14 @@ jobs:
             STAGE_LABEL="Draft (временная дельта)"
           fi
 
+          # Backward-compatible финальный сигнал: если PR сразу открыт как non-draft,
+          # считаем это финальной отсечкой для проверки.
+          if [[ "${PR_DRAFT}" == "false" && ( "${PR_ACTION}" == "opened" || "${PR_ACTION}" == "reopened" ) ]]; then
+            SIGNAL_LABEL="FINAL_REVIEW"
+            STAGE_LABEL="In Review (финал)"
+            CHECK_NOW="YES"
+          fi
+
           MESSAGE=$'PLANKA: PR review signal\n'
           MESSAGE+="Signal: ${SIGNAL_LABEL}"$'\n'
           MESSAGE+="Action: ${ACTION_LABEL}"$'\n'

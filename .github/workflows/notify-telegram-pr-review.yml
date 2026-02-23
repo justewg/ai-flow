@@ -77,6 +77,25 @@ jobs:
             CHECK_NOW="YES"
           fi
 
+          # Явная финализация через маркер в PR body:
+          # task_finalize добавляет CODEX_SIGNAL: FINAL_REVIEW.
+          # Отправляем FINAL_REVIEW только в момент появления маркера.
+          BODY_FROM="$(jq -r '.changes.body.from // ""' "${GITHUB_EVENT_PATH}" 2>/dev/null || true)"
+          HAS_FINAL_NOW="0"
+          HAS_FINAL_BEFORE="0"
+          if printf '%s' "${PR_BODY}" | grep -q 'CODEX_SIGNAL: FINAL_REVIEW'; then
+            HAS_FINAL_NOW="1"
+          fi
+          if printf '%s' "${BODY_FROM}" | grep -q 'CODEX_SIGNAL: FINAL_REVIEW'; then
+            HAS_FINAL_BEFORE="1"
+          fi
+          if [[ "${PR_ACTION}" == "edited" && "${HAS_FINAL_NOW}" == "1" && "${HAS_FINAL_BEFORE}" != "1" ]]; then
+            ACTION_LABEL="edited_finalized"
+            SIGNAL_LABEL="FINAL_REVIEW"
+            STAGE_LABEL="In Review (финал)"
+            CHECK_NOW="YES"
+          fi
+
           MESSAGE=$'PLANKA: PR review signal\n'
           MESSAGE+="Signal: ${SIGNAL_LABEL}"$'\n'
           MESSAGE+="Action: ${ACTION_LABEL}"$'\n'

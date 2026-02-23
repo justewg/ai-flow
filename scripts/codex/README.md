@@ -129,6 +129,7 @@
 - `executor_tick.sh <task-id> <issue-number>`
   - проверяет живость executor по pid/state
   - при `FAILED` автоматически публикует blocker-комментарий в Issue (один раз на задачу)
+  - после нового ответа пользователя в Issue делает retry executor без ручного сброса state
   - при `DONE` и активной задаче без waiting-state перезапускает executor после cooldown
 - `executor_reset.sh`
   - останавливает живой executor-процесс (если есть) и очищает state-файлы

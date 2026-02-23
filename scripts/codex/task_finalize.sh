@@ -75,6 +75,15 @@ build_default_pr_body() {
 EOF
 }
 
+ensure_final_review_signal() {
+  local body="$1"
+  if printf '%s\n' "$body" | grep -q 'CODEX_SIGNAL: FINAL_REVIEW'; then
+    printf '%s' "$body"
+    return
+  fi
+  printf '%s\n\n%s\n%s\n' "$body" "CODEX_SIGNAL: FINAL_REVIEW" "CODEX_STAGE: IN_REVIEW"
+}
+
 extract_task_id_from_message() {
   local commit_message="$1"
   local task_id
@@ -85,6 +94,24 @@ extract_task_id_from_message() {
 extract_pr_number_from_url() {
   local url="$1"
   printf '%s' "$url" | sed -E 's#.*/pull/([0-9]+).*#\1#'
+}
+
+mark_pr_ready_if_draft() {
+  local pr_number="$1"
+  local is_draft
+  is_draft="$(
+    gh pr view "$pr_number" \
+      --repo "$REPO" \
+      --json isDraft \
+      --jq '.isDraft'
+  )"
+
+  if [[ "$is_draft" == "true" ]]; then
+    gh pr ready "$pr_number" --repo "$REPO" >/dev/null
+    echo "PR_READY_FOR_REVIEW=true"
+  else
+    echo "PR_READY_FOR_REVIEW=false"
+  fi
 }
 
 mkdir -p "$CODEX_DIR"
@@ -126,6 +153,7 @@ pr_body="$(read_if_present "$body_file" || true)"
 if [[ -z "$pr_body" ]]; then
   pr_body="$(build_default_pr_body "$task_id")"
 fi
+pr_body="$(ensure_final_review_signal "$pr_body")"
 
 tmp_title="$(mktemp)"
 tmp_body="$(mktemp)"
@@ -169,6 +197,8 @@ else
   printf '%s\n' "$open_prs_json"
   exit 1
 fi
+
+mark_pr_ready_if_draft "$pr_number"
 
 printf '%s\n' "$pr_number" > "$pr_number_file"
 "${ROOT_DIR}/scripts/codex/project_set_status.sh" "$task_id" "In Progress" "In Review"

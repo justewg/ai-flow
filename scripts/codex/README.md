@@ -130,7 +130,7 @@
   - при `FAILED` автоматически публикует blocker-комментарий в Issue (один раз на задачу)
   - при `DONE` и активной задаче без waiting-state перезапускает executor после cooldown
 - `executor_reset.sh`
-  - очищает state-файлы executor
+  - останавливает живой executor-процесс (если есть) и очищает state-файлы
 - `task_ask.sh <question|blocker> <message-file>`
   - публикует структурированный комментарий в текущий Issue (`CODEX_SIGNAL: AGENT_QUESTION|AGENT_BLOCKER`)
   - сохраняет waiting-state в `.tmp/codex/`, чтобы daemon ждал ответ пользователя

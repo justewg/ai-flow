@@ -12,6 +12,10 @@ fi
 task_or_item_id="$1"
 status_name="$2"
 flow_name="${3:-$2}"
+issue_number_hint=""
+if [[ "$task_or_item_id" =~ ^ISSUE-([0-9]+)$ ]]; then
+  issue_number_hint="${BASH_REMATCH[1]}"
+fi
 
 project_id="PVT_kwHOAPt_Q84BPyyr"
 
@@ -76,11 +80,16 @@ if [[ "$task_or_item_id" == PVTI_* ]]; then
 else
   item_id="$(
     printf '%s' "$project_json" |
-      jq -r --arg task "$task_or_item_id" '
+      jq -r --arg task "$task_or_item_id" --arg issue_num "$issue_number_hint" '
         .data.node.items.nodes[]
         | select(
             (.fieldValueByName.text // "") == $task
-            or ((.content.title // "") | test($task))
+            or ((.content.title // "") | contains($task))
+            or (
+              ($issue_num != "")
+              and ((.content.__typename // "") == "Issue")
+              and ((.content.number // "") | tostring) == $issue_num
+            )
           )
         | .id
       ' |

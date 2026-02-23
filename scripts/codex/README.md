@@ -98,6 +98,7 @@
   - синхронное обновление полей `Status` и `Flow` карточки проекта
 - `project_add_task.sh <task-id> <title-file> <scope> <priority> [status] [flow]`
   - создание карточки задачи в проекте с заполнением `Task ID`, `Scope`, `Priority`, `Status`, `Flow`
+  - после создания делает verify `Status/Flow`; при сетевой деградации возвращает ошибку, чтобы не считать задачу корректно инициализированной
 - `next_task.sh`
   - выводит `NEXT_TASK_ID=...` и `NEXT_TITLE=...` для ближайшей задачи (статус `Planned`)
 - `daemon_tick.sh`

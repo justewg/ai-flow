@@ -114,6 +114,126 @@ mark_pr_ready_if_draft() {
   fi
 }
 
+find_issue_number_for_task() {
+  local task_id="$1"
+  local issue_number=""
+
+  if [[ -s "$active_issue_file" ]]; then
+    issue_number="$(<"$active_issue_file")"
+  fi
+  if [[ -n "$issue_number" ]]; then
+    printf '%s' "$issue_number"
+    return 0
+  fi
+
+  local candidates_json=""
+  if ! candidates_json="$(
+    "${ROOT_DIR}/scripts/codex/gh_retry.sh" \
+      gh issue list \
+      --repo "$REPO" \
+      --state open \
+      --limit 100 \
+      --json number,title 2>/dev/null
+  )"; then
+    return 1
+  fi
+
+  issue_number="$(
+    printf '%s' "$candidates_json" |
+      jq -r --arg task "$task_id" '
+        [ .[] | select((.title // "") | test($task)) ][0].number // empty
+      '
+  )"
+  printf '%s' "$issue_number"
+  return 0
+}
+
+post_in_review_issue_comment() {
+  local task_id="$1"
+  local pr_number="$2"
+  local pr_url="$3"
+  local issue_number=""
+
+  if ! issue_number="$(find_issue_number_for_task "$task_id")"; then
+    echo "FINAL_ISSUE_COMMENT_SKIPPED=GITHUB_LOOKUP_UNAVAILABLE"
+    return 0
+  fi
+  if [[ -z "$issue_number" ]]; then
+    echo "FINAL_ISSUE_COMMENT_SKIPPED=ISSUE_NOT_FOUND"
+    return 0
+  fi
+
+  local comment_body
+  comment_body="$(cat <<EOF
+CODEX_SIGNAL: AGENT_IN_REVIEW
+CODEX_TASK: ${task_id}
+CODEX_PR_NUMBER: ${pr_number}
+CODEX_EXPECT: USER_REVIEW
+
+Работу по задаче завершил, PR готов к проверке.
+Жду твою проверку и решение по PR: ${pr_url}
+EOF
+)"
+
+  local comment_json=""
+  if comment_json="$(
+    "${ROOT_DIR}/scripts/codex/gh_retry.sh" \
+      gh api "repos/${REPO}/issues/${issue_number}/comments" \
+      -f body="$comment_body" 2>&1
+  )"; then
+    local comment_id comment_url
+    comment_id="$(printf '%s' "$comment_json" | jq -r '.id // empty')"
+    comment_url="$(printf '%s' "$comment_json" | jq -r '.html_url // empty')"
+    echo "FINAL_ISSUE_COMMENT_POSTED=1"
+    echo "FINAL_ISSUE_NUMBER=$issue_number"
+    echo "FINAL_ISSUE_COMMENT_ID=$comment_id"
+    echo "FINAL_ISSUE_COMMENT_URL=$comment_url"
+    return 0
+  fi
+
+  local rc=$?
+  if [[ "$rc" -eq 75 ]]; then
+    local tmp_body queue_out
+    tmp_body="$(mktemp "${CODEX_DIR}/in_review_comment.XXXXXX")"
+    printf '%s\n' "$comment_body" > "$tmp_body"
+
+    if queue_out="$(
+      "${ROOT_DIR}/scripts/codex/github_outbox.sh" \
+        enqueue_issue_comment \
+        "$REPO" \
+        "$issue_number" \
+        "$tmp_body" \
+        "$task_id" \
+        "IN_REVIEW" \
+        "0" 2>&1
+    )"; then
+      rm -f "$tmp_body"
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        echo "$line"
+      done <<< "$queue_out"
+      echo "FINAL_ISSUE_COMMENT_QUEUED_OUTBOX=1"
+      echo "FINAL_ISSUE_NUMBER=$issue_number"
+      echo "WAIT_GITHUB_API_UNSTABLE=1"
+      return 0
+    fi
+
+    local qrc=$?
+    rm -f "$tmp_body"
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "FINAL_ISSUE_COMMENT_OUTBOX_ERROR(rc=$qrc): $line"
+    done <<< "$queue_out"
+    return 0
+  fi
+
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "FINAL_ISSUE_COMMENT_ERROR(rc=$rc): $line"
+  done <<< "$comment_json"
+  return 0
+}
+
 mkdir -p "$CODEX_DIR"
 
 commit_message="$(require_nonempty_file "$commit_file")"
@@ -199,6 +319,8 @@ else
 fi
 
 mark_pr_ready_if_draft "$pr_number"
+
+post_in_review_issue_comment "$task_id" "$pr_number" "$pr_url"
 
 printf '%s\n' "$pr_number" > "$pr_number_file"
 "${ROOT_DIR}/scripts/codex/project_set_status.sh" "$task_id" "In Progress" "In Review"

@@ -124,6 +124,13 @@ Execution-Mode: daemon
 16. Для разделения авторства в GitHub можно задать отдельный токен автоматики:
    - `DAEMON_GH_TOKEN` (или `CODEX_GH_TOKEN`) в `.env`/`.env.deploy`;
    - тогда Issue/PR/Project-действия демона пойдут от владельца этого токена.
+   - этот токен уместен в двух сценариях:
+     - как основной (текущий этап до полного перехода на GitHub App);
+     - как аварийный fallback после перехода на GitHub App.
+   - выпуск токена:
+     - GitHub UI -> `Settings` -> `Developer settings` -> `Personal access tokens`;
+     - предпочтительно выпускать от отдельного bot-аккаунта;
+     - минимальные scopes для текущего flow: `repo`, `read:project`, `project`.
 17. Перед взятием задачи из `Status=Todo` daemon должен проверять `Flow Meta -> Depends-On`:
    - если есть незакрытые блокеры, задача не берется в работу;
    - daemon пишет причину блокировки в лог/state и (опционально) комментарий в Issue;

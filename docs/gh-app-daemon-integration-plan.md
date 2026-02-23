@@ -38,6 +38,9 @@
 
 Опционально аварийный fallback:
 - `DAEMON_GH_TOKEN=...`
+  - источник: PAT (лучше от отдельного bot-аккаунта)
+  - путь в UI: `Settings -> Developer settings -> Personal access tokens`
+  - минимальные scopes для текущего flow: `repo`, `read:project`, `project`
 
 ## Мини-сервис (Node.js)
 ### Обязательные endpoint-ы

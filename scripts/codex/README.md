@@ -77,6 +77,17 @@
   - Применяется к действиям автоматики: комментарии в Issue, update/create PR, update Project status.
   - Автор этих действий в GitHub будет владельцем этого токена.
   - Читается из env процесса или из `.env`/`.env.deploy`.
+  - Роль в архитектуре:
+    - текущий режим: основной токен для daemon/watchdog;
+    - целевой режим с GitHub App: аварийный fallback, если App auth недоступен.
+  - Когда можно не задавать:
+    - после полного перехода на GitHub App (APP-03..APP-09), если fallback не нужен.
+  - Как выпустить:
+    - GitHub UI -> `Settings` -> `Developer settings` -> `Personal access tokens`.
+    - Рекомендуемо: токен отдельного bot-аккаунта (не личный), чтобы авторство действий было отделено.
+    - Тип токена: `Tokens (classic)` (для простого старта) или fine-grained PAT с эквивалентными правами.
+    - Минимальные права для текущего flow: `repo`, `read:project`, `project`.
+    - После выпуска записать в `.env` и перезапустить сервисы.
   - После изменения значения перезапусти сервисы:
     - `scripts/codex/run.sh daemon_uninstall && scripts/codex/run.sh daemon_install`
     - `scripts/codex/run.sh watchdog_uninstall && scripts/codex/run.sh watchdog_install`

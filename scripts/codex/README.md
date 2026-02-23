@@ -20,7 +20,7 @@
 - `scripts/codex/run.sh project_add_task`
 - `scripts/codex/run.sh project_set_status`
 - `scripts/codex/run.sh next_task` — показать следующую задачу со статусом `Planned` (приоритет P0→P1→P2, затем по номеру `PL-xxx`).
-- `scripts/codex/run.sh daemon_tick` — один цикл демона: проверка `To Progress`, подхват задачи, перевод в `In Progress`.
+- `scripts/codex/run.sh daemon_tick` — один цикл демона: проверка `Todo`, подхват задачи, перевод в `In Progress`.
 - `scripts/codex/run.sh daemon_loop [interval-sec]` — непрерывный polling-цикл демона (по умолчанию 45 сек).
 - `scripts/codex/run.sh daemon_install [label] [interval-sec]` — установка и запуск `launchd`-агента.
 - `scripts/codex/run.sh daemon_uninstall [label]` — остановка и удаление `launchd`-агента.
@@ -112,7 +112,7 @@
   - сетевые вызовы к GitHub выполняет через `gh_retry.sh`, чтобы кратковременные DNS/API-сбои не роняли flow
   - если активной задачи нет, проверяет открытые PR `development -> main` и при наличии ждет merge/close
   - читает Project через GraphQL (без нестабильного `gh project item-list`)
-  - берет задачу только из `Status=To Progress`
+  - берет задачу только из `Status=Todo`
   - для автоподхвата учитывает только `Issue`; `DraftIssue` игнорируется
   - для перевода статуса использует `project item id`, поэтому не зависит от ручного заполнения поля `Task ID`
   - `Task ID` берет из поля, либо извлекает `PL-xxx` из title

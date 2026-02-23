@@ -59,7 +59,7 @@ Fixed input files in .tmp/codex:
   project_new_title.txt
   project_new_scope.txt
   project_new_priority.txt
-  project_new_status.txt (optional; defaults to Todo)
+  project_new_status.txt (optional; defaults to Backlog)
   project_new_flow.txt (optional; defaults to Backlog)
 EOF
 }
@@ -200,7 +200,7 @@ case "$cmd" in
     new_task_id="$(read_required_file "${CODEX_DIR}/project_new_task_id.txt")"
     new_scope="$(read_required_file "${CODEX_DIR}/project_new_scope.txt")"
     new_priority="$(read_required_file "${CODEX_DIR}/project_new_priority.txt")"
-    new_status="Todo"
+    new_status="Backlog"
     new_flow="Backlog"
     [[ -f "${CODEX_DIR}/project_new_status.txt" ]] && new_status="$(read_required_file "${CODEX_DIR}/project_new_status.txt")"
     [[ -f "${CODEX_DIR}/project_new_flow.txt" ]] && new_flow="$(read_required_file "${CODEX_DIR}/project_new_flow.txt")"

@@ -9,7 +9,7 @@ project_number="${PROJECT_NUMBER:-2}"
 project_owner="${PROJECT_OWNER:-@me}"
 project_items_limit="${PROJECT_ITEMS_LIMIT:-200}"
 repo="${GITHUB_REPO:-justewg/planka}"
-trigger_status="${TRIGGER_STATUS:-To Progress}"
+trigger_status="${TRIGGER_STATUS:-Todo}"
 target_status="${TARGET_STATUS:-In Progress}"
 target_flow="${TARGET_FLOW:-In Progress}"
 

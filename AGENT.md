@@ -94,8 +94,8 @@
 После сообщения `merged`:
 
 1) Синхронизирую ветки (`scripts/codex/run.sh sync_branches`).
-2) Для daemon-flow задача на запуск задается переводом `Status` в `To Progress`.
-3) Демон мониторит `Status=To Progress`, подхватывает задачу и переводит ее в `In Progress` (ACK).
+2) Для daemon-flow задача на запуск задается переводом `Status` из `Backlog` в `Todo`.
+3) Демон мониторит `Status=Todo`, подхватывает задачу и переводит ее в `In Progress` (ACK).
 4) После подхвата:
    - запускается автономный executor (`codex exec`) и выполняет реализацию в рамках Issue.
    - executor коммитит русскими сообщениями и обновляет PR по мере прогресса.

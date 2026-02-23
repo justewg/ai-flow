@@ -98,6 +98,8 @@
 3) Демон мониторит `Status=To Progress`, подхватывает задачу и переводит ее в `In Progress` (ACK).
 4) После подхвата:
    - начинаю реализацию и коммичу русскими сообщениями.
+   - если есть блокер/вопрос, публикую комментарий в Issue через `scripts/codex/run.sh task_ask ...`;
+   - жду ответ в Issue-комментариях; daemon читает ответ и фиксирует `AGENT_RESUMED`.
 5) По готовности:
    - выполняю `scripts/codex/run.sh task_finalize` (commit+push, create/update PR, `Flow=In Review`);
    - отправляю PR на ревью и прошу ревью;

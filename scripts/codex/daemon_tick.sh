@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+CODEX_DIR="${ROOT_DIR}/.tmp/codex"
 
 project_id="${PROJECT_ID:-PVT_kwHOAPt_Q84BPyyr}"
 repo="${GITHUB_REPO:-justewg/planka}"
@@ -28,6 +29,26 @@ fi
 if ! git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- ||
   ! git -C "${ROOT_DIR}" diff --cached --quiet --ignore-submodules --; then
   echo "WAIT_DIRTY_WORKTREE_TRACKED=1"
+  exit 0
+fi
+
+mkdir -p "$CODEX_DIR"
+
+reply_probe_out="$("${ROOT_DIR}/scripts/codex/daemon_check_replies.sh" 2>&1)"
+while IFS= read -r line; do
+  [[ -z "$line" || "$line" == "NO_WAITING_USER_REPLY=1" ]] && continue
+  echo "$line"
+done <<< "$reply_probe_out"
+if printf '%s' "$reply_probe_out" | grep -q '^WAIT_USER_REPLY=1'; then
+  exit 0
+fi
+
+if [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]]; then
+  active_task_id="$(<"${CODEX_DIR}/daemon_active_task.txt")"
+  echo "WAIT_ACTIVE_TASK_ID=$active_task_id"
+  if [[ -s "${CODEX_DIR}/daemon_active_issue_number.txt" ]]; then
+    echo "WAIT_ACTIVE_ISSUE_NUMBER=$(<"${CODEX_DIR}/daemon_active_issue_number.txt")"
+  fi
   exit 0
 fi
 
@@ -96,6 +117,7 @@ matched_json="$(
       | {
           item_id: .id,
           content_type: (.content.__typename // ""),
+          issue_number: (.content.number // ""),
           title: (.content.title // ""),
           task_id: (
             .taskId.text
@@ -160,6 +182,7 @@ if (( valid_queue_count > 1 )); then
 fi
 
 item_id="$(printf '%s' "$valid_queue_json" | jq -r '.[0].item_id')"
+issue_number="$(printf '%s' "$valid_queue_json" | jq -r '.[0].issue_number')"
 task_id="$(printf '%s' "$valid_queue_json" | jq -r '.[0].task_id')"
 title="$(printf '%s' "$valid_queue_json" | jq -r '.[0].title')"
 
@@ -173,16 +196,23 @@ if [[ -z "$item_id" || "$item_id" == "null" ]]; then
   exit 1
 fi
 
+if [[ -z "$issue_number" || "$issue_number" == "null" ]]; then
+  echo "Task in trigger status has no issue number"
+  exit 1
+fi
+
 "${ROOT_DIR}/scripts/codex/sync_branches.sh"
 "${ROOT_DIR}/scripts/codex/project_set_status.sh" "$item_id" "$target_status" "$target_flow"
 
-mkdir -p "${ROOT_DIR}/.tmp/codex"
-printf '%s\n' "$task_id" > "${ROOT_DIR}/.tmp/codex/daemon_active_task.txt"
-printf '%s\n' "$task_id" > "${ROOT_DIR}/.tmp/codex/project_task_id.txt"
-date -u '+%Y-%m-%dT%H:%M:%SZ' > "${ROOT_DIR}/.tmp/codex/daemon_last_claim_utc.txt"
+printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_active_task.txt"
+printf '%s\n' "$item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"
+printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
+printf '%s\n' "$task_id" > "${CODEX_DIR}/project_task_id.txt"
+date -u '+%Y-%m-%dT%H:%M:%SZ' > "${CODEX_DIR}/daemon_last_claim_utc.txt"
 
 echo "CLAIMED_TASK_ID=$task_id"
 echo "CLAIMED_ITEM_ID=$item_id"
+echo "CLAIMED_ISSUE_NUMBER=$issue_number"
 echo "CLAIMED_TITLE=$title"
 echo "CLAIMED_FROM_STATUS=$trigger_status"
 echo "CLAIMED_TO_STATUS=$target_status"

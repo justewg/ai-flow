@@ -22,7 +22,7 @@
 ## Wrapper-first (рекомендуемый режим)
 - Префикс: `scripts/codex/run.sh`
   - Шаблон: `scripts/codex/run.sh <command>`
-  - Поддерживаемые команды: `help`, `clear`, `write`, `append`, `copy`, `sync_branches`, `pr_list_open`, `pr_view`, `pr_create`, `pr_edit`, `commit_push`, `project_add_task`, `project_set_status`, `next_task`, `daemon_tick`, `daemon_loop`, `daemon_install`, `daemon_uninstall`, `daemon_status`, `task_finalize`
+  - Поддерживаемые команды: `help`, `clear`, `write`, `append`, `copy`, `sync_branches`, `pr_list_open`, `pr_view`, `pr_create`, `pr_edit`, `commit_push`, `project_add_task`, `project_set_status`, `next_task`, `daemon_tick`, `daemon_loop`, `daemon_install`, `daemon_uninstall`, `daemon_status`, `task_ask`, `daemon_check_replies`, `task_finalize`
   - Regex mask: `^scripts/codex/run\.sh(?:\s+.+)?$`
   - UI mask: `scripts/codex/run.sh`
 - Префикс: `scripts/codex/dev_commit_push.sh`
@@ -49,6 +49,14 @@
   - Шаблон: `scripts/codex/project_set_status.sh <task-id|project-item-id> <status-name> [flow-name]`
   - Regex mask: `^scripts/codex/project_set_status\.sh(?:\s+.+){2,3}$`
   - UI mask: `scripts/codex/project_set_status.sh`
+- Префикс: `scripts/codex/task_ask.sh`
+  - Шаблон: `scripts/codex/task_ask.sh <question|blocker> <message-file>`
+  - Regex mask: `^scripts/codex/task_ask\.sh\s+(?:question|blocker)\s+.+$`
+  - UI mask: `scripts/codex/task_ask.sh`
+- Префикс: `scripts/codex/daemon_check_replies.sh`
+  - Шаблон: `scripts/codex/daemon_check_replies.sh`
+  - Regex mask: `^scripts/codex/daemon_check_replies\.sh$`
+  - UI mask: `scripts/codex/daemon_check_replies.sh`
 
 ## Git (стандартный flow)
 - Префикс: `git add`

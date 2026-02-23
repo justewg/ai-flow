@@ -36,7 +36,7 @@
 - `scripts/codex/run.sh executor_build_prompt <task-id> <issue-number> <output-file>` — сбор prompt для executor из Issue.
 - `scripts/codex/run.sh task_ask <question|blocker> <message-file>` — отправить вопрос/блокер в comment Issue и включить режим ожидания ответа.
 - `scripts/codex/run.sh daemon_check_replies` — проверить ответы в Issue-комментах для ожидающего вопроса.
-- `scripts/codex/run.sh task_finalize` — финализация задачи: commit+push, create/update PR, перевод задачи в `In Review`.
+- `scripts/codex/run.sh task_finalize` — финализация задачи: commit+push, create/update PR, перевод задачи в `Status=Done`, `Flow=In Review`.
 - `scripts/codex/run.sh gh_retry <command> [args...]` — выполнить GitHub-команду с retry/backoff.
 - `scripts/codex/run.sh github_health_check` — быстрый preflight GitHub API (`healthy/unstable`).
 - `scripts/codex/run.sh github_outbox <enqueue_issue_comment|flush|count|list> ...` — управление отложенными GitHub-действиями.

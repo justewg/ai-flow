@@ -399,7 +399,8 @@ else
     echo "WAIT_GITHUB_STAGE=SYNC_BRANCHES"
     exit 0
   fi
-  if printf '%s' "$sync_out" | grep -Fq 'Not possible to fast-forward, aborting.'; then
+  if [[ "$rc" -eq 78 ]] ||
+    printf '%s' "$sync_out" | grep -Eq 'BRANCH_SYNC_CONFLICT=1|Not possible to fast-forward, aborting.|Automatic merge failed'; then
     echo "WAIT_BRANCH_SYNC_REQUIRED=1"
     echo "WAIT_BRANCH_STAGE=SYNC_BRANCHES"
     exit 0

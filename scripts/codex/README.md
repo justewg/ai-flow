@@ -83,7 +83,9 @@
 - `dev_commit_push.sh "message" <path...>`
   - `git add` + `git commit` + `git push origin development`
 - `sync_branches.sh`
-  - `fetch/pull/ff-merge/push` для выравнивания `main` и `development` после merge PR
+  - `fetch/pull/merge/push` для выравнивания `main` и `development` после merge PR
+  - если `main` уже включен в `development`, merge пропускается
+  - при merge-конфликте возвращает `BRANCH_SYNC_CONFLICT=1` (код 78)
 - `pr_list_open.sh`
   - список открытых PR `development -> main`
 - `pr_view.sh <pr-number>`

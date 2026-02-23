@@ -25,6 +25,11 @@
 - `scripts/codex/run.sh daemon_install [label] [interval-sec]` — установка и запуск `launchd`-агента.
 - `scripts/codex/run.sh daemon_uninstall [label]` — остановка и удаление `launchd`-агента.
 - `scripts/codex/run.sh daemon_status [label]` — проверка статуса `launchd`-агента.
+- `scripts/codex/run.sh watchdog_tick` — один цикл самодиагностики/самовосстановления.
+- `scripts/codex/run.sh watchdog_loop [interval-sec]` — непрерывный watchdog-цикл.
+- `scripts/codex/run.sh watchdog_install [label] [interval-sec]` — установка и запуск `launchd`-watchdog.
+- `scripts/codex/run.sh watchdog_uninstall [label]` — остановка и удаление `launchd`-watchdog.
+- `scripts/codex/run.sh watchdog_status [label]` — проверка статуса watchdog.
 - `scripts/codex/run.sh executor_reset` — сброс состояния автономного executor.
 - `scripts/codex/run.sh executor_start <task-id> <issue-number>` — запуск автономного executor.
 - `scripts/codex/run.sh executor_tick <task-id> <issue-number>` — проверка/перезапуск executor, обработка fail-state.
@@ -127,6 +132,27 @@
   - выгружает и удаляет `launchd`-агент
 - `daemon_status.sh [label]`
   - проверяет, запущен ли агент `launchd`
+- `watchdog_tick.sh`
+  - проверяет согласованность daemon/executor состояния
+  - триггеры деградации:
+    - `active_task` есть, но `executor_pid` мертв
+    - `executor_state=RUNNING`, но heartbeat устарел
+    - `daemon_state=IDLE_NO_TASKS`, но активная задача еще есть
+    - stale `daemon.lock` + устаревший `daemon.log`
+  - лестница восстановления:
+    - `SOFT_DAEMON_TICK` (`daemon_tick`)
+    - `MEDIUM_RESET_EXECUTOR` (`executor_reset` + `daemon_tick`)
+    - `HARD_RESTART_DAEMON` (`daemon_uninstall` + `daemon_install`)
+  - использует cooldown, чтобы не спамить recovery-действиями
+  - отправляет Telegram-сигнал о срабатывании recovery (если доступен бот)
+- `watchdog_loop.sh [interval-sec]`
+  - крутит `watchdog_tick.sh` в цикле с отдельным lock-файлом
+- `watchdog_install.sh [label] [interval-sec]`
+  - создает `~/Library/LaunchAgents/<label>.plist` для watchdog
+- `watchdog_uninstall.sh [label]`
+  - выгружает и удаляет watchdog-агент
+- `watchdog_status.sh [label]`
+  - проверяет, запущен ли watchdog-агент
 - `task_finalize.sh`
   - читает `commit_message.txt`, `stage_paths.txt`, `project_task_id.txt` (или `daemon_active_task.txt`)
   - выполняет commit/push в `development`
@@ -175,6 +201,13 @@
 - `.tmp/codex/daemon.log` — heartbeat и результат `daemon_tick`
 - `.tmp/codex/launchd.out.log` — stdout агента `launchd`
 - `.tmp/codex/launchd.err.log` — stderr агента `launchd`
+- `.tmp/codex/watchdog.log` — heartbeat watchdog и recovery-действия
+- `.tmp/codex/watchdog_state.txt` — агрегированный статус watchdog
+- `.tmp/codex/watchdog_state_detail.txt` — причина/деталь статуса watchdog
+- `.tmp/codex/watchdog_last_action.txt` — последнее recovery-действие
+- `.tmp/codex/watchdog_last_action_epoch.txt` — timestamp последнего recovery-действия
+- `.tmp/codex/watchdog.launchd.out.log` — stdout watchdog-агента
+- `.tmp/codex/watchdog.launchd.err.log` — stderr watchdog-агента
 - `.tmp/codex/daemon_user_reply.txt` — последний ответ пользователя из Issue-комментариев
 - `.tmp/codex/daemon_state.txt` — текущий агрегированный state демона (`IDLE_NO_TASKS`, `WAIT_OPEN_PR`, `WAIT_GITHUB_OFFLINE` и т.д.)
 - `.tmp/codex/daemon_state_detail.txt` — краткая причина/деталь текущего state, включая признаки деградации (`DEGRADED=GITHUB_DNS_OFFLINE`, `DEGRADED=PENDING_OUTBOX:<n>` и т.п.)
@@ -204,3 +237,8 @@ chmod +x scripts/codex/*.sh
 - `DAEMON_TG_ENV_FILE` (путь к env-файлу; по умолчанию проверяются `.env`, `.env.deploy`)
 - `DAEMON_TG_REMINDER_SEC` (интервал reminder в секундах, минимум 60; по умолчанию 1800)
 - `DAEMON_TG_GH_DNS_REMINDER_SEC` (интервал напоминаний именно для деградации `GITHUB_DNS_OFFLINE` при доступном Telegram; минимум 60, по умолчанию 300)
+- `WATCHDOG_DAEMON_LABEL` (какой daemon label перезапускать при hard recovery; по умолчанию `com.planka.codex-daemon`)
+- `WATCHDOG_DAEMON_INTERVAL_SEC` (интервал daemon после hard restart; по умолчанию 45)
+- `WATCHDOG_COOLDOWN_SEC` (минимальная пауза между recovery-действиями; по умолчанию 120)
+- `WATCHDOG_EXECUTOR_STALE_SEC` (порог stale heartbeat executor; по умолчанию 180)
+- `WATCHDOG_DAEMON_LOG_STALE_SEC` (порог stale daemon log/lock; по умолчанию 180)

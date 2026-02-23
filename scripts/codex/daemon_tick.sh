@@ -26,8 +26,9 @@ if (( open_pr_count > 0 )); then
   exit 0
 fi
 
-if [[ -n "$(git -C "${ROOT_DIR}" status --porcelain)" ]]; then
-  echo "WAIT_DIRTY_WORKTREE=1"
+if ! git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- ||
+  ! git -C "${ROOT_DIR}" diff --cached --quiet --ignore-submodules --; then
+  echo "WAIT_DIRTY_WORKTREE_TRACKED=1"
   exit 0
 fi
 

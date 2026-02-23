@@ -122,6 +122,8 @@
 - `.tmp/codex/launchd.out.log` — stdout агента `launchd`
 - `.tmp/codex/launchd.err.log` — stderr агента `launchd`
 - `.tmp/codex/daemon_user_reply.txt` — последний ответ пользователя из Issue-комментариев
+- `.tmp/codex/daemon_state.txt` — текущий агрегированный state демона (`IDLE_NO_TASKS`, `WAIT_OPEN_PR`, `WAIT_GITHUB_OFFLINE` и т.д.)
+- `.tmp/codex/daemon_state_detail.txt` — краткая причина/деталь текущего state
 
 ## Подготовка
 Скрипты должны быть исполняемыми:

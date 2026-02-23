@@ -7,6 +7,9 @@ LOCK_DIR="${CODEX_DIR}/daemon.lock"
 LOG_FILE="${CODEX_DIR}/daemon.log"
 STATE_FILE="${CODEX_DIR}/daemon_state.txt"
 STATE_DETAIL_FILE="${CODEX_DIR}/daemon_state_detail.txt"
+NOTIFY_MODE_FILE="${CODEX_DIR}/daemon_notify_mode.txt"
+NOTIFY_EPOCH_FILE="${CODEX_DIR}/daemon_notify_last_epoch.txt"
+NOTIFY_SIGNATURE_FILE="${CODEX_DIR}/daemon_notify_last_signature.txt"
 
 interval="${1:-${DAEMON_INTERVAL_SEC:-45}}"
 if ! [[ "$interval" =~ ^[0-9]+$ ]] || (( interval < 5 )); then
@@ -30,6 +33,16 @@ log() {
   local ts
   ts="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   printf '%s %s\n' "$ts" "$*" >> "$LOG_FILE"
+}
+
+read_file_or_default() {
+  local file_path="$1"
+  local default_value="$2"
+  if [[ -s "$file_path" ]]; then
+    cat "$file_path"
+  else
+    printf '%s' "$default_value"
+  fi
 }
 
 set_state() {
@@ -114,6 +127,96 @@ detect_flow_degradation() {
   fi
 }
 
+build_notify_message() {
+  local reason="$1"
+  local state="$2"
+  local detail="$3"
+  local now_utc
+  now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+  local msg
+  msg=$'PLANKA: daemon degradation signal\n'
+  msg+="Reason: ${reason}"$'\n'
+  msg+="State: ${state}"$'\n'
+  msg+="Detail: ${detail}"$'\n'
+  msg+="Time: ${now_utc}"
+  printf '%s' "$msg"
+}
+
+notify_if_needed() {
+  local state="$1"
+  local detail="$2"
+
+  local mode="healthy"
+  if [[ "$detail" == *"DEGRADED="* ]]; then
+    mode="degraded"
+  fi
+
+  local now_epoch
+  now_epoch="$(date +%s)"
+  local reminder_sec="${DAEMON_TG_REMINDER_SEC:-1800}"
+  if ! [[ "$reminder_sec" =~ ^[0-9]+$ ]] || (( reminder_sec < 60 )); then
+    reminder_sec=1800
+  fi
+
+  local signature
+  signature="$(printf '%s|%s' "$state" "$detail" | shasum -a 1 | awk '{print $1}')"
+
+  local last_mode
+  last_mode="$(read_file_or_default "$NOTIFY_MODE_FILE" "unknown")"
+  local last_epoch
+  last_epoch="$(read_file_or_default "$NOTIFY_EPOCH_FILE" "0")"
+  local last_signature
+  last_signature="$(read_file_or_default "$NOTIFY_SIGNATURE_FILE" "")"
+  if ! [[ "$last_epoch" =~ ^[0-9]+$ ]]; then
+    last_epoch=0
+  fi
+
+  local should_notify="0"
+  local reason=""
+  if [[ "$mode" == "degraded" ]]; then
+    if [[ "$last_mode" != "degraded" ]]; then
+      should_notify="1"
+      reason="ENTER_DEGRADED"
+    elif [[ "$last_signature" != "$signature" ]]; then
+      should_notify="1"
+      reason="DEGRADED_CHANGED"
+    elif (( now_epoch - last_epoch >= reminder_sec )); then
+      should_notify="1"
+      reason="DEGRADED_REMINDER"
+    fi
+  else
+    if [[ "$last_mode" == "degraded" ]]; then
+      should_notify="1"
+      reason="RECOVERED"
+    fi
+  fi
+
+  if [[ "$should_notify" == "1" ]]; then
+    local msg_file notify_out rc
+    msg_file="$(mktemp "${CODEX_DIR}/daemon_notify.XXXXXX")"
+    build_notify_message "$reason" "$state" "$detail" > "$msg_file"
+    if notify_out="$("${ROOT_DIR}/scripts/codex/telegram_local_notify.sh" "$msg_file" 2>&1)"; then
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        log "TG_NOTIFY: $line"
+      done <<<"$notify_out"
+      log "TG_NOTIFY_REASON=$reason"
+    else
+      rc=$?
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        log "TG_NOTIFY_ERROR(rc=$rc): $line"
+      done <<<"$notify_out"
+      log "TG_NOTIFY_REASON=$reason"
+    fi
+    rm -f "$msg_file"
+    printf '%s\n' "$now_epoch" > "$NOTIFY_EPOCH_FILE"
+    printf '%s\n' "$signature" > "$NOTIFY_SIGNATURE_FILE"
+    printf '%s\n' "$mode" > "$NOTIFY_MODE_FILE"
+  fi
+}
+
 log "daemon_loop start interval=${interval}s"
 set_state "BOOTING" "daemon_loop started"
 
@@ -132,6 +235,7 @@ while true; do
       detail="${detail} | ${degradation}"
     fi
     set_state "$state" "$detail"
+    notify_if_needed "$state" "$detail"
   else
     rc=$?
     while IFS= read -r line; do
@@ -146,6 +250,7 @@ while true; do
       detail="${detail} | ${degradation}"
     fi
     set_state "$state" "$detail"
+    notify_if_needed "$state" "$detail"
   fi
   sleep "$interval"
 done

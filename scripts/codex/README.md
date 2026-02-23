@@ -95,6 +95,11 @@
   - сохраняет текущий `Task ID` в `.tmp/codex/project_task_id.txt` для последующего `task_finalize`
 - `daemon_loop.sh [interval-sec]`
   - крутит `daemon_tick.sh` в цикле с lock-файлом и heartbeat-логом
+  - отправляет локальные Telegram-алерты по деградации без спама:
+    - вход в деградацию (`ENTER_DEGRADED`)
+    - смена причины деградации (`DEGRADED_CHANGED`)
+    - периодический reminder (`DEGRADED_REMINDER`, по умолчанию раз в 30 минут)
+    - восстановление (`RECOVERED`)
 - `daemon_install.sh [label] [interval-sec]`
   - создает `~/Library/LaunchAgents/<label>.plist`
   - включает автозапуск демона при логине и restart при падении
@@ -124,6 +129,9 @@
 - `.tmp/codex/daemon_user_reply.txt` — последний ответ пользователя из Issue-комментариев
 - `.tmp/codex/daemon_state.txt` — текущий агрегированный state демона (`IDLE_NO_TASKS`, `WAIT_OPEN_PR`, `WAIT_GITHUB_OFFLINE` и т.д.)
 - `.tmp/codex/daemon_state_detail.txt` — краткая причина/деталь текущего state, включая признаки деградации (`DEGRADED=GITHUB_DNS_OFFLINE`, `DEGRADED=PENDING_OUTBOX:<n>` и т.п.)
+- `.tmp/codex/daemon_notify_mode.txt` — последний режим уведомлений (`degraded|healthy`)
+- `.tmp/codex/daemon_notify_last_epoch.txt` — timestamp последней попытки локального Telegram-уведомления
+- `.tmp/codex/daemon_notify_last_signature.txt` — подпись последнего состояния, по которой определяется `DEGRADED_CHANGED`
 
 ## Подготовка
 Скрипты должны быть исполняемыми:
@@ -131,3 +139,9 @@
 ```bash
 chmod +x scripts/codex/*.sh
 ```
+
+Опциональные переменные для локальных Telegram-алертов демона:
+- `DAEMON_TG_BOT_TOKEN` (или `TG_BOT_TOKEN`)
+- `DAEMON_TG_CHAT_ID` (или `TG_CHAT_ID`)
+- `DAEMON_TG_ENV_FILE` (путь к env-файлу; по умолчанию проверяются `.env`, `.env.deploy`)
+- `DAEMON_TG_REMINDER_SEC` (интервал reminder в секундах, минимум 60; по умолчанию 1800)

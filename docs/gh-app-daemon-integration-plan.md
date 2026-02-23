@@ -90,6 +90,57 @@
 8. `APP-08` Реализовать проверку `Flow Meta -> Depends-On` в daemon.
 9. `APP-09` Добавить генерацию диаграммы зависимостей (Mermaid) из `Flow Meta`.
 
+## Детализация APP-01
+Цель: подготовить GitHub App для auth-интеграции демона.
+
+Шаги:
+1. `Settings -> Developer settings -> GitHub Apps -> New GitHub App`.
+2. Заполнить базовые поля:
+- `GitHub App name` (уникальный, например `planka-daemon-auth`);
+- `Homepage URL` (`https://github.com/justewg/planka`);
+- Webhook на этом этапе отключить.
+3. Выдать permissions:
+- `Issues: Read and write`;
+- `Pull requests: Read and write`;
+- `Contents: Read-only`;
+- `Metadata: Read-only`;
+- `Projects/Project v2: Read and write` (если доступно в UI).
+4. Создать App.
+5. В App: `Private keys -> Generate a private key` и сохранить `.pem` вне репозитория.
+6. Зафиксировать данные для следующих шагов:
+- `App ID`;
+- имя App;
+- путь к `.pem`.
+
+Критерии приемки:
+1. App создан и виден в списке GitHub Apps.
+2. Приватный ключ сгенерирован.
+3. Есть полный набор исходных данных для `APP-02/APP-03`.
+
+## Детализация APP-02
+Цель: установить App и подтвердить доступы к `repo + project`.
+
+Шаги:
+1. Открыть App из `APP-01` и выбрать `Install App`.
+2. Установить на owner `justewg`.
+3. Ограничить доступ репозиториями:
+- предпочтительно `Only selected repositories -> planka`.
+4. Проверить права на Project v2 (`PLANKA Roadmap #2`) и при необходимости добавить write-доступ.
+5. Зафиксировать:
+- `Installation ID`;
+- owner/repo scope (`justewg/planka`).
+6. Подготовить значения для `.env` (без запуска интеграции):
+- `GH_APP_ID=...`
+- `GH_APP_INSTALLATION_ID=...`
+- `GH_APP_PRIVATE_KEY_PATH=/absolute/path/to/key.pem`
+- `GH_APP_OWNER=justewg`
+- `GH_APP_REPO=planka`
+
+Критерии приемки:
+1. App установлен на `justewg/planka`.
+2. Доступ к Project подтвержден.
+3. Собраны входные данные для старта `APP-03`.
+
 ## Граф зависимостей (план)
 - `APP-01 -> APP-02 -> APP-03 -> APP-04 -> APP-05`
 - `APP-03 -> APP-06`

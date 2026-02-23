@@ -5,6 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CODEX_DIR="${ROOT_DIR}/.tmp/codex"
 
 project_id="${PROJECT_ID:-PVT_kwHOAPt_Q84BPyyr}"
+project_number="${PROJECT_NUMBER:-2}"
+project_owner="${PROJECT_OWNER:-@me}"
+project_items_limit="${PROJECT_ITEMS_LIMIT:-200}"
 repo="${GITHUB_REPO:-justewg/planka}"
 trigger_status="${TRIGGER_STATUS:-To Progress}"
 target_status="${TARGET_STATUS:-In Progress}"
@@ -93,7 +96,9 @@ if [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]]; then
   exit 0
 fi
 
-if ! health_out="$("${ROOT_DIR}/scripts/codex/github_health_check.sh" 2>&1)"; then
+if health_out="$("${ROOT_DIR}/scripts/codex/github_health_check.sh" 2>&1)"; then
+  :
+else
   rc=$?
   emit_lines "$health_out"
   if [[ "$rc" -eq 75 ]]; then
@@ -105,7 +110,7 @@ if ! health_out="$("${ROOT_DIR}/scripts/codex/github_health_check.sh" 2>&1)"; th
 fi
 
 open_prs_json=""
-if ! open_prs_json="$(
+if open_prs_json="$(
   run_gh_retry_capture \
     gh pr list \
     --repo "$repo" \
@@ -115,6 +120,8 @@ if ! open_prs_json="$(
     --json number,title,url \
     --jq '.'
 )"; then
+  :
+else
   rc=$?
   if [[ "$rc" -eq 75 ]]; then
     echo "WAIT_GITHUB_API_UNSTABLE=1"
@@ -132,7 +139,7 @@ if (( open_pr_count > 0 )); then
 fi
 
 project_json=""
-if ! project_json="$(
+if project_json="$(
   run_gh_retry_capture \
     gh api graphql \
     -f query='
@@ -187,6 +194,8 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
     -F fieldsFirst=100 \
     -F itemsFirst=100
 )"; then
+  :
+else
   rc=$?
   if [[ "$rc" -eq 75 ]]; then
     echo "WAIT_GITHUB_API_UNSTABLE=1"
@@ -213,7 +222,7 @@ matched_json="$(
             | (($item.taskId.text // "") | gsub("^\\s+|\\s+$";"")) as $task_field
             | if $task_field != "" then $task_field
               else (
-                (try (($item.content.title // "") | capture("(?<id>PL-[0-9]{3})").id) catch "") as $pl_from_title
+                ([ (($item.content.title // "") | capture("(?<id>PL-[0-9]{3})").id) ] | first // "") as $pl_from_title
                 | if $pl_from_title != "" then $pl_from_title
                   else (
                     if ($item.content.__typename // "") == "Issue" and ($item.content.number != null)
@@ -261,8 +270,82 @@ if (( matched_count > 0 && queue_count == 0 )); then
 fi
 
 if (( queue_count == 0 )); then
-  echo "NO_TASKS_IN_TRIGGER_STATUS=$trigger_status"
-  exit 0
+  fallback_items_json=""
+  if fallback_items_json="$(
+    run_gh_retry_capture \
+      gh project item-list "$project_number" \
+      --owner "$project_owner" \
+      --limit "$project_items_limit" \
+      --format json \
+      --jq '.'
+  )"; then
+    :
+  else
+    rc=$?
+    if [[ "$rc" -eq 75 ]]; then
+      echo "WAIT_GITHUB_API_UNSTABLE=1"
+      echo "WAIT_GITHUB_STAGE=PROJECT_ITEM_LIST_FALLBACK"
+      exit 0
+    fi
+    exit "$rc"
+  fi
+
+  fallback_queue_json="$(
+    printf '%s' "$fallback_items_json" | jq -c --arg trigger "$trigger_status" '
+      def norm: gsub("^\\s+|\\s+$";"") | ascii_downcase;
+      [
+        .items[]
+        | {
+            item_id: .id,
+            content_type: (.content.type // ""),
+            issue_number: (.content.number // ""),
+            title: (.title // .content.title // ""),
+            task_id: (
+              . as $item
+              | (($item."task ID" // "") | gsub("^\\s+|\\s+$";"")) as $task_field
+              | if $task_field != "" then $task_field
+                else (
+                  ([ (($item.title // $item.content.title // "") | capture("(?<id>PL-[0-9]{3})").id) ] | first // "") as $pl_from_title
+                  | if $pl_from_title != "" then $pl_from_title
+                    else (
+                      if ($item.content.type // "") == "Issue" and ($item.content.number != null)
+                      then ("ISSUE-" + (($item.content.number | tostring)))
+                      else ""
+                      end
+                    )
+                    end
+                )
+                end
+            ),
+            status_name: (.status // ""),
+            flow: (.flow // ""),
+            priority: (.priority // "")
+          }
+        | select((.status_name | norm) == ($trigger | norm))
+        | .pri_w = (
+            if .priority == "P0" then 0
+            elif .priority == "P1" then 1
+            elif .priority == "P2" then 2
+            elif .priority == "P3" then 3
+            else 9
+            end
+          )
+        | .num = ((try (.issue_number | tonumber) catch 999999))
+      ]
+      | sort_by(.pri_w, .num)
+      | [.[] | select(.content_type == "Issue")]
+    '
+  )"
+
+  fallback_queue_count="$(printf '%s' "$fallback_queue_json" | jq 'length')"
+  if (( fallback_queue_count == 0 )); then
+    echo "NO_TASKS_IN_TRIGGER_STATUS=$trigger_status"
+    exit 0
+  fi
+
+  echo "FALLBACK_PROJECT_ITEM_LIST_USED=1"
+  queue_json="$fallback_queue_json"
+  queue_count="$fallback_queue_count"
 fi
 
 valid_queue_json="$(printf '%s' "$queue_json" | jq -c '[.[] | select(.task_id != "")]')"
@@ -300,7 +383,9 @@ if [[ -z "$issue_number" || "$issue_number" == "null" ]]; then
   exit 1
 fi
 
-if ! sync_out="$("${ROOT_DIR}/scripts/codex/sync_branches.sh" 2>&1)"; then
+if sync_out="$("${ROOT_DIR}/scripts/codex/sync_branches.sh" 2>&1)"; then
+  :
+else
   rc=$?
   emit_lines "$sync_out"
   if printf '%s' "$sync_out" | grep -Eiq 'Could not resolve host|api\.github\.com|github\.com|failed to connect|timed out|TLS'; then
@@ -312,7 +397,9 @@ if ! sync_out="$("${ROOT_DIR}/scripts/codex/sync_branches.sh" 2>&1)"; then
 fi
 emit_lines "$sync_out"
 
-if ! status_out="$("${ROOT_DIR}/scripts/codex/project_set_status.sh" "$item_id" "$target_status" "$target_flow" 2>&1)"; then
+if status_out="$("${ROOT_DIR}/scripts/codex/project_set_status.sh" "$item_id" "$target_status" "$target_flow" 2>&1)"; then
+  :
+else
   rc=$?
   emit_lines "$status_out"
   if printf '%s' "$status_out" | grep -Eiq 'api\.github\.com|Could not resolve host|failed to connect|timed out|TLS'; then

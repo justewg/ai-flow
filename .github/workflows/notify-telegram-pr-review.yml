@@ -79,7 +79,6 @@ jobs:
 
           # Явная финализация через маркер в PR body:
           # task_finalize добавляет CODEX_SIGNAL: FINAL_REVIEW.
-          # Отправляем FINAL_REVIEW только в момент появления маркера.
           BODY_FROM="$(jq -r '.changes.body.from // ""' "${GITHUB_EVENT_PATH}" 2>/dev/null || true)"
           HAS_FINAL_NOW="0"
           HAS_FINAL_BEFORE="0"
@@ -95,6 +94,28 @@ jobs:
             STAGE_LABEL="In Review (финал)"
             CHECK_NOW="YES"
           fi
+
+          # Гарантия финального сигнала:
+          # если маркер FINAL_REVIEW уже есть в body и PR не draft,
+          # всегда считаем сигнал финальным (включая synchronize).
+          if [[ "${PR_DRAFT}" == "false" && "${HAS_FINAL_NOW}" == "1" ]]; then
+            if [[ "${PR_ACTION}" == "synchronize" ]]; then
+              ACTION_LABEL="updated_finalized"
+            elif [[ "${PR_ACTION}" == "edited" && "${HAS_FINAL_BEFORE}" == "1" ]]; then
+              ACTION_LABEL="edited_finalized"
+            fi
+            SIGNAL_LABEL="FINAL_REVIEW"
+            STAGE_LABEL="In Review (финал)"
+            CHECK_NOW="YES"
+          fi
+
+          echo "DEBUG_PR_ACTION=${PR_ACTION}"
+          echo "DEBUG_PR_DRAFT=${PR_DRAFT}"
+          echo "DEBUG_HAS_FINAL_NOW=${HAS_FINAL_NOW}"
+          echo "DEBUG_HAS_FINAL_BEFORE=${HAS_FINAL_BEFORE}"
+          echo "DEBUG_SIGNAL=${SIGNAL_LABEL}"
+          echo "DEBUG_ACTION_LABEL=${ACTION_LABEL}"
+          echo "DEBUG_CHECK_NOW=${CHECK_NOW}"
 
           MESSAGE=$'PLANKA: PR review signal\n'
           MESSAGE+="Signal: ${SIGNAL_LABEL}"$'\n'

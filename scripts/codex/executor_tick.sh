@@ -19,6 +19,7 @@ ISSUE_FILE="${CODEX_DIR}/executor_issue_number.txt"
 EXIT_FILE="${CODEX_DIR}/executor_last_exit_code.txt"
 START_EPOCH_FILE="${CODEX_DIR}/executor_last_start_epoch.txt"
 FAIL_NOTIFY_FILE="${CODEX_DIR}/executor_failure_notified_task.txt"
+RETRY_REPLY_FILE="${CODEX_DIR}/executor_last_retry_reply_comment_id.txt"
 
 mkdir -p "$CODEX_DIR"
 
@@ -32,6 +33,10 @@ exec_task="$(cat "$TASK_FILE" 2>/dev/null || true)"
 exec_issue="$(cat "$ISSUE_FILE" 2>/dev/null || true)"
 pid="$(cat "$PID_FILE" 2>/dev/null || true)"
 last_rc="$(cat "$EXIT_FILE" 2>/dev/null || true)"
+reply_task="$(cat "${CODEX_DIR}/daemon_user_reply_task_id.txt" 2>/dev/null || true)"
+reply_issue="$(cat "${CODEX_DIR}/daemon_user_reply_issue_number.txt" 2>/dev/null || true)"
+reply_comment_id="$(cat "${CODEX_DIR}/daemon_user_reply_comment_id.txt" 2>/dev/null || true)"
+last_retry_reply_id="$(cat "$RETRY_REPLY_FILE" 2>/dev/null || true)"
 
 if [[ -n "$exec_task" && "$exec_task" != "$task_id" ]]; then
   "${ROOT_DIR}/scripts/codex/executor_reset.sh" >/dev/null
@@ -62,9 +67,19 @@ if [[ "$state" == "RUNNING" ]]; then
     last_rc="unknown"
   fi
   printf '%s\n' "$state" > "$STATE_FILE"
+  : > "$PID_FILE"
 fi
 
 if [[ "$state" == "FAILED" ]]; then
+  # После нового ответа пользователя даем executor одну новую попытку.
+  if [[ "$is_waiting_user" != "1" && "$reply_task" == "$task_id" && "$reply_issue" == "$issue_number" &&
+    -n "$reply_comment_id" && "$reply_comment_id" != "$last_retry_reply_id" ]]; then
+    printf '%s\n' "$reply_comment_id" > "$RETRY_REPLY_FILE"
+    "${ROOT_DIR}/scripts/codex/executor_reset.sh" >/dev/null
+    echo "EXECUTOR_RETRY_AFTER_USER_REPLY=1"
+    echo "EXECUTOR_RETRY_REPLY_COMMENT_ID=$reply_comment_id"
+    state=""
+  else
   echo "EXECUTOR_FAILED=1"
   echo "EXECUTOR_TASK_ID=$task_id"
   echo "EXECUTOR_EXIT_CODE=${last_rc:-unknown}"
@@ -96,7 +111,8 @@ EOF
     fi
     rm -f "$msg_file"
   fi
-  exit 0
+    exit 0
+  fi
 fi
 
 if [[ "$state" == "DONE" ]]; then

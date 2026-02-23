@@ -40,6 +40,20 @@ mkdir -p "$CODEX_DIR"
 active_task_file="${CODEX_DIR}/daemon_active_task.txt"
 project_task_file="${CODEX_DIR}/project_task_id.txt"
 active_issue_file="${CODEX_DIR}/daemon_active_issue_number.txt"
+pending_post_file="${CODEX_DIR}/daemon_waiting_pending_post.txt"
+
+post_issue_comment() {
+  local issue_number="$1"
+  local body="$2"
+  local out=""
+  if out="$("${ROOT_DIR}/scripts/codex/gh_retry.sh" gh api "repos/${REPO}/issues/${issue_number}/comments" -f body="$body" 2>&1)"; then
+    printf '%s' "$out"
+    return 0
+  fi
+  local rc=$?
+  printf '%s\n' "$out" >&2
+  return "$rc"
+}
 
 task_id=""
 if [[ -s "$active_task_file" ]]; then
@@ -59,13 +73,22 @@ if [[ -s "$active_issue_file" ]]; then
 fi
 
 if [[ -z "$issue_number" ]]; then
-  candidates_json="$(
-    gh issue list \
+  if ! candidates_json="$(
+    "${ROOT_DIR}/scripts/codex/gh_retry.sh" \
+      gh issue list \
       --repo "$REPO" \
       --state open \
       --limit 100 \
       --json number,title
-  )"
+  )"; then
+    rc=$?
+    if [[ "$rc" -eq 75 ]]; then
+      echo "WAIT_GITHUB_API_UNSTABLE=1"
+      exit 75
+    fi
+    exit "$rc"
+  fi
+
   issue_number="$(
     printf '%s' "$candidates_json" |
       jq -r --arg task "$task_id" '
@@ -81,7 +104,7 @@ fi
 
 now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
-comment_body="$(cat <<EOF
+comment_body="$(cat <<EOF_COMMENT
 CODEX_SIGNAL: ${signal}
 CODEX_TASK: ${task_id}
 CODEX_KIND: ${kind_label}
@@ -92,28 +115,73 @@ CODEX_EXPECT: USER_REPLY
 ${message_text}
 
 Ответь комментарием в этот Issue обычным текстом.
-EOF
+EOF_COMMENT
 )"
 
-comment_json="$(
-  gh api "repos/${REPO}/issues/${issue_number}/comments" \
-    -f body="$comment_body"
-)"
+if comment_json="$(post_issue_comment "$issue_number" "$comment_body")"; then
+  question_comment_id="$(printf '%s' "$comment_json" | jq -r '.id')"
+  question_comment_url="$(printf '%s' "$comment_json" | jq -r '.html_url')"
 
-question_comment_id="$(printf '%s' "$comment_json" | jq -r '.id')"
-question_comment_url="$(printf '%s' "$comment_json" | jq -r '.html_url')"
+  printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
+  printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_waiting_task_id.txt"
+  printf '%s\n' "$question_comment_id" > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
+  printf '%s\n' "$kind_label" > "${CODEX_DIR}/daemon_waiting_kind.txt"
+  printf '%s\n' "$now_utc" > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
+  printf '%s\n' "$question_comment_url" > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
+  : > "$pending_post_file"
+
+  echo "QUESTION_POSTED=1"
+  echo "TASK_ID=$task_id"
+  echo "ISSUE_NUMBER=$issue_number"
+  echo "QUESTION_KIND=$kind_label"
+  echo "QUESTION_COMMENT_ID=$question_comment_id"
+  echo "QUESTION_COMMENT_URL=$question_comment_url"
+  echo "WAITING_FOR_USER_REPLY=1"
+  exit 0
+fi
+
+rc=$?
+if [[ "$rc" -ne 75 ]]; then
+  exit "$rc"
+fi
+
+tmp_body="$(mktemp "${CODEX_DIR}/question_body.XXXXXX")"
+trap 'rm -f "$tmp_body"' EXIT
+printf '%s\n' "$comment_body" > "$tmp_body"
+
+if ! enqueue_out="$(
+  "${ROOT_DIR}/scripts/codex/github_outbox.sh" \
+    enqueue_issue_comment \
+    "$REPO" \
+    "$issue_number" \
+    "$tmp_body" \
+    "$task_id" \
+    "$kind_label" \
+    "1" 2>&1
+)"; then
+  qrc=$?
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "QUESTION_OUTBOX_ERROR(rc=$qrc): $line"
+  done <<< "$enqueue_out"
+  exit "$qrc"
+fi
+while IFS= read -r line; do
+  [[ -z "$line" ]] && continue
+  echo "$line"
+done <<< "$enqueue_out"
 
 printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
 printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_waiting_task_id.txt"
-printf '%s\n' "$question_comment_id" > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
+printf '%s\n' "-1" > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
 printf '%s\n' "$kind_label" > "${CODEX_DIR}/daemon_waiting_kind.txt"
 printf '%s\n' "$now_utc" > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
-printf '%s\n' "$question_comment_url" > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
+: > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
+printf '%s\n' "1" > "$pending_post_file"
 
-echo "QUESTION_POSTED=1"
+echo "QUESTION_QUEUED_OUTBOX=1"
 echo "TASK_ID=$task_id"
 echo "ISSUE_NUMBER=$issue_number"
 echo "QUESTION_KIND=$kind_label"
-echo "QUESTION_COMMENT_ID=$question_comment_id"
-echo "QUESTION_COMMENT_URL=$question_comment_url"
-echo "WAITING_FOR_USER_REPLY=1"
+echo "WAIT_GITHUB_API_UNSTABLE=1"
+echo "WAITING_FOR_USER_REPLY_PENDING_POST=1"

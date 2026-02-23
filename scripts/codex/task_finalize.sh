@@ -216,6 +216,7 @@ printf '%s\n' "$pr_number" > "$pr_number_file"
 : > "${CODEX_DIR}/daemon_waiting_kind.txt"
 : > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
 : > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
+: > "${CODEX_DIR}/daemon_waiting_pending_post.txt"
 "${ROOT_DIR}/scripts/codex/executor_reset.sh" >/dev/null
 
 echo "FINALIZED_TASK_ID=$task_id"

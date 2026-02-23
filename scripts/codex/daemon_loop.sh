@@ -59,7 +59,9 @@ set_state() {
 
 classify_success_state() {
   local output="$1"
-  if printf '%s' "$output" | grep -q '^EXECUTOR_FAILED=1'; then
+  if printf '%s' "$output" | grep -q '^WAIT_GITHUB_API_UNSTABLE=1'; then
+    echo "WAIT_GITHUB_OFFLINE"
+  elif printf '%s' "$output" | grep -q '^EXECUTOR_FAILED=1'; then
     echo "BLOCKED_EXECUTOR_FAILED"
   elif printf '%s' "$output" | grep -q '^BLOCKED_ACTIVE_TASK_WITHOUT_ISSUE=1'; then
     echo "BLOCKED_ACTIVE_TASK_WITHOUT_ISSUE"
@@ -127,6 +129,9 @@ build_success_detail() {
     WAIT_OPEN_PR)
       line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_OPEN_PR_COUNT=' || true)"
       ;;
+    WAIT_GITHUB_OFFLINE)
+      line="$(printf '%s\n' "$output" | grep -m1 -E '^(WAIT_GITHUB_STAGE=|WAIT_GITHUB_API_UNSTABLE=1)' || true)"
+      ;;
     WAIT_DIRTY_WORKTREE)
       line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_DIRTY_WORKTREE_TRACKED=1' || true)"
       ;;
@@ -143,7 +148,7 @@ build_success_detail() {
 
 classify_error_state() {
   local output="$1"
-  if printf '%s' "$output" | grep -Eiq 'error connecting to api\.github\.com|could not resolve host: api\.github\.com|connection timed out|tls handshake timeout|temporary failure in name resolution'; then
+  if printf '%s' "$output" | grep -Eiq 'error connecting to api\.github\.com|could not resolve host: api\.github\.com|could not resolve host: github\.com|connection timed out|tls handshake timeout|temporary failure in name resolution|failed to connect'; then
     echo "WAIT_GITHUB_OFFLINE"
   else
     echo "ERROR_LOCAL_FLOW"
@@ -155,7 +160,7 @@ detect_flow_degradation() {
   local pending_outbox_count="0"
   if [[ -d "${CODEX_DIR}/outbox" ]]; then
     pending_outbox_count="$(
-      find "${CODEX_DIR}/outbox" -maxdepth 1 -type f -name '*.txt' -size +0c 2>/dev/null | wc -l | tr -d ' '
+      find "${CODEX_DIR}/outbox" -maxdepth 1 -type f -name '*.json' -size +0c 2>/dev/null | wc -l | tr -d ' '
     )"
   fi
   if [[ "${pending_outbox_count}" != "0" ]]; then

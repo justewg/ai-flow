@@ -9,6 +9,7 @@ issue_file="${CODEX_DIR}/daemon_waiting_issue_number.txt"
 task_file="${CODEX_DIR}/daemon_waiting_task_id.txt"
 question_id_file="${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
 kind_file="${CODEX_DIR}/daemon_waiting_kind.txt"
+pending_post_file="${CODEX_DIR}/daemon_waiting_pending_post.txt"
 
 clear_waiting_state() {
   : > "$issue_file"
@@ -17,6 +18,7 @@ clear_waiting_state() {
   : > "$kind_file"
   : > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
   : > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
+  : > "$pending_post_file"
 }
 
 if [[ ! -s "$issue_file" || ! -s "$question_id_file" ]]; then
@@ -28,12 +30,45 @@ issue_number="$(<"$issue_file")"
 task_id=""
 question_comment_id="$(<"$question_id_file")"
 kind_label=""
+pending_post="0"
 [[ -s "$task_file" ]] && task_id="$(<"$task_file")"
 [[ -s "$kind_file" ]] && kind_label="$(<"$kind_file")"
+[[ -s "$pending_post_file" ]] && pending_post="$(<"$pending_post_file")"
 
-comments_json="$(
-  gh api "repos/${REPO}/issues/${issue_number}/comments?per_page=100"
-)"
+if [[ "$pending_post" == "1" ]]; then
+  outbox_count="0"
+  if outbox_out="$("${ROOT_DIR}/scripts/codex/github_outbox.sh" count 2>/dev/null)"; then
+    outbox_count="$(printf '%s\n' "$outbox_out" | awk -F= '/^OUTBOX_PENDING_COUNT=/{print $2}' | tail -n1)"
+    [[ -z "$outbox_count" ]] && outbox_count="0"
+  fi
+
+  echo "WAIT_USER_REPLY=1"
+  echo "TASK_ID=$task_id"
+  echo "ISSUE_NUMBER=$issue_number"
+  echo "QUESTION_COMMENT_ID=$question_comment_id"
+  echo "QUESTION_KIND=$kind_label"
+  echo "WAIT_GITHUB_API_UNSTABLE=1"
+  echo "WAITING_FOR_QUESTION_POST=1"
+  echo "OUTBOX_PENDING_COUNT=$outbox_count"
+  exit 0
+fi
+
+if ! comments_json="$(
+  "${ROOT_DIR}/scripts/codex/gh_retry.sh" \
+    gh api "repos/${REPO}/issues/${issue_number}/comments?per_page=100"
+)"; then
+  rc=$?
+  if [[ "$rc" -eq 75 ]]; then
+    echo "WAIT_USER_REPLY=1"
+    echo "TASK_ID=$task_id"
+    echo "ISSUE_NUMBER=$issue_number"
+    echo "QUESTION_COMMENT_ID=$question_comment_id"
+    echo "QUESTION_KIND=$kind_label"
+    echo "WAIT_GITHUB_API_UNSTABLE=1"
+    exit 0
+  fi
+  exit "$rc"
+fi
 
 reply_json="$(
   printf '%s' "$comments_json" |
@@ -72,15 +107,42 @@ printf '%s\n' "$now_utc" > "${CODEX_DIR}/daemon_user_reply_at_utc.txt"
 
 clear_waiting_state
 
-ack_body="$(cat <<EOF
+ack_body="$(cat <<EOF_ACK
 CODEX_SIGNAL: AGENT_RESUMED
 CODEX_TASK: ${task_id}
 CODEX_SOURCE_REPLY_COMMENT_ID: ${reply_id}
 
 Ответ получен, продолжаю работу по задаче.
-EOF
+EOF_ACK
 )"
-gh api "repos/${REPO}/issues/${issue_number}/comments" -f body="$ack_body" >/dev/null || true
+
+if ! ack_out="$("${ROOT_DIR}/scripts/codex/gh_retry.sh" gh api "repos/${REPO}/issues/${issue_number}/comments" -f body="$ack_body" 2>&1)"; then
+  rc=$?
+  if [[ "$rc" -eq 75 ]]; then
+    tmp_ack="$(mktemp "${CODEX_DIR}/ack_body.XXXXXX")"
+    trap 'rm -f "$tmp_ack"' EXIT
+    printf '%s\n' "$ack_body" > "$tmp_ack"
+    if queue_out="$("${ROOT_DIR}/scripts/codex/github_outbox.sh" enqueue_issue_comment "$REPO" "$issue_number" "$tmp_ack" "$task_id" "ACK" "0" 2>&1)"; then
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        echo "$line"
+      done <<< "$queue_out"
+      echo "ACK_QUEUED_OUTBOX=1"
+      echo "WAIT_GITHUB_API_UNSTABLE=1"
+    else
+      qrc=$?
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        echo "ACK_OUTBOX_ERROR(rc=$qrc): $line"
+      done <<< "$queue_out"
+    fi
+  else
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "ACK_POST_ERROR(rc=$rc): $line"
+    done <<< "$ack_out"
+  fi
+fi
 
 echo "USER_REPLY_RECEIVED=1"
 echo "TASK_ID=$task_id"

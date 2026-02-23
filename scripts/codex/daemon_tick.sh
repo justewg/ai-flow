@@ -305,7 +305,7 @@ if (( queue_count == 0 )); then
               | (($item."task ID" // "") | gsub("^\\s+|\\s+$";"")) as $task_field
               | if $task_field != "" then $task_field
                 else (
-                  (try ((($item.title // $item.content.title // "") | capture("(?<id>PL-[0-9]{3})").id) catch "")) as $pl_from_title
+                  (try (($item.title // $item.content.title // "") | capture("(?<id>PL-[0-9]{3})").id) catch "") as $pl_from_title
                   | if $pl_from_title != "" then $pl_from_title
                     else (
                       if ($item.content.type // "") == "Issue" and ($item.content.number != null)

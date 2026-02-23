@@ -80,12 +80,12 @@
 - `next_task.sh`
   - выводит `NEXT_TASK_ID=...` и `NEXT_TITLE=...` для ближайшей задачи (статус `Planned`)
 - `daemon_tick.sh`
-  - проверяет открытые PR `development -> main`
   - останавливается только при изменениях tracked-файлов (staged/unstaged)
   - untracked-файлы не блокируют daemon-flow
   - перед взятием новой задачи проверяет waiting-state по Issue-комментариям (`daemon_check_replies.sh`)
   - при `WAIT_USER_REPLY` не берет новые задачи
-  - при наличии `daemon_active_task.txt` не берет новые задачи до финализации
+  - при наличии `daemon_active_task.txt` не берет новые задачи до финализации, но продолжает проверять ответы в Issue
+  - если активной задачи нет, проверяет открытые PR `development -> main` и при наличии ждет merge/close
   - читает Project через GraphQL (без нестабильного `gh project item-list`)
   - берет задачу только из `Status=To Progress`
   - для автоподхвата учитывает только `Issue`; `DraftIssue` игнорируется

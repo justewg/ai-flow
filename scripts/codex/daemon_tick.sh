@@ -10,22 +10,6 @@ trigger_status="${TRIGGER_STATUS:-To Progress}"
 target_status="${TARGET_STATUS:-In Progress}"
 target_flow="${TARGET_FLOW:-In Progress}"
 
-open_prs_json="$(
-  gh pr list \
-    --repo "$repo" \
-    --state open \
-    --base main \
-    --head development \
-    --json number,title,url \
-    --jq '.'
-)"
-open_pr_count="$(printf '%s' "$open_prs_json" | jq 'length')"
-if (( open_pr_count > 0 )); then
-  echo "WAIT_OPEN_PR_COUNT=$open_pr_count"
-  printf '%s' "$open_prs_json" | jq -r '.[] | "OPEN_PR=#\(.number) \(.title) \(.url)"'
-  exit 0
-fi
-
 if ! git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- ||
   ! git -C "${ROOT_DIR}" diff --cached --quiet --ignore-submodules --; then
   echo "WAIT_DIRTY_WORKTREE_TRACKED=1"
@@ -49,6 +33,22 @@ if [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]]; then
   if [[ -s "${CODEX_DIR}/daemon_active_issue_number.txt" ]]; then
     echo "WAIT_ACTIVE_ISSUE_NUMBER=$(<"${CODEX_DIR}/daemon_active_issue_number.txt")"
   fi
+  exit 0
+fi
+
+open_prs_json="$(
+  gh pr list \
+    --repo "$repo" \
+    --state open \
+    --base main \
+    --head development \
+    --json number,title,url \
+    --jq '.'
+)"
+open_pr_count="$(printf '%s' "$open_prs_json" | jq 'length')"
+if (( open_pr_count > 0 )); then
+  echo "WAIT_OPEN_PR_COUNT=$open_pr_count"
+  printf '%s' "$open_prs_json" | jq -r '.[] | "OPEN_PR=#\(.number) \(.title) \(.url)"'
   exit 0
 fi
 

@@ -21,7 +21,7 @@
 5. После подхвата:
    - реализую изменения в рабочем цикле.
 6. По готовности:
-   - запускаю `scripts/codex/run.sh task_finalize` (commit+push, create/update PR, перевод в `Status=Done`, `Flow=In Review`);
+   - запускаю `scripts/codex/run.sh task_finalize` (commit+push, create/update PR, перевод в `Status=Review`, `Flow=In Review`);
    - перевожу PR в финальный сигнал ревью (`ready_for_review`);
    - отправляю ссылку на PR для ревью;
    - после merge цикл повторяется.
@@ -40,7 +40,7 @@
 
 ### 4.2. Рекомендуемая модель состояний
 Используем текущие поля:
-- `Status`: `Todo -> To Progress -> In Progress -> Done -> Closed`
+- `Status`: `Todo -> To Progress -> In Progress -> Review -> Done -> Closed`
 - `Flow`: `Backlog -> In Progress -> In Review -> Done`
 
 Правила:
@@ -54,7 +54,7 @@
    - если `PL-xxx` нет, daemon автоматически использует `ISSUE-<number>`.
 6. При подхвате daemon сразу переводит задачу в `Status=In Progress` (визуальный ACK, что демон жив и начал работу).
 7. Затем daemon переводит `Flow=In Progress` и запускает обычный цикл реализации.
-8. Перед запросом ревью: `Status=Done`, `Flow=In Review`.
+8. Перед запросом ревью: `Status=Review`, `Flow=In Review`.
 9. После merge: existing workflow ставит `Done`.
 
 ### 4.3. Семантика статусов
@@ -77,7 +77,7 @@
    - продолжить разработку по стандартному flow.
 6. При завершении разработки:
    - выполнить `task_finalize` для commit/push и create/update PR;
-   - перевести карточку в `Status=Done`, `Flow=In Review`.
+   - перевести карточку в `Status=Review`, `Flow=In Review`.
 7. Логировать heartbeat и действия в `.tmp/codex/daemon.log`.
 8. Корректно обрабатывать ошибки (retry/backoff, без дублирования действий).
 9. Не запускать подхват задач при изменениях tracked-файлов (wait-state), чтобы не конфликтовать с ручной работой в чате.
@@ -178,7 +178,7 @@ Telegram-сигналы по Issue-вопросам:
 1. Открой проект GitHub Project (№2) в table view.
 2. Открой настройки single-select поля `Status`.
 3. Добавь новую опцию со значением `To Progress`.
-4. Сохрани изменения и расположи опцию между `Todo` и `In Progress`.
+4. Сохрани изменения и расположи опции в порядке: `Todo`, `To Progress`, `In Progress`, `Review`, `Done`.
 5. В board-view убедись, что колонка `To Progress` отображается.
 
 Практический смысл:

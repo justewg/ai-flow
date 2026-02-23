@@ -37,6 +37,9 @@ Commands:
   task_ask
   daemon_check_replies
   task_finalize
+  gh_retry
+  github_health_check
+  github_outbox
 
 Fixed input files in .tmp/codex:
   pr_number.txt
@@ -301,6 +304,28 @@ case "$cmd" in
 
   task_finalize)
     "${ROOT_DIR}/scripts/codex/task_finalize.sh"
+    ;;
+
+  gh_retry)
+    if [[ $# -lt 2 ]]; then
+      echo "Usage: scripts/codex/run.sh gh_retry <command> [args...]"
+      exit 1
+    fi
+    shift 1
+    "${ROOT_DIR}/scripts/codex/gh_retry.sh" "$@"
+    ;;
+
+  github_health_check)
+    "${ROOT_DIR}/scripts/codex/github_health_check.sh"
+    ;;
+
+  github_outbox)
+    if [[ $# -lt 2 ]]; then
+      echo "Usage: scripts/codex/run.sh github_outbox <enqueue_issue_comment|flush|count|list> [args...]"
+      exit 1
+    fi
+    shift 1
+    "${ROOT_DIR}/scripts/codex/github_outbox.sh" "$@"
     ;;
 
   *)

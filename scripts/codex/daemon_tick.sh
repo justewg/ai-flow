@@ -10,6 +10,25 @@ trigger_status="${TRIGGER_STATUS:-To Progress}"
 target_status="${TARGET_STATUS:-In Progress}"
 target_flow="${TARGET_FLOW:-In Progress}"
 
+emit_lines() {
+  local text="$1"
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "$line"
+  done <<< "$text"
+}
+
+run_gh_retry_capture() {
+  local out=""
+  if out="$("${ROOT_DIR}/scripts/codex/gh_retry.sh" "$@" 2>&1)"; then
+    printf '%s' "$out"
+    return 0
+  fi
+  local rc=$?
+  printf '%s\n' "$out" >&2
+  return "$rc"
+}
+
 if ! git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- ||
   ! git -C "${ROOT_DIR}" diff --cached --quiet --ignore-submodules --; then
   echo "WAIT_DIRTY_WORKTREE_TRACKED=1"
@@ -17,6 +36,15 @@ if ! git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- ||
 fi
 
 mkdir -p "$CODEX_DIR"
+
+# Сначала пытаемся доставить отложенные действия в GitHub (outbox).
+outbox_out="$("${ROOT_DIR}/scripts/codex/github_outbox.sh" flush 2>&1 || true)"
+if [[ -n "$outbox_out" ]]; then
+  while IFS= read -r line; do
+    [[ -z "$line" || "$line" == "OUTBOX_EMPTY=1" ]] && continue
+    echo "$line"
+  done <<< "$outbox_out"
+fi
 
 reply_probe_out="$("${ROOT_DIR}/scripts/codex/daemon_check_replies.sh" 2>&1)"
 while IFS= read -r line; do
@@ -38,25 +66,44 @@ if [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]]; then
 
   if [[ -n "$active_issue_number" ]]; then
     exec_out="$("${ROOT_DIR}/scripts/codex/executor_tick.sh" "$active_task_id" "$active_issue_number" 2>&1)"
-    while IFS= read -r line; do
-      [[ -z "$line" ]] && continue
-      echo "$line"
-    done <<<"$exec_out"
+    emit_lines "$exec_out"
   else
     echo "BLOCKED_ACTIVE_TASK_WITHOUT_ISSUE=1"
   fi
   exit 0
 fi
 
-open_prs_json="$(
-  gh pr list \
+if ! health_out="$("${ROOT_DIR}/scripts/codex/github_health_check.sh" 2>&1)"; then
+  rc=$?
+  emit_lines "$health_out"
+  if [[ "$rc" -eq 75 ]]; then
+    echo "WAIT_GITHUB_API_UNSTABLE=1"
+    echo "WAIT_GITHUB_STAGE=PRE_CLAIM"
+    exit 0
+  fi
+  exit "$rc"
+fi
+
+open_prs_json=""
+if ! open_prs_json="$(
+  run_gh_retry_capture \
+    gh pr list \
     --repo "$repo" \
     --state open \
     --base main \
     --head development \
     --json number,title,url \
     --jq '.'
-)"
+)"; then
+  rc=$?
+  if [[ "$rc" -eq 75 ]]; then
+    echo "WAIT_GITHUB_API_UNSTABLE=1"
+    echo "WAIT_GITHUB_STAGE=OPEN_PR_CHECK"
+    exit 0
+  fi
+  exit "$rc"
+fi
+
 open_pr_count="$(printf '%s' "$open_prs_json" | jq 'length')"
 if (( open_pr_count > 0 )); then
   echo "WAIT_OPEN_PR_COUNT=$open_pr_count"
@@ -64,8 +111,10 @@ if (( open_pr_count > 0 )); then
   exit 0
 fi
 
-project_json="$(
-  gh api graphql \
+project_json=""
+if ! project_json="$(
+  run_gh_retry_capture \
+    gh api graphql \
     -f query='
 query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
   node(id: $projectId) {
@@ -117,9 +166,17 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
     -f projectId="$project_id" \
     -F fieldsFirst=100 \
     -F itemsFirst=100
-)"
+)"; then
+  rc=$?
+  if [[ "$rc" -eq 75 ]]; then
+    echo "WAIT_GITHUB_API_UNSTABLE=1"
+    echo "WAIT_GITHUB_STAGE=PROJECT_QUERY"
+    exit 0
+  fi
+  exit "$rc"
+fi
 
-matched_json="$(
+matched_json="$({
   printf '%s' "$project_json" | jq -c --arg trigger "$trigger_status" '
     def norm: gsub("^\\s+|\\s+$";"") | ascii_downcase;
     .data.node as $project
@@ -161,7 +218,7 @@ matched_json="$(
     ]
     | sort_by(.pri_w, .num)
   '
-)"
+)}"
 
 matched_count="$(printf '%s' "$matched_json" | jq 'length')"
 queue_json="$(printf '%s' "$matched_json" | jq -c '[.[] | select(.content_type == "Issue")]')"
@@ -213,8 +270,29 @@ if [[ -z "$issue_number" || "$issue_number" == "null" ]]; then
   exit 1
 fi
 
-"${ROOT_DIR}/scripts/codex/sync_branches.sh"
-"${ROOT_DIR}/scripts/codex/project_set_status.sh" "$item_id" "$target_status" "$target_flow"
+if ! sync_out="$("${ROOT_DIR}/scripts/codex/sync_branches.sh" 2>&1)"; then
+  rc=$?
+  emit_lines "$sync_out"
+  if printf '%s' "$sync_out" | grep -Eiq 'Could not resolve host|api\.github\.com|github\.com|failed to connect|timed out|TLS'; then
+    echo "WAIT_GITHUB_API_UNSTABLE=1"
+    echo "WAIT_GITHUB_STAGE=SYNC_BRANCHES"
+    exit 0
+  fi
+  exit "$rc"
+fi
+emit_lines "$sync_out"
+
+if ! status_out="$("${ROOT_DIR}/scripts/codex/project_set_status.sh" "$item_id" "$target_status" "$target_flow" 2>&1)"; then
+  rc=$?
+  emit_lines "$status_out"
+  if printf '%s' "$status_out" | grep -Eiq 'api\.github\.com|Could not resolve host|failed to connect|timed out|TLS'; then
+    echo "WAIT_GITHUB_API_UNSTABLE=1"
+    echo "WAIT_GITHUB_STAGE=PROJECT_STATUS_UPDATE"
+    exit 0
+  fi
+  exit "$rc"
+fi
+emit_lines "$status_out"
 
 printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_active_task.txt"
 printf '%s\n' "$item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"

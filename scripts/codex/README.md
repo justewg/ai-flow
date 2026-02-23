@@ -32,6 +32,9 @@
 - `scripts/codex/run.sh task_ask <question|blocker> <message-file>` — отправить вопрос/блокер в comment Issue и включить режим ожидания ответа.
 - `scripts/codex/run.sh daemon_check_replies` — проверить ответы в Issue-комментах для ожидающего вопроса.
 - `scripts/codex/run.sh task_finalize` — финализация задачи: commit+push, create/update PR, перевод задачи в `In Review`.
+- `scripts/codex/run.sh gh_retry <command> [args...]` — выполнить GitHub-команду с retry/backoff.
+- `scripts/codex/run.sh github_health_check` — быстрый preflight GitHub API (`healthy/unstable`).
+- `scripts/codex/run.sh github_outbox <enqueue_issue_comment|flush|count|list> ...` — управление отложенными GitHub-действиями.
 
 `run.sh` читает фиксированные файлы из `.tmp/codex/`:
 - `pr_number.txt`
@@ -93,10 +96,13 @@
 - `daemon_tick.sh`
   - останавливается только при изменениях tracked-файлов (staged/unstaged)
   - untracked-файлы не блокируют daemon-flow
+  - на старте тика делает `github_outbox flush` (доставка отложенных GitHub-комментариев)
   - перед взятием новой задачи проверяет waiting-state по Issue-комментариям (`daemon_check_replies.sh`)
   - при `WAIT_USER_REPLY` не берет новые задачи
   - при наличии `daemon_active_task.txt` не берет новые задачи до финализации, но продолжает проверять ответы в Issue
   - для активной задачи вызывает `executor_tick.sh`, который запускает/мониторит headless executor (`codex exec`)
+  - перед критичными GitHub-операциями делает preflight (`github_health_check.sh`)
+  - сетевые вызовы к GitHub выполняет через `gh_retry.sh`, чтобы кратковременные DNS/API-сбои не роняли flow
   - если активной задачи нет, проверяет открытые PR `development -> main` и при наличии ждет merge/close
   - читает Project через GraphQL (без нестабильного `gh project item-list`)
   - берет задачу только из `Status=To Progress`
@@ -142,12 +148,24 @@
   - останавливает живой executor-процесс (если есть) и очищает state-файлы
 - `task_ask.sh <question|blocker> <message-file>`
   - публикует структурированный комментарий в текущий Issue (`CODEX_SIGNAL: AGENT_QUESTION|AGENT_BLOCKER`)
+  - при временной недоступности GitHub кладет комментарий в outbox и включает pending-waiting state
   - сохраняет waiting-state в `.tmp/codex/`, чтобы daemon ждал ответ пользователя
 - `daemon_check_replies.sh`
   - если daemon в waiting-state, проверяет новые комментарии Issue после вопроса
   - первый пользовательский комментарий (без `CODEX_SIGNAL:`) принимает как ответ
   - сохраняет ответ в `.tmp/codex/daemon_user_reply.txt`
-  - публикует `CODEX_SIGNAL: AGENT_RESUMED` и снимает waiting-state
+  - публикует `CODEX_SIGNAL: AGENT_RESUMED`; если GitHub недоступен, кладет ack в outbox
+  - при pending-question (`вопрос еще не доставлен`) удерживает `WAIT_USER_REPLY`, не теряя контекст
+- `gh_retry.sh <command> [args...]`
+  - retry/backoff для нестабильных ошибок GitHub API/DNS
+  - на исчерпании попыток возвращает код `75` и `GITHUB_API_UNSTABLE=1`
+- `github_health_check.sh`
+  - preflight проверки GitHub API через `gh api rate_limit`
+  - возвращает `GITHUB_HEALTHY=1` либо `GITHUB_API_UNSTABLE=1`
+- `github_outbox.sh`
+  - очередь отложенных GitHub-действий (сейчас: комментарии в Issue)
+  - умеет `enqueue`, `flush`, `count`, `list`
+  - при доставке queued question автоматически выставляет корректный waiting-state (`comment_id/url`)
 
 Логи демона:
 - `.tmp/codex/daemon.log` — heartbeat и результат `daemon_tick`
@@ -165,6 +183,9 @@
 - `.tmp/codex/executor_last_exit_code.txt` — код завершения последнего executor запуска
 - `.tmp/codex/executor_heartbeat_utc.txt` — время последнего heartbeat executor
 - `.tmp/codex/executor_heartbeat_epoch.txt` — epoch-время последнего heartbeat executor
+- `.tmp/codex/outbox/` — pending GitHub-действия (очередь)
+- `.tmp/codex/outbox_payloads/` — payload-файлы для pending действий
+- `.tmp/codex/outbox_failed/` — non-retryable ошибки outbox
 
 ## Подготовка
 Скрипты должны быть исполняемыми:

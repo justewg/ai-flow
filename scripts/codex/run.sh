@@ -25,6 +25,12 @@ Commands:
   project_add_task
   project_set_status
   next_task
+  daemon_tick
+  daemon_loop
+  daemon_install
+  daemon_uninstall
+  daemon_status
+  task_finalize
 
 Fixed input files in .tmp/codex:
   pr_number.txt
@@ -207,6 +213,48 @@ case "$cmd" in
 
   next_task)
     "${ROOT_DIR}/scripts/codex/next_task.sh"
+    ;;
+
+  daemon_tick)
+    "${ROOT_DIR}/scripts/codex/daemon_tick.sh"
+    ;;
+
+  daemon_loop)
+    if [[ $# -ge 2 ]]; then
+      "${ROOT_DIR}/scripts/codex/daemon_loop.sh" "$2"
+    else
+      "${ROOT_DIR}/scripts/codex/daemon_loop.sh"
+    fi
+    ;;
+
+  daemon_install)
+    if [[ $# -ge 3 ]]; then
+      "${ROOT_DIR}/scripts/codex/daemon_install.sh" "$2" "$3"
+    elif [[ $# -ge 2 ]]; then
+      "${ROOT_DIR}/scripts/codex/daemon_install.sh" "$2"
+    else
+      "${ROOT_DIR}/scripts/codex/daemon_install.sh"
+    fi
+    ;;
+
+  daemon_uninstall)
+    if [[ $# -ge 2 ]]; then
+      "${ROOT_DIR}/scripts/codex/daemon_uninstall.sh" "$2"
+    else
+      "${ROOT_DIR}/scripts/codex/daemon_uninstall.sh"
+    fi
+    ;;
+
+  daemon_status)
+    if [[ $# -ge 2 ]]; then
+      "${ROOT_DIR}/scripts/codex/daemon_status.sh" "$2"
+    else
+      "${ROOT_DIR}/scripts/codex/daemon_status.sh"
+    fi
+    ;;
+
+  task_finalize)
+    "${ROOT_DIR}/scripts/codex/task_finalize.sh"
     ;;
 
   *)

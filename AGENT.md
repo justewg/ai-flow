@@ -94,9 +94,11 @@
 После сообщения `merged`:
 
 1) Синхронизирую ветки (`scripts/codex/run.sh sync_branches`).
-2) Предлагаю следующую задачу из GitHub Project со статусом `Planned` с приоритетом P0→P1→P2 (сортировка по номеру `PL-xxx`).
-3) По подтверждению:
-   - перевожу задачу в `In Progress` (`scripts/codex/run.sh project_set_status`),
-   - создаю PR `development → main` с русским заголовком и шаблоном тела,
+2) Для daemon-flow задача на запуск задается переводом `Status` в `To Progress`.
+3) Демон мониторит `Status=To Progress`, подхватывает задачу и переводит ее в `In Progress` (ACK).
+4) После подхвата:
    - начинаю реализацию и коммичу русскими сообщениями.
-4) По готовности — обновляю PR, прошу ревью, двигаю по статусам.
+5) По готовности:
+   - выполняю `scripts/codex/run.sh task_finalize` (commit+push, create/update PR, `Flow=In Review`);
+   - отправляю PR на ревью и прошу ревью;
+   - двигаю статус задачи по flow.

@@ -159,16 +159,22 @@ if (( valid_queue_count > 1 )); then
   exit 0
 fi
 
+item_id="$(printf '%s' "$valid_queue_json" | jq -r '.[0].item_id')"
 task_id="$(printf '%s' "$valid_queue_json" | jq -r '.[0].task_id')"
 title="$(printf '%s' "$valid_queue_json" | jq -r '.[0].title')"
 
 if [[ -z "$task_id" || "$task_id" == "null" ]]; then
-  echo "Task in trigger status has no Task ID"
+  echo "Task in trigger status has no PL-xxx id in Task ID/title"
+  exit 1
+fi
+
+if [[ -z "$item_id" || "$item_id" == "null" ]]; then
+  echo "Task in trigger status has no project item id"
   exit 1
 fi
 
 "${ROOT_DIR}/scripts/codex/sync_branches.sh"
-"${ROOT_DIR}/scripts/codex/project_set_status.sh" "$task_id" "$target_status" "$target_flow"
+"${ROOT_DIR}/scripts/codex/project_set_status.sh" "$item_id" "$target_status" "$target_flow"
 
 mkdir -p "${ROOT_DIR}/.tmp/codex"
 printf '%s\n' "$task_id" > "${ROOT_DIR}/.tmp/codex/daemon_active_task.txt"
@@ -176,6 +182,7 @@ printf '%s\n' "$task_id" > "${ROOT_DIR}/.tmp/codex/project_task_id.txt"
 date -u '+%Y-%m-%dT%H:%M:%SZ' > "${ROOT_DIR}/.tmp/codex/daemon_last_claim_utc.txt"
 
 echo "CLAIMED_TASK_ID=$task_id"
+echo "CLAIMED_ITEM_ID=$item_id"
 echo "CLAIMED_TITLE=$title"
 echo "CLAIMED_FROM_STATUS=$trigger_status"
 echo "CLAIMED_TO_STATUS=$target_status"

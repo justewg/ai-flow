@@ -2,12 +2,14 @@
 set -euo pipefail
 
 if [[ $# -lt 2 || $# -gt 3 ]]; then
-  echo "Usage: $0 <task-id> <status-name> [flow-name]"
-  echo "Example: $0 PL-003 \"In Progress\" \"In Progress\""
+  echo "Usage: $0 <task-id|project-item-id> <status-name> [flow-name]"
+  echo "Examples:"
+  echo "  $0 PL-003 \"In Progress\" \"In Progress\""
+  echo "  $0 PVTI_xxxxx \"In Progress\" \"In Progress\""
   exit 1
 fi
 
-task_id="$1"
+task_or_item_id="$1"
 status_name="$2"
 flow_name="${3:-$2}"
 
@@ -46,6 +48,12 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
       items(first: $itemsFirst) {
         nodes {
           id
+          content {
+            __typename
+            ... on DraftIssue { title }
+            ... on Issue { title number }
+            ... on PullRequest { title number }
+          }
           fieldValueByName(name: "Task ID") {
             __typename
             ... on ProjectV2ItemFieldTextValue {
@@ -63,16 +71,24 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
     -F itemsFirst=100
 )"
 
-item_id="$(
-  printf '%s' "$project_json" |
-    jq -r --arg task "$task_id" '
-      .data.node.items.nodes[]
-      | select(.fieldValueByName.text == $task)
-      | .id
-    '
-)"
+if [[ "$task_or_item_id" == PVTI_* ]]; then
+  item_id="$task_or_item_id"
+else
+  item_id="$(
+    printf '%s' "$project_json" |
+      jq -r --arg task "$task_or_item_id" '
+        .data.node.items.nodes[]
+        | select(
+            (.fieldValueByName.text // "") == $task
+            or ((.content.title // "") | test($task))
+          )
+        | .id
+      ' |
+      head -n1
+  )"
+fi
 if [[ -z "$item_id" || "$item_id" == "null" ]]; then
-  echo "Task not found in project: $task_id"
+  echo "Task not found in project: $task_or_item_id"
   exit 1
 fi
 
@@ -93,8 +109,18 @@ if [[ -z "$status_option_id" || "$status_option_id" == "null" ]]; then
   exit 1
 fi
 
+if [[ -z "$status_field_id" || "$status_field_id" == "null" ]]; then
+  echo "Status field not found in project"
+  exit 1
+fi
+
 if [[ -z "$flow_option_id" || "$flow_option_id" == "null" ]]; then
   echo "Flow option not found: $flow_name"
+  exit 1
+fi
+
+if [[ -z "$flow_field_id" || "$flow_field_id" == "null" ]]; then
+  echo "Flow field not found in project"
   exit 1
 fi
 
@@ -142,4 +168,4 @@ mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
   -f fieldId="$flow_field_id" \
   -f optionId="$flow_option_id" >/dev/null
 
-echo "Updated $task_id: Status=$status_name, Flow=$flow_name"
+echo "Updated $task_or_item_id: Status=$status_name, Flow=$flow_name"

@@ -98,7 +98,7 @@ detect_flow_degradation() {
   local pending_outbox_count="0"
   if [[ -d "${CODEX_DIR}/outbox" ]]; then
     pending_outbox_count="$(
-      find "${CODEX_DIR}/outbox" -type f -name '*.txt' -size +0c 2>/dev/null | wc -l | tr -d ' '
+      find "${CODEX_DIR}/outbox" -maxdepth 1 -type f -name '*.txt' -size +0c 2>/dev/null | wc -l | tr -d ' '
     )"
   fi
   if [[ "${pending_outbox_count}" != "0" ]]; then

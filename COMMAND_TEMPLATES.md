@@ -46,7 +46,7 @@
   - Regex mask: `^scripts/codex/pr_edit\.sh\s+\d+(?:\s+.+){2,}$`
   - UI mask: `scripts/codex/pr_edit.sh`
 - Префикс: `scripts/codex/project_set_status.sh`
-  - Шаблон: `scripts/codex/project_set_status.sh <task-id> <status-name> [flow-name]`
+  - Шаблон: `scripts/codex/project_set_status.sh <task-id|project-item-id> <status-name> [flow-name]`
   - Regex mask: `^scripts/codex/project_set_status\.sh(?:\s+.+){2,3}$`
   - UI mask: `scripts/codex/project_set_status.sh`
 

@@ -71,7 +71,7 @@
   - создание PR `development -> main`
 - `pr_edit.sh <pr-number> <title-file> <body-file>`
   - обновление title/body PR
-- `project_set_status.sh <task-id> <status-name> [flow-name]`
+- `project_set_status.sh <task-id|project-item-id> <status-name> [flow-name]`
   - синхронное обновление полей `Status` и `Flow` карточки проекта
 - `project_add_task.sh <task-id> <title-file> <scope> <priority> [status] [flow]`
   - создание карточки задачи в проекте с заполнением `Task ID`, `Scope`, `Priority`, `Status`, `Flow`
@@ -84,6 +84,8 @@
   - читает Project через GraphQL (без нестабильного `gh project item-list`)
   - берет задачу только из `Status=To Progress`
   - для автоподхвата учитывает только `Issue`; `DraftIssue` игнорируется
+  - для перевода статуса использует `project item id`, поэтому не зависит от ручного заполнения поля `Task ID`
+  - `Task ID` берет из поля или извлекает из title по маске `PL-xxx`
   - при единственной задаче переводит ее в `Status/Flow=In Progress`
   - сохраняет текущий `Task ID` в `.tmp/codex/project_task_id.txt` для последующего `task_finalize`
 - `daemon_loop.sh [interval-sec]`

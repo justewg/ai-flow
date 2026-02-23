@@ -49,6 +49,132 @@ run_gh_retry_capture() {
   fi
 }
 
+trim() {
+  local value="$1"
+  value="$(printf '%s' "$value" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+  printf '%s' "$value"
+}
+
+parse_flow_meta_line() {
+  local body="$1"
+  local key="$2"
+  local value
+  value="$(
+    printf '%s\n' "$body" |
+      awk -v k="$key" '
+        BEGIN { IGNORECASE = 1 }
+        {
+          line=$0
+          gsub("\r","",line)
+          if (tolower(line) ~ "^" tolower(k) "[[:space:]]*:") {
+            sub(/^[^:]*:[[:space:]]*/, "", line)
+            print line
+            exit
+          }
+        }
+      '
+  )"
+  trim "$value"
+}
+
+build_dependency_block_comment() {
+  local task_id="$1"
+  local blockers="$2"
+  cat <<EOF
+CODEX_SIGNAL: AGENT_DEPENDENCY_BLOCKED
+CODEX_TASK: ${task_id}
+CODEX_BLOCKED_BY: ${blockers}
+CODEX_EXPECT: WAIT_DEPENDENCIES
+
+Задача не может быть взята в работу: не выполнены зависимости из Flow Meta.
+Блокеры: ${blockers}
+
+Закрой блокеры (или обнови Depends-On), затем снова переведи задачу в Todo.
+EOF
+}
+
+notify_dependency_blocked_once() {
+  local task_id="$1"
+  local issue_number="$2"
+  local blockers="$3"
+
+  local signature_file="${CODEX_DIR}/daemon_dependency_blocked_signature.txt"
+  local signature="${task_id}|${blockers}"
+  local previous=""
+  if [[ -s "$signature_file" ]]; then
+    previous="$(<"$signature_file")"
+  fi
+  if [[ "$previous" == "$signature" ]]; then
+    echo "DEPENDENCY_BLOCK_NOTIFY_SKIPPED=ALREADY_SENT"
+    echo "DEPENDENCY_BLOCK_SIGNATURE=$signature"
+    return 0
+  fi
+
+  local comment_body comment_json err_file
+  comment_body="$(build_dependency_block_comment "$task_id" "$blockers")"
+  err_file="$(mktemp "${CODEX_DIR}/dependency_block_gh_err.XXXXXX")"
+
+  if comment_json="$(
+    "${ROOT_DIR}/scripts/codex/gh_retry.sh" \
+      gh api "repos/${repo}/issues/${issue_number}/comments" \
+      -f body="$comment_body" 2>"$err_file"
+  )"; then
+    if [[ -s "$err_file" ]]; then
+      cat "$err_file" >&2
+    fi
+    rm -f "$err_file"
+    printf '%s\n' "$signature" > "$signature_file"
+    echo "DEPENDENCY_BLOCK_COMMENT_POSTED=1"
+    echo "DEPENDENCY_BLOCK_ISSUE_NUMBER=$issue_number"
+    echo "DEPENDENCY_BLOCK_SIGNATURE=$signature"
+    return 0
+  fi
+
+  local rc=$?
+  if [[ -s "$err_file" ]]; then
+    cat "$err_file" >&2
+  fi
+  rm -f "$err_file"
+
+  if [[ "$rc" -eq 75 ]]; then
+    local tmp_body queue_out
+    tmp_body="$(mktemp "${CODEX_DIR}/dependency_block_body.XXXXXX")"
+    printf '%s\n' "$comment_body" > "$tmp_body"
+
+    if queue_out="$(
+      "${ROOT_DIR}/scripts/codex/github_outbox.sh" \
+        enqueue_issue_comment \
+        "$repo" \
+        "$issue_number" \
+        "$tmp_body" \
+        "$task_id" \
+        "DEPENDENCY_BLOCKED" \
+        "0" 2>&1
+    )"; then
+      rm -f "$tmp_body"
+      emit_lines "$queue_out"
+      printf '%s\n' "$signature" > "$signature_file"
+      echo "DEPENDENCY_BLOCK_COMMENT_QUEUED_OUTBOX=1"
+      echo "WAIT_GITHUB_API_UNSTABLE=1"
+      return 0
+    fi
+
+    local qrc=$?
+    rm -f "$tmp_body"
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "DEPENDENCY_BLOCK_OUTBOX_ERROR(rc=$qrc): $line"
+    done <<<"$queue_out"
+    return 0
+  fi
+
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "DEPENDENCY_BLOCK_COMMENT_ERROR(rc=$rc): $line"
+  done <<<"$comment_json"
+  return 0
+}
+
 if ! git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- ||
   ! git -C "${ROOT_DIR}" diff --cached --quiet --ignore-submodules --; then
   echo "WAIT_DIRTY_WORKTREE_TRACKED=1"
@@ -389,6 +515,104 @@ if [[ -z "$issue_number" || "$issue_number" == "null" ]]; then
   exit 1
 fi
 
+issue_body=""
+if issue_body="$(
+  run_gh_retry_capture \
+    gh issue view "$issue_number" \
+    --repo "$repo" \
+    --json body \
+    --jq '.body // ""'
+)"; then
+  :
+else
+  rc=$?
+  if [[ "$rc" -eq 75 ]]; then
+    echo "WAIT_GITHUB_API_UNSTABLE=1"
+    echo "WAIT_GITHUB_STAGE=DEPENDENCY_BODY"
+    exit 0
+  fi
+  exit "$rc"
+fi
+
+depends_line="$(parse_flow_meta_line "$issue_body" "Depends-On")"
+execution_mode="$(parse_flow_meta_line "$issue_body" "Execution-Mode")"
+auto_queue="$(parse_flow_meta_line "$issue_body" "Auto-Queue-When-Unblocked")"
+
+[[ -z "$depends_line" ]] && depends_line="none"
+[[ -z "$execution_mode" ]] && execution_mode="daemon"
+[[ -z "$auto_queue" ]] && auto_queue="false"
+
+echo "FLOW_META_DEPENDS_ON=$depends_line"
+echo "FLOW_META_EXECUTION_MODE=$execution_mode"
+echo "FLOW_META_AUTO_QUEUE=$auto_queue"
+
+blocked_dependencies=()
+
+execution_mode_norm="$(printf '%s' "$execution_mode" | tr '[:upper:]' '[:lower:]')"
+if [[ "$execution_mode_norm" == "manual" ]]; then
+  blocked_dependencies+=("Execution-Mode=manual")
+fi
+
+if [[ "$depends_line" != "none" ]]; then
+  IFS=',' read -r -a dep_tokens <<< "$depends_line"
+  for raw_dep in "${dep_tokens[@]}"; do
+    dep_token="$(trim "$raw_dep")"
+    [[ -z "$dep_token" ]] && continue
+
+    dep_norm="$(printf '%s' "$dep_token" | tr '[:upper:]' '[:lower:]')"
+    if [[ "$dep_norm" == "none" ]]; then
+      continue
+    fi
+
+    dep_issue_number=""
+    if [[ "$dep_token" =~ ^#([0-9]+)$ ]]; then
+      dep_issue_number="${BASH_REMATCH[1]}"
+    elif [[ "$dep_token" =~ ^ISSUE-([0-9]+)$ ]]; then
+      dep_issue_number="${BASH_REMATCH[1]}"
+    elif [[ "$dep_token" =~ ^([0-9]+)$ ]]; then
+      dep_issue_number="${BASH_REMATCH[1]}"
+    fi
+
+    if [[ -z "$dep_issue_number" ]]; then
+      blocked_dependencies+=("$dep_token")
+      continue
+    fi
+
+    dep_state=""
+    if dep_state="$(
+      run_gh_retry_capture \
+        gh issue view "$dep_issue_number" \
+        --repo "$repo" \
+        --json state \
+        --jq '.state'
+    )"; then
+      :
+    else
+      rc=$?
+      if [[ "$rc" -eq 75 ]]; then
+        echo "WAIT_GITHUB_API_UNSTABLE=1"
+        echo "WAIT_GITHUB_STAGE=DEPENDENCY_CHECK"
+        exit 0
+      fi
+      exit "$rc"
+    fi
+
+    if [[ "$dep_state" != "CLOSED" ]]; then
+      blocked_dependencies+=("#${dep_issue_number}")
+    fi
+  done
+fi
+
+if (( ${#blocked_dependencies[@]} > 0 )); then
+  blocked_csv="$(IFS=', '; printf '%s' "${blocked_dependencies[*]}")"
+  echo "WAIT_DEPENDENCIES=1"
+  echo "WAIT_DEPENDENCIES_TASK_ID=$task_id"
+  echo "WAIT_DEPENDENCIES_ISSUE_NUMBER=$issue_number"
+  echo "WAIT_DEPENDENCIES_BLOCKERS=$blocked_csv"
+  notify_dependency_blocked_once "$task_id" "$issue_number" "$blocked_csv"
+  exit 0
+fi
+
 if sync_out="$("${ROOT_DIR}/scripts/codex/sync_branches.sh" 2>&1)"; then
   :
 else
@@ -422,6 +646,8 @@ else
   exit "$rc"
 fi
 emit_lines "$status_out"
+
+rm -f "${CODEX_DIR}/daemon_dependency_blocked_signature.txt"
 
 printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_active_task.txt"
 printf '%s\n' "$item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"

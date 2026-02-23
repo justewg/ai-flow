@@ -116,3 +116,13 @@ Watchdog fallback:
 - отдельный `watchdog`-процесс мониторит рассинхроны daemon/executor и зависшие lock-состояния;
 - при деградации выполняет ступени восстановления (`soft` -> `medium` -> `hard`);
 - все действия и причины фиксируются в `watchdog.log` и дублируются Telegram-сигналом (если канал доступен).
+
+Flow Meta (зависимости):
+- В задачах (`Issue`) поддерживается блок `## Flow Meta` с полями:
+  - `Depends-On: #<issue>, #<issue>`
+  - `Blocks: #<issue>, #<issue>`
+  - `Auto-Queue-When-Unblocked: false|true`
+  - `Execution-Mode: daemon|manual`
+- Правило daemon-flow:
+  - задача в `Todo` берется только если все `Depends-On` закрыты;
+  - при незакрытых блокерах daemon не стартует задачу и отражает причину в state/log.

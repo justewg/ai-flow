@@ -72,6 +72,27 @@
 - Делать отдельные вызовы `scripts/codex/run.sh write/append/clear`.
 - Затем отдельно вызывать `scripts/codex/run.sh <action>`.
 
+## Важные env-переменные
+- `DAEMON_GH_TOKEN` (или `CODEX_GH_TOKEN`) — отдельный GitHub token для daemon/watchdog.
+  - Применяется к действиям автоматики: комментарии в Issue, update/create PR, update Project status.
+  - Автор этих действий в GitHub будет владельцем этого токена.
+  - Читается из env процесса или из `.env`/`.env.deploy`.
+  - Роль в архитектуре:
+    - текущий режим: основной токен для daemon/watchdog;
+    - целевой режим с GitHub App: аварийный fallback, если App auth недоступен.
+  - Когда можно не задавать:
+    - после полного перехода на GitHub App (APP-03..APP-09), если fallback не нужен.
+  - Как выпустить:
+    - GitHub UI -> `Settings` -> `Developer settings` -> `Personal access tokens`.
+    - Рекомендуемо: токен отдельного bot-аккаунта (не личный), чтобы авторство действий было отделено.
+    - Тип токена: `Tokens (classic)` (для простого старта) или fine-grained PAT с эквивалентными правами.
+    - Минимальные права для текущего flow: `repo`, `read:project`, `project`.
+    - После выпуска записать в `.env` и перезапустить сервисы.
+  - После изменения значения перезапусти сервисы:
+    - `scripts/codex/run.sh daemon_uninstall && scripts/codex/run.sh daemon_install`
+    - `scripts/codex/run.sh watchdog_uninstall && scripts/codex/run.sh watchdog_install`
+- `CODEX_GIT_AUTHOR_*` / `CODEX_GIT_COMMITTER_*` — отдельная identity только для git-коммитов агента.
+
 ## Итеративный executor-flow (коммит1 -> вопрос -> ответ -> коммит2 -> финализация)
 1. Сделать первую рабочую дельту и выполнить `commit_push`.
 2. Если нужно подтверждение/уточнение, подготовить файл с вопросом и вызвать `scripts/codex/run.sh task_ask question <message-file>`.
@@ -82,6 +103,7 @@
 ## Команды
 - `dev_commit_push.sh "message" <path...>`
   - `git add` + `git commit` + `git push origin development`
+  - для agent-коммитов использует отдельную identity (env): `CODEX_GIT_AUTHOR_NAME`, `CODEX_GIT_AUTHOR_EMAIL`, `CODEX_GIT_COMMITTER_NAME`, `CODEX_GIT_COMMITTER_EMAIL`
 - `sync_branches.sh`
   - `fetch/pull/merge/push` для выравнивания `main` и `development` после merge PR
   - если `main` уже включен в `development`, merge пропускается
@@ -114,6 +136,8 @@
   - если активной задачи нет, проверяет открытые PR `development -> main` и при наличии ждет merge/close
   - читает Project через GraphQL (без нестабильного `gh project item-list`)
   - берет задачу только из `Status=Todo`
+  - перед подхватом читает `Flow Meta` у Issue и проверяет `Depends-On`
+  - при незакрытых зависимостях не берет задачу, пишет `WAIT_DEPENDENCIES...` в вывод и отправляет одноразовый сигнал `CODEX_SIGNAL: AGENT_DEPENDENCY_BLOCKED` (через outbox при офлайне GitHub)
   - для автоподхвата учитывает только `Issue`; `DraftIssue` игнорируется
   - для перевода статуса использует `project item id`, поэтому не зависит от ручного заполнения поля `Task ID`
   - `Task ID` берет из поля, либо извлекает `PL-xxx` из title

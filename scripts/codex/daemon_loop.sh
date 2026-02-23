@@ -35,6 +35,71 @@ log() {
   printf '%s %s\n' "$ts" "$*" >> "$LOG_FILE"
 }
 
+strip_quotes() {
+  local value="$1"
+  value="${value%\"}"
+  value="${value#\"}"
+  value="${value%\'}"
+  value="${value#\'}"
+  printf '%s' "$value"
+}
+
+read_key_from_env_file() {
+  local file_path="$1"
+  local key="$2"
+  [[ -f "$file_path" ]] || return 1
+  local raw
+  raw="$(grep -E "^${key}=" "$file_path" | tail -n1 | cut -d'=' -f2- || true)"
+  [[ -n "$raw" ]] || return 1
+  strip_quotes "$raw"
+}
+
+configure_daemon_github_token() {
+  if [[ -n "${GH_TOKEN:-}" ]]; then
+    log "GITHUB_AUTH_MODE=ENV_GH_TOKEN"
+    return 0
+  fi
+
+  local token=""
+  local source="none"
+  local env_candidates=()
+
+  if [[ -n "${DAEMON_GH_TOKEN:-}" ]]; then
+    token="${DAEMON_GH_TOKEN}"
+    source="env:DAEMON_GH_TOKEN"
+  elif [[ -n "${CODEX_GH_TOKEN:-}" ]]; then
+    token="${CODEX_GH_TOKEN}"
+    source="env:CODEX_GH_TOKEN"
+  else
+    if [[ -n "${DAEMON_GH_ENV_FILE:-}" ]]; then
+      env_candidates+=("${DAEMON_GH_ENV_FILE}")
+    fi
+    env_candidates+=("${ROOT_DIR}/.env")
+    env_candidates+=("${ROOT_DIR}/.env.deploy")
+
+    local env_file
+    for env_file in "${env_candidates[@]}"; do
+      token="$(read_key_from_env_file "$env_file" "DAEMON_GH_TOKEN" || true)"
+      if [[ -n "$token" ]]; then
+        source="file:${env_file}:DAEMON_GH_TOKEN"
+        break
+      fi
+      token="$(read_key_from_env_file "$env_file" "CODEX_GH_TOKEN" || true)"
+      if [[ -n "$token" ]]; then
+        source="file:${env_file}:CODEX_GH_TOKEN"
+        break
+      fi
+    done
+  fi
+
+  if [[ -n "$token" ]]; then
+    export GH_TOKEN="$token"
+    log "GITHUB_AUTH_MODE=DAEMON_TOKEN (${source})"
+  else
+    log "GITHUB_AUTH_MODE=DEFAULT_GH_AUTH"
+  fi
+}
+
 read_file_or_default() {
   local file_path="$1"
   local default_value="$2"
@@ -87,6 +152,8 @@ classify_success_state() {
     echo "WAIT_ACTIVE_TASK"
   elif printf '%s' "$output" | grep -q '^WAIT_OPEN_PR_COUNT='; then
     echo "WAIT_OPEN_PR"
+  elif printf '%s' "$output" | grep -q '^WAIT_DEPENDENCIES=1'; then
+    echo "WAIT_DEPENDENCIES"
   elif printf '%s' "$output" | grep -q '^WAIT_DIRTY_WORKTREE_TRACKED=1'; then
     echo "WAIT_DIRTY_WORKTREE"
   elif printf '%s' "$output" | grep -q '^BLOCKED_MULTIPLE_TRIGGER_TASKS='; then
@@ -130,6 +197,10 @@ build_success_detail() {
       ;;
     WAIT_OPEN_PR)
       line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_OPEN_PR_COUNT=' || true)"
+      ;;
+    WAIT_DEPENDENCIES)
+      line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_DEPENDENCIES_BLOCKERS=' || true)"
+      [[ -z "$line" ]] && line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_DEPENDENCIES=1' || true)"
       ;;
     WAIT_GITHUB_OFFLINE)
       line="$(printf '%s\n' "$output" | grep -m1 -E '^(WAIT_GITHUB_STAGE=|WAIT_GITHUB_API_UNSTABLE=1)' || true)"
@@ -348,6 +419,8 @@ notify_if_needed() {
     printf '%s\n' "$mode" > "$NOTIFY_MODE_FILE"
   fi
 }
+
+configure_daemon_github_token
 
 log "daemon_loop start interval=${interval}s"
 set_state "BOOTING" "daemon_loop started"

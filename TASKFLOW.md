@@ -10,6 +10,28 @@
 - Я выполняю реализацию, коммиты, PR, обновления статусов.
 - Источник правды по очереди задач: GitHub Project (поля `Priority`, `Status`, `Flow`; `Task ID` опционально, если заполнен).
 
+## 1.1. Формализация зависимостей задач (Flow Meta)
+Для задач типа `Issue` используем машиночитаемый блок в body:
+
+```md
+## Flow Meta
+Depends-On: #66, #67
+Blocks: #70
+Auto-Queue-When-Unblocked: false
+Execution-Mode: daemon
+```
+
+Правила:
+1. `Depends-On` — список блокеров (issue numbers), которые должны быть `closed`/`done` до старта.
+2. `Blocks` — список задач, которые разблокируются после закрытия текущей.
+3. `Auto-Queue-When-Unblocked`:
+   - `false` (по умолчанию): задача остается в `Backlog`, старт только вручную через `Todo`;
+   - `true`: после снятия блокеров задачу можно автоматически перевести в `Todo`.
+4. `Execution-Mode`:
+   - `daemon` — может выполняться автоматикой;
+   - `manual` — ручной шаг/prerequisite, автоматикой не берется.
+5. В `Depends-On/Blocks` используем canonical-идентификатор `#issue_number` (не `APP-xx`), чтобы парсинг был стабильным.
+
 ## 2. Текущий рабочий flow (действует сейчас)
 1. Ты делаешь merge PR `development -> main`.
 2. Ты пишешь `merged`.
@@ -99,6 +121,20 @@
    - `medium`: `executor_reset` + `daemon_tick`;
    - `hard`: `daemon_uninstall` + `daemon_install` (и cleanup stale `daemon.lock`);
    - с cooldown и логированием причин в `watchdog.log`.
+16. Для разделения авторства в GitHub можно задать отдельный токен автоматики:
+   - `DAEMON_GH_TOKEN` (или `CODEX_GH_TOKEN`) в `.env`/`.env.deploy`;
+   - тогда Issue/PR/Project-действия демона пойдут от владельца этого токена.
+   - этот токен уместен в двух сценариях:
+     - как основной (текущий этап до полного перехода на GitHub App);
+     - как аварийный fallback после перехода на GitHub App.
+   - выпуск токена:
+     - GitHub UI -> `Settings` -> `Developer settings` -> `Personal access tokens`;
+     - предпочтительно выпускать от отдельного bot-аккаунта;
+     - минимальные scopes для текущего flow: `repo`, `read:project`, `project`.
+17. Перед взятием задачи из `Status=Todo` daemon должен проверять `Flow Meta -> Depends-On`:
+   - если есть незакрытые блокеры, задача не берется в работу;
+   - daemon пишет причину блокировки в лог/state и (опционально) комментарий в Issue;
+   - для `Auto-Queue-When-Unblocked: false` задача остается в `Backlog` до ручного старта.
 
 ## 5.1. Режимы работы: чат и демон
 Есть два параллельных режима, они не конфликтуют:
@@ -128,6 +164,7 @@ Telegram-сигналы по Issue-вопросам:
 - `Signal: AGENT_QUESTION` — вопрос по задаче, нужен твой ответ.
 - `Signal: AGENT_BLOCKER` — блокер, нужен твой ответ.
 - `Signal: AGENT_RESUMED` — ответ получен, выполнение продолжено.
+- `Signal: AGENT_DEPENDENCY_BLOCKED` — задача в `Todo` заблокирована зависимостями (`Depends-On`), старт отложен.
 
 ## 6. Политика языка и оформления
 - Общение: русский.

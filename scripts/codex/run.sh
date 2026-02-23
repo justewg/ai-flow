@@ -24,6 +24,7 @@ Commands:
   commit_push
   project_add_task
   project_set_status
+  next_task
 
 Fixed input files in .tmp/codex:
   pr_number.txt
@@ -202,6 +203,10 @@ case "$cmd" in
     else
       "${ROOT_DIR}/scripts/codex/project_set_status.sh" "$task_id" "$status_name"
     fi
+    ;;
+
+  next_task)
+    "${ROOT_DIR}/scripts/codex/next_task.sh"
     ;;
 
   *)

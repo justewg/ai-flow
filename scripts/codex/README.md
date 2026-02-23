@@ -19,6 +19,7 @@
 - `scripts/codex/run.sh commit_push`
 - `scripts/codex/run.sh project_add_task`
 - `scripts/codex/run.sh project_set_status`
+- `scripts/codex/run.sh next_task` — показать следующую задачу со статусом `Planned` (приоритет P0→P1→P2, затем по номеру `PL-xxx`).
 
 `run.sh` читает фиксированные файлы из `.tmp/codex/`:
 - `pr_number.txt`
@@ -68,6 +69,8 @@
   - синхронное обновление полей `Status` и `Flow` карточки проекта
 - `project_add_task.sh <task-id> <title-file> <scope> <priority> [status] [flow]`
   - создание карточки задачи в проекте с заполнением `Task ID`, `Scope`, `Priority`, `Status`, `Flow`
+- `next_task.sh`
+  - выводит `NEXT_TASK_ID=...` и `NEXT_TITLE=...` для ближайшей задачи (статус `Planned`)
 
 ## Подготовка
 Скрипты должны быть исполняемыми:

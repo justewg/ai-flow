@@ -252,7 +252,10 @@ fi
 action="NONE"
 reason=""
 
-if [[ -n "$active_task" ]]; then
+if [[ -d "$DAEMON_LOCK_DIR" && $daemon_log_age -gt $DAEMON_LOG_STALE_SEC ]]; then
+  action="HARD_RESTART_DAEMON"
+  reason="DAEMON_LOG_STALE_WITH_LOCK"
+elif [[ -n "$active_task" ]]; then
   if [[ "$executor_state" == "RUNNING" && "$executor_pid_alive" != "1" ]]; then
     action="MEDIUM_RESET_EXECUTOR"
     reason="EXECUTOR_PID_DEAD"
@@ -266,11 +269,6 @@ if [[ -n "$active_task" ]]; then
     action="SOFT_DAEMON_TICK"
     reason="ACTIVE_TASK_WITHOUT_EXECUTOR_STATE"
   fi
-fi
-
-if [[ "$action" == "NONE" && -d "$DAEMON_LOCK_DIR" && $daemon_log_age -gt $DAEMON_LOG_STALE_SEC ]]; then
-  action="HARD_RESTART_DAEMON"
-  reason="DAEMON_LOG_STALE_WITH_LOCK"
 fi
 
 summary="active_task=${active_task:-none};active_issue=${active_issue:-none};daemon_state=${daemon_state};executor_state=${executor_state:-none};executor_pid=${executor_pid:-none};executor_pid_alive=${executor_pid_alive};daemon_log_age=${daemon_log_age}s"

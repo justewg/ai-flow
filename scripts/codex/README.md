@@ -25,6 +25,10 @@
 - `scripts/codex/run.sh daemon_install [label] [interval-sec]` — установка и запуск `launchd`-агента.
 - `scripts/codex/run.sh daemon_uninstall [label]` — остановка и удаление `launchd`-агента.
 - `scripts/codex/run.sh daemon_status [label]` — проверка статуса `launchd`-агента.
+- `scripts/codex/run.sh executor_reset` — сброс состояния автономного executor.
+- `scripts/codex/run.sh executor_start <task-id> <issue-number>` — запуск автономного executor.
+- `scripts/codex/run.sh executor_tick <task-id> <issue-number>` — проверка/перезапуск executor, обработка fail-state.
+- `scripts/codex/run.sh executor_build_prompt <task-id> <issue-number> <output-file>` — сбор prompt для executor из Issue.
 - `scripts/codex/run.sh task_ask <question|blocker> <message-file>` — отправить вопрос/блокер в comment Issue и включить режим ожидания ответа.
 - `scripts/codex/run.sh daemon_check_replies` — проверить ответы в Issue-комментах для ожидающего вопроса.
 - `scripts/codex/run.sh task_finalize` — финализация задачи: commit+push, create/update PR, перевод задачи в `In Review`.
@@ -85,6 +89,7 @@
   - перед взятием новой задачи проверяет waiting-state по Issue-комментариям (`daemon_check_replies.sh`)
   - при `WAIT_USER_REPLY` не берет новые задачи
   - при наличии `daemon_active_task.txt` не берет новые задачи до финализации, но продолжает проверять ответы в Issue
+  - для активной задачи вызывает `executor_tick.sh`, который запускает/мониторит headless executor (`codex exec`)
   - если активной задачи нет, проверяет открытые PR `development -> main` и при наличии ждет merge/close
   - читает Project через GraphQL (без нестабильного `gh project item-list`)
   - берет задачу только из `Status=To Progress`
@@ -113,6 +118,19 @@
   - создает PR `development -> main` или обновляет существующий
   - переводит задачу в `Status=In Progress`, `Flow=In Review`
   - очищает входные файлы commit/PR и активный daemon-state (active/waiting), чтобы избежать повторного использования старых данных
+- `executor_build_prompt.sh <task-id> <issue-number> <output-file>`
+  - собирает prompt executor из текста Issue и последнего ответа пользователя
+- `executor_start.sh <task-id> <issue-number>`
+  - запускает `executor_run.sh` в фоне и сохраняет pid/state
+- `executor_run.sh <task-id> <issue-number>`
+  - выполняет `codex exec --full-auto` с подготовленным prompt
+  - пишет результат в `.tmp/codex/executor.log` и обновляет state (`DONE/FAILED`)
+- `executor_tick.sh <task-id> <issue-number>`
+  - проверяет живость executor по pid/state
+  - при `FAILED` автоматически публикует blocker-комментарий в Issue (один раз на задачу)
+  - при `DONE` и активной задаче без waiting-state перезапускает executor после cooldown
+- `executor_reset.sh`
+  - очищает state-файлы executor
 - `task_ask.sh <question|blocker> <message-file>`
   - публикует структурированный комментарий в текущий Issue (`CODEX_SIGNAL: AGENT_QUESTION|AGENT_BLOCKER`)
   - сохраняет waiting-state в `.tmp/codex/`, чтобы daemon ждал ответ пользователя
@@ -132,6 +150,10 @@
 - `.tmp/codex/daemon_notify_mode.txt` — последний режим уведомлений (`degraded|healthy`)
 - `.tmp/codex/daemon_notify_last_epoch.txt` — timestamp последней попытки локального Telegram-уведомления
 - `.tmp/codex/daemon_notify_last_signature.txt` — подпись последнего состояния, по которой определяется `DEGRADED_CHANGED`
+- `.tmp/codex/executor.log` — полный лог автономного executor
+- `.tmp/codex/executor_state.txt` — состояние executor (`RUNNING|DONE|FAILED`)
+- `.tmp/codex/executor_pid.txt` — pid фонового executor-процесса
+- `.tmp/codex/executor_last_exit_code.txt` — код завершения последнего executor запуска
 
 ## Подготовка
 Скрипты должны быть исполняемыми:

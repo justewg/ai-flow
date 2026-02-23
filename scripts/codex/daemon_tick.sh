@@ -36,39 +36,14 @@ if [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]]; then
     echo "WAIT_ACTIVE_ISSUE_NUMBER=$active_issue_number"
   fi
 
-  # Watchdog: если активная задача долго "висит" без перехода в waiting-state,
-  # автоматически публикуем blocker-вопрос в Issue один раз на задачу.
-  if [[ -n "$active_issue_number" && ! -s "${CODEX_DIR}/daemon_waiting_issue_number.txt" ]]; then
-    watchdog_sec="${ACTIVE_TASK_WATCHDOG_SEC:-180}"
-    if ! [[ "$watchdog_sec" =~ ^[0-9]+$ ]] || (( watchdog_sec < 30 )); then
-      watchdog_sec=180
-    fi
-    active_mtime="$(stat -f %m "${CODEX_DIR}/daemon_active_task.txt" 2>/dev/null || echo 0)"
-    now_epoch="$(date +%s)"
-    age_sec=$(( now_epoch - active_mtime ))
-    last_watchdog_task="$(cat "${CODEX_DIR}/daemon_watchdog_task_id.txt" 2>/dev/null || true)"
-    if (( age_sec >= watchdog_sec )) && [[ "$last_watchdog_task" != "$active_task_id" ]]; then
-      msg_file="$(mktemp "${CODEX_DIR}/watchdog_blocker.XXXXXX")"
-      cat > "$msg_file" <<EOF
-Автосигнал watchdog: задача находится в активном состоянии дольше ${watchdog_sec} сек без нового шага.
-Нужна твоя команда: продолжать текущий сценарий или скорректировать план.
-EOF
-      if ask_out="$("${ROOT_DIR}/scripts/codex/task_ask.sh" blocker "$msg_file" 2>&1)"; then
-        echo "WATCHDOG_BLOCKER_POSTED=1"
-        while IFS= read -r line; do
-          [[ -z "$line" ]] && continue
-          echo "WATCHDOG: $line"
-        done <<<"$ask_out"
-        printf '%s\n' "$active_task_id" > "${CODEX_DIR}/daemon_watchdog_task_id.txt"
-      else
-        rc=$?
-        while IFS= read -r line; do
-          [[ -z "$line" ]] && continue
-          echo "WATCHDOG_ERROR(rc=$rc): $line"
-        done <<<"$ask_out"
-      fi
-      rm -f "$msg_file"
-    fi
+  if [[ -n "$active_issue_number" ]]; then
+    exec_out="$("${ROOT_DIR}/scripts/codex/executor_tick.sh" "$active_task_id" "$active_issue_number" 2>&1)"
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "$line"
+    done <<<"$exec_out"
+  else
+    echo "BLOCKED_ACTIVE_TASK_WITHOUT_ISSUE=1"
   fi
   exit 0
 fi
@@ -245,7 +220,7 @@ printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_active_task.txt"
 printf '%s\n' "$item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"
 printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
 printf '%s\n' "$task_id" > "${CODEX_DIR}/project_task_id.txt"
-printf '\n' > "${CODEX_DIR}/daemon_watchdog_task_id.txt"
+"${ROOT_DIR}/scripts/codex/executor_reset.sh" >/dev/null
 date -u '+%Y-%m-%dT%H:%M:%SZ' > "${CODEX_DIR}/daemon_last_claim_utc.txt"
 
 echo "CLAIMED_TASK_ID=$task_id"

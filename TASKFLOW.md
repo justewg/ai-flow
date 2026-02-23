@@ -91,6 +91,11 @@
 14. Если деградация связана с DNS GitHub, daemon обязан дополнительно проверить доступность Telegram (`api.telegram.org`):
    - если Telegram доступен, обязательно отправлять сигнал через бота о текущем состоянии деградации;
    - если Telegram тоже недоступен, фиксировать это в state/detail и логе для диагностики.
+15. Отдельный watchdog-процесс (вне sandbox runtime) должен мониторить daemon/executor и делать авто-восстановление:
+   - `soft`: `daemon_tick`;
+   - `medium`: `executor_reset` + `daemon_tick`;
+   - `hard`: `daemon_uninstall` + `daemon_install` (и cleanup stale `daemon.lock`);
+   - с cooldown и логированием причин в `watchdog.log`.
 
 ## 5.1. Режимы работы: чат и демон
 Есть два параллельных режима, они не конфликтуют:
@@ -154,6 +159,16 @@ Telegram-сигналы по Issue-вопросам:
   - `scripts/codex/run.sh daemon_status`
 - Остановить и удалить сервис:
   - `scripts/codex/run.sh daemon_uninstall`
+
+### 8.2. Команды watchdog
+- Установить и запустить watchdog:
+  - `scripts/codex/run.sh watchdog_install`
+- Проверить статус watchdog:
+  - `scripts/codex/run.sh watchdog_status`
+- Выполнить ручной тик watchdog:
+  - `scripts/codex/run.sh watchdog_tick`
+- Остановить и удалить watchdog:
+  - `scripts/codex/run.sh watchdog_uninstall`
 
 ## 9. Как добавить статус `To Progress` в GitHub Project
 ### 9.1. Рекомендуемый путь (UI)

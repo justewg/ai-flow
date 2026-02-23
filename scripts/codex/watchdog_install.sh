@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+CODEX_DIR="${ROOT_DIR}/.tmp/codex"
+
+label="${1:-com.planka.codex-watchdog}"
+interval="${2:-45}"
+plist_path="${HOME}/Library/LaunchAgents/${label}.plist"
+
+if ! [[ "$interval" =~ ^[0-9]+$ ]] || (( interval < 10 )); then
+  echo "Invalid interval: '$interval' (expected integer >= 10 sec)"
+  exit 1
+fi
+
+mkdir -p "${HOME}/Library/LaunchAgents" "${CODEX_DIR}"
+
+cat > "${plist_path}" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>${label}</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>${ROOT_DIR}/scripts/codex/watchdog_loop.sh</string>
+    <string>${interval}</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>${ROOT_DIR}</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>${CODEX_DIR}/watchdog.launchd.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>${CODEX_DIR}/watchdog.launchd.err.log</string>
+</dict>
+</plist>
+EOF
+
+launchctl bootout "gui/${UID}" "${plist_path}" >/dev/null 2>&1 || true
+launchctl bootstrap "gui/${UID}" "${plist_path}"
+launchctl kickstart -k "gui/${UID}/${label}"
+
+echo "Installed launchd watchdog: ${label}"
+echo "Plist: ${plist_path}"
+echo "Interval: ${interval}s"

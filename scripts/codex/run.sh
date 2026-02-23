@@ -30,6 +30,11 @@ Commands:
   daemon_install
   daemon_uninstall
   daemon_status
+  watchdog_tick
+  watchdog_loop
+  watchdog_install
+  watchdog_uninstall
+  watchdog_status
   executor_reset
   executor_start
   executor_tick
@@ -259,6 +264,44 @@ case "$cmd" in
       "${ROOT_DIR}/scripts/codex/daemon_status.sh" "$2"
     else
       "${ROOT_DIR}/scripts/codex/daemon_status.sh"
+    fi
+    ;;
+
+  watchdog_tick)
+    "${ROOT_DIR}/scripts/codex/watchdog_tick.sh"
+    ;;
+
+  watchdog_loop)
+    if [[ $# -ge 2 ]]; then
+      "${ROOT_DIR}/scripts/codex/watchdog_loop.sh" "$2"
+    else
+      "${ROOT_DIR}/scripts/codex/watchdog_loop.sh"
+    fi
+    ;;
+
+  watchdog_install)
+    if [[ $# -ge 3 ]]; then
+      "${ROOT_DIR}/scripts/codex/watchdog_install.sh" "$2" "$3"
+    elif [[ $# -ge 2 ]]; then
+      "${ROOT_DIR}/scripts/codex/watchdog_install.sh" "$2"
+    else
+      "${ROOT_DIR}/scripts/codex/watchdog_install.sh"
+    fi
+    ;;
+
+  watchdog_uninstall)
+    if [[ $# -ge 2 ]]; then
+      "${ROOT_DIR}/scripts/codex/watchdog_uninstall.sh" "$2"
+    else
+      "${ROOT_DIR}/scripts/codex/watchdog_uninstall.sh"
+    fi
+    ;;
+
+  watchdog_status)
+    if [[ $# -ge 2 ]]; then
+      "${ROOT_DIR}/scripts/codex/watchdog_status.sh" "$2"
+    else
+      "${ROOT_DIR}/scripts/codex/watchdog_status.sh"
     fi
     ;;
 

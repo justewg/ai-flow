@@ -87,6 +87,24 @@ extract_pr_number_from_url() {
   printf '%s' "$url" | sed -E 's#.*/pull/([0-9]+).*#\1#'
 }
 
+mark_pr_ready_if_draft() {
+  local pr_number="$1"
+  local is_draft
+  is_draft="$(
+    gh pr view "$pr_number" \
+      --repo "$REPO" \
+      --json isDraft \
+      --jq '.isDraft'
+  )"
+
+  if [[ "$is_draft" == "true" ]]; then
+    gh pr ready "$pr_number" --repo "$REPO" >/dev/null
+    echo "PR_READY_FOR_REVIEW=true"
+  else
+    echo "PR_READY_FOR_REVIEW=false"
+  fi
+}
+
 mkdir -p "$CODEX_DIR"
 
 commit_message="$(require_nonempty_file "$commit_file")"
@@ -169,6 +187,8 @@ else
   printf '%s\n' "$open_prs_json"
   exit 1
 fi
+
+mark_pr_ready_if_draft "$pr_number"
 
 printf '%s\n' "$pr_number" > "$pr_number_file"
 "${ROOT_DIR}/scripts/codex/project_set_status.sh" "$task_id" "In Progress" "In Review"

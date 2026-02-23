@@ -20,11 +20,21 @@ emit_lines() {
 
 run_gh_retry_capture() {
   local out=""
-  if out="$("${ROOT_DIR}/scripts/codex/gh_retry.sh" "$@" 2>&1)"; then
+  local err_file
+  err_file="$(mktemp "${CODEX_DIR}/gh_retry_err.XXXXXX")"
+  if out="$("${ROOT_DIR}/scripts/codex/gh_retry.sh" "$@" 2>"$err_file")"; then
+    if [[ -s "$err_file" ]]; then
+      cat "$err_file" >&2
+    fi
+    rm -f "$err_file"
     printf '%s' "$out"
     return 0
   fi
   local rc=$?
+  if [[ -s "$err_file" ]]; then
+    cat "$err_file" >&2
+  fi
+  rm -f "$err_file"
   printf '%s\n' "$out" >&2
   return "$rc"
 }

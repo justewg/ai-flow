@@ -176,11 +176,20 @@ EOF
 )"
 
   local comment_json=""
+  local err_file
+  err_file="$(mktemp "${CODEX_DIR}/final_comment_gh_err.XXXXXX")"
   if comment_json="$(
     "${ROOT_DIR}/scripts/codex/gh_retry.sh" \
       gh api "repos/${REPO}/issues/${issue_number}/comments" \
-      -f body="$comment_body" 2>&1
+      -f body="$comment_body" 2>"$err_file"
   )"; then
+    if [[ -s "$err_file" ]]; then
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        echo "$line"
+      done < "$err_file"
+    fi
+    rm -f "$err_file"
     local comment_id comment_url
     comment_id="$(printf '%s' "$comment_json" | jq -r '.id // empty')"
     comment_url="$(printf '%s' "$comment_json" | jq -r '.html_url // empty')"
@@ -192,6 +201,15 @@ EOF
   fi
 
   local rc=$?
+  local comment_err
+  comment_err="$(cat "$err_file" 2>/dev/null || true)"
+  rm -f "$err_file"
+  if [[ -n "$comment_err" ]]; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "$line"
+    done <<< "$comment_err"
+  fi
   if [[ "$rc" -eq 75 ]]; then
     local tmp_body queue_out
     tmp_body="$(mktemp "${CODEX_DIR}/in_review_comment.XXXXXX")"

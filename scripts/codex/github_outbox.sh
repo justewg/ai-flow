@@ -134,7 +134,15 @@ case "$cmd" in
       fi
 
       api_out=""
-      if api_out="$("${ROOT_DIR}/scripts/codex/gh_retry.sh" gh api "repos/${repo}/issues/${issue_number}/comments" -f body="$body_text" 2>&1)"; then
+      err_file="$(mktemp "${CODEX_DIR}/outbox_gh_err.XXXXXX")"
+      if api_out="$("${ROOT_DIR}/scripts/codex/gh_retry.sh" gh api "repos/${repo}/issues/${issue_number}/comments" -f body="$body_text" 2>"$err_file")"; then
+        if [[ -s "$err_file" ]]; then
+          while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            echo "$line"
+          done < "$err_file"
+        fi
+        rm -f "$err_file"
         comment_id="$(printf '%s' "$api_out" | jq -r '.id // empty')"
         comment_url="$(printf '%s' "$api_out" | jq -r '.html_url // empty')"
         now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -160,6 +168,14 @@ case "$cmd" in
         echo "OUTBOX_SENT_ITEM=$issue_number"
       else
         rc=$?
+        api_err="$(cat "$err_file" 2>/dev/null || true)"
+        rm -f "$err_file"
+        if [[ -n "$api_err" ]]; then
+          while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            echo "$line"
+          done <<<"$api_err"
+        fi
         if [[ "$rc" -eq 75 ]]; then
           attempts="$(jq -r '.attempts // 0' "$item_file")"
           if ! [[ "$attempts" =~ ^[0-9]+$ ]]; then

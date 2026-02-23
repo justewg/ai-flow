@@ -46,11 +46,21 @@ post_issue_comment() {
   local issue_number="$1"
   local body="$2"
   local out=""
-  if out="$("${ROOT_DIR}/scripts/codex/gh_retry.sh" gh api "repos/${REPO}/issues/${issue_number}/comments" -f body="$body" 2>&1)"; then
+  local err_file
+  err_file="$(mktemp "${CODEX_DIR}/task_ask_gh_err.XXXXXX")"
+  if out="$("${ROOT_DIR}/scripts/codex/gh_retry.sh" gh api "repos/${REPO}/issues/${issue_number}/comments" -f body="$body" 2>"$err_file")"; then
+    if [[ -s "$err_file" ]]; then
+      cat "$err_file" >&2
+    fi
+    rm -f "$err_file"
     printf '%s' "$out"
     return 0
   fi
   local rc=$?
+  if [[ -s "$err_file" ]]; then
+    cat "$err_file" >&2
+  fi
+  rm -f "$err_file"
   printf '%s\n' "$out" >&2
   return "$rc"
 }

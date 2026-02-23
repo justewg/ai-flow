@@ -119,6 +119,8 @@
   - сохраняет текущий `Task ID` в `.tmp/codex/project_task_id.txt` для последующего `task_finalize`
 - `daemon_loop.sh [interval-sec]`
   - крутит `daemon_tick.sh` в цикле с lock-файлом и heartbeat-логом
+  - пишет в `daemon_state_detail` явные health-маркеры: `GITHUB_STATUS=<...>` и `TELEGRAM_STATUS=<...>`
+  - различает сетевую деградацию и веточный блокер синхронизации (`WAIT_BRANCH_SYNC`)
   - отправляет локальные Telegram-алерты по деградации без спама:
     - вход в деградацию (`ENTER_DEGRADED`)
     - смена причины деградации (`DEGRADED_CHANGED`)

@@ -61,6 +61,8 @@ classify_success_state() {
   local output="$1"
   if printf '%s' "$output" | grep -q '^WAIT_GITHUB_API_UNSTABLE=1'; then
     echo "WAIT_GITHUB_OFFLINE"
+  elif printf '%s' "$output" | grep -q '^WAIT_BRANCH_SYNC_REQUIRED=1'; then
+    echo "WAIT_BRANCH_SYNC"
   elif printf '%s' "$output" | grep -q '^EXECUTOR_FAILED=1'; then
     echo "BLOCKED_EXECUTOR_FAILED"
   elif printf '%s' "$output" | grep -q '^BLOCKED_ACTIVE_TASK_WITHOUT_ISSUE=1'; then
@@ -132,6 +134,10 @@ build_success_detail() {
     WAIT_GITHUB_OFFLINE)
       line="$(printf '%s\n' "$output" | grep -m1 -E '^(WAIT_GITHUB_STAGE=|WAIT_GITHUB_API_UNSTABLE=1)' || true)"
       ;;
+    WAIT_BRANCH_SYNC)
+      line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_BRANCH_SYNC_REQUIRED=1' || true)"
+      [[ -z "$line" ]] && line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_BRANCH_STAGE=' || true)"
+      ;;
     WAIT_DIRTY_WORKTREE)
       line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_DIRTY_WORKTREE_TRACKED=1' || true)"
       ;;
@@ -191,6 +197,7 @@ detect_flow_degradation() {
 
   local github_status
   github_status="$(probe_http_status "https://api.github.com")"
+  parts+=("GITHUB_STATUS=${github_status}")
   if [[ "$github_status" != "OK" ]]; then
     if [[ "$github_status" == "DNS_OFFLINE" ]]; then
       parts+=("DEGRADED=GITHUB_DNS_OFFLINE")
@@ -206,6 +213,7 @@ detect_flow_degradation() {
   if [[ "$github_status" == "DNS_OFFLINE" ]]; then
     local telegram_status
     telegram_status="$(probe_http_status "https://api.telegram.org")"
+    parts+=("TELEGRAM_STATUS=${telegram_status}")
     parts+=("CHECK_TELEGRAM=${telegram_status}")
     if [[ "$telegram_status" == "OK" ]]; then
       parts+=("TELEGRAM_NOTIFY_ROUTE=AVAILABLE")
@@ -216,6 +224,8 @@ detect_flow_degradation() {
     else
       parts+=("DEGRADED=TELEGRAM_UNSTABLE")
     fi
+  else
+    parts+=("TELEGRAM_STATUS=SKIPPED")
   fi
 
   if (( ${#parts[@]} > 0 )); then

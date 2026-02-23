@@ -75,6 +75,15 @@ build_default_pr_body() {
 EOF
 }
 
+ensure_final_review_signal() {
+  local body="$1"
+  if printf '%s\n' "$body" | grep -q 'CODEX_SIGNAL: FINAL_REVIEW'; then
+    printf '%s' "$body"
+    return
+  fi
+  printf '%s\n\n%s\n%s\n' "$body" "CODEX_SIGNAL: FINAL_REVIEW" "CODEX_STAGE: IN_REVIEW"
+}
+
 extract_task_id_from_message() {
   local commit_message="$1"
   local task_id
@@ -144,6 +153,7 @@ pr_body="$(read_if_present "$body_file" || true)"
 if [[ -z "$pr_body" ]]; then
   pr_body="$(build_default_pr_body "$task_id")"
 fi
+pr_body="$(ensure_final_review_signal "$pr_body")"
 
 tmp_title="$(mktemp)"
 tmp_body="$(mktemp)"

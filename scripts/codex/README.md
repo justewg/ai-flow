@@ -64,6 +64,13 @@
 - Делать отдельные вызовы `scripts/codex/run.sh write/append/clear`.
 - Затем отдельно вызывать `scripts/codex/run.sh <action>`.
 
+## Итеративный executor-flow (коммит1 -> вопрос -> ответ -> коммит2 -> финализация)
+1. Сделать первую рабочую дельту и выполнить `commit_push`.
+2. Если нужно подтверждение/уточнение, подготовить файл с вопросом и вызвать `scripts/codex/run.sh task_ask question <message-file>`.
+3. После ответа пользователя продолжить реализацию второй дельты.
+4. На финальном шаге заполнить `.tmp/codex/commit_message.txt` и `.tmp/codex/stage_paths.txt`, при необходимости обновить `pr_title`/`pr_body`, затем вызвать `scripts/codex/run.sh task_finalize`.
+5. Если PR остался draft, перевести его в `ready_for_review`.
+
 ## Команды
 - `dev_commit_push.sh "message" <path...>`
   - `git add` + `git commit` + `git push origin development`

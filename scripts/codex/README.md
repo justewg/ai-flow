@@ -81,7 +81,9 @@
   - проверяет открытые PR `development -> main`
   - останавливается только при изменениях tracked-файлов (staged/unstaged)
   - untracked-файлы не блокируют daemon-flow
+  - читает Project через GraphQL (без нестабильного `gh project item-list`)
   - берет задачу только из `Status=To Progress`
+  - для автоподхвата учитывает только `Issue`; `DraftIssue` игнорируется
   - при единственной задаче переводит ее в `Status/Flow=In Progress`
   - сохраняет текущий `Task ID` в `.tmp/codex/project_task_id.txt` для последующего `task_finalize`
 - `daemon_loop.sh [interval-sec]`

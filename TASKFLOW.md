@@ -47,10 +47,12 @@
 1. Новая задача: `Status=Todo`, `Flow=Backlog`.
 2. Твоя команда на старт: перевести задачу `Status: Todo -> To Progress`.
 3. Daemon мониторит только `Status=To Progress`.
-4. При подхвате daemon сразу переводит задачу в `Status=In Progress` (визуальный ACK, что демон жив и начал работу).
-5. Затем daemon переводит `Flow=In Progress` и запускает обычный цикл реализации.
-6. Перед запросом ревью: `Flow=In Review`.
-7. После merge: existing workflow ставит `Done`.
+4. Для автоподхвата учитываются только карточки типа `Issue` (не `DraftIssue`).
+5. У карточки должен быть заполнен `Task ID` (`PL-xxx`).
+6. При подхвате daemon сразу переводит задачу в `Status=In Progress` (визуальный ACK, что демон жив и начал работу).
+7. Затем daemon переводит `Flow=In Progress` и запускает обычный цикл реализации.
+8. Перед запросом ревью: `Flow=In Review`.
+9. После merge: existing workflow ставит `Done`.
 
 ### 4.3. Семантика статусов
 - `Todo`: бэклог.

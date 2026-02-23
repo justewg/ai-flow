@@ -3,7 +3,7 @@ set -euo pipefail
 
 if [[ $# -lt 4 || $# -gt 6 ]]; then
   echo "Usage: $0 <task-id> <title-file> <scope> <priority> [status] [flow]"
-  echo "Example: $0 PL-014 .tmp/codex/project_new_title.txt V1+ P2 Todo Backlog"
+  echo "Example: $0 PL-014 .tmp/codex/project_new_title.txt V1+ P2 Backlog Backlog"
   exit 1
 fi
 
@@ -11,7 +11,7 @@ task_id="$1"
 title_file="$2"
 scope="$3"
 priority="$4"
-status_name="${5:-Todo}"
+status_name="${5:-Backlog}"
 flow_name="${6:-Backlog}"
 
 if [[ ! -f "$title_file" ]]; then
@@ -110,4 +110,3 @@ gh project item-edit \
   --single-select-option-id "$flow_option_id" >/dev/null
 
 echo "Created project task: $task_id ($full_title)"
-

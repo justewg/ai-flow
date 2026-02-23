@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CODEX_DIR="${ROOT_DIR}/.tmp/codex"
 REPO="${GITHUB_REPO:-justewg/planka}"
-FINAL_STATUS="${FINAL_STATUS:-Done}"
+FINAL_STATUS="${FINAL_STATUS:-Review}"
 FINAL_FLOW="${FINAL_FLOW:-In Review}"
 
 commit_file="${CODEX_DIR}/commit_message.txt"

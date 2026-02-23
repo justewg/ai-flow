@@ -20,7 +20,7 @@
 - `scripts/codex/run.sh project_add_task`
 - `scripts/codex/run.sh project_set_status`
 - `scripts/codex/run.sh next_task` — показать следующую задачу со статусом `Planned` (приоритет P0→P1→P2, затем по номеру `PL-xxx`).
-- `scripts/codex/run.sh daemon_tick` — один цикл демона: проверка `To Progress`, подхват задачи, перевод в `In Progress`.
+- `scripts/codex/run.sh daemon_tick` — один цикл демона: проверка `Todo`, подхват задачи, перевод в `In Progress`.
 - `scripts/codex/run.sh daemon_loop [interval-sec]` — непрерывный polling-цикл демона (по умолчанию 45 сек).
 - `scripts/codex/run.sh daemon_install [label] [interval-sec]` — установка и запуск `launchd`-агента.
 - `scripts/codex/run.sh daemon_uninstall [label]` — остановка и удаление `launchd`-агента.
@@ -36,7 +36,7 @@
 - `scripts/codex/run.sh executor_build_prompt <task-id> <issue-number> <output-file>` — сбор prompt для executor из Issue.
 - `scripts/codex/run.sh task_ask <question|blocker> <message-file>` — отправить вопрос/блокер в comment Issue и включить режим ожидания ответа.
 - `scripts/codex/run.sh daemon_check_replies` — проверить ответы в Issue-комментах для ожидающего вопроса.
-- `scripts/codex/run.sh task_finalize` — финализация задачи: commit+push, create/update PR, перевод задачи в `Status=Done`, `Flow=In Review`.
+- `scripts/codex/run.sh task_finalize` — финализация задачи: commit+push, create/update PR, перевод задачи в `Status=Review`, `Flow=In Review`.
 - `scripts/codex/run.sh gh_retry <command> [args...]` — выполнить GitHub-команду с retry/backoff.
 - `scripts/codex/run.sh github_health_check` — быстрый preflight GitHub API (`healthy/unstable`).
 - `scripts/codex/run.sh github_outbox <enqueue_issue_comment|flush|count|list> ...` — управление отложенными GitHub-действиями.
@@ -112,7 +112,7 @@
   - сетевые вызовы к GitHub выполняет через `gh_retry.sh`, чтобы кратковременные DNS/API-сбои не роняли flow
   - если активной задачи нет, проверяет открытые PR `development -> main` и при наличии ждет merge/close
   - читает Project через GraphQL (без нестабильного `gh project item-list`)
-  - берет задачу только из `Status=To Progress`
+  - берет задачу только из `Status=Todo`
   - для автоподхвата учитывает только `Issue`; `DraftIssue` игнорируется
   - для перевода статуса использует `project item id`, поэтому не зависит от ручного заполнения поля `Task ID`
   - `Task ID` берет из поля, либо извлекает `PL-xxx` из title
@@ -162,7 +162,7 @@
   - читает `commit_message.txt`, `stage_paths.txt`, `project_task_id.txt` (или `daemon_active_task.txt`)
   - выполняет commit/push в `development`
   - создает PR `development -> main` или обновляет существующий
-  - переводит задачу в `Status=Done`, `Flow=In Review` (можно переопределить через `FINAL_STATUS` и `FINAL_FLOW`)
+  - переводит задачу в `Status=Review`, `Flow=In Review` (можно переопределить через `FINAL_STATUS` и `FINAL_FLOW`)
   - очищает входные файлы commit/PR и активный daemon-state (active/waiting), чтобы избежать повторного использования старых данных
 - `executor_build_prompt.sh <task-id> <issue-number> <output-file>`
   - собирает prompt executor из текста Issue и последнего ответа пользователя

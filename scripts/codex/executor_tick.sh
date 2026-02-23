@@ -131,12 +131,12 @@ if [[ "$state" == "DONE" ]]; then
   fi
 
   if [[ "$state" == "DONE" ]]; then
-  echo "EXECUTOR_DONE=1"
-  echo "EXECUTOR_TASK_ID=$task_id"
-  if [[ "$is_waiting_user" == "1" ]]; then
-    echo "EXECUTOR_WAIT_USER_REPLY=1"
-    exit 0
-  fi
+    echo "EXECUTOR_DONE=1"
+    echo "EXECUTOR_TASK_ID=$task_id"
+    if [[ "$is_waiting_user" == "1" ]]; then
+      echo "EXECUTOR_WAIT_USER_REPLY=1"
+      exit 0
+    fi
     notified_task="$(cat "$DONE_NOTIFY_FILE" 2>/dev/null || true)"
     if [[ "$notified_task" != "$task_id" ]]; then
       msg_file="$(mktemp "${CODEX_DIR}/executor_done_wait.XXXXXX")"

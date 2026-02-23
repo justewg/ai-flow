@@ -166,6 +166,7 @@
   - очередь отложенных GitHub-действий (сейчас: комментарии в Issue)
   - умеет `enqueue`, `flush`, `count`, `list`
   - при доставке queued question автоматически выставляет корректный waiting-state (`comment_id/url`)
+  - пишет в лог структурированные сигналы отправки/ошибок (`GITHUB_ACTION_SENT`, `GITHUB_ACTION_SEND_FAILED`, `WAIT_GITHUB_PENDING_ACTIONS`)
 
 Логи демона:
 - `.tmp/codex/daemon.log` — heartbeat и результат `daemon_tick`

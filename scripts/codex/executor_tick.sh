@@ -17,8 +17,8 @@ PID_FILE="${CODEX_DIR}/executor_pid.txt"
 TASK_FILE="${CODEX_DIR}/executor_task_id.txt"
 ISSUE_FILE="${CODEX_DIR}/executor_issue_number.txt"
 EXIT_FILE="${CODEX_DIR}/executor_last_exit_code.txt"
-START_EPOCH_FILE="${CODEX_DIR}/executor_last_start_epoch.txt"
 FAIL_NOTIFY_FILE="${CODEX_DIR}/executor_failure_notified_task.txt"
+DONE_NOTIFY_FILE="${CODEX_DIR}/executor_done_wait_notified_task.txt"
 RETRY_REPLY_FILE="${CODEX_DIR}/executor_last_retry_reply_comment_id.txt"
 
 mkdir -p "$CODEX_DIR"
@@ -40,6 +40,7 @@ last_retry_reply_id="$(cat "$RETRY_REPLY_FILE" 2>/dev/null || true)"
 
 if [[ -n "$exec_task" && "$exec_task" != "$task_id" ]]; then
   "${ROOT_DIR}/scripts/codex/executor_reset.sh" >/dev/null
+  : > "$DONE_NOTIFY_FILE"
   state=""
   exec_task=""
   exec_issue=""
@@ -76,18 +77,20 @@ if [[ "$state" == "FAILED" ]]; then
     -n "$reply_comment_id" && "$reply_comment_id" != "$last_retry_reply_id" ]]; then
     printf '%s\n' "$reply_comment_id" > "$RETRY_REPLY_FILE"
     "${ROOT_DIR}/scripts/codex/executor_reset.sh" >/dev/null
+    : > "$DONE_NOTIFY_FILE"
+    : > "$FAIL_NOTIFY_FILE"
     echo "EXECUTOR_RETRY_AFTER_USER_REPLY=1"
     echo "EXECUTOR_RETRY_REPLY_COMMENT_ID=$reply_comment_id"
     state=""
   else
-  echo "EXECUTOR_FAILED=1"
-  echo "EXECUTOR_TASK_ID=$task_id"
-  echo "EXECUTOR_EXIT_CODE=${last_rc:-unknown}"
+    echo "EXECUTOR_FAILED=1"
+    echo "EXECUTOR_TASK_ID=$task_id"
+    echo "EXECUTOR_EXIT_CODE=${last_rc:-unknown}"
 
-  notified_task="$(cat "$FAIL_NOTIFY_FILE" 2>/dev/null || true)"
-  if [[ "$notified_task" != "$task_id" && "$is_waiting_user" != "1" ]]; then
-    msg_file="$(mktemp "${CODEX_DIR}/executor_failed.XXXXXX")"
-    cat > "$msg_file" <<EOF
+    notified_task="$(cat "$FAIL_NOTIFY_FILE" 2>/dev/null || true)"
+    if [[ "$notified_task" != "$task_id" && "$is_waiting_user" != "1" ]]; then
+      msg_file="$(mktemp "${CODEX_DIR}/executor_failed.XXXXXX")"
+      cat > "$msg_file" <<EOF
 Executor не смог продолжить задачу.
 Task: ${task_id}
 Issue: #${issue_number}
@@ -95,48 +98,74 @@ Exit code: ${last_rc:-unknown}
 
 Проверь логи .tmp/codex/executor.log и дай команду как действовать дальше.
 EOF
-    if ask_out="$("${ROOT_DIR}/scripts/codex/task_ask.sh" blocker "$msg_file" 2>&1)"; then
-      echo "EXECUTOR_FAILURE_BLOCKER_POSTED=1"
-      while IFS= read -r line; do
-        [[ -z "$line" ]] && continue
-        echo "EXECUTOR: $line"
-      done <<<"$ask_out"
-      printf '%s\n' "$task_id" > "$FAIL_NOTIFY_FILE"
-    else
-      rc=$?
-      while IFS= read -r line; do
-        [[ -z "$line" ]] && continue
-        echo "EXECUTOR_BLOCKER_ERROR(rc=$rc): $line"
-      done <<<"$ask_out"
+      if ask_out="$("${ROOT_DIR}/scripts/codex/task_ask.sh" blocker "$msg_file" 2>&1)"; then
+        echo "EXECUTOR_FAILURE_BLOCKER_POSTED=1"
+        while IFS= read -r line; do
+          [[ -z "$line" ]] && continue
+          echo "EXECUTOR: $line"
+        done <<<"$ask_out"
+        printf '%s\n' "$task_id" > "$FAIL_NOTIFY_FILE"
+      else
+        rc=$?
+        while IFS= read -r line; do
+          [[ -z "$line" ]] && continue
+          echo "EXECUTOR_BLOCKER_ERROR(rc=$rc): $line"
+        done <<<"$ask_out"
+      fi
+      rm -f "$msg_file"
     fi
-    rm -f "$msg_file"
-  fi
     exit 0
   fi
 fi
 
 if [[ "$state" == "DONE" ]]; then
+  if [[ "$is_waiting_user" != "1" && "$reply_task" == "$task_id" && "$reply_issue" == "$issue_number" &&
+    -n "$reply_comment_id" && "$reply_comment_id" != "$last_retry_reply_id" ]]; then
+    printf '%s\n' "$reply_comment_id" > "$RETRY_REPLY_FILE"
+    "${ROOT_DIR}/scripts/codex/executor_reset.sh" >/dev/null
+    : > "$DONE_NOTIFY_FILE"
+    : > "$FAIL_NOTIFY_FILE"
+    echo "EXECUTOR_RETRY_AFTER_USER_REPLY=1"
+    echo "EXECUTOR_RETRY_REPLY_COMMENT_ID=$reply_comment_id"
+    state=""
+  fi
+
+  if [[ "$state" == "DONE" ]]; then
   echo "EXECUTOR_DONE=1"
   echo "EXECUTOR_TASK_ID=$task_id"
   if [[ "$is_waiting_user" == "1" ]]; then
     echo "EXECUTOR_WAIT_USER_REPLY=1"
     exit 0
   fi
+    notified_task="$(cat "$DONE_NOTIFY_FILE" 2>/dev/null || true)"
+    if [[ "$notified_task" != "$task_id" ]]; then
+      msg_file="$(mktemp "${CODEX_DIR}/executor_done_wait.XXXXXX")"
+      cat > "$msg_file" <<EOF
+Executor завершил текущий прогон без финализации задачи.
+Task: ${task_id}
+Issue: #${issue_number}
 
-  # Если задача еще активна и нет waiting-state, перезапускаем executor
-  # (например после получения USER_REPLY_RECEIVED).
-  now_epoch="$(date +%s)"
-  last_start_epoch="$(cat "$START_EPOCH_FILE" 2>/dev/null || echo 0)"
-  if ! [[ "$last_start_epoch" =~ ^[0-9]+$ ]]; then
-    last_start_epoch=0
-  fi
-  cooldown_sec="${EXECUTOR_RESTART_COOLDOWN_SEC:-20}"
-  if ! [[ "$cooldown_sec" =~ ^[0-9]+$ ]] || (( cooldown_sec < 5 )); then
-    cooldown_sec=20
-  fi
-
-  if (( now_epoch - last_start_epoch < cooldown_sec )); then
-    echo "WAIT_EXECUTOR_RESTART_COOLDOWN=$((cooldown_sec - (now_epoch - last_start_epoch)))"
+Сейчас он ждет твоего решения:
+- "продолжай" — запустить следующий прогон;
+- "финализируй" — переходить к завершению PR.
+EOF
+      if ask_out="$("${ROOT_DIR}/scripts/codex/task_ask.sh" blocker "$msg_file" 2>&1)"; then
+        echo "EXECUTOR_DONE_BLOCKER_POSTED=1"
+        while IFS= read -r line; do
+          [[ -z "$line" ]] && continue
+          echo "EXECUTOR: $line"
+        done <<<"$ask_out"
+        printf '%s\n' "$task_id" > "$DONE_NOTIFY_FILE"
+      else
+        rc=$?
+        while IFS= read -r line; do
+          [[ -z "$line" ]] && continue
+          echo "EXECUTOR_DONE_BLOCKER_ERROR(rc=$rc): $line"
+        done <<<"$ask_out"
+      fi
+      rm -f "$msg_file"
+    fi
+    echo "EXECUTOR_DONE_WAITING_DECISION=1"
     exit 0
   fi
 fi

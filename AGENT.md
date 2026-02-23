@@ -100,8 +100,14 @@
    - запускается автономный executor (`codex exec`) и выполняет реализацию в рамках Issue.
    - executor коммитит русскими сообщениями и обновляет PR по мере прогресса.
    - если есть блокер/вопрос, публикую комментарий в Issue через `scripts/codex/run.sh task_ask ...`;
+   - если executor завершил прогон, но не финализировал задачу, публикую `AGENT_BLOCKER` в Issue и перехожу в ожидание твоего решения;
    - жду ответ в Issue-комментариях; daemon читает ответ и фиксирует `AGENT_RESUMED`.
 5) По готовности:
    - выполняю `scripts/codex/run.sh task_finalize` (commit+push, create/update PR, `Flow=In Review`);
    - отправляю PR на ревью и прошу ревью;
    - двигаю статус задачи по flow.
+
+Сетевой fallback:
+- при проблемах DNS GitHub daemon дополнительно проверяет DNS/API Telegram;
+- если Telegram доступен, daemon обязан отправить уведомление в бота о деградации и текущем режиме ожидания;
+- если Telegram тоже недоступен, это явно отражается в `daemon_state_detail` и `daemon.log`.

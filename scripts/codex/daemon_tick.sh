@@ -209,15 +209,15 @@ matched_json="$(
           issue_number: (.content.number // ""),
           title: (.content.title // ""),
           task_id: (
-            (.taskId.text // "")
-            | gsub("^\\s+|\\s+$";"")
-            | if . != "" then .
+            . as $item
+            | (($item.taskId.text // "") | gsub("^\\s+|\\s+$";"")) as $task_field
+            | if $task_field != "" then $task_field
               else (
-                (try ((.content.title // "") | capture("(?<id>PL-[0-9]{3})").id) catch "")
-                | if . != "" then .
+                (try (($item.content.title // "") | capture("(?<id>PL-[0-9]{3})").id) catch "") as $pl_from_title
+                | if $pl_from_title != "" then $pl_from_title
                   else (
-                    if (.content.__typename // "") == "Issue" and (.content.number != null)
-                    then ("ISSUE-" + ((.content.number | tostring)))
+                    if ($item.content.__typename // "") == "Issue" and ($item.content.number != null)
+                    then ("ISSUE-" + (($item.content.number | tostring)))
                     else ""
                     end
                   )

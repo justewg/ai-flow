@@ -176,7 +176,7 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
   exit "$rc"
 fi
 
-matched_json="$({
+matched_json="$(
   printf '%s' "$project_json" | jq -c --arg trigger "$trigger_status" '
     def norm: gsub("^\\s+|\\s+$";"") | ascii_downcase;
     .data.node as $project
@@ -218,7 +218,7 @@ matched_json="$({
     ]
     | sort_by(.pri_w, .num)
   '
-)}"
+)"
 
 matched_count="$(printf '%s' "$matched_json" | jq 'length')"
 queue_json="$(printf '%s' "$matched_json" | jq -c '[.[] | select(.content_type == "Issue")]')"

@@ -1,0 +1,98 @@
+name: Notify Telegram on Issue Agent Signals
+
+on:
+  issue_comment:
+    types:
+      - created
+
+jobs:
+  notify_telegram:
+    if: ${{ github.event.issue.pull_request == null }}
+    runs-on: ubuntu-latest
+    env:
+      TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+      TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      ISSUE_TITLE: ${{ github.event.issue.title }}
+      ISSUE_URL: ${{ github.event.issue.html_url }}
+      COMMENT_BODY: ${{ github.event.comment.body }}
+      COMMENT_URL: ${{ github.event.comment.html_url }}
+      COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+
+    steps:
+      - name: Validate required secrets
+        run: |
+          : "${TG_BOT_TOKEN:?TG_BOT_TOKEN is required}"
+          : "${TG_CHAT_ID:?TG_CHAT_ID is required}"
+
+      - name: Parse signal from comment
+        id: parse
+        run: |
+          SIGNAL="$(printf '%s\n' "${COMMENT_BODY}" | sed -n 's/^CODEX_SIGNAL:[[:space:]]*//p' | head -n1 | tr -d '\r')"
+          TASK_ID="$(printf '%s\n' "${COMMENT_BODY}" | sed -n 's/^CODEX_TASK:[[:space:]]*//p' | head -n1 | tr -d '\r')"
+
+          if [[ -z "${TASK_ID}" ]]; then
+            TASK_ID="none"
+          fi
+
+          case "${SIGNAL}" in
+            AGENT_QUESTION|AGENT_BLOCKER|AGENT_RESUMED)
+              echo "skip=false" >> "${GITHUB_OUTPUT}"
+              ;;
+            *)
+              echo "skip=true" >> "${GITHUB_OUTPUT}"
+              exit 0
+              ;;
+          esac
+
+          CHECK_NOW="NO"
+          STAGE_LABEL="Комментарий агента"
+          case "${SIGNAL}" in
+            AGENT_QUESTION)
+              CHECK_NOW="YES"
+              STAGE_LABEL="Нужен ответ"
+              ;;
+            AGENT_BLOCKER)
+              CHECK_NOW="YES"
+              STAGE_LABEL="Блокер"
+              ;;
+            AGENT_RESUMED)
+              CHECK_NOW="NO"
+              STAGE_LABEL="Работа продолжена"
+              ;;
+          esac
+
+          echo "signal=${SIGNAL}" >> "${GITHUB_OUTPUT}"
+          echo "task_id=${TASK_ID}" >> "${GITHUB_OUTPUT}"
+          echo "check_now=${CHECK_NOW}" >> "${GITHUB_OUTPUT}"
+          echo "stage=${STAGE_LABEL}" >> "${GITHUB_OUTPUT}"
+
+      - name: Send Telegram push
+        if: ${{ steps.parse.outputs.skip != 'true' }}
+        env:
+          SIGNAL: ${{ steps.parse.outputs.signal }}
+          TASK_ID: ${{ steps.parse.outputs.task_id }}
+          CHECK_NOW: ${{ steps.parse.outputs.check_now }}
+          STAGE_LABEL: ${{ steps.parse.outputs.stage }}
+        run: |
+          MESSAGE=$'PLANKA: issue signal\n'
+          MESSAGE+="Signal: ${SIGNAL}"$'\n'
+          MESSAGE+="Stage: ${STAGE_LABEL}"$'\n'
+          MESSAGE+="Check now: ${CHECK_NOW}"$'\n'
+          MESSAGE+="Issue #${ISSUE_NUMBER}: ${ISSUE_TITLE}"$'\n'
+          MESSAGE+="Task: ${TASK_ID}"$'\n'
+          MESSAGE+="Author: @${COMMENT_AUTHOR}"$'\n'
+          MESSAGE+="Issue: ${ISSUE_URL}"$'\n'
+          MESSAGE+="Comment: ${COMMENT_URL}"
+
+          payload="$(
+            jq -n \
+              --arg chat_id "${TG_CHAT_ID}" \
+              --arg text "${MESSAGE}" \
+              '{chat_id: $chat_id, text: $text, disable_web_page_preview: true}'
+          )"
+
+          curl -fsS \
+            -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            --data "${payload}" >/dev/null

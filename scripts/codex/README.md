@@ -25,6 +25,8 @@
 - `scripts/codex/run.sh daemon_install [label] [interval-sec]` — установка и запуск `launchd`-агента.
 - `scripts/codex/run.sh daemon_uninstall [label]` — остановка и удаление `launchd`-агента.
 - `scripts/codex/run.sh daemon_status [label]` — проверка статуса `launchd`-агента.
+- `scripts/codex/run.sh task_ask <question|blocker> <message-file>` — отправить вопрос/блокер в comment Issue и включить режим ожидания ответа.
+- `scripts/codex/run.sh daemon_check_replies` — проверить ответы в Issue-комментах для ожидающего вопроса.
 - `scripts/codex/run.sh task_finalize` — финализация задачи: commit+push, create/update PR, перевод задачи в `In Review`.
 
 `run.sh` читает фиксированные файлы из `.tmp/codex/`:
@@ -81,6 +83,9 @@
   - проверяет открытые PR `development -> main`
   - останавливается только при изменениях tracked-файлов (staged/unstaged)
   - untracked-файлы не блокируют daemon-flow
+  - перед взятием новой задачи проверяет waiting-state по Issue-комментариям (`daemon_check_replies.sh`)
+  - при `WAIT_USER_REPLY` не берет новые задачи
+  - при наличии `daemon_active_task.txt` не берет новые задачи до финализации
   - читает Project через GraphQL (без нестабильного `gh project item-list`)
   - берет задачу только из `Status=To Progress`
   - для автоподхвата учитывает только `Issue`; `DraftIssue` игнорируется
@@ -102,12 +107,21 @@
   - выполняет commit/push в `development`
   - создает PR `development -> main` или обновляет существующий
   - переводит задачу в `Status=In Progress`, `Flow=In Review`
-  - очищает входные файлы commit/PR, чтобы избежать повторного использования старых данных
+  - очищает входные файлы commit/PR и активный daemon-state (active/waiting), чтобы избежать повторного использования старых данных
+- `task_ask.sh <question|blocker> <message-file>`
+  - публикует структурированный комментарий в текущий Issue (`CODEX_SIGNAL: AGENT_QUESTION|AGENT_BLOCKER`)
+  - сохраняет waiting-state в `.tmp/codex/`, чтобы daemon ждал ответ пользователя
+- `daemon_check_replies.sh`
+  - если daemon в waiting-state, проверяет новые комментарии Issue после вопроса
+  - первый пользовательский комментарий (без `CODEX_SIGNAL:`) принимает как ответ
+  - сохраняет ответ в `.tmp/codex/daemon_user_reply.txt`
+  - публикует `CODEX_SIGNAL: AGENT_RESUMED` и снимает waiting-state
 
 Логи демона:
 - `.tmp/codex/daemon.log` — heartbeat и результат `daemon_tick`
 - `.tmp/codex/launchd.out.log` — stdout агента `launchd`
 - `.tmp/codex/launchd.err.log` — stderr агента `launchd`
+- `.tmp/codex/daemon_user_reply.txt` — последний ответ пользователя из Issue-комментариев
 
 ## Подготовка
 Скрипты должны быть исполняемыми:

@@ -30,6 +30,8 @@ Commands:
   daemon_install
   daemon_uninstall
   daemon_status
+  task_ask
+  daemon_check_replies
   task_finalize
 
 Fixed input files in .tmp/codex:
@@ -251,6 +253,18 @@ case "$cmd" in
     else
       "${ROOT_DIR}/scripts/codex/daemon_status.sh"
     fi
+    ;;
+
+  task_ask)
+    if [[ $# -ne 3 ]]; then
+      echo "Usage: scripts/codex/run.sh task_ask <question|blocker> <message-file>"
+      exit 1
+    fi
+    "${ROOT_DIR}/scripts/codex/task_ask.sh" "$2" "$3"
+    ;;
+
+  daemon_check_replies)
+    "${ROOT_DIR}/scripts/codex/daemon_check_replies.sh"
     ;;
 
   task_finalize)

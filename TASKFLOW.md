@@ -99,6 +99,9 @@
    - `medium`: `executor_reset` + `daemon_tick`;
    - `hard`: `daemon_uninstall` + `daemon_install` (и cleanup stale `daemon.lock`);
    - с cooldown и логированием причин в `watchdog.log`.
+16. Для разделения авторства в GitHub можно задать отдельный токен автоматики:
+   - `DAEMON_GH_TOKEN` (или `CODEX_GH_TOKEN`) в `.env`/`.env.deploy`;
+   - тогда Issue/PR/Project-действия демона пойдут от владельца этого токена.
 
 ## 5.1. Режимы работы: чат и демон
 Есть два параллельных режима, они не конфликтуют:

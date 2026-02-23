@@ -72,6 +72,16 @@
 - Делать отдельные вызовы `scripts/codex/run.sh write/append/clear`.
 - Затем отдельно вызывать `scripts/codex/run.sh <action>`.
 
+## Важные env-переменные
+- `DAEMON_GH_TOKEN` (или `CODEX_GH_TOKEN`) — отдельный GitHub token для daemon/watchdog.
+  - Применяется к действиям автоматики: комментарии в Issue, update/create PR, update Project status.
+  - Автор этих действий в GitHub будет владельцем этого токена.
+  - Читается из env процесса или из `.env`/`.env.deploy`.
+  - После изменения значения перезапусти сервисы:
+    - `scripts/codex/run.sh daemon_uninstall && scripts/codex/run.sh daemon_install`
+    - `scripts/codex/run.sh watchdog_uninstall && scripts/codex/run.sh watchdog_install`
+- `CODEX_GIT_AUTHOR_*` / `CODEX_GIT_COMMITTER_*` — отдельная identity только для git-коммитов агента.
+
 ## Итеративный executor-flow (коммит1 -> вопрос -> ответ -> коммит2 -> финализация)
 1. Сделать первую рабочую дельту и выполнить `commit_push`.
 2. Если нужно подтверждение/уточнение, подготовить файл с вопросом и вызвать `scripts/codex/run.sh task_ask question <message-file>`.

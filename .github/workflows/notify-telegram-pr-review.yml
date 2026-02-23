@@ -13,7 +13,6 @@ on:
 
 jobs:
   notify_telegram:
-    if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     env:
       TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
@@ -28,6 +27,7 @@ jobs:
       PR_HEAD: ${{ github.event.pull_request.head.ref }}
       PR_COMMITS: ${{ github.event.pull_request.commits }}
       PR_CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+      PR_DRAFT: ${{ github.event.pull_request.draft }}
 
     steps:
       - name: Validate required secrets
@@ -49,16 +49,31 @@ jobs:
           TASK_IDS: ${{ steps.extract.outputs.task_ids }}
         run: |
           ACTION_LABEL="${PR_ACTION}"
+          SIGNAL_LABEL="TEMP_PROGRESS"
+          STAGE_LABEL="Временная дельта"
+          CHECK_NOW="NO"
           case "${PR_ACTION}" in
             opened) ACTION_LABEL="opened" ;;
             reopened) ACTION_LABEL="reopened" ;;
             synchronize) ACTION_LABEL="updated" ;;
-            ready_for_review) ACTION_LABEL="ready_for_review" ;;
+            ready_for_review)
+              ACTION_LABEL="ready_for_review"
+              SIGNAL_LABEL="FINAL_REVIEW"
+              STAGE_LABEL="In Review (финал)"
+              CHECK_NOW="YES"
+              ;;
             edited) ACTION_LABEL="edited" ;;
           esac
 
+          if [[ "${PR_DRAFT}" == "true" && "${PR_ACTION}" != "ready_for_review" ]]; then
+            STAGE_LABEL="Draft (временная дельта)"
+          fi
+
           MESSAGE=$'PLANKA: PR review signal\n'
+          MESSAGE+="Signal: ${SIGNAL_LABEL}"$'\n'
           MESSAGE+="Action: ${ACTION_LABEL}"$'\n'
+          MESSAGE+="Stage: ${STAGE_LABEL}"$'\n'
+          MESSAGE+="Check now: ${CHECK_NOW}"$'\n'
           MESSAGE+="PR #${PR_NUMBER}: ${PR_TITLE}"$'\n'
           MESSAGE+="Tasks: ${TASK_IDS}"$'\n'
           MESSAGE+="From ${PR_HEAD} -> ${PR_BASE}"$'\n'

@@ -80,6 +80,40 @@ classify_error_state() {
   fi
 }
 
+detect_flow_degradation() {
+  local parts=()
+  local pending_outbox_count="0"
+  if [[ -d "${CODEX_DIR}/outbox" ]]; then
+    pending_outbox_count="$(
+      find "${CODEX_DIR}/outbox" -type f -name '*.txt' -size +0c 2>/dev/null | wc -l | tr -d ' '
+    )"
+  fi
+  if [[ "${pending_outbox_count}" != "0" ]]; then
+    parts+=("DEGRADED=PENDING_OUTBOX:${pending_outbox_count}")
+  fi
+
+  local probe_out
+  if probe_out="$(curl -sS -o /dev/null --max-time 5 https://api.github.com 2>&1)"; then
+    :
+  else
+    if printf '%s' "$probe_out" | grep -Eiq 'could not resolve host: api\.github\.com|temporary failure in name resolution'; then
+      parts+=("DEGRADED=GITHUB_DNS_OFFLINE")
+    elif printf '%s' "$probe_out" | grep -Eiq 'connection timed out|operation timed out|tls handshake timeout|failed to connect'; then
+      parts+=("DEGRADED=GITHUB_API_UNREACHABLE")
+    else
+      parts+=("DEGRADED=GITHUB_UNSTABLE")
+    fi
+  fi
+
+  if (( ${#parts[@]} > 0 )); then
+    local joined
+    joined="$(IFS=';'; echo "${parts[*]}")"
+    echo "$joined"
+  else
+    echo ""
+  fi
+}
+
 log "daemon_loop start interval=${interval}s"
 set_state "BOOTING" "daemon_loop started"
 
@@ -92,7 +126,12 @@ while true; do
     done <<<"$output"
     state="$(classify_success_state "$output")"
     first_line="$(printf '%s' "$output" | head -n1 | tr '\n' ' ')"
-    set_state "$state" "$first_line"
+    degradation="$(detect_flow_degradation)"
+    detail="$first_line"
+    if [[ -n "$degradation" ]]; then
+      detail="${detail} | ${degradation}"
+    fi
+    set_state "$state" "$detail"
   else
     rc=$?
     while IFS= read -r line; do
@@ -101,7 +140,12 @@ while true; do
     done <<<"$output"
     state="$(classify_error_state "$output")"
     first_line="$(printf '%s' "$output" | head -n1 | tr '\n' ' ')"
-    set_state "$state" "rc=$rc; ${first_line}"
+    degradation="$(detect_flow_degradation)"
+    detail="rc=$rc; ${first_line}"
+    if [[ -n "$degradation" ]]; then
+      detail="${detail} | ${degradation}"
+    fi
+    set_state "$state" "$detail"
   fi
   sleep "$interval"
 done

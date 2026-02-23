@@ -176,11 +176,20 @@ EOF
 )"
 
   local comment_json=""
+  local err_file
+  err_file="$(mktemp "${CODEX_DIR}/final_comment_gh_err.XXXXXX")"
   if comment_json="$(
     "${ROOT_DIR}/scripts/codex/gh_retry.sh" \
       gh api "repos/${REPO}/issues/${issue_number}/comments" \
-      -f body="$comment_body" 2>&1
+      -f body="$comment_body" 2>"$err_file"
   )"; then
+    if [[ -s "$err_file" ]]; then
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        echo "$line"
+      done < "$err_file"
+    fi
+    rm -f "$err_file"
     local comment_id comment_url
     comment_id="$(printf '%s' "$comment_json" | jq -r '.id // empty')"
     comment_url="$(printf '%s' "$comment_json" | jq -r '.html_url // empty')"
@@ -189,49 +198,58 @@ EOF
     echo "FINAL_ISSUE_COMMENT_ID=$comment_id"
     echo "FINAL_ISSUE_COMMENT_URL=$comment_url"
     return 0
-  fi
-
-  local rc=$?
-  if [[ "$rc" -eq 75 ]]; then
-    local tmp_body queue_out
-    tmp_body="$(mktemp "${CODEX_DIR}/in_review_comment.XXXXXX")"
-    printf '%s\n' "$comment_body" > "$tmp_body"
-
-    if queue_out="$(
-      "${ROOT_DIR}/scripts/codex/github_outbox.sh" \
-        enqueue_issue_comment \
-        "$REPO" \
-        "$issue_number" \
-        "$tmp_body" \
-        "$task_id" \
-        "IN_REVIEW" \
-        "0" 2>&1
-    )"; then
-      rm -f "$tmp_body"
+  else
+    local rc=$?
+    local comment_err
+    comment_err="$(cat "$err_file" 2>/dev/null || true)"
+    rm -f "$err_file"
+    if [[ -n "$comment_err" ]]; then
       while IFS= read -r line; do
         [[ -z "$line" ]] && continue
         echo "$line"
+      done <<< "$comment_err"
+    fi
+    if [[ "$rc" -eq 75 ]]; then
+      local tmp_body queue_out
+      tmp_body="$(mktemp "${CODEX_DIR}/in_review_comment.XXXXXX")"
+      printf '%s\n' "$comment_body" > "$tmp_body"
+
+      if queue_out="$(
+        "${ROOT_DIR}/scripts/codex/github_outbox.sh" \
+          enqueue_issue_comment \
+          "$REPO" \
+          "$issue_number" \
+          "$tmp_body" \
+          "$task_id" \
+          "IN_REVIEW" \
+          "0" 2>&1
+      )"; then
+        rm -f "$tmp_body"
+        while IFS= read -r line; do
+          [[ -z "$line" ]] && continue
+          echo "$line"
+        done <<< "$queue_out"
+        echo "FINAL_ISSUE_COMMENT_QUEUED_OUTBOX=1"
+        echo "FINAL_ISSUE_NUMBER=$issue_number"
+        echo "WAIT_GITHUB_API_UNSTABLE=1"
+        return 0
+      fi
+
+      local qrc=$?
+      rm -f "$tmp_body"
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        echo "FINAL_ISSUE_COMMENT_OUTBOX_ERROR(rc=$qrc): $line"
       done <<< "$queue_out"
-      echo "FINAL_ISSUE_COMMENT_QUEUED_OUTBOX=1"
-      echo "FINAL_ISSUE_NUMBER=$issue_number"
-      echo "WAIT_GITHUB_API_UNSTABLE=1"
       return 0
     fi
 
-    local qrc=$?
-    rm -f "$tmp_body"
     while IFS= read -r line; do
       [[ -z "$line" ]] && continue
-      echo "FINAL_ISSUE_COMMENT_OUTBOX_ERROR(rc=$qrc): $line"
-    done <<< "$queue_out"
+      echo "FINAL_ISSUE_COMMENT_ERROR(rc=$rc): $line"
+    done <<< "$comment_json"
     return 0
   fi
-
-  while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    echo "FINAL_ISSUE_COMMENT_ERROR(rc=$rc): $line"
-  done <<< "$comment_json"
-  return 0
 }
 
 mkdir -p "$CODEX_DIR"

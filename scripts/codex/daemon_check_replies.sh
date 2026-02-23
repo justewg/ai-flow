@@ -35,6 +35,8 @@ pending_post="0"
 [[ -s "$kind_file" ]] && kind_label="$(<"$kind_file")"
 [[ -s "$pending_post_file" ]] && pending_post="$(<"$pending_post_file")"
 
+comments_json=""
+
 if [[ "$pending_post" == "1" ]]; then
   outbox_count="0"
   if outbox_out="$("${ROOT_DIR}/scripts/codex/github_outbox.sh" count 2>/dev/null)"; then
@@ -53,21 +55,69 @@ if [[ "$pending_post" == "1" ]]; then
   exit 0
 fi
 
-if ! comments_json="$(
-  "${ROOT_DIR}/scripts/codex/gh_retry.sh" \
-    gh api "repos/${REPO}/issues/${issue_number}/comments?per_page=100"
-)"; then
-  rc=$?
-  if [[ "$rc" -eq 75 ]]; then
+# Мягкое восстановление: если id вопроса потерян/пустой, не падаем.
+# Пытаемся найти последний AGENT_QUESTION/AGENT_BLOCKER в Issue и взять его id.
+if ! [[ "$question_comment_id" =~ ^[0-9]+$ ]]; then
+  if ! comments_json="$(
+    "${ROOT_DIR}/scripts/codex/gh_retry.sh" \
+      gh api "repos/${REPO}/issues/${issue_number}/comments?per_page=100"
+  )"; then
+    rc=$?
+    if [[ "$rc" -eq 75 ]]; then
+      echo "WAIT_USER_REPLY=1"
+      echo "TASK_ID=$task_id"
+      echo "ISSUE_NUMBER=$issue_number"
+      echo "QUESTION_COMMENT_ID=$question_comment_id"
+      echo "QUESTION_KIND=$kind_label"
+      echo "WAIT_GITHUB_API_UNSTABLE=1"
+      echo "WAITING_FOR_VALID_QUESTION_ID=1"
+      exit 0
+    fi
+    exit "$rc"
+  fi
+
+  recovered_qid="$(
+    printf '%s' "$comments_json" |
+      jq -r '
+        [ .[]
+          | select(((.body // "") | test("(?m)^CODEX_SIGNAL: (AGENT_QUESTION|AGENT_BLOCKER)$")))
+          | select(((.body // "") | test("(?m)^CODEX_EXPECT: USER_REPLY$")))
+        ][-1].id // empty
+      '
+  )"
+
+  if [[ -n "$recovered_qid" ]]; then
+    question_comment_id="$recovered_qid"
+    printf '%s\n' "$question_comment_id" > "$question_id_file"
+    echo "RECOVERED_QUESTION_COMMENT_ID=$question_comment_id"
+  else
     echo "WAIT_USER_REPLY=1"
     echo "TASK_ID=$task_id"
     echo "ISSUE_NUMBER=$issue_number"
     echo "QUESTION_COMMENT_ID=$question_comment_id"
     echo "QUESTION_KIND=$kind_label"
-    echo "WAIT_GITHUB_API_UNSTABLE=1"
+    echo "WAITING_FOR_VALID_QUESTION_ID=1"
     exit 0
   fi
-  exit "$rc"
+fi
+
+if [[ -z "$comments_json" ]]; then
+  if ! comments_json="$(
+    "${ROOT_DIR}/scripts/codex/gh_retry.sh" \
+      gh api "repos/${REPO}/issues/${issue_number}/comments?per_page=100"
+  )"; then
+    rc=$?
+    if [[ "$rc" -eq 75 ]]; then
+      echo "WAIT_USER_REPLY=1"
+      echo "TASK_ID=$task_id"
+      echo "ISSUE_NUMBER=$issue_number"
+      echo "QUESTION_COMMENT_ID=$question_comment_id"
+      echo "QUESTION_KIND=$kind_label"
+      echo "WAIT_GITHUB_API_UNSTABLE=1"
+      exit 0
+    fi
+    exit "$rc"
+  fi
 fi
 
 reply_json="$(

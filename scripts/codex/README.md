@@ -125,6 +125,8 @@
   - если активной задачи нет, проверяет открытые PR `development -> main` и при наличии ждет merge/close
   - читает Project через GraphQL (без нестабильного `gh project item-list`)
   - берет задачу только из `Status=Todo`
+  - перед подхватом читает `Flow Meta` у Issue и проверяет `Depends-On`
+  - при незакрытых зависимостях не берет задачу, пишет `WAIT_DEPENDENCIES...` в вывод и отправляет одноразовый сигнал `CODEX_SIGNAL: AGENT_DEPENDENCY_BLOCKED` (через outbox при офлайне GitHub)
   - для автоподхвата учитывает только `Issue`; `DraftIssue` игнорируется
   - для перевода статуса использует `project item id`, поэтому не зависит от ручного заполнения поля `Task ID`
   - `Task ID` берет из поля, либо извлекает `PL-xxx` из title

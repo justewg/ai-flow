@@ -157,6 +157,7 @@ Telegram-сигналы по Issue-вопросам:
 - `Signal: AGENT_QUESTION` — вопрос по задаче, нужен твой ответ.
 - `Signal: AGENT_BLOCKER` — блокер, нужен твой ответ.
 - `Signal: AGENT_RESUMED` — ответ получен, выполнение продолжено.
+- `Signal: AGENT_DEPENDENCY_BLOCKED` — задача в `Todo` заблокирована зависимостями (`Depends-On`), старт отложен.
 
 ## 6. Политика языка и оформления
 - Общение: русский.

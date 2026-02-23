@@ -152,6 +152,8 @@ classify_success_state() {
     echo "WAIT_ACTIVE_TASK"
   elif printf '%s' "$output" | grep -q '^WAIT_OPEN_PR_COUNT='; then
     echo "WAIT_OPEN_PR"
+  elif printf '%s' "$output" | grep -q '^WAIT_DEPENDENCIES=1'; then
+    echo "WAIT_DEPENDENCIES"
   elif printf '%s' "$output" | grep -q '^WAIT_DIRTY_WORKTREE_TRACKED=1'; then
     echo "WAIT_DIRTY_WORKTREE"
   elif printf '%s' "$output" | grep -q '^BLOCKED_MULTIPLE_TRIGGER_TASKS='; then
@@ -195,6 +197,10 @@ build_success_detail() {
       ;;
     WAIT_OPEN_PR)
       line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_OPEN_PR_COUNT=' || true)"
+      ;;
+    WAIT_DEPENDENCIES)
+      line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_DEPENDENCIES_BLOCKERS=' || true)"
+      [[ -z "$line" ]] && line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_DEPENDENCIES=1' || true)"
       ;;
     WAIT_GITHUB_OFFLINE)
       line="$(printf '%s\n' "$output" | grep -m1 -E '^(WAIT_GITHUB_STAGE=|WAIT_GITHUB_API_UNSTABLE=1)' || true)"

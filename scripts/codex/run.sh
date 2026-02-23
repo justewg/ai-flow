@@ -30,6 +30,10 @@ Commands:
   daemon_install
   daemon_uninstall
   daemon_status
+  executor_reset
+  executor_start
+  executor_tick
+  executor_build_prompt
   task_ask
   daemon_check_replies
   task_finalize
@@ -253,6 +257,34 @@ case "$cmd" in
     else
       "${ROOT_DIR}/scripts/codex/daemon_status.sh"
     fi
+    ;;
+
+  executor_reset)
+    "${ROOT_DIR}/scripts/codex/executor_reset.sh"
+    ;;
+
+  executor_start)
+    if [[ $# -ne 3 ]]; then
+      echo "Usage: scripts/codex/run.sh executor_start <task-id> <issue-number>"
+      exit 1
+    fi
+    "${ROOT_DIR}/scripts/codex/executor_start.sh" "$2" "$3"
+    ;;
+
+  executor_tick)
+    if [[ $# -ne 3 ]]; then
+      echo "Usage: scripts/codex/run.sh executor_tick <task-id> <issue-number>"
+      exit 1
+    fi
+    "${ROOT_DIR}/scripts/codex/executor_tick.sh" "$2" "$3"
+    ;;
+
+  executor_build_prompt)
+    if [[ $# -ne 4 ]]; then
+      echo "Usage: scripts/codex/run.sh executor_build_prompt <task-id> <issue-number> <output-file>"
+      exit 1
+    fi
+    "${ROOT_DIR}/scripts/codex/executor_build_prompt.sh" "$2" "$3" "$4"
     ;;
 
   task_ask)

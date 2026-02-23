@@ -30,8 +30,20 @@ fi
 if [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]]; then
   active_task_id="$(<"${CODEX_DIR}/daemon_active_task.txt")"
   echo "WAIT_ACTIVE_TASK_ID=$active_task_id"
+  active_issue_number=""
   if [[ -s "${CODEX_DIR}/daemon_active_issue_number.txt" ]]; then
-    echo "WAIT_ACTIVE_ISSUE_NUMBER=$(<"${CODEX_DIR}/daemon_active_issue_number.txt")"
+    active_issue_number="$(<"${CODEX_DIR}/daemon_active_issue_number.txt")"
+    echo "WAIT_ACTIVE_ISSUE_NUMBER=$active_issue_number"
+  fi
+
+  if [[ -n "$active_issue_number" ]]; then
+    exec_out="$("${ROOT_DIR}/scripts/codex/executor_tick.sh" "$active_task_id" "$active_issue_number" 2>&1)"
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "$line"
+    done <<<"$exec_out"
+  else
+    echo "BLOCKED_ACTIVE_TASK_WITHOUT_ISSUE=1"
   fi
   exit 0
 fi
@@ -208,6 +220,7 @@ printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_active_task.txt"
 printf '%s\n' "$item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"
 printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
 printf '%s\n' "$task_id" > "${CODEX_DIR}/project_task_id.txt"
+"${ROOT_DIR}/scripts/codex/executor_reset.sh" >/dev/null
 date -u '+%Y-%m-%dT%H:%M:%SZ' > "${CODEX_DIR}/daemon_last_claim_utc.txt"
 
 echo "CLAIMED_TASK_ID=$task_id"

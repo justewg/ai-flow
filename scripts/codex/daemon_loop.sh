@@ -59,10 +59,26 @@ set_state() {
 
 classify_success_state() {
   local output="$1"
-  if printf '%s' "$output" | grep -q '^CLAIMED_TASK_ID='; then
+  if printf '%s' "$output" | grep -q '^EXECUTOR_FAILED=1'; then
+    echo "BLOCKED_EXECUTOR_FAILED"
+  elif printf '%s' "$output" | grep -q '^BLOCKED_ACTIVE_TASK_WITHOUT_ISSUE=1'; then
+    echo "BLOCKED_ACTIVE_TASK_WITHOUT_ISSUE"
+  elif printf '%s' "$output" | grep -q '^EXECUTOR_RUNNING=1'; then
+    echo "EXECUTOR_RUNNING"
+  elif printf '%s' "$output" | grep -q '^EXECUTOR_STARTED=1'; then
+    echo "EXECUTOR_STARTED"
+  elif printf '%s' "$output" | grep -q '^EXECUTOR_DONE=1'; then
+    echo "EXECUTOR_DONE"
+  elif printf '%s' "$output" | grep -q '^EXECUTOR_WAIT_USER_REPLY=1'; then
+    echo "WAIT_USER_REPLY"
+  elif printf '%s' "$output" | grep -q '^CLAIMED_TASK_ID='; then
     echo "ACTIVE_TASK_CLAIMED"
+  elif printf '%s' "$output" | grep -q '^USER_REPLY_RECEIVED=1'; then
+    echo "USER_REPLY_RECEIVED"
   elif printf '%s' "$output" | grep -q '^WAIT_USER_REPLY=1'; then
     echo "WAIT_USER_REPLY"
+  elif printf '%s' "$output" | grep -q '^WAIT_EXECUTOR_RESTART_COOLDOWN='; then
+    echo "WAIT_EXECUTOR_RESTART_COOLDOWN"
   elif printf '%s' "$output" | grep -q '^WAIT_ACTIVE_TASK_ID='; then
     echo "WAIT_ACTIVE_TASK"
   elif printf '%s' "$output" | grep -q '^WAIT_OPEN_PR_COUNT='; then
@@ -77,11 +93,52 @@ classify_success_state() {
     echo "IDLE_NO_ISSUE_TASKS"
   elif printf '%s' "$output" | grep -q '^NO_TASKS_IN_TRIGGER_STATUS='; then
     echo "IDLE_NO_TASKS"
-  elif printf '%s' "$output" | grep -q '^USER_REPLY_RECEIVED=1'; then
-    echo "USER_REPLY_RECEIVED"
   else
     echo "OK"
   fi
+}
+
+build_success_detail() {
+  local state="$1"
+  local output="$2"
+  local line=""
+
+  case "$state" in
+    BLOCKED_EXECUTOR_FAILED)
+      line="$(printf '%s\n' "$output" | grep -m1 '^EXECUTOR_EXIT_CODE=' || true)"
+      [[ -z "$line" ]] && line="$(printf '%s\n' "$output" | grep -m1 '^EXECUTOR_FAILED=1' || true)"
+      ;;
+    EXECUTOR_RUNNING)
+      line="$(printf '%s\n' "$output" | grep -m1 '^EXECUTOR_PID=' || true)"
+      [[ -z "$line" ]] && line="$(printf '%s\n' "$output" | grep -m1 '^EXECUTOR_RUNNING=1' || true)"
+      ;;
+    EXECUTOR_STARTED)
+      line="$(printf '%s\n' "$output" | grep -m1 '^EXECUTOR_STARTED=1' || true)"
+      ;;
+    EXECUTOR_DONE)
+      line="$(printf '%s\n' "$output" | grep -m1 '^EXECUTOR_DONE=1' || true)"
+      ;;
+    WAIT_USER_REPLY)
+      line="$(printf '%s\n' "$output" | grep -m1 -E '^(WAIT_USER_REPLY=1|EXECUTOR_WAIT_USER_REPLY=1)' || true)"
+      ;;
+    USER_REPLY_RECEIVED)
+      line="$(printf '%s\n' "$output" | grep -m1 '^USER_REPLY_RECEIVED=1' || true)"
+      ;;
+    WAIT_OPEN_PR)
+      line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_OPEN_PR_COUNT=' || true)"
+      ;;
+    WAIT_DIRTY_WORKTREE)
+      line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_DIRTY_WORKTREE_TRACKED=1' || true)"
+      ;;
+    ACTIVE_TASK_CLAIMED)
+      line="$(printf '%s\n' "$output" | grep -m1 '^CLAIMED_TASK_ID=' || true)"
+      ;;
+  esac
+
+  if [[ -z "$line" ]]; then
+    line="$(printf '%s\n' "$output" | awk 'NF {print; exit}')"
+  fi
+  printf '%s' "$line"
 }
 
 classify_error_state() {
@@ -228,7 +285,7 @@ while true; do
       log "$line"
     done <<<"$output"
     state="$(classify_success_state "$output")"
-    first_line="$(printf '%s' "$output" | head -n1 | tr '\n' ' ')"
+    first_line="$(build_success_detail "$state" "$output" | tr '\n' ' ')"
     degradation="$(detect_flow_degradation)"
     detail="$first_line"
     if [[ -n "$degradation" ]]; then

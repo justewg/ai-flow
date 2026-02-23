@@ -22,7 +22,7 @@
 ## Wrapper-first (рекомендуемый режим)
 - Префикс: `scripts/codex/run.sh`
   - Шаблон: `scripts/codex/run.sh <command>`
-  - Поддерживаемые команды: `help`, `clear`, `write`, `append`, `copy`, `sync_branches`, `pr_list_open`, `pr_view`, `pr_create`, `pr_edit`, `commit_push`, `project_add_task`, `project_set_status`, `next_task`, `daemon_tick`, `daemon_loop`, `daemon_install`, `daemon_uninstall`, `daemon_status`, `task_ask`, `daemon_check_replies`, `task_finalize`
+  - Поддерживаемые команды: `help`, `clear`, `write`, `append`, `copy`, `sync_branches`, `pr_list_open`, `pr_view`, `pr_create`, `pr_edit`, `commit_push`, `project_add_task`, `project_set_status`, `next_task`, `daemon_tick`, `daemon_loop`, `daemon_install`, `daemon_uninstall`, `daemon_status`, `executor_reset`, `executor_start`, `executor_tick`, `executor_build_prompt`, `task_ask`, `daemon_check_replies`, `task_finalize`
   - Regex mask: `^scripts/codex/run\.sh(?:\s+.+)?$`
   - UI mask: `scripts/codex/run.sh`
 - Префикс: `scripts/codex/dev_commit_push.sh`

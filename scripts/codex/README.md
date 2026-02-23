@@ -125,6 +125,7 @@
 - `executor_run.sh <task-id> <issue-number>`
   - выполняет `codex exec --full-auto` с подготовленным prompt
   - пишет результат в `.tmp/codex/executor.log` и обновляет state (`DONE/FAILED`)
+  - обновляет heartbeat-файлы для диагностики "жив/завис"
 - `executor_tick.sh <task-id> <issue-number>`
   - проверяет живость executor по pid/state
   - при `FAILED` автоматически публикует blocker-комментарий в Issue (один раз на задачу)
@@ -154,6 +155,8 @@
 - `.tmp/codex/executor_state.txt` — состояние executor (`RUNNING|DONE|FAILED`)
 - `.tmp/codex/executor_pid.txt` — pid фонового executor-процесса
 - `.tmp/codex/executor_last_exit_code.txt` — код завершения последнего executor запуска
+- `.tmp/codex/executor_heartbeat_utc.txt` — время последнего heartbeat executor
+- `.tmp/codex/executor_heartbeat_epoch.txt` — epoch-время последнего heartbeat executor
 
 ## Подготовка
 Скрипты должны быть исполняемыми:

@@ -19,6 +19,9 @@ ISSUE_FILE="${CODEX_DIR}/executor_issue_number.txt"
 START_FILE="${CODEX_DIR}/executor_last_started_utc.txt"
 START_EPOCH_FILE="${CODEX_DIR}/executor_last_start_epoch.txt"
 LOG_FILE="${CODEX_DIR}/executor.log"
+HEARTBEAT_FILE="${CODEX_DIR}/executor_heartbeat_utc.txt"
+HEARTBEAT_EPOCH_FILE="${CODEX_DIR}/executor_heartbeat_epoch.txt"
+HEARTBEAT_PID_FILE="${CODEX_DIR}/executor_heartbeat_pid.txt"
 
 mkdir -p "$CODEX_DIR"
 
@@ -33,6 +36,12 @@ current_state="$(cat "$STATE_FILE" 2>/dev/null || true)"
 current_pid="$(cat "$PID_FILE" 2>/dev/null || true)"
 current_task="$(cat "$TASK_FILE" 2>/dev/null || true)"
 
+case "$current_state" in
+  EXECUTOR_RUNNING) current_state="RUNNING" ;;
+  EXECUTOR_DONE) current_state="DONE" ;;
+  EXECUTOR_FAILED) current_state="FAILED" ;;
+esac
+
 if [[ "$current_state" == "RUNNING" && -n "$current_pid" ]] && kill -0 "$current_pid" 2>/dev/null; then
   echo "EXECUTOR_ALREADY_RUNNING=1"
   echo "EXECUTOR_PID=$current_pid"
@@ -45,6 +54,9 @@ printf '%s\n' "$task_id" > "$TASK_FILE"
 printf '%s\n' "$issue_number" > "$ISSUE_FILE"
 date -u '+%Y-%m-%dT%H:%M:%SZ' > "$START_FILE"
 date +%s > "$START_EPOCH_FILE"
+date -u '+%Y-%m-%dT%H:%M:%SZ' > "$HEARTBEAT_FILE"
+date +%s > "$HEARTBEAT_EPOCH_FILE"
+: > "$HEARTBEAT_PID_FILE"
 
 /bin/bash "${ROOT_DIR}/scripts/codex/executor_run.sh" "$task_id" "$issue_number" >>"$LOG_FILE" 2>&1 &
 pid="$!"

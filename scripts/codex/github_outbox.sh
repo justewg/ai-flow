@@ -85,6 +85,8 @@ case "$cmd" in
       }' > "$item_file"
 
     echo "OUTBOX_ENQUEUED=1"
+    echo "GITHUB_ACTION_DEFERRED=issue_comment"
+    echo "GITHUB_ACTION_TARGET=issue#${issue_number}"
     echo "OUTBOX_ITEM=$item_file"
     echo "OUTBOX_PENDING_COUNT=$(pending_count)"
     ;;
@@ -153,6 +155,8 @@ case "$cmd" in
 
         rm -f "$item_file" "$payload_file"
         ((sent++))
+        echo "GITHUB_ACTION_SENT=issue_comment"
+        echo "GITHUB_ACTION_TARGET=issue#${issue_number}"
         echo "OUTBOX_SENT_ITEM=$issue_number"
       else
         rc=$?
@@ -166,13 +170,20 @@ case "$cmd" in
           jq --argjson attempts "$attempts" '.attempts = $attempts | .last_attempt_at = now | .last_error = "GITHUB_API_UNSTABLE"' "$item_file" > "$tmp_item"
           mv "$tmp_item" "$item_file"
           ((kept++))
+          echo "GITHUB_ACTION_SEND_FAILED=issue_comment"
+          echo "GITHUB_ACTION_FAIL_TARGET=issue#${issue_number}"
+          echo "GITHUB_ACTION_FAIL_REASON=GITHUB_API_UNSTABLE"
           echo "OUTBOX_WAIT_GITHUB_API_UNSTABLE=1"
           echo "OUTBOX_PENDING_COUNT=$(pending_count)"
+          echo "WAIT_GITHUB_PENDING_ACTIONS=$(pending_count)"
           echo "OUTBOX_LAST_ITEM=$item_file"
           break
         fi
 
         echo "OUTBOX_DROPPED_NONRETRYABLE=$item_file"
+        echo "GITHUB_ACTION_SEND_FAILED=issue_comment"
+        echo "GITHUB_ACTION_FAIL_TARGET=issue#${issue_number}"
+        echo "GITHUB_ACTION_FAIL_REASON=NONRETRYABLE"
         while IFS= read -r line; do
           [[ -z "$line" ]] && continue
           echo "OUTBOX_ERROR(rc=$rc): $line"

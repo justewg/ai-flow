@@ -46,6 +46,15 @@ if [[ -n "$outbox_out" ]]; then
   done <<< "$outbox_out"
 fi
 
+pending_actions="$(
+  "${ROOT_DIR}/scripts/codex/github_outbox.sh" count 2>/dev/null |
+    awk -F= '/^OUTBOX_PENDING_COUNT=/{print $2}' |
+    tail -n1
+)"
+if [[ -n "$pending_actions" && "$pending_actions" != "0" ]]; then
+  echo "WAIT_GITHUB_PENDING_ACTIONS=$pending_actions"
+fi
+
 reply_probe_out="$("${ROOT_DIR}/scripts/codex/daemon_check_replies.sh" 2>&1)"
 while IFS= read -r line; do
   [[ -z "$line" || "$line" == "NO_WAITING_USER_REPLY=1" ]] && continue

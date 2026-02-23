@@ -82,6 +82,7 @@
 ## Команды
 - `dev_commit_push.sh "message" <path...>`
   - `git add` + `git commit` + `git push origin development`
+  - для agent-коммитов использует отдельную identity (env): `CODEX_GIT_AUTHOR_NAME`, `CODEX_GIT_AUTHOR_EMAIL`, `CODEX_GIT_COMMITTER_NAME`, `CODEX_GIT_COMMITTER_EMAIL`
 - `sync_branches.sh`
   - `fetch/pull/merge/push` для выравнивания `main` и `development` после merge PR
   - если `main` уже включен в `development`, merge пропускается

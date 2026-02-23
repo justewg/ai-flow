@@ -155,6 +155,28 @@ classify_error_state() {
   fi
 }
 
+classify_probe_status() {
+  local probe_out="$1"
+  if printf '%s' "$probe_out" | grep -Eiq 'could not resolve host|temporary failure in name resolution'; then
+    echo "DNS_OFFLINE"
+  elif printf '%s' "$probe_out" | grep -Eiq 'connection timed out|operation timed out|tls handshake timeout|failed to connect'; then
+    echo "UNREACHABLE"
+  else
+    echo "UNSTABLE"
+  fi
+}
+
+probe_http_status() {
+  local url="$1"
+  local probe_out
+  if probe_out="$(curl -sS -o /dev/null --max-time 5 "$url" 2>&1)"; then
+    echo "OK"
+    return 0
+  fi
+  classify_probe_status "$probe_out"
+  return 1
+}
+
 detect_flow_degradation() {
   local parts=()
   local pending_outbox_count="0"
@@ -167,16 +189,32 @@ detect_flow_degradation() {
     parts+=("DEGRADED=PENDING_OUTBOX:${pending_outbox_count}")
   fi
 
-  local probe_out
-  if probe_out="$(curl -sS -o /dev/null --max-time 5 https://api.github.com 2>&1)"; then
-    :
-  else
-    if printf '%s' "$probe_out" | grep -Eiq 'could not resolve host: api\.github\.com|temporary failure in name resolution'; then
+  local github_status
+  github_status="$(probe_http_status "https://api.github.com")"
+  if [[ "$github_status" != "OK" ]]; then
+    if [[ "$github_status" == "DNS_OFFLINE" ]]; then
       parts+=("DEGRADED=GITHUB_DNS_OFFLINE")
-    elif printf '%s' "$probe_out" | grep -Eiq 'connection timed out|operation timed out|tls handshake timeout|failed to connect'; then
+    elif [[ "$github_status" == "UNREACHABLE" ]]; then
       parts+=("DEGRADED=GITHUB_API_UNREACHABLE")
     else
       parts+=("DEGRADED=GITHUB_UNSTABLE")
+    fi
+  fi
+
+  # При DNS-деградации GitHub дополнительно проверяем Telegram-канал.
+  # Это позволяет явно сигнализировать в бот, что проблема именно в GitHub-пути.
+  if [[ "$github_status" == "DNS_OFFLINE" ]]; then
+    local telegram_status
+    telegram_status="$(probe_http_status "https://api.telegram.org")"
+    parts+=("CHECK_TELEGRAM=${telegram_status}")
+    if [[ "$telegram_status" == "OK" ]]; then
+      parts+=("TELEGRAM_NOTIFY_ROUTE=AVAILABLE")
+    elif [[ "$telegram_status" == "DNS_OFFLINE" ]]; then
+      parts+=("DEGRADED=TELEGRAM_DNS_OFFLINE")
+    elif [[ "$telegram_status" == "UNREACHABLE" ]]; then
+      parts+=("DEGRADED=TELEGRAM_API_UNREACHABLE")
+    else
+      parts+=("DEGRADED=TELEGRAM_UNSTABLE")
     fi
   fi
 
@@ -220,6 +258,10 @@ notify_if_needed() {
   if ! [[ "$reminder_sec" =~ ^[0-9]+$ ]] || (( reminder_sec < 60 )); then
     reminder_sec=1800
   fi
+  local github_dns_reminder_sec="${DAEMON_TG_GH_DNS_REMINDER_SEC:-300}"
+  if ! [[ "$github_dns_reminder_sec" =~ ^[0-9]+$ ]] || (( github_dns_reminder_sec < 60 )); then
+    github_dns_reminder_sec=300
+  fi
 
   local signature
   signature="$(printf '%s|%s' "$state" "$detail" | shasum -a 1 | awk '{print $1}')"
@@ -236,16 +278,34 @@ notify_if_needed() {
 
   local should_notify="0"
   local reason=""
+  local github_dns_via_telegram="0"
+  if [[ "$detail" == *"DEGRADED=GITHUB_DNS_OFFLINE"* && "$detail" == *"TELEGRAM_NOTIFY_ROUTE=AVAILABLE"* ]]; then
+    github_dns_via_telegram="1"
+  fi
+
   if [[ "$mode" == "degraded" ]]; then
-    if [[ "$last_mode" != "degraded" ]]; then
-      should_notify="1"
-      reason="ENTER_DEGRADED"
-    elif [[ "$last_signature" != "$signature" ]]; then
-      should_notify="1"
-      reason="DEGRADED_CHANGED"
-    elif (( now_epoch - last_epoch >= reminder_sec )); then
-      should_notify="1"
-      reason="DEGRADED_REMINDER"
+    if [[ "$github_dns_via_telegram" == "1" ]]; then
+      if [[ "$last_mode" != "degraded" ]]; then
+        should_notify="1"
+        reason="GITHUB_DNS_TELEGRAM_OK_ENTER"
+      elif [[ "$last_signature" != "$signature" ]]; then
+        should_notify="1"
+        reason="GITHUB_DNS_TELEGRAM_OK_CHANGED"
+      elif (( now_epoch - last_epoch >= github_dns_reminder_sec )); then
+        should_notify="1"
+        reason="GITHUB_DNS_TELEGRAM_OK_REMINDER"
+      fi
+    else
+      if [[ "$last_mode" != "degraded" ]]; then
+        should_notify="1"
+        reason="ENTER_DEGRADED"
+      elif [[ "$last_signature" != "$signature" ]]; then
+        should_notify="1"
+        reason="DEGRADED_CHANGED"
+      elif (( now_epoch - last_epoch >= reminder_sec )); then
+        should_notify="1"
+        reason="DEGRADED_REMINDER"
+      fi
     fi
   else
     if [[ "$last_mode" == "degraded" ]]; then

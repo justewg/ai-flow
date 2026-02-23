@@ -118,6 +118,8 @@
     - смена причины деградации (`DEGRADED_CHANGED`)
     - периодический reminder (`DEGRADED_REMINDER`, по умолчанию раз в 30 минут)
     - восстановление (`RECOVERED`)
+  - при DNS-проблемах GitHub дополнительно проверяет `api.telegram.org`
+  - если Telegram доступен, отправляет приоритетный сигнал через бота о GitHub DNS-деградации (`GITHUB_DNS_TELEGRAM_OK_*`)
 - `daemon_install.sh [label] [interval-sec]`
   - создает `~/Library/LaunchAgents/<label>.plist`
   - включает автозапуск демона при логине и restart при падении
@@ -143,7 +145,8 @@
   - проверяет живость executor по pid/state
   - при `FAILED` автоматически публикует blocker-комментарий в Issue (один раз на задачу)
   - после нового ответа пользователя в Issue делает retry executor без ручного сброса state
-  - при `DONE` и активной задаче без waiting-state перезапускает executor после cooldown
+  - при `DONE` и активной задаче без финализации публикует blocker-комментарий и ждет явного решения пользователя (`продолжай`/`финализируй`)
+  - после нового ответа пользователя в этом состоянии запускает новый прогон executor
 - `executor_reset.sh`
   - останавливает живой executor-процесс (если есть) и очищает state-файлы
 - `task_ask.sh <question|blocker> <message-file>`
@@ -200,3 +203,4 @@ chmod +x scripts/codex/*.sh
 - `DAEMON_TG_CHAT_ID` (или `TG_CHAT_ID`)
 - `DAEMON_TG_ENV_FILE` (путь к env-файлу; по умолчанию проверяются `.env`, `.env.deploy`)
 - `DAEMON_TG_REMINDER_SEC` (интервал reminder в секундах, минимум 60; по умолчанию 1800)
+- `DAEMON_TG_GH_DNS_REMINDER_SEC` (интервал напоминаний именно для деградации `GITHUB_DNS_OFFLINE` при доступном Telegram; минимум 60, по умолчанию 300)

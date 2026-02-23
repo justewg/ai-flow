@@ -79,7 +79,8 @@
   - выводит `NEXT_TASK_ID=...` и `NEXT_TITLE=...` для ближайшей задачи (статус `Planned`)
 - `daemon_tick.sh`
   - проверяет открытые PR `development -> main`
-  - останавливается, если локальное рабочее дерево содержит незакоммиченные изменения
+  - останавливается только при изменениях tracked-файлов (staged/unstaged)
+  - untracked-файлы не блокируют daemon-flow
   - берет задачу только из `Status=To Progress`
   - при единственной задаче переводит ее в `Status/Flow=In Progress`
   - сохраняет текущий `Task ID` в `.tmp/codex/project_task_id.txt` для последующего `task_finalize`

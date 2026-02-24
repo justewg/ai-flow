@@ -43,6 +43,12 @@
 - `scripts/codex/run.sh gh_app_auth_start` — запустить локальный GitHub App auth-сервис (`/health`, `/token`).
 - `scripts/codex/run.sh gh_app_auth_health` — проверить endpoint `/health` auth-сервиса.
 - `scripts/codex/run.sh gh_app_auth_probe` — проверить `/health` и `/token` (без вывода токена).
+- `scripts/codex/run.sh gh_app_auth_pm2_start` — зарегистрировать/перезапустить auth-сервис в PM2.
+- `scripts/codex/run.sh gh_app_auth_pm2_stop` — остановить и удалить auth-сервис из PM2.
+- `scripts/codex/run.sh gh_app_auth_pm2_restart` — перезапустить auth-сервис в PM2.
+- `scripts/codex/run.sh gh_app_auth_pm2_status` — показать статус auth-сервиса в PM2.
+- `scripts/codex/run.sh gh_app_auth_pm2_health` — проверить PM2 status=`online` + endpoint `/health`.
+- `scripts/codex/run.sh gh_app_auth_pm2_crash_test` — kill процесса auth-сервиса и подтвердить авто-restart PM2.
 
 `run.sh` читает фиксированные файлы из `.tmp/codex/`:
 - `pr_number.txt`
@@ -109,6 +115,8 @@
 - `GH_APP_TOKEN_SKEW_SEC` — упреждающее обновление installation token (по умолчанию `300` сек).
 - `GH_APP_API_BASE_URL` — базовый URL GitHub API (по умолчанию `https://api.github.com`).
 - `GH_APP_HTTP_TIMEOUT_MS` — timeout HTTP-запроса к GitHub API (по умолчанию `10000` мс).
+- `GH_APP_PM2_APP_NAME` — имя PM2 процесса auth-сервиса (по умолчанию `planka-gh-app-auth`).
+- `GH_APP_PM2_RESTART_TIMEOUT_SEC` — timeout проверки авто-restart в `gh_app_auth_pm2_crash_test` (по умолчанию `20` сек).
 
 ## Итеративный executor-flow (коммит1 -> вопрос -> ответ -> коммит2 -> финализация)
 1. Сделать первую рабочую дельту и выполнить `commit_push`.
@@ -268,6 +276,20 @@
   - проверяет локальный `GET /health`
 - `gh_app_auth_probe.sh`
   - проверяет `GET /health` и `GET /token`; валидирует ответ без вывода токена
+- `gh_app_auth_pm2_ecosystem.config.cjs`
+  - PM2 ecosystem-конфиг auth-сервиса (`autorestart`, отдельные log-файлы)
+- `gh_app_auth_pm2_start.sh`
+  - стартует auth-сервис под PM2 (или делает restart существующего процесса)
+- `gh_app_auth_pm2_stop.sh`
+  - останавливает и удаляет auth-сервис из PM2
+- `gh_app_auth_pm2_restart.sh`
+  - перезапускает auth-сервис в PM2
+- `gh_app_auth_pm2_status.sh`
+  - показывает состояние auth-сервиса в PM2 (`status`, `pid`, `restarts`, `uptime`)
+- `gh_app_auth_pm2_health.sh`
+  - проверяет, что PM2-процесс `online`, и валидирует `GET /health`
+- `gh_app_auth_pm2_crash_test.sh`
+  - имитирует падение процесса (`kill -9`) и подтверждает авто-restart PM2
 
 Логи демона:
 - `.tmp/codex/daemon.log` — heartbeat и результат `daemon_tick`

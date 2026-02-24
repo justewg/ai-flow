@@ -48,6 +48,12 @@ Commands:
   gh_app_auth_start
   gh_app_auth_health
   gh_app_auth_probe
+  gh_app_auth_pm2_start
+  gh_app_auth_pm2_stop
+  gh_app_auth_pm2_restart
+  gh_app_auth_pm2_status
+  gh_app_auth_pm2_health
+  gh_app_auth_pm2_crash_test
 
 Fixed input files in .tmp/codex:
   pr_number.txt
@@ -384,6 +390,30 @@ case "$cmd" in
 
   gh_app_auth_probe)
     "${ROOT_DIR}/scripts/codex/gh_app_auth_probe.sh"
+    ;;
+
+  gh_app_auth_pm2_start)
+    "${ROOT_DIR}/scripts/codex/gh_app_auth_pm2_start.sh"
+    ;;
+
+  gh_app_auth_pm2_stop)
+    "${ROOT_DIR}/scripts/codex/gh_app_auth_pm2_stop.sh"
+    ;;
+
+  gh_app_auth_pm2_restart)
+    "${ROOT_DIR}/scripts/codex/gh_app_auth_pm2_restart.sh"
+    ;;
+
+  gh_app_auth_pm2_status)
+    "${ROOT_DIR}/scripts/codex/gh_app_auth_pm2_status.sh"
+    ;;
+
+  gh_app_auth_pm2_health)
+    "${ROOT_DIR}/scripts/codex/gh_app_auth_pm2_health.sh"
+    ;;
+
+  gh_app_auth_pm2_crash_test)
+    "${ROOT_DIR}/scripts/codex/gh_app_auth_pm2_crash_test.sh"
     ;;
 
   *)

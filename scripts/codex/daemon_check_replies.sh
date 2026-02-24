@@ -10,6 +10,10 @@ task_file="${CODEX_DIR}/daemon_waiting_task_id.txt"
 question_id_file="${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
 kind_file="${CODEX_DIR}/daemon_waiting_kind.txt"
 pending_post_file="${CODEX_DIR}/daemon_waiting_pending_post.txt"
+review_task_file="${CODEX_DIR}/daemon_review_task_id.txt"
+review_item_file="${CODEX_DIR}/daemon_review_item_id.txt"
+review_issue_file="${CODEX_DIR}/daemon_review_issue_number.txt"
+review_pr_file="${CODEX_DIR}/daemon_review_pr_number.txt"
 
 is_review_feedback_kind() {
   local value="$1"
@@ -139,6 +143,13 @@ clear_waiting_state() {
   : > "$pending_post_file"
 }
 
+clear_review_context() {
+  : > "$review_task_file"
+  : > "$review_item_file"
+  : > "$review_issue_file"
+  : > "$review_pr_file"
+}
+
 if [[ ! -s "$issue_file" || ! -s "$question_id_file" ]]; then
   echo "NO_WAITING_USER_REPLY=1"
   exit 0
@@ -155,6 +166,39 @@ issue_author=""
 [[ -s "$pending_post_file" ]] && pending_post="$(<"$pending_post_file")"
 
 comments_json=""
+
+# Если issue уже закрыта (или удалена), waiting/review контекст становится невалидным.
+issue_state=""
+if ! issue_state="$(
+  "${ROOT_DIR}/scripts/codex/gh_retry.sh" \
+    gh issue view "$issue_number" \
+    --repo "$REPO" \
+    --json state \
+    --jq '.state'
+)"; then
+  rc=$?
+  if [[ "$rc" -eq 75 ]]; then
+    emit_wait_state "$task_id" "$issue_number" "$question_comment_id" "$kind_label"
+    echo "WAIT_GITHUB_API_UNSTABLE=1"
+    echo "WAITING_FOR_ISSUE_STATE=1"
+    exit 0
+  fi
+  clear_waiting_state
+  clear_review_context
+  echo "STALE_WAITING_CONTEXT_CLEARED=ISSUE_LOOKUP_FAILED"
+  echo "STALE_WAITING_ISSUE_NUMBER=$issue_number"
+  echo "NO_WAITING_USER_REPLY=1"
+  exit 0
+fi
+
+if [[ "$issue_state" == "CLOSED" ]]; then
+  clear_waiting_state
+  clear_review_context
+  echo "STALE_WAITING_CONTEXT_CLEARED=ISSUE_CLOSED"
+  echo "STALE_WAITING_ISSUE_NUMBER=$issue_number"
+  echo "NO_WAITING_USER_REPLY=1"
+  exit 0
+fi
 
 if [[ "$pending_post" == "1" ]]; then
   outbox_count="0"

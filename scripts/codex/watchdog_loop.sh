@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CODEX_DIR="${ROOT_DIR}/.tmp/codex"
 LOCK_DIR="${CODEX_DIR}/watchdog.lock"
 LOG_FILE="${CODEX_DIR}/watchdog.log"
+STATE_FILE="${CODEX_DIR}/watchdog_state.txt"
+DETAIL_FILE="${CODEX_DIR}/watchdog_state_detail.txt"
 
 interval="${1:-${WATCHDOG_INTERVAL_SEC:-45}}"
 if ! [[ "$interval" =~ ^[0-9]+$ ]] || (( interval < 10 )); then
@@ -30,77 +32,68 @@ log() {
   printf '%s %s\n' "$ts" "$*" >> "$LOG_FILE"
 }
 
-strip_quotes() {
-  local value="$1"
-  value="${value%\"}"
-  value="${value#\"}"
-  value="${value%\'}"
-  value="${value#\'}"
-  printf '%s' "$value"
+set_state() {
+  local state="$1"
+  local detail="${2:-}"
+  printf '%s\n' "$state" > "$STATE_FILE"
+  printf '%s\n' "$detail" > "$DETAIL_FILE"
+  if [[ -n "$detail" ]]; then
+    log "STATE=$state DETAIL=$detail"
+  else
+    log "STATE=$state"
+  fi
 }
 
-read_key_from_env_file() {
-  local file_path="$1"
-  local key="$2"
-  [[ -f "$file_path" ]] || return 1
-  local raw
-  raw="$(grep -E "^${key}=" "$file_path" | tail -n1 | cut -d'=' -f2- || true)"
-  [[ -n "$raw" ]] || return 1
-  strip_quotes "$raw"
-}
+WATCHDOG_AUTH_LAST_DETAIL=""
 
-configure_daemon_github_token() {
-  if [[ -n "${GH_TOKEN:-}" ]]; then
-    log "WATCHDOG_GITHUB_AUTH_MODE=ENV_GH_TOKEN"
+refresh_watchdog_github_token() {
+  local auth_log_file token line rc
+  WATCHDOG_AUTH_LAST_DETAIL=""
+  auth_log_file="$(mktemp "${CODEX_DIR}/watchdog_auth.XXXXXX")"
+
+  if token="$("${ROOT_DIR}/scripts/codex/gh_app_auth_token.sh" 2>"$auth_log_file")"; then
+    token="$(printf '%s' "$token" | tr -d '\r\n')"
+    if [[ -z "$token" ]]; then
+      rm -f "$auth_log_file"
+      WATCHDOG_AUTH_LAST_DETAIL="AUTH_ERROR_CODE=AUTH_SERVICE_BAD_PAYLOAD"
+      return 1
+    fi
+    export GH_TOKEN="$token"
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      log "WATCHDOG_AUTH: $line"
+    done < "$auth_log_file"
+    rm -f "$auth_log_file"
     return 0
   fi
 
-  local token=""
-  local source="none"
-  local env_candidates=()
-
-  if [[ -n "${DAEMON_GH_TOKEN:-}" ]]; then
-    token="${DAEMON_GH_TOKEN}"
-    source="env:DAEMON_GH_TOKEN"
-  elif [[ -n "${CODEX_GH_TOKEN:-}" ]]; then
-    token="${CODEX_GH_TOKEN}"
-    source="env:CODEX_GH_TOKEN"
-  else
-    if [[ -n "${DAEMON_GH_ENV_FILE:-}" ]]; then
-      env_candidates+=("${DAEMON_GH_ENV_FILE}")
-    fi
-    env_candidates+=("${ROOT_DIR}/.env")
-    env_candidates+=("${ROOT_DIR}/.env.deploy")
-
-    local env_file
-    for env_file in "${env_candidates[@]}"; do
-      token="$(read_key_from_env_file "$env_file" "DAEMON_GH_TOKEN" || true)"
-      if [[ -n "$token" ]]; then
-        source="file:${env_file}:DAEMON_GH_TOKEN"
-        break
-      fi
-      token="$(read_key_from_env_file "$env_file" "CODEX_GH_TOKEN" || true)"
-      if [[ -n "$token" ]]; then
-        source="file:${env_file}:CODEX_GH_TOKEN"
-        break
-      fi
-    done
+  rc=$?
+  unset GH_TOKEN || true
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    [[ -z "$WATCHDOG_AUTH_LAST_DETAIL" ]] && WATCHDOG_AUTH_LAST_DETAIL="$line"
+    log "WATCHDOG_AUTH_ERROR(rc=$rc): $line"
+  done < "$auth_log_file"
+  rm -f "$auth_log_file"
+  if [[ -z "$WATCHDOG_AUTH_LAST_DETAIL" ]]; then
+    WATCHDOG_AUTH_LAST_DETAIL="AUTH_ERROR_CODE=AUTH_SERVICE_UNREACHABLE"
   fi
-
-  if [[ -n "$token" ]]; then
-    export GH_TOKEN="$token"
-    log "WATCHDOG_GITHUB_AUTH_MODE=DAEMON_TOKEN (${source})"
-  else
-    log "WATCHDOG_GITHUB_AUTH_MODE=DEFAULT_GH_AUTH"
-  fi
+  return "$rc"
 }
 
-configure_daemon_github_token
-
 log "watchdog_loop start interval=${interval}s"
+set_state "BOOTING" "watchdog_loop started"
 
 while true; do
   log "watchdog_heartbeat"
+  if ! refresh_watchdog_github_token; then
+    rc=$?
+    detail="AUTH_UNAVAILABLE=1; AUTH_RC=${rc}; ${WATCHDOG_AUTH_LAST_DETAIL}"
+    set_state "WAIT_AUTH_SERVICE" "$detail"
+    sleep "$interval"
+    continue
+  fi
+
   if output="$("${ROOT_DIR}/scripts/codex/watchdog_tick.sh" 2>&1)"; then
     while IFS= read -r line; do
       [[ -z "$line" ]] && continue

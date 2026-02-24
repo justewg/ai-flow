@@ -16,6 +16,104 @@ is_review_feedback_kind() {
   [[ "$(printf '%s' "$value" | tr '[:lower:]' '[:upper:]')" == "REVIEW_FEEDBACK" ]]
 }
 
+detect_review_reply_mode() {
+  local body="$1"
+  local explicit_mode=""
+  explicit_mode="$(
+    printf '%s\n' "$body" |
+      sed -n 's/^CODEX_MODE:[[:space:]]*//p' |
+      head -n1 |
+      tr '[:lower:]' '[:upper:]'
+  )"
+  if [[ "$explicit_mode" == "QUESTION" || "$explicit_mode" == "REWORK" ]]; then
+    printf '%s' "$explicit_mode"
+    return 0
+  fi
+
+  if printf '%s' "$body" | grep -Eiq '(сделай|добавь|исправ|поправ|измени|доработ|реализ|перепиши|убери|удали|перенеси|нужно|надо|требуется|поменяй|обнови)'; then
+    printf 'REWORK'
+    return 0
+  fi
+
+  if printf '%s' "$body" | grep -q '?' ||
+    printf '%s' "$body" | grep -Eiq '^[[:space:]]*(что|как|почему|зачем|когда|где|какой|какая|какие|можно ли|все ли)\b'; then
+    printf 'QUESTION'
+    return 0
+  fi
+
+  printf 'REWORK'
+}
+
+build_review_answer_comment() {
+  local task_id="$1"
+  local issue_number="$2"
+  local reply_id="$3"
+
+  local status_hint="Review"
+  local flow_hint="In Review"
+  local active_task=""
+  local exec_state=""
+  local exec_pid=""
+  local pr_number=""
+  local pr_state="UNKNOWN"
+  local pr_url=""
+
+  [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]] && active_task="$(<"${CODEX_DIR}/daemon_active_task.txt")"
+  [[ -s "${CODEX_DIR}/executor_state.txt" ]] && exec_state="$(<"${CODEX_DIR}/executor_state.txt")"
+  [[ -s "${CODEX_DIR}/executor_pid.txt" ]] && exec_pid="$(<"${CODEX_DIR}/executor_pid.txt")"
+  [[ -s "${CODEX_DIR}/daemon_review_pr_number.txt" ]] && pr_number="$(<"${CODEX_DIR}/daemon_review_pr_number.txt")"
+
+  if [[ "$active_task" == "$task_id" ]]; then
+    status_hint="In Progress"
+    flow_hint="In Progress"
+  fi
+
+  if [[ -n "$pr_number" ]]; then
+    if pr_json="$(
+      "${ROOT_DIR}/scripts/codex/gh_retry.sh" \
+        gh pr view "$pr_number" \
+          --repo "$REPO" \
+          --json state,url \
+          --jq '.'
+    )"; then
+      pr_state="$(printf '%s' "$pr_json" | jq -r '.state // "UNKNOWN"')"
+      pr_url="$(printf '%s' "$pr_json" | jq -r '.url // ""')"
+    fi
+  fi
+
+  [[ -z "$exec_state" ]] && exec_state="unknown"
+  if [[ -n "$exec_pid" ]]; then
+    exec_state="${exec_state} (pid ${exec_pid})"
+  fi
+
+  local pr_line=""
+  if [[ -n "$pr_number" && -n "$pr_url" ]]; then
+    pr_line="- PR #${pr_number}: ${pr_state} (${pr_url})"
+  elif [[ -n "$pr_number" ]]; then
+    pr_line="- PR #${pr_number}: ${pr_state}"
+  else
+    pr_line="- PR: не найден в review-контексте"
+  fi
+
+  cat <<EOF
+CODEX_SIGNAL: AGENT_ANSWER
+CODEX_TASK: ${task_id}
+CODEX_SOURCE_REPLY_COMMENT_ID: ${reply_id}
+CODEX_MODE: QUESTION
+
+Короткий ответ: задача в работе, review-feedback получен и обработан.
+
+Текущий контекст:
+- Задача #${issue_number}: ${status_hint} / ${flow_hint}
+${pr_line}
+- Executor: ${exec_state}
+
+Если нужна доработка, напиши отдельный комментарий:
+CODEX_MODE: REWORK
+<что именно изменить>
+EOF
+}
+
 emit_wait_state() {
   local task_id="$1"
   local issue_number="$2"
@@ -195,6 +293,61 @@ reply_body="$(printf '%s' "$reply_json" | jq -r '.body // ""')"
 reply_preview="$(printf '%s' "$reply_body" | tr '\n' ' ' | cut -c1-180)"
 now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
+reply_mode="REWORK"
+if is_review_feedback_kind "$kind_label"; then
+  reply_mode="$(detect_review_reply_mode "$reply_body")"
+fi
+
+if is_review_feedback_kind "$kind_label" && [[ "$reply_mode" == "QUESTION" ]]; then
+  printf '%s\n' "$reply_id" > "$question_id_file"
+  date -u '+%Y-%m-%dT%H:%M:%SZ' > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
+
+  answer_body="$(build_review_answer_comment "$task_id" "$issue_number" "$reply_id")"
+  if ! answer_out="$("${ROOT_DIR}/scripts/codex/gh_retry.sh" gh api "repos/${REPO}/issues/${issue_number}/comments" -f body="$answer_body" 2>&1)"; then
+    rc=$?
+    if [[ "$rc" -eq 75 ]]; then
+      tmp_answer="$(mktemp "${CODEX_DIR}/answer_body.XXXXXX")"
+      trap 'rm -f "$tmp_answer"' EXIT
+      printf '%s\n' "$answer_body" > "$tmp_answer"
+      if queue_out="$("${ROOT_DIR}/scripts/codex/github_outbox.sh" enqueue_issue_comment "$REPO" "$issue_number" "$tmp_answer" "$task_id" "ANSWER" "0" 2>&1)"; then
+        while IFS= read -r line; do
+          [[ -z "$line" ]] && continue
+          echo "$line"
+        done <<< "$queue_out"
+        echo "ANSWER_QUEUED_OUTBOX=1"
+        echo "WAIT_GITHUB_API_UNSTABLE=1"
+      else
+        qrc=$?
+        while IFS= read -r line; do
+          [[ -z "$line" ]] && continue
+          echo "ANSWER_OUTBOX_ERROR(rc=$qrc): $line"
+        done <<< "$queue_out"
+      fi
+    else
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        echo "ANSWER_POST_ERROR(rc=$rc): $line"
+      done <<< "$answer_out"
+    fi
+  else
+    echo "ANSWER_POSTED=1"
+  fi
+
+  emit_wait_state "$task_id" "$issue_number" "$reply_id" "$kind_label"
+  echo "REVIEW_FEEDBACK_RECEIVED=1"
+  echo "REVIEW_FEEDBACK_ISSUE_AUTHOR=$issue_author"
+  echo "USER_REPLY_RECEIVED=1"
+  echo "TASK_ID=$task_id"
+  echo "ISSUE_NUMBER=$issue_number"
+  echo "REPLY_KIND=$kind_label"
+  echo "REPLY_MODE=$reply_mode"
+  echo "REPLY_COMMENT_ID=$reply_id"
+  echo "REPLY_AUTHOR=$reply_user"
+  echo "REPLY_URL=$reply_url"
+  echo "REPLY_PREVIEW=$reply_preview"
+  exit 0
+fi
+
 printf '%s\n' "$reply_body" > "${CODEX_DIR}/daemon_user_reply.txt"
 printf '%s\n' "$reply_id" > "${CODEX_DIR}/daemon_user_reply_comment_id.txt"
 printf '%s\n' "$reply_url" > "${CODEX_DIR}/daemon_user_reply_comment_url.txt"
@@ -258,6 +411,7 @@ echo "USER_REPLY_RECEIVED=1"
 echo "TASK_ID=$task_id"
 echo "ISSUE_NUMBER=$issue_number"
 echo "REPLY_KIND=$kind_label"
+echo "REPLY_MODE=$reply_mode"
 echo "REPLY_COMMENT_ID=$reply_id"
 echo "REPLY_AUTHOR=$reply_user"
 echo "REPLY_URL=$reply_url"

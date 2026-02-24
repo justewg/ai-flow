@@ -224,9 +224,13 @@
   - если daemon в waiting-state, проверяет новые комментарии Issue после вопроса/ревью
   - для `AGENT_QUESTION/AGENT_BLOCKER` первый пользовательский комментарий (без `CODEX_SIGNAL:`) принимает как ответ
   - для `REVIEW_FEEDBACK` принимает только не-системный комментарий автора Issue
+  - для `REVIEW_FEEDBACK` различает режимы:
+    - `QUESTION` -> публикует `CODEX_SIGNAL: AGENT_ANSWER` и оставляет задачу в `WAIT_REVIEW_FEEDBACK`
+    - `REWORK` -> публикует `CODEX_SIGNAL: AGENT_RESUMED_REVIEW` и передает задачу в доработку
+  - поддерживает явный override в комментарии: `CODEX_MODE: QUESTION|REWORK`
   - пишет явные маркеры review-feedback цикла: `WAIT_REVIEW_FEEDBACK`, `REVIEW_FEEDBACK_RECEIVED`, `REVIEW_FEEDBACK_RESUMED`
   - сохраняет ответ в `.tmp/codex/daemon_user_reply.txt`
-  - публикует `CODEX_SIGNAL: AGENT_RESUMED` или `CODEX_SIGNAL: AGENT_RESUMED_REVIEW`; если GitHub недоступен, кладет ack в outbox
+  - публикует `CODEX_SIGNAL: AGENT_RESUMED`, `CODEX_SIGNAL: AGENT_RESUMED_REVIEW` или `CODEX_SIGNAL: AGENT_ANSWER`; если GitHub недоступен, кладет ответ/ack в outbox
   - при pending-question (`вопрос еще не доставлен`) удерживает `WAIT_USER_REPLY`, не теряя контекст
 - `gh_retry.sh <command> [args...]`
   - retry/backoff для нестабильных ошибок GitHub API/DNS

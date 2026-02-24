@@ -223,6 +223,70 @@ normalize_executor_question() {
   printf '%s' "$normalized"
 }
 
+is_generic_executor_question() {
+  local line="$1"
+  local value
+  value="$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')"
+  [[ "$value" == "как действовать дальше?" || "$value" == "какой следующий шаг?" || "$value" == "что дальше?" ]]
+}
+
+build_smart_options() {
+  local raw_text="$1"
+  local question_text="$2"
+  local remark_text="$3"
+  local kind="$4"
+  local merged
+  merged="$(printf '%s\n%s\n%s\n' "$raw_text" "$question_text" "$remark_text" | tr '[:upper:]' '[:lower:]')"
+
+  if printf '%s' "$merged" | grep -Eiq '(завершил текущий прогон без финализации|ждет твоего решения|финализируй|finalize|готов к ревью)'; then
+    cat <<'EOF'
+1) продолжай — запусти следующий рабочий прогон.
+2) финализируй — заверши задачу и подготовь PR к ревью.
+3) уточни: <что проверить перед финализацией>.
+EOF
+    return 0
+  fi
+
+  if printf '%s' "$merged" | grep -Eiq '(не смог продолжить|failed|exit code|ошибка|reconnecting|stream disconnected|api\.github|dns|network|таймаут|timeout|unreachable)'; then
+    cat <<'EOF'
+1) продолжай — перезапусти прогон и продолжи с последнего шага.
+2) продолжай без сети — делай локальные правки/коммиты, GitHub-операции отложи.
+3) опиши блокер — коротко: причина, что уже проверено, что нужно от меня.
+EOF
+    return 0
+  fi
+
+  if [[ "$kind" == "BLOCKER" ]]; then
+    cat <<'EOF'
+1) продолжай — выбери лучший следующий шаг и выполняй.
+2) уточни — задай один конкретный вопрос, если данных недостаточно.
+3) финализируй — останови реализацию и подготовь PR к ревью.
+EOF
+    return 0
+  fi
+
+  cat <<'EOF'
+1) продолжай — выполняй следующий шаг по задаче.
+2) финализируй — завершай задачу и готовь PR к ревью.
+3) уточни — задай один конкретный вопрос перед продолжением.
+EOF
+}
+
+detect_recommended_option() {
+  local raw_text="$1"
+  local question_text="$2"
+  local remark_text="$3"
+  local merged
+  merged="$(printf '%s\n%s\n%s\n' "$raw_text" "$question_text" "$remark_text" | tr '[:upper:]' '[:lower:]')"
+
+  if printf '%s' "$merged" | grep -Eiq '(завершил текущий прогон без финализации|ждет твоего решения|готов к ревью)'; then
+    printf '2'
+    return 0
+  fi
+
+  printf '1'
+}
+
 infer_executor_question() {
   local candidate=""
   local src_text=""
@@ -270,6 +334,7 @@ infer_executor_remark() {
 
 render_question_message() {
   local text="$1"
+  local kind="$2"
   local explicit_q=""
   local explicit_decision=""
   local inferred_q=""
@@ -277,6 +342,8 @@ render_question_message() {
   local selected_q=""
   local context_line=""
   local executor_remark=""
+  local smart_options=""
+  local recommended_option=""
 
   explicit_q="$(extract_question_line "$text")"
   explicit_decision="$(extract_decision_line "$text")"
@@ -303,8 +370,13 @@ render_question_message() {
   fi
 
   selected_q="$(normalize_executor_question "$selected_q")"
+  if is_generic_executor_question "$selected_q"; then
+    selected_q="Выбери следующий шаг для executor."
+  fi
   context_line="$(extract_context_line "$text")"
   executor_remark="$(infer_executor_remark)"
+  smart_options="$(build_smart_options "$text" "$selected_q" "$executor_remark" "$kind")"
+  recommended_option="$(detect_recommended_option "$text" "$selected_q" "$executor_remark")"
 
   if [[ -n "$selected_q" ]]; then
     if [[ -n "$executor_remark" && "$executor_remark" != "$selected_q" && "$executor_remark" != "$context_line" ]]; then
@@ -322,11 +394,19 @@ ${context_line}
 
 Вопрос executor:
 ${selected_q}
+
+Варианты ответа:
+${smart_options}
+Рекомендовано: ${recommended_option}
 EOF_RENDER
     else
       cat <<EOF_RENDER
 Вопрос executor:
 ${selected_q}
+
+Варианты ответа:
+${smart_options}
+Рекомендовано: ${recommended_option}
 EOF_RENDER
     fi
     return 0
@@ -410,7 +490,7 @@ now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
 comment_message_text="$message_text"
 if [[ "$kind_label" == "QUESTION" || "$kind_label" == "BLOCKER" ]]; then
-  comment_message_text="$(render_question_message "$message_text")"
+  comment_message_text="$(render_question_message "$message_text" "$kind_label")"
 fi
 
 comment_body="$(cat <<EOF_COMMENT

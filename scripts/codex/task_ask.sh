@@ -64,6 +64,44 @@ extract_decision_line() {
     | sed -E 's/^[*-][[:space:]]*//'
 }
 
+strip_technical_lines() {
+  local text="$1"
+  printf '%s\n' "$text" \
+    | sed 's/\r$//' \
+    | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' \
+    | sed '/^$/d' \
+    | grep -Eiv '(^Task:|^Issue:|^Exit code:|\.tmp/codex/executor\.log|^Проверь лог|^Проверь логи)'
+}
+
+extract_context_line() {
+  local text="$1"
+  strip_technical_lines "$text" | head -n1
+}
+
+normalize_executor_question() {
+  local line="$1"
+  local normalized=""
+  normalized="$(printf '%s' "$line" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+  normalized="$(printf '%s' "$normalized" | sed -E 's#\.tmp/codex/executor\.log#лог задачи#g')"
+
+  if printf '%s' "$normalized" | grep -Eiq 'дай команду как действовать дальше|как действовать дальше'; then
+    printf 'Как действовать дальше?'
+    return 0
+  fi
+
+  normalized="$(printf '%s' "$normalized" | sed -E 's/^Проверь логи[^.]*\.[[:space:]]*//I')"
+  normalized="$(printf '%s' "$normalized" | sed -E 's/^Проверь лог[^.]*\.[[:space:]]*//I')"
+  normalized="$(printf '%s' "$normalized" | sed -E 's/[[:space:]]+/ /g')"
+  normalized="$(printf '%s' "$normalized" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+
+  if [[ -z "$normalized" ]]; then
+    printf 'Какой следующий шаг?'
+    return 0
+  fi
+
+  printf '%s' "$normalized"
+}
+
 infer_executor_question() {
   local candidate=""
   local src_text=""
@@ -94,6 +132,7 @@ render_question_message() {
   local inferred_q=""
   local fallback_q=""
   local selected_q=""
+  local context_line=""
 
   explicit_q="$(extract_question_line "$text")"
   explicit_decision="$(extract_decision_line "$text")"
@@ -112,17 +151,31 @@ render_question_message() {
   fi
 
   if [[ -z "$selected_q" ]]; then
-    fallback_q="$(printf '%s\n' "$text" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' | sed '/^$/d' | head -n1)"
+    fallback_q="$(extract_context_line "$text")"
+    if [[ -z "$fallback_q" ]]; then
+      fallback_q="$(printf '%s\n' "$text" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' | sed '/^$/d' | head -n1)"
+    fi
     selected_q="$fallback_q"
   fi
 
+  selected_q="$(normalize_executor_question "$selected_q")"
+  context_line="$(extract_context_line "$text")"
+
   if [[ -n "$selected_q" ]]; then
-    cat <<EOF_RENDER
-${text}
+    if [[ -n "$context_line" && "$context_line" != "$selected_q" ]]; then
+      cat <<EOF_RENDER
+Контекст:
+${context_line}
 
 Вопрос executor:
 ${selected_q}
 EOF_RENDER
+    else
+      cat <<EOF_RENDER
+Вопрос executor:
+${selected_q}
+EOF_RENDER
+    fi
     return 0
   fi
 

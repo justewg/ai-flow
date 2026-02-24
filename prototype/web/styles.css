@@ -218,6 +218,7 @@ body {
   padding: 0;
   min-height: 0;
   user-select: none;
+  touch-action: none;
 }
 
 .key-label {

@@ -12,14 +12,13 @@ const LAYOUTS = {
 };
 
 const NUMBER_ROW = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
-const PARENT_TRIGGER_KEYS = Object.freeze(["Р", "О", "Д"]);
-const PARENT_TRIGGER_KEY_SET = new Set(PARENT_TRIGGER_KEYS);
+const PARENT_TRIGGER_SEQUENCE = Object.freeze(["Р", "О", "Д"]);
+const PARENT_TRIGGER_KEY_SET = new Set(PARENT_TRIGGER_SEQUENCE);
 const PARENT_ENTRY_PIN = "2580";
 const SYSTEM_EXIT_PIN = "9000";
 const PIN_LENGTH = 4;
 const PIN_LOCKOUT_MS = 10_000;
-const PARENT_TRIGGER_COLLECTION_MS = 3_000;
-const PARENT_TRIGGER_HOLD_MS = 3_000;
+const PARENT_TRIGGER_SEQUENCE_WINDOW_MS = 3_000;
 
 const state = {
   lang: "RU",
@@ -29,13 +28,8 @@ const state = {
   clearTimerId: null,
   parentTrigger: {
     active: false,
-    collectionTimerId: null,
-    holdTimerId: null,
-    pressedCounts: {
-      Р: 0,
-      О: 0,
-      Д: 0,
-    },
+    timerId: null,
+    sequenceIndex: 0,
   },
   parentControl: {
     gateOpen: false,
@@ -79,7 +73,7 @@ function isParentUiOpen() {
 function renderParentTriggerHint() {
   if (parentTriggerHintEl) {
     parentTriggerHintEl.textContent =
-      "Родительский вход: в течение 3 секунд зажми Р, О, Д и удерживай все три еще 3 секунды.";
+      "Родительский вход: нажми Р, О, Д по порядку в течение 3 секунд.";
   }
 }
 
@@ -178,19 +172,9 @@ function createLetterKey(symbol) {
   setKeyLabel(keyEl, symbol);
 
   if (isParentTriggerSymbol(symbol)) {
-    keyEl.addEventListener("pointerdown", () => {
+    keyEl.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
       onParentTriggerKeyPressed(symbol);
-    });
-
-    const release = () => {
-      onParentTriggerKeyReleased(symbol);
-    };
-    keyEl.addEventListener("pointerup", release);
-    keyEl.addEventListener("pointercancel", release);
-    keyEl.addEventListener("pointerleave", (event) => {
-      if (event.buttons === 0) {
-        release();
-      }
     });
 
   } else {
@@ -255,85 +239,26 @@ function renderKeyboard() {
   );
 }
 
-function clearParentTriggerCollectionTimer() {
-  if (state.parentTrigger.collectionTimerId) {
-    window.clearTimeout(state.parentTrigger.collectionTimerId);
-    state.parentTrigger.collectionTimerId = null;
-  }
-}
-
-function clearParentTriggerHoldTimer() {
-  if (state.parentTrigger.holdTimerId) {
-    window.clearTimeout(state.parentTrigger.holdTimerId);
-    state.parentTrigger.holdTimerId = null;
-  }
-}
-
-function resetParentTriggerPressedCounts() {
-  for (const symbol of PARENT_TRIGGER_KEYS) {
-    state.parentTrigger.pressedCounts[symbol] = 0;
+function clearParentTriggerTimer() {
+  if (state.parentTrigger.timerId) {
+    window.clearTimeout(state.parentTrigger.timerId);
+    state.parentTrigger.timerId = null;
   }
 }
 
 function resetParentTriggerState() {
-  clearParentTriggerCollectionTimer();
-  clearParentTriggerHoldTimer();
+  clearParentTriggerTimer();
   state.parentTrigger.active = false;
-  resetParentTriggerPressedCounts();
-}
-
-function isAnyParentTriggerKeyPressed() {
-  return PARENT_TRIGGER_KEYS.some(
-    (symbol) => state.parentTrigger.pressedCounts[symbol] > 0,
-  );
-}
-
-function areAllParentTriggerKeysPressed() {
-  return PARENT_TRIGGER_KEYS.every(
-    (symbol) => state.parentTrigger.pressedCounts[symbol] > 0,
-  );
+  state.parentTrigger.sequenceIndex = 0;
 }
 
 function startParentTriggerAttempt() {
   state.parentTrigger.active = true;
-  clearParentTriggerCollectionTimer();
-  state.parentTrigger.collectionTimerId = window.setTimeout(() => {
+  state.parentTrigger.sequenceIndex = 1;
+  clearParentTriggerTimer();
+  state.parentTrigger.timerId = window.setTimeout(() => {
     resetParentTriggerState();
-  }, PARENT_TRIGGER_COLLECTION_MS);
-}
-
-function tryOpenParentPinGateFromTrigger() {
-  if (!state.parentTrigger.active || !areAllParentTriggerKeysPressed()) {
-    return false;
-  }
-  openPinGate("parent", false);
-  resetParentTriggerState();
-  return true;
-}
-
-function updateParentTriggerProgress() {
-  if (!state.parentTrigger.active) {
-    return;
-  }
-
-  if (areAllParentTriggerKeysPressed()) {
-    clearParentTriggerCollectionTimer();
-    if (!state.parentTrigger.holdTimerId) {
-      state.parentTrigger.holdTimerId = window.setTimeout(() => {
-        tryOpenParentPinGateFromTrigger();
-      }, PARENT_TRIGGER_HOLD_MS);
-    }
-    return;
-  }
-
-  if (state.parentTrigger.holdTimerId) {
-    resetParentTriggerState();
-    return;
-  }
-
-  if (!isAnyParentTriggerKeyPressed() && !state.parentTrigger.collectionTimerId) {
-    resetParentTriggerState();
-  }
+  }, PARENT_TRIGGER_SEQUENCE_WINDOW_MS);
 }
 
 function onParentTriggerKeyPressed(symbol) {
@@ -346,23 +271,29 @@ function onParentTriggerKeyPressed(symbol) {
   }
 
   if (!state.parentTrigger.active) {
+    if (symbol !== PARENT_TRIGGER_SEQUENCE[0]) {
+      return false;
+    }
     startParentTriggerAttempt();
+    return true;
   }
 
-  state.parentTrigger.pressedCounts[symbol] += 1;
-  updateParentTriggerProgress();
-  return true;
-}
-
-function onParentTriggerKeyReleased(symbol) {
-  if (!isParentTriggerSymbol(symbol) || !state.parentTrigger.active) {
-    return false;
+  const expected = PARENT_TRIGGER_SEQUENCE[state.parentTrigger.sequenceIndex];
+  if (symbol === expected) {
+    state.parentTrigger.sequenceIndex += 1;
+    if (state.parentTrigger.sequenceIndex === PARENT_TRIGGER_SEQUENCE.length) {
+      openPinGate("parent", false);
+      resetParentTriggerState();
+    }
+    return true;
   }
 
-  if (state.parentTrigger.pressedCounts[symbol] > 0) {
-    state.parentTrigger.pressedCounts[symbol] -= 1;
+  if (symbol === PARENT_TRIGGER_SEQUENCE[0]) {
+    startParentTriggerAttempt();
+    return true;
   }
-  updateParentTriggerProgress();
+
+  resetParentTriggerState();
   return true;
 }
 
@@ -693,7 +624,6 @@ document.addEventListener("keyup", (event) => {
     return;
   }
   event.preventDefault();
-  onParentTriggerKeyReleased(triggerSymbol);
 });
 
 window.addEventListener("resize", applyOrientationClass);

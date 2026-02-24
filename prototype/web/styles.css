@@ -69,7 +69,7 @@ body {
 .shell-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: var(--layout-gap);
   margin: 0 0 var(--layout-gap);
 }
@@ -78,16 +78,6 @@ body {
   display: flex;
   align-items: center;
   gap: var(--layout-gap);
-}
-
-.parent-trigger-hint {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.25;
-  font-weight: 700;
-  color: var(--muted);
-  text-align: right;
-  max-width: min(540px, 62vw);
 }
 
 .dev-volume-controls {
@@ -139,18 +129,6 @@ body {
   background: var(--danger);
   color: #fff;
   border-color: var(--danger);
-}
-
-@media (max-width: 900px) {
-  .shell-bar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .parent-trigger-hint {
-    max-width: 100%;
-    text-align: left;
-  }
 }
 
 .split-layout {
@@ -277,6 +255,32 @@ body {
 
 .parent-overlay[hidden] {
   display: none;
+}
+
+.app-toast {
+  position: fixed;
+  left: 50%;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  z-index: 1200;
+  transform: translateX(-50%);
+  width: min(560px, calc(100% - 20px));
+  border: 2px solid var(--overlay-line);
+  border-radius: 12px;
+  background: var(--overlay-card);
+  color: var(--overlay-text);
+  padding: 10px 14px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+  font-size: clamp(14px, 2vw, 18px);
+  font-weight: 700;
+}
+
+.app-toast.toast-success {
+  border-color: var(--overlay-primary);
+  background: var(--overlay-primary-soft);
+}
+
+.app-toast.toast-error {
+  border-color: #b33a3a;
 }
 
 .parent-card {

@@ -42,6 +42,82 @@ project_task_file="${CODEX_DIR}/project_task_id.txt"
 active_issue_file="${CODEX_DIR}/daemon_active_issue_number.txt"
 pending_post_file="${CODEX_DIR}/daemon_waiting_pending_post.txt"
 
+extract_question_line() {
+  local text="$1"
+  printf '%s\n' "$text" \
+    | sed 's/\r$//' \
+    | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' \
+    | sed '/^$/d' \
+    | grep -E '.+\?' \
+    | tail -n1 \
+    | sed -E 's/^[*-][[:space:]]*//'
+}
+
+extract_decision_line() {
+  local text="$1"
+  printf '%s\n' "$text" \
+    | sed 's/\r$//' \
+    | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' \
+    | sed '/^$/d' \
+    | grep -Ei '\b(продолжай|продолжить|финализируй|финализировать|подтверди|выбери|как действовать|нужен ответ|ответь)\b' \
+    | tail -n1 \
+    | sed -E 's/^[*-][[:space:]]*//'
+}
+
+infer_executor_question() {
+  local candidate=""
+  local src_text=""
+
+  if [[ -s "${CODEX_DIR}/executor_last_message.txt" ]]; then
+    src_text="$(<"${CODEX_DIR}/executor_last_message.txt")"
+    candidate="$(extract_question_line "$src_text")"
+    if [[ -z "$candidate" ]]; then
+      candidate="$(extract_decision_line "$src_text")"
+    fi
+  fi
+
+  if [[ -z "$candidate" && -f "${CODEX_DIR}/executor.log" ]]; then
+    src_text="$(tail -n 400 "${CODEX_DIR}/executor.log" 2>/dev/null || true)"
+    candidate="$(extract_question_line "$src_text")"
+    if [[ -z "$candidate" ]]; then
+      candidate="$(extract_decision_line "$src_text")"
+    fi
+  fi
+
+  printf '%s' "$candidate"
+}
+
+render_question_message() {
+  local text="$1"
+  local explicit_q=""
+  local inferred_q=""
+  local fallback_q=""
+
+  explicit_q="$(extract_question_line "$text")"
+  if [[ -n "$explicit_q" ]]; then
+    printf '%s' "$text"
+    return 0
+  fi
+
+  inferred_q="$(infer_executor_question)"
+  if [[ -z "$inferred_q" ]]; then
+    fallback_q="$(printf '%s\n' "$text" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' | sed '/^$/d' | head -n1)"
+    inferred_q="$fallback_q"
+  fi
+
+  if [[ -n "$inferred_q" ]]; then
+    cat <<EOF_RENDER
+${text}
+
+Вопрос executor:
+${inferred_q}
+EOF_RENDER
+    return 0
+  fi
+
+  printf '%s' "$text"
+}
+
 post_issue_comment() {
   local issue_number="$1"
   local body="$2"
@@ -115,6 +191,11 @@ fi
 
 now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
+comment_message_text="$message_text"
+if [[ "$kind_label" == "QUESTION" ]]; then
+  comment_message_text="$(render_question_message "$message_text")"
+fi
+
 comment_body="$(cat <<EOF_COMMENT
 CODEX_SIGNAL: ${signal}
 CODEX_TASK: ${task_id}
@@ -123,7 +204,7 @@ CODEX_EXPECT: USER_REPLY
 
 Нужен твой ответ для продолжения работы по задаче.
 
-${message_text}
+${comment_message_text}
 
 Ответь комментарием в этот Issue обычным текстом.
 EOF_COMMENT

@@ -25,6 +25,7 @@ Commands:
   project_add_task
   project_set_status
   next_task
+  app_deps_mermaid
   daemon_tick
   daemon_loop
   daemon_install
@@ -236,6 +237,14 @@ case "$cmd" in
 
   next_task)
     "${ROOT_DIR}/scripts/codex/next_task.sh"
+    ;;
+
+  app_deps_mermaid)
+    if [[ $# -ge 2 ]]; then
+      "${ROOT_DIR}/scripts/codex/generate_app_dependencies_mermaid.sh" "$2"
+    else
+      "${ROOT_DIR}/scripts/codex/generate_app_dependencies_mermaid.sh"
+    fi
     ;;
 
   daemon_tick)

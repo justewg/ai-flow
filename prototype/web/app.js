@@ -12,17 +12,14 @@ const LAYOUTS = {
 };
 
 const NUMBER_ROW = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
-const PARENT_TRIGGER_SYMBOL = "Р";
+const PARENT_TRIGGER_KEYS = Object.freeze(["Р", "О", "Д"]);
+const PARENT_TRIGGER_KEY_SET = new Set(PARENT_TRIGGER_KEYS);
 const PARENT_ENTRY_PIN = "2580";
 const SYSTEM_EXIT_PIN = "9000";
 const PIN_LENGTH = 4;
 const PIN_LOCKOUT_MS = 10_000;
-const PARENT_TRIGGER_WINDOW_MS = 2_000;
-const PARENT_TRIGGER_MODE_QUERY_KEYS = ["parentTriggerMode", "parent_mode"];
-const PARENT_TRIGGER_MODE = Object.freeze({
-  PROD: "prod",
-  DEV: "dev",
-});
+const PARENT_TRIGGER_COLLECTION_MS = 3_000;
+const PARENT_TRIGGER_HOLD_MS = 3_000;
 
 const state = {
   lang: "RU",
@@ -31,14 +28,14 @@ const state = {
   clearArmed: false,
   clearTimerId: null,
   parentTrigger: {
-    rHoldActive: false,
-    windowActive: false,
-    comboMatched: false,
-    windowTimerId: null,
-    volumeUpPressed: false,
-    volumeDownPressed: false,
-    volumeUpSeen: false,
-    volumeDownSeen: false,
+    active: false,
+    collectionTimerId: null,
+    holdTimerId: null,
+    pressedCounts: {
+      Р: 0,
+      О: 0,
+      Д: 0,
+    },
   },
   parentControl: {
     gateOpen: false,
@@ -62,9 +59,6 @@ const clearButtonEl = document.getElementById("clear-btn");
 const themeToggleEl = document.getElementById("theme-toggle");
 const themeIconEl = document.getElementById("theme-icon");
 const parentTriggerHintEl = document.getElementById("parent-trigger-hint");
-const parentTriggerDevControlsEl = document.getElementById("parent-trigger-dev-controls");
-const parentVolumeUpDevEl = document.getElementById("parent-volume-up-dev");
-const parentVolumeDownDevEl = document.getElementById("parent-volume-down-dev");
 const parentPinOverlayEl = document.getElementById("parent-pin-overlay");
 const parentPinSubtitleEl = document.getElementById("parent-pin-subtitle");
 const parentPinDotsEl = document.getElementById("parent-pin-dots");
@@ -77,49 +71,20 @@ const parentPanelStatusEl = document.getElementById("parent-panel-status");
 const parentSystemBtnEl = document.getElementById("parent-system-btn");
 const parentCloseBtnEl = document.getElementById("parent-close-btn");
 const parentActionEls = Array.from(document.querySelectorAll("[data-parent-action]"));
-const parentTriggerMode = detectParentTriggerMode();
-
-function isAppleMobileTouchDevice() {
-  const ua = String(window.navigator.userAgent || "");
-  const platform = String(window.navigator.platform || "");
-  const touchPoints = Number(window.navigator.maxTouchPoints || 0);
-  return (
-    /iPad|iPhone|iPod/i.test(ua) ||
-    (platform === "MacIntel" && touchPoints > 1)
-  );
-}
-
-function detectParentTriggerMode() {
-  const params = new URLSearchParams(window.location.search);
-  for (const key of PARENT_TRIGGER_MODE_QUERY_KEYS) {
-    const mode = String(params.get(key) || "")
-      .trim()
-      .toLowerCase();
-    if (mode === PARENT_TRIGGER_MODE.PROD || mode === PARENT_TRIGGER_MODE.DEV) {
-      return mode;
-    }
-  }
-  return isAppleMobileTouchDevice() ? PARENT_TRIGGER_MODE.DEV : PARENT_TRIGGER_MODE.PROD;
-}
-
-function isParentTriggerDevMode() {
-  return parentTriggerMode === PARENT_TRIGGER_MODE.DEV;
-}
 
 function isParentUiOpen() {
   return state.parentControl.gateOpen || state.parentControl.panelOpen;
 }
 
-function applyParentTriggerModeUi() {
-  const isDevMode = isParentTriggerDevMode();
-  if (parentTriggerDevControlsEl) {
-    parentTriggerDevControlsEl.hidden = !isDevMode;
-  }
+function renderParentTriggerHint() {
   if (parentTriggerHintEl) {
-    parentTriggerHintEl.textContent = isDevMode
-      ? "Режим DEV: удерживай Р и нажми VOL+ и VOL- (можно по очереди). Fallback: F9/F10 или +/-."
-      : "Режим PROD: удерживай Р и нажми обе громкости. Fallback: F9/F10, +/- или Alt+↑/Alt+↓.";
+    parentTriggerHintEl.textContent =
+      "Родительский вход: в течение 3 секунд зажми Р, О, Д и удерживай все три еще 3 секунды.";
   }
+}
+
+function isParentTriggerSymbol(symbol) {
+  return PARENT_TRIGGER_KEY_SET.has(symbol);
 }
 
 function setKeyLabel(keyEl, label) {
@@ -212,14 +177,13 @@ function createLetterKey(symbol) {
   keyEl.className = "key letter";
   setKeyLabel(keyEl, symbol);
 
-  if (symbol === PARENT_TRIGGER_SYMBOL) {
-    keyEl.addEventListener("pointerdown", (event) => {
-      event.preventDefault();
-      startParentTriggerHold();
+  if (isParentTriggerSymbol(symbol)) {
+    keyEl.addEventListener("pointerdown", () => {
+      onParentTriggerKeyPressed(symbol);
     });
 
     const release = () => {
-      finishParentTriggerHold();
+      onParentTriggerKeyReleased(symbol);
     };
     keyEl.addEventListener("pointerup", release);
     keyEl.addEventListener("pointercancel", release);
@@ -229,7 +193,8 @@ function createLetterKey(symbol) {
       }
     });
 
-    return keyEl;
+  } else {
+    keyEl.addEventListener("pointerdown", cancelParentTriggerAttempt);
   }
 
   keyEl.addEventListener("click", () => appendText(symbol));
@@ -242,6 +207,7 @@ function createControlKey(label, className, onClick, ariaLabel = label) {
   keyEl.className = `key ${className}`;
   keyEl.setAttribute("aria-label", ariaLabel);
   setKeyLabel(keyEl, label);
+  keyEl.addEventListener("pointerdown", cancelParentTriggerAttempt);
   keyEl.addEventListener("click", onClick);
   return keyEl;
 }
@@ -289,151 +255,136 @@ function renderKeyboard() {
   );
 }
 
-function clearParentTriggerWindowTimer() {
-  if (state.parentTrigger.windowTimerId) {
-    window.clearTimeout(state.parentTrigger.windowTimerId);
-    state.parentTrigger.windowTimerId = null;
+function clearParentTriggerCollectionTimer() {
+  if (state.parentTrigger.collectionTimerId) {
+    window.clearTimeout(state.parentTrigger.collectionTimerId);
+    state.parentTrigger.collectionTimerId = null;
+  }
+}
+
+function clearParentTriggerHoldTimer() {
+  if (state.parentTrigger.holdTimerId) {
+    window.clearTimeout(state.parentTrigger.holdTimerId);
+    state.parentTrigger.holdTimerId = null;
+  }
+}
+
+function resetParentTriggerPressedCounts() {
+  for (const symbol of PARENT_TRIGGER_KEYS) {
+    state.parentTrigger.pressedCounts[symbol] = 0;
   }
 }
 
 function resetParentTriggerState() {
-  clearParentTriggerWindowTimer();
-  state.parentTrigger.rHoldActive = false;
-  state.parentTrigger.windowActive = false;
-  state.parentTrigger.comboMatched = false;
+  clearParentTriggerCollectionTimer();
+  clearParentTriggerHoldTimer();
+  state.parentTrigger.active = false;
+  resetParentTriggerPressedCounts();
 }
 
-function resetParentTriggerHardwareState() {
-  state.parentTrigger.volumeUpPressed = false;
-  state.parentTrigger.volumeDownPressed = false;
-  state.parentTrigger.volumeUpSeen = false;
-  state.parentTrigger.volumeDownSeen = false;
+function isAnyParentTriggerKeyPressed() {
+  return PARENT_TRIGGER_KEYS.some(
+    (symbol) => state.parentTrigger.pressedCounts[symbol] > 0,
+  );
 }
 
-function startParentTriggerHold() {
-  if (isParentUiOpen() || state.lang !== "RU") {
-    return;
-  }
-
-  clearParentTriggerWindowTimer();
-  resetParentTriggerHardwareState();
-  state.parentTrigger.rHoldActive = true;
-  state.parentTrigger.comboMatched = false;
-  state.parentTrigger.windowActive = true;
-  state.parentTrigger.windowTimerId = window.setTimeout(() => {
-    state.parentTrigger.windowActive = false;
-    state.parentTrigger.windowTimerId = null;
-  }, PARENT_TRIGGER_WINDOW_MS);
+function areAllParentTriggerKeysPressed() {
+  return PARENT_TRIGGER_KEYS.every(
+    (symbol) => state.parentTrigger.pressedCounts[symbol] > 0,
+  );
 }
 
-function finishParentTriggerHold() {
-  if (!state.parentTrigger.rHoldActive) {
-    return;
-  }
-
-  const shouldTypeSymbol = !state.parentTrigger.comboMatched && !isParentUiOpen();
-  resetParentTriggerState();
-  if (shouldTypeSymbol) {
-    appendText(PARENT_TRIGGER_SYMBOL);
-  }
-}
-
-function getVolumeKeyType(event) {
-  const key = String(event.key || "");
-  const code = String(event.code || "");
-
-  if (
-    key === "AudioVolumeUp" ||
-    key === "VolumeUp" ||
-    code === "AudioVolumeUp" ||
-    key === "F9" ||
-    code === "F9" ||
-    code === "Equal" ||
-    code === "NumpadAdd" ||
-    (code === "ArrowUp" && event.altKey)
-  ) {
-    return "up";
-  }
-  if (
-    key === "AudioVolumeDown" ||
-    key === "VolumeDown" ||
-    code === "AudioVolumeDown" ||
-    key === "F10" ||
-    code === "F10" ||
-    code === "Minus" ||
-    code === "NumpadSubtract" ||
-    (code === "ArrowDown" && event.altKey)
-  ) {
-    return "down";
-  }
-
-  return null;
-}
-
-function setVolumeKeyPressed(volumeKeyType, isPressed) {
-  if (volumeKeyType === "up") {
-    state.parentTrigger.volumeUpPressed = isPressed;
-    return;
-  }
-  state.parentTrigger.volumeDownPressed = isPressed;
-}
-
-function onVolumeKeyPressed(volumeKeyType) {
-  setVolumeKeyPressed(volumeKeyType, true);
-  if (volumeKeyType === "up") {
-    state.parentTrigger.volumeUpSeen = true;
-  } else {
-    state.parentTrigger.volumeDownSeen = true;
-  }
-  tryOpenParentPinGateFromTrigger();
-}
-
-function onVolumeKeyReleased(volumeKeyType) {
-  setVolumeKeyPressed(volumeKeyType, false);
-}
-
-function bindDevVolumeControl(buttonEl, volumeKeyType) {
-  if (!buttonEl) {
-    return;
-  }
-
-  buttonEl.addEventListener("pointerdown", (event) => {
-    event.preventDefault();
-    onVolumeKeyPressed(volumeKeyType);
-  });
-
-  const release = (event) => {
-    if (event) {
-      event.preventDefault();
-    }
-    onVolumeKeyReleased(volumeKeyType);
-  };
-
-  buttonEl.addEventListener("pointerup", release);
-  buttonEl.addEventListener("pointercancel", release);
-  buttonEl.addEventListener("pointerleave", (event) => {
-    if (event.buttons === 0) {
-      release(event);
-    }
-  });
+function startParentTriggerAttempt() {
+  state.parentTrigger.active = true;
+  clearParentTriggerCollectionTimer();
+  state.parentTrigger.collectionTimerId = window.setTimeout(() => {
+    resetParentTriggerState();
+  }, PARENT_TRIGGER_COLLECTION_MS);
 }
 
 function tryOpenParentPinGateFromTrigger() {
-  const triggerReady =
-    state.parentTrigger.rHoldActive &&
-    state.parentTrigger.windowActive &&
-    state.parentTrigger.volumeUpSeen &&
-    state.parentTrigger.volumeDownSeen;
+  if (!state.parentTrigger.active || !areAllParentTriggerKeysPressed()) {
+    return false;
+  }
+  openPinGate("parent", false);
+  resetParentTriggerState();
+  return true;
+}
 
-  if (!triggerReady) {
+function updateParentTriggerProgress() {
+  if (!state.parentTrigger.active) {
+    return;
+  }
+
+  if (areAllParentTriggerKeysPressed()) {
+    clearParentTriggerCollectionTimer();
+    if (!state.parentTrigger.holdTimerId) {
+      state.parentTrigger.holdTimerId = window.setTimeout(() => {
+        tryOpenParentPinGateFromTrigger();
+      }, PARENT_TRIGGER_HOLD_MS);
+    }
+    return;
+  }
+
+  if (state.parentTrigger.holdTimerId) {
+    resetParentTriggerState();
+    return;
+  }
+
+  if (!isAnyParentTriggerKeyPressed() && !state.parentTrigger.collectionTimerId) {
+    resetParentTriggerState();
+  }
+}
+
+function onParentTriggerKeyPressed(symbol) {
+  if (
+    !isParentTriggerSymbol(symbol) ||
+    isParentUiOpen() ||
+    state.lang !== "RU"
+  ) {
     return false;
   }
 
-  state.parentTrigger.comboMatched = true;
-  openPinGate("parent", false);
-  resetParentTriggerState();
-  resetParentTriggerHardwareState();
+  if (!state.parentTrigger.active) {
+    startParentTriggerAttempt();
+  }
+
+  state.parentTrigger.pressedCounts[symbol] += 1;
+  updateParentTriggerProgress();
   return true;
+}
+
+function onParentTriggerKeyReleased(symbol) {
+  if (!isParentTriggerSymbol(symbol) || !state.parentTrigger.active) {
+    return false;
+  }
+
+  if (state.parentTrigger.pressedCounts[symbol] > 0) {
+    state.parentTrigger.pressedCounts[symbol] -= 1;
+  }
+  updateParentTriggerProgress();
+  return true;
+}
+
+function cancelParentTriggerAttempt() {
+  if (!state.parentTrigger.active) {
+    return;
+  }
+  resetParentTriggerState();
+}
+
+function getParentTriggerSymbolFromKeyboardKey(keyValue) {
+  const key = String(keyValue || "");
+  if (key === "р" || key === "Р" || key === "r" || key === "R") {
+    return "Р";
+  }
+  if (key === "о" || key === "О" || key === "o" || key === "O") {
+    return "О";
+  }
+  if (key === "д" || key === "Д" || key === "d" || key === "D") {
+    return "Д";
+  }
+  return null;
 }
 
 function isPinBlocked() {
@@ -467,9 +418,7 @@ function renderParentControlUi() {
     parentPinSubtitleEl.textContent =
       state.parentControl.pinMode === "system"
         ? "Уровень 2: подтверждение выхода в системный режим"
-        : isParentTriggerDevMode()
-          ? "Dev-режим: удерживай Р + VOL+/VOL- на экране (можно по очереди), затем введи PIN"
-          : "Удерживай Р + обе громкости (или F9/F10, +/-), затем введи PIN";
+        : "Комбинация Р+О+Д подтверждена. Введи PIN для входа в родительский режим.";
     buildPinDots();
 
     const blocked = isPinBlocked();
@@ -674,7 +623,16 @@ async function tryLockLandscape() {
 langToggleEl.addEventListener("click", switchLanguage);
 clearButtonEl.addEventListener("click", handleClear);
 themeToggleEl.addEventListener("click", toggleTheme);
+langToggleEl.addEventListener("pointerdown", cancelParentTriggerAttempt);
+clearButtonEl.addEventListener("pointerdown", cancelParentTriggerAttempt);
+themeToggleEl.addEventListener("pointerdown", cancelParentTriggerAttempt);
 parentPinCancelEl.addEventListener("click", () => {
+  closePinGate(state.parentControl.pinMode === "system");
+});
+parentPinOverlayEl.addEventListener("click", (event) => {
+  if (event.target !== parentPinOverlayEl || !state.parentControl.gateOpen) {
+    return;
+  }
   closePinGate(state.parentControl.pinMode === "system");
 });
 
@@ -694,23 +652,17 @@ for (const parentActionEl of parentActionEls) {
   });
 }
 
-if (isParentTriggerDevMode()) {
-  bindDevVolumeControl(parentVolumeUpDevEl, "up");
-  bindDevVolumeControl(parentVolumeDownDevEl, "down");
-}
-
 document.addEventListener("keydown", (event) => {
-  const volumeKeyType = getVolumeKeyType(event);
-  if (volumeKeyType) {
+  const triggerSymbol = getParentTriggerSymbolFromKeyboardKey(event.key);
+  if (triggerSymbol && !event.repeat) {
     event.preventDefault();
-    onVolumeKeyPressed(volumeKeyType);
+    onParentTriggerKeyPressed(triggerSymbol);
     return;
   }
 
-  if ((event.key === "р" || event.key === "Р" || event.key === "r" || event.key === "R") && !event.repeat) {
+  if (state.parentTrigger.active && !event.repeat) {
     event.preventDefault();
-    startParentTriggerHold();
-    return;
+    cancelParentTriggerAttempt();
   }
 
   if (isParentUiOpen()) {
@@ -736,30 +688,24 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("keyup", (event) => {
-  if (event.key === "р" || event.key === "Р" || event.key === "r" || event.key === "R") {
-    event.preventDefault();
-    finishParentTriggerHold();
-    return;
-  }
-
-  const volumeKeyType = getVolumeKeyType(event);
-  if (!volumeKeyType) {
+  const triggerSymbol = getParentTriggerSymbolFromKeyboardKey(event.key);
+  if (!triggerSymbol) {
     return;
   }
   event.preventDefault();
-  onVolumeKeyReleased(volumeKeyType);
+  onParentTriggerKeyReleased(triggerSymbol);
 });
 
 window.addEventListener("resize", applyOrientationClass);
 window.addEventListener("orientationchange", applyOrientationClass);
-window.addEventListener("blur", resetParentTriggerHardwareState);
+window.addEventListener("blur", resetParentTriggerState);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
-    resetParentTriggerHardwareState();
+    resetParentTriggerState();
   }
 });
 
-applyParentTriggerModeUi();
+renderParentTriggerHint();
 restoreState();
 renderTheme();
 renderClearButtonState();

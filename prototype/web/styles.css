@@ -50,6 +50,9 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .app {

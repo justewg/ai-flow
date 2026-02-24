@@ -64,6 +64,16 @@ extract_decision_line() {
     | sed -E 's/^[*-][[:space:]]*//'
 }
 
+sanitize_executor_remark_text() {
+  local text="$1"
+  printf '%s\n' "$text" \
+    | sed 's/\r$//' \
+    | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' \
+    | sed '/^$/d' \
+    | grep -Eiv '^(thinking|exec|codex|viewed image|reconnecting|error:|warning:|tokens used|=== EXECUTOR_|/bin/zsh|```)' \
+    | head -n 8
+}
+
 strip_technical_lines() {
   local text="$1"
   printf '%s\n' "$text" \
@@ -125,6 +135,54 @@ infer_executor_question() {
   printf '%s' "$candidate"
 }
 
+infer_executor_remark() {
+  local remark=""
+  local src_text=""
+
+  if [[ -s "${CODEX_DIR}/executor_last_message.txt" ]]; then
+    src_text="$(<"${CODEX_DIR}/executor_last_message.txt")"
+    remark="$(sanitize_executor_remark_text "$src_text")"
+  fi
+
+  if [[ -z "$remark" && -f "${CODEX_DIR}/executor.log" ]]; then
+    src_text="$(
+      awk '
+        function flush_buffer() {
+          if (buffer != "") {
+            last_block = buffer
+            buffer = ""
+          }
+        }
+        BEGIN { capture = 0; buffer = ""; last_block = "" }
+        {
+          line = $0
+          if (line == "codex") {
+            flush_buffer()
+            capture = 1
+            next
+          }
+          if (capture == 1) {
+            if (line ~ /^(thinking|exec|viewed image|Reconnecting|ERROR:|Warning:|tokens used|=== EXECUTOR_|\/bin\/zsh|$)/) {
+              flush_buffer()
+              capture = 0
+              next
+            }
+            if (buffer == "") buffer = line
+            else buffer = buffer "\n" line
+          }
+        }
+        END {
+          flush_buffer()
+          printf "%s", last_block
+        }
+      ' "${CODEX_DIR}/executor.log" 2>/dev/null || true
+    )"
+    remark="$(sanitize_executor_remark_text "$src_text")"
+  fi
+
+  printf '%s' "$remark"
+}
+
 render_question_message() {
   local text="$1"
   local explicit_q=""
@@ -133,6 +191,7 @@ render_question_message() {
   local fallback_q=""
   local selected_q=""
   local context_line=""
+  local executor_remark=""
 
   explicit_q="$(extract_question_line "$text")"
   explicit_decision="$(extract_decision_line "$text")"
@@ -160,8 +219,17 @@ render_question_message() {
 
   selected_q="$(normalize_executor_question "$selected_q")"
   context_line="$(extract_context_line "$text")"
+  executor_remark="$(infer_executor_remark)"
 
   if [[ -n "$selected_q" ]]; then
+    if [[ -n "$executor_remark" && "$executor_remark" != "$selected_q" && "$executor_remark" != "$context_line" ]]; then
+      cat <<EOF_RENDER
+Последняя ремарка executor:
+${executor_remark}
+
+EOF_RENDER
+    fi
+
     if [[ -n "$context_line" && "$context_line" != "$selected_q" ]]; then
       cat <<EOF_RENDER
 Контекст:

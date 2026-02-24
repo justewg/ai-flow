@@ -70,8 +70,113 @@ sanitize_executor_remark_text() {
     | sed 's/\r$//' \
     | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' \
     | sed '/^$/d' \
-    | grep -Eiv '^(thinking|exec|codex|viewed image|reconnecting|error:|warning:|tokens used|=== EXECUTOR_|/bin/zsh|```)' \
-    | head -n 8
+    | grep -Eiv '^(thinking|exec|codex|viewed image|reconnecting|error:|warning:|tokens used|=== EXECUTOR_|/bin/zsh|```|USE THESE RULES|IMPORTANT:|Open the referenced issue|Plan:|^-\s+Progress updates|^-\s+Use only approved commands|^-\s+Act as a coding agent)'
+}
+
+format_recent_executor_paragraphs() {
+  local text="$1"
+  printf '%s\n' "$text" | awk '
+    function normalize(p) {
+      gsub(/\r/, "", p)
+      gsub(/\n+/, " ", p)
+      gsub(/[[:space:]]+/, " ", p)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", p)
+      if (length(p) > 320) {
+        p = substr(p, 1, 317) "..."
+      }
+      return p
+    }
+    function store(p) {
+      p = normalize(p)
+      if (p == "") return
+      idx = (count % 3) + 1
+      arr[idx] = p
+      count++
+    }
+    {
+      if ($0 ~ /^[[:space:]]*$/) {
+        store(buf)
+        buf = ""
+        next
+      }
+      if (buf == "") buf = $0
+      else buf = buf "\n" $0
+    }
+    END {
+      store(buf)
+      if (count == 0) exit
+      start = (count > 3 ? count - 2 : 1)
+      rank = 1
+      for (i = start; i <= count; i++) {
+        idx = ((i - 1) % 3) + 1
+        printf "%d) %s", rank, arr[idx]
+        if (i < count) printf "\n"
+        rank++
+      }
+    }
+  '
+}
+
+extract_recent_codex_blocks_from_log() {
+  if [[ ! -f "${CODEX_DIR}/executor.log" ]]; then
+    return 0
+  fi
+
+  awk '
+    function normalize(p) {
+      gsub(/\r/, "", p)
+      gsub(/\n+/, " ", p)
+      gsub(/[[:space:]]+/, " ", p)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", p)
+      if (length(p) > 320) {
+        p = substr(p, 1, 317) "..."
+      }
+      return p
+    }
+    function store_block(p) {
+      p = normalize(p)
+      if (p == "") return
+      idx = (count % 3) + 1
+      arr[idx] = p
+      count++
+    }
+    function flush_buffer() {
+      if (buffer != "") {
+        store_block(buffer)
+        buffer = ""
+      }
+    }
+    BEGIN { capture = 0; buffer = ""; count = 0 }
+    {
+      line = $0
+      if (line == "codex") {
+        flush_buffer()
+        capture = 1
+        next
+      }
+      if (capture == 1) {
+        if (line ~ /^(thinking|exec|viewed image|Reconnecting|ERROR:|Warning:|tokens used|=== EXECUTOR_|\/bin\/zsh|$)/) {
+          flush_buffer()
+          capture = 0
+          next
+        }
+        if (buffer == "") buffer = line
+        else buffer = buffer "\n" line
+      }
+    }
+    END {
+      flush_buffer()
+      if (count == 0) exit
+      start = (count > 3 ? count - 2 : 1)
+      rank = 1
+      for (i = start; i <= count; i++) {
+        idx = ((i - 1) % 3) + 1
+        printf "%d) %s", rank, arr[idx]
+        if (i < count) printf "\n"
+        rank++
+      }
+    }
+  ' "${CODEX_DIR}/executor.log" 2>/dev/null || true
 }
 
 strip_technical_lines() {
@@ -138,46 +243,20 @@ infer_executor_question() {
 infer_executor_remark() {
   local remark=""
   local src_text=""
+  local cleaned=""
+  local formatted=""
 
   if [[ -s "${CODEX_DIR}/executor_last_message.txt" ]]; then
     src_text="$(<"${CODEX_DIR}/executor_last_message.txt")"
-    remark="$(sanitize_executor_remark_text "$src_text")"
+    cleaned="$(sanitize_executor_remark_text "$src_text")"
+    formatted="$(format_recent_executor_paragraphs "$cleaned")"
+    if [[ -n "$formatted" ]]; then
+      remark="$formatted"
+    fi
   fi
 
-  if [[ -z "$remark" && -f "${CODEX_DIR}/executor.log" ]]; then
-    src_text="$(
-      awk '
-        function flush_buffer() {
-          if (buffer != "") {
-            last_block = buffer
-            buffer = ""
-          }
-        }
-        BEGIN { capture = 0; buffer = ""; last_block = "" }
-        {
-          line = $0
-          if (line == "codex") {
-            flush_buffer()
-            capture = 1
-            next
-          }
-          if (capture == 1) {
-            if (line ~ /^(thinking|exec|viewed image|Reconnecting|ERROR:|Warning:|tokens used|=== EXECUTOR_|\/bin\/zsh|$)/) {
-              flush_buffer()
-              capture = 0
-              next
-            }
-            if (buffer == "") buffer = line
-            else buffer = buffer "\n" line
-          }
-        }
-        END {
-          flush_buffer()
-          printf "%s", last_block
-        }
-      ' "${CODEX_DIR}/executor.log" 2>/dev/null || true
-    )"
-    remark="$(sanitize_executor_remark_text "$src_text")"
+  if [[ -z "$remark" ]]; then
+    remark="$(extract_recent_codex_blocks_from_log)"
   fi
 
   printf '%s' "$remark"
@@ -224,7 +303,7 @@ render_question_message() {
   if [[ -n "$selected_q" ]]; then
     if [[ -n "$executor_remark" && "$executor_remark" != "$selected_q" && "$executor_remark" != "$context_line" ]]; then
       cat <<EOF_RENDER
-Последняя ремарка executor:
+Последние ремарки executor:
 ${executor_remark}
 
 EOF_RENDER

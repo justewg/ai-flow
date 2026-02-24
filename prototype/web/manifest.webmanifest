@@ -1,7 +1,7 @@
 {
   "name": "PLANKA",
   "short_name": "PLANKA",
-  "start_url": "/?source=a2hs",
+  "start_url": "/prototype/web/?source=a2hs",
   "display": "standalone",
   "background_color": "#111418",
   "theme_color": "#111418",

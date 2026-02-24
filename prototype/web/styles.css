@@ -340,6 +340,7 @@ body {
   min-height: 54px;
   font-size: clamp(18px, 2.4vw, 26px);
   font-weight: 700;
+  touch-action: manipulation;
 }
 
 .pin-key:disabled {

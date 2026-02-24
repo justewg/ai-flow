@@ -51,6 +51,7 @@ task_id=""
 question_comment_id="$(<"$question_id_file")"
 kind_label=""
 pending_post="0"
+issue_author=""
 [[ -s "$task_file" ]] && task_id="$(<"$task_file")"
 [[ -s "$kind_file" ]] && kind_label="$(<"$kind_file")"
 [[ -s "$pending_post_file" ]] && pending_post="$(<"$pending_post_file")"
@@ -136,16 +137,51 @@ if [[ -z "$comments_json" ]]; then
   fi
 fi
 
-reply_json="$(
-  printf '%s' "$comments_json" |
-    jq -c --argjson qid "$question_comment_id" '
-      [
-        .[]
-        | select((.id | tonumber) > $qid)
-        | select(((.body // "") | test("(?m)^CODEX_SIGNAL:")) | not)
-      ][0] // empty
-    '
-)"
+if is_review_feedback_kind "$kind_label"; then
+  if ! issue_json="$(
+    "${ROOT_DIR}/scripts/codex/gh_retry.sh" \
+      gh api "repos/${REPO}/issues/${issue_number}"
+  )"; then
+    rc=$?
+    if [[ "$rc" -eq 75 ]]; then
+      emit_wait_state "$task_id" "$issue_number" "$question_comment_id" "$kind_label"
+      echo "WAIT_GITHUB_API_UNSTABLE=1"
+      echo "WAITING_FOR_ISSUE_AUTHOR=1"
+      exit 0
+    fi
+    exit "$rc"
+  fi
+
+  issue_author="$(printf '%s' "$issue_json" | jq -r '.user.login // empty')"
+  if [[ -z "$issue_author" || "$issue_author" == "null" ]]; then
+    emit_wait_state "$task_id" "$issue_number" "$question_comment_id" "$kind_label"
+    echo "WAITING_FOR_ISSUE_AUTHOR=1"
+    exit 0
+  fi
+
+  reply_json="$(
+    printf '%s' "$comments_json" |
+      jq -c --argjson qid "$question_comment_id" --arg issue_author "$issue_author" '
+        [
+          .[]
+          | select((.id | tonumber) > $qid)
+          | select(((.body // "") | test("(?m)^CODEX_SIGNAL:")) | not)
+          | select((((.user.login // "") | ascii_downcase) == ($issue_author | ascii_downcase)))
+        ][0] // empty
+      '
+  )"
+else
+  reply_json="$(
+    printf '%s' "$comments_json" |
+      jq -c --argjson qid "$question_comment_id" '
+        [
+          .[]
+          | select((.id | tonumber) > $qid)
+          | select(((.body // "") | test("(?m)^CODEX_SIGNAL:")) | not)
+        ][0] // empty
+      '
+  )"
+fi
 
 if [[ -z "$reply_json" ]]; then
   emit_wait_state "$task_id" "$issue_number" "$question_comment_id" "$kind_label"
@@ -211,6 +247,11 @@ if ! ack_out="$("${ROOT_DIR}/scripts/codex/gh_retry.sh" gh api "repos/${REPO}/is
       echo "ACK_POST_ERROR(rc=$rc): $line"
     done <<< "$ack_out"
   fi
+fi
+
+if is_review_feedback_kind "$kind_label"; then
+  echo "REVIEW_FEEDBACK_RECEIVED=1"
+  echo "REVIEW_FEEDBACK_ISSUE_AUTHOR=$issue_author"
 fi
 
 echo "USER_REPLY_RECEIVED=1"

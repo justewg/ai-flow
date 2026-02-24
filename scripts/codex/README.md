@@ -222,7 +222,9 @@
   - сохраняет waiting-state в `.tmp/codex/`, чтобы daemon ждал ответ пользователя
 - `daemon_check_replies.sh`
   - если daemon в waiting-state, проверяет новые комментарии Issue после вопроса/ревью
-  - первый пользовательский комментарий (без `CODEX_SIGNAL:`) принимает как ответ
+  - для `AGENT_QUESTION/AGENT_BLOCKER` первый пользовательский комментарий (без `CODEX_SIGNAL:`) принимает как ответ
+  - для `REVIEW_FEEDBACK` принимает только не-системный комментарий автора Issue
+  - пишет явные маркеры review-feedback цикла: `WAIT_REVIEW_FEEDBACK`, `REVIEW_FEEDBACK_RECEIVED`, `REVIEW_FEEDBACK_RESUMED`
   - сохраняет ответ в `.tmp/codex/daemon_user_reply.txt`
   - публикует `CODEX_SIGNAL: AGENT_RESUMED` или `CODEX_SIGNAL: AGENT_RESUMED_REVIEW`; если GitHub недоступен, кладет ack в outbox
   - при pending-question (`вопрос еще не доставлен`) удерживает `WAIT_USER_REPLY`, не теряя контекст

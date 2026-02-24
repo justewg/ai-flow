@@ -90,27 +90,38 @@ infer_executor_question() {
 render_question_message() {
   local text="$1"
   local explicit_q=""
+  local explicit_decision=""
   local inferred_q=""
   local fallback_q=""
+  local selected_q=""
 
   explicit_q="$(extract_question_line "$text")"
+  explicit_decision="$(extract_decision_line "$text")"
+
   if [[ -n "$explicit_q" ]]; then
-    printf '%s' "$text"
-    return 0
+    selected_q="$explicit_q"
+  elif [[ -n "$explicit_decision" ]]; then
+    selected_q="$explicit_decision"
   fi
 
-  inferred_q="$(infer_executor_question)"
-  if [[ -z "$inferred_q" ]]; then
+  if [[ -z "$selected_q" ]]; then
+    inferred_q="$(infer_executor_question)"
+    if [[ -n "$inferred_q" ]]; then
+      selected_q="$inferred_q"
+    fi
+  fi
+
+  if [[ -z "$selected_q" ]]; then
     fallback_q="$(printf '%s\n' "$text" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' | sed '/^$/d' | head -n1)"
-    inferred_q="$fallback_q"
+    selected_q="$fallback_q"
   fi
 
-  if [[ -n "$inferred_q" ]]; then
+  if [[ -n "$selected_q" ]]; then
     cat <<EOF_RENDER
 ${text}
 
 Вопрос executor:
-${inferred_q}
+${selected_q}
 EOF_RENDER
     return 0
   fi
@@ -192,7 +203,7 @@ fi
 now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
 comment_message_text="$message_text"
-if [[ "$kind_label" == "QUESTION" ]]; then
+if [[ "$kind_label" == "QUESTION" || "$kind_label" == "BLOCKER" ]]; then
   comment_message_text="$(render_question_message "$message_text")"
 fi
 

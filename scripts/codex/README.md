@@ -77,15 +77,18 @@
 
 ## Важные env-переменные
 - `node` (Node.js runtime, рекомендуется LTS >= 18) — обязателен для `gh_app_auth_*` скриптов и сервиса `gh_app_auth_service.js`.
+- `GH_APP_INTERNAL_SECRET` — обязателен не только для auth-сервиса, но и для daemon/watchdog-клиента токена (`GET /token`).
+- `DAEMON_GH_AUTH_TIMEOUT_SEC` — timeout запроса daemon/watchdog к локальному auth endpoint (по умолчанию `8` сек).
+- `DAEMON_GH_AUTH_TOKEN_URL` — опциональный явный URL `GET /token` (по умолчанию `http://${GH_APP_BIND:-127.0.0.1}:${GH_APP_PORT:-8787}/token`).
 - `DAEMON_GH_TOKEN` (или `CODEX_GH_TOKEN`) — отдельный GitHub token для daemon/watchdog.
   - Применяется к действиям автоматики: комментарии в Issue, update/create PR, update Project status.
   - Автор этих действий в GitHub будет владельцем этого токена.
   - Читается из env процесса или из `.env`/`.env.deploy`.
   - Роль в архитектуре:
-    - текущий режим: основной токен для daemon/watchdog;
-    - целевой режим с GitHub App: аварийный fallback, если App auth недоступен.
+    - штатный режим: токен из локального GitHub App auth-сервиса;
+    - PAT — только аварийный fallback (включается отдельно, не базовый путь).
   - Когда можно не задавать:
-    - после полного перехода на GitHub App (APP-03..APP-09), если fallback не нужен.
+    - в штатном режиме GitHub App, если fallback не нужен.
   - Как выпустить:
     - GitHub UI -> `Settings` -> `Developer settings` -> `Personal access tokens`.
     - Рекомендуемо: токен отдельного bot-аккаунта (не личный), чтобы авторство действий было отделено.
@@ -156,6 +159,8 @@
   - сохраняет текущий `Task ID` в `.tmp/codex/project_task_id.txt` для последующего `task_finalize`
 - `daemon_loop.sh [interval-sec]`
   - крутит `daemon_tick.sh` в цикле с lock-файлом и heartbeat-логом
+  - перед каждым тиком получает свежий `GH_TOKEN` из локального auth endpoint (`/token`)
+  - при ошибке auth-сервиса не запускает GitHub-действия и выставляет `WAIT_AUTH_SERVICE`
   - пишет в `daemon_state_detail` явные health-маркеры: `GITHUB_STATUS=<...>` и `TELEGRAM_STATUS=<...>`
   - различает сетевую деградацию и веточный блокер синхронизации (`WAIT_BRANCH_SYNC`)
   - отправляет локальные Telegram-алерты по деградации без спама:
@@ -187,6 +192,8 @@
   - отправляет Telegram-сигнал о срабатывании recovery (если доступен бот)
 - `watchdog_loop.sh [interval-sec]`
   - крутит `watchdog_tick.sh` в цикле с отдельным lock-файлом
+  - перед каждым циклом обновляет `GH_TOKEN` через локальный auth endpoint
+  - при ошибке auth-сервиса выставляет `watchdog_state=WAIT_AUTH_SERVICE` и ждет восстановления
 - `watchdog_install.sh [label] [interval-sec]`
   - создает `~/Library/LaunchAgents/<label>.plist` для watchdog
 - `watchdog_uninstall.sh [label]`

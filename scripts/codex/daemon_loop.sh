@@ -35,69 +35,41 @@ log() {
   printf '%s %s\n' "$ts" "$*" >> "$LOG_FILE"
 }
 
-strip_quotes() {
-  local value="$1"
-  value="${value%\"}"
-  value="${value#\"}"
-  value="${value%\'}"
-  value="${value#\'}"
-  printf '%s' "$value"
-}
+AUTH_LAST_DETAIL=""
 
-read_key_from_env_file() {
-  local file_path="$1"
-  local key="$2"
-  [[ -f "$file_path" ]] || return 1
-  local raw
-  raw="$(grep -E "^${key}=" "$file_path" | tail -n1 | cut -d'=' -f2- || true)"
-  [[ -n "$raw" ]] || return 1
-  strip_quotes "$raw"
-}
+refresh_daemon_github_token() {
+  local auth_log_file token line rc
+  AUTH_LAST_DETAIL=""
+  auth_log_file="$(mktemp "${CODEX_DIR}/daemon_auth.XXXXXX")"
 
-configure_daemon_github_token() {
-  if [[ -n "${GH_TOKEN:-}" ]]; then
-    log "GITHUB_AUTH_MODE=ENV_GH_TOKEN"
+  if token="$("${ROOT_DIR}/scripts/codex/gh_app_auth_token.sh" 2>"$auth_log_file")"; then
+    token="$(printf '%s' "$token" | tr -d '\r\n')"
+    if [[ -z "$token" ]]; then
+      rm -f "$auth_log_file"
+      AUTH_LAST_DETAIL="AUTH_ERROR_CODE=AUTH_SERVICE_BAD_PAYLOAD"
+      return 1
+    fi
+    export GH_TOKEN="$token"
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      log "AUTH: $line"
+    done < "$auth_log_file"
+    rm -f "$auth_log_file"
     return 0
   fi
 
-  local token=""
-  local source="none"
-  local env_candidates=()
-
-  if [[ -n "${DAEMON_GH_TOKEN:-}" ]]; then
-    token="${DAEMON_GH_TOKEN}"
-    source="env:DAEMON_GH_TOKEN"
-  elif [[ -n "${CODEX_GH_TOKEN:-}" ]]; then
-    token="${CODEX_GH_TOKEN}"
-    source="env:CODEX_GH_TOKEN"
-  else
-    if [[ -n "${DAEMON_GH_ENV_FILE:-}" ]]; then
-      env_candidates+=("${DAEMON_GH_ENV_FILE}")
-    fi
-    env_candidates+=("${ROOT_DIR}/.env")
-    env_candidates+=("${ROOT_DIR}/.env.deploy")
-
-    local env_file
-    for env_file in "${env_candidates[@]}"; do
-      token="$(read_key_from_env_file "$env_file" "DAEMON_GH_TOKEN" || true)"
-      if [[ -n "$token" ]]; then
-        source="file:${env_file}:DAEMON_GH_TOKEN"
-        break
-      fi
-      token="$(read_key_from_env_file "$env_file" "CODEX_GH_TOKEN" || true)"
-      if [[ -n "$token" ]]; then
-        source="file:${env_file}:CODEX_GH_TOKEN"
-        break
-      fi
-    done
+  rc=$?
+  unset GH_TOKEN || true
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    [[ -z "$AUTH_LAST_DETAIL" ]] && AUTH_LAST_DETAIL="$line"
+    log "AUTH_ERROR(rc=$rc): $line"
+  done < "$auth_log_file"
+  rm -f "$auth_log_file"
+  if [[ -z "$AUTH_LAST_DETAIL" ]]; then
+    AUTH_LAST_DETAIL="AUTH_ERROR_CODE=AUTH_SERVICE_UNREACHABLE"
   fi
-
-  if [[ -n "$token" ]]; then
-    export GH_TOKEN="$token"
-    log "GITHUB_AUTH_MODE=DAEMON_TOKEN (${source})"
-  else
-    log "GITHUB_AUTH_MODE=DEFAULT_GH_AUTH"
-  fi
+  return "$rc"
 }
 
 read_file_or_default() {
@@ -426,13 +398,24 @@ notify_if_needed() {
   fi
 }
 
-configure_daemon_github_token
-
 log "daemon_loop start interval=${interval}s"
 set_state "BOOTING" "daemon_loop started"
 
 while true; do
   log "heartbeat"
+  if ! refresh_daemon_github_token; then
+    rc=$?
+    degradation="$(detect_flow_degradation)"
+    detail="AUTH_UNAVAILABLE=1; AUTH_RC=${rc}; ${AUTH_LAST_DETAIL}"
+    if [[ -n "$degradation" ]]; then
+      detail="${detail} | ${degradation}"
+    fi
+    set_state "WAIT_AUTH_SERVICE" "$detail"
+    notify_if_needed "WAIT_AUTH_SERVICE" "$detail"
+    sleep "$interval"
+    continue
+  fi
+
   if output="$("${ROOT_DIR}/scripts/codex/daemon_tick.sh" 2>&1)"; then
     while IFS= read -r line; do
       [[ -z "$line" ]] && continue

@@ -117,7 +117,7 @@ function applyParentTriggerModeUi() {
   }
   if (parentTriggerHintEl) {
     parentTriggerHintEl.textContent = isDevMode
-      ? "Режим DEV: удерживай Р и нажми VOL+ и VOL- (можно по очереди). Fallback: F9/F10 или +/-."
+      ? "Режим DEV (iPhone/iPad): удерживай Р и нажми VOL+ и VOL- на экране (можно по очереди). Аппаратные кнопки громкости в браузере не поддерживаются."
       : "Режим PROD: удерживай Р и нажми обе громкости. Fallback: F9/F10, +/- или Alt+↑/Alt+↓.";
   }
 }
@@ -468,7 +468,7 @@ function renderParentControlUi() {
       state.parentControl.pinMode === "system"
         ? "Уровень 2: подтверждение выхода в системный режим"
         : isParentTriggerDevMode()
-          ? "Dev-режим: удерживай Р + VOL+/VOL- на экране (можно по очереди), затем введи PIN"
+          ? "Dev-режим: удерживай Р + VOL+/VOL- на экране (можно по очереди). Аппаратные кнопки iPhone в браузере не ловятся."
           : "Удерживай Р + обе громкости (или F9/F10, +/-), затем введи PIN";
     buildPinDots();
 

@@ -45,6 +45,9 @@ Commands:
   gh_retry
   github_health_check
   github_outbox
+  gh_app_auth_start
+  gh_app_auth_health
+  gh_app_auth_probe
 
 Fixed input files in .tmp/codex:
   pr_number.txt
@@ -369,6 +372,18 @@ case "$cmd" in
     fi
     shift 1
     "${ROOT_DIR}/scripts/codex/github_outbox.sh" "$@"
+    ;;
+
+  gh_app_auth_start)
+    "${ROOT_DIR}/scripts/codex/gh_app_auth_start.sh"
+    ;;
+
+  gh_app_auth_health)
+    "${ROOT_DIR}/scripts/codex/gh_app_auth_health.sh"
+    ;;
+
+  gh_app_auth_probe)
+    "${ROOT_DIR}/scripts/codex/gh_app_auth_probe.sh"
     ;;
 
   *)

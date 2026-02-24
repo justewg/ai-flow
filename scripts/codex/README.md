@@ -40,6 +40,9 @@
 - `scripts/codex/run.sh gh_retry <command> [args...]` — выполнить GitHub-команду с retry/backoff.
 - `scripts/codex/run.sh github_health_check` — быстрый preflight GitHub API (`healthy/unstable`).
 - `scripts/codex/run.sh github_outbox <enqueue_issue_comment|flush|count|list> ...` — управление отложенными GitHub-действиями.
+- `scripts/codex/run.sh gh_app_auth_start` — запустить локальный GitHub App auth-сервис (`/health`, `/token`).
+- `scripts/codex/run.sh gh_app_auth_health` — проверить endpoint `/health` auth-сервиса.
+- `scripts/codex/run.sh gh_app_auth_probe` — проверить `/health` и `/token` (без вывода токена).
 
 `run.sh` читает фиксированные файлы из `.tmp/codex/`:
 - `pr_number.txt`
@@ -73,6 +76,7 @@
 - Затем отдельно вызывать `scripts/codex/run.sh <action>`.
 
 ## Важные env-переменные
+- `node` (Node.js runtime, рекомендуется LTS >= 18) — обязателен для `gh_app_auth_*` скриптов и сервиса `gh_app_auth_service.js`.
 - `DAEMON_GH_TOKEN` (или `CODEX_GH_TOKEN`) — отдельный GitHub token для daemon/watchdog.
   - Применяется к действиям автоматики: комментарии в Issue, update/create PR, update Project status.
   - Автор этих действий в GitHub будет владельцем этого токена.
@@ -92,6 +96,11 @@
     - `scripts/codex/run.sh daemon_uninstall && scripts/codex/run.sh daemon_install`
     - `scripts/codex/run.sh watchdog_uninstall && scripts/codex/run.sh watchdog_install`
 - `CODEX_GIT_AUTHOR_*` / `CODEX_GIT_COMMITTER_*` — отдельная identity только для git-коммитов агента.
+- `GH_APP_ID`, `GH_APP_INSTALLATION_ID`, `GH_APP_PRIVATE_KEY_PATH`, `GH_APP_INTERNAL_SECRET` — обязательные переменные для auth-сервиса GitHub App.
+- `GH_APP_BIND` / `GH_APP_PORT` — bind/port auth-сервиса (bind фиксируется как `127.0.0.1`).
+- `GH_APP_TOKEN_SKEW_SEC` — упреждающее обновление installation token (по умолчанию `300` сек).
+- `GH_APP_API_BASE_URL` — базовый URL GitHub API (по умолчанию `https://api.github.com`).
+- `GH_APP_HTTP_TIMEOUT_MS` — timeout HTTP-запроса к GitHub API (по умолчанию `10000` мс).
 
 ## Итеративный executor-flow (коммит1 -> вопрос -> ответ -> коммит2 -> финализация)
 1. Сделать первую рабочую дельту и выполнить `commit_push`.
@@ -226,6 +235,16 @@
   - умеет `enqueue`, `flush`, `count`, `list`
   - при доставке queued question автоматически выставляет корректный waiting-state (`comment_id/url`)
   - пишет в лог структурированные сигналы отправки/ошибок (`GITHUB_ACTION_SENT`, `GITHUB_ACTION_SEND_FAILED`, `WAIT_GITHUB_PENDING_ACTIONS`)
+- `gh_app_auth_service.js`
+  - локальный Node.js auth-сервис для GitHub App
+  - endpoint-ы: `GET /health`, `GET /token` (защищен `X-Internal-Secret`)
+  - генерирует JWT, получает installation token, кэширует и обновляет его до истечения
+- `gh_app_auth_start.sh`
+  - запускает auth-сервис, предварительно загружая `.env` и `.env.deploy`
+- `gh_app_auth_health.sh`
+  - проверяет локальный `GET /health`
+- `gh_app_auth_probe.sh`
+  - проверяет `GET /health` и `GET /token`; валидирует ответ без вывода токена
 
 Логи демона:
 - `.tmp/codex/daemon.log` — heartbeat и результат `daemon_tick`

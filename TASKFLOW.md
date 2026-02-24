@@ -111,6 +111,15 @@ Execution-Mode: daemon
    - твой следующий комментарий в Issue принимается как входное сообщение;
    - после получения ответа daemon публикует `CODEX_SIGNAL: AGENT_RESUMED` и продолжает flow.
    - если executor завершил прогон (`DONE`), но задача не финализирована, агент обязан опубликовать blocker-комментарий и ждать твоего решения (`продолжай`/`финализируй`), а не молчать.
+11.1. Если задача уже в `Status=Review`, daemon включает режим `WAIT_REVIEW_FEEDBACK`:
+   - не-системный комментарий автора Issue после `AGENT_IN_REVIEW` принимается как review-feedback;
+   - daemon пишет явный маркер `REVIEW_FEEDBACK_RECEIVED`;
+   - daemon классифицирует комментарий:
+     - `QUESTION` — публикует `CODEX_SIGNAL: AGENT_ANSWER` и остается в `WAIT_REVIEW_FEEDBACK`;
+     - `REWORK` — публикует `CODEX_SIGNAL: AGENT_RESUMED_REVIEW`, переводит задачу `Review -> In Progress` и возобновляет executor (`REVIEW_FEEDBACK_RESUMED`).
+   - явный override в комментарии:
+     - `CODEX_MODE: QUESTION`
+     - `CODEX_MODE: REWORK`
 12. В heartbeat-логе daemon обязан писать агрегированный operational-state и причину (`STATE=...`), включая деградации вроде `WAIT_GITHUB_OFFLINE`.
 13. При деградации daemon отправляет локальный Telegram-сигнал (не по каждому тику): вход в деградацию, смена причины, редкий reminder и восстановление.
 14. Если деградация связана с DNS GitHub, daemon обязан дополнительно проверить доступность Telegram (`api.telegram.org`):
@@ -164,6 +173,8 @@ Telegram-сигналы по Issue-вопросам:
 - `Signal: AGENT_QUESTION` — вопрос по задаче, нужен твой ответ.
 - `Signal: AGENT_BLOCKER` — блокер, нужен твой ответ.
 - `Signal: AGENT_RESUMED` — ответ получен, выполнение продолжено.
+- `Signal: AGENT_RESUMED_REVIEW` — получен feedback в `In Review`, доработка запущена.
+- `Signal: AGENT_ANSWER` — агент дал текстовый ответ в Issue без запуска доработки.
 - `Signal: AGENT_DEPENDENCY_BLOCKED` — задача в `Todo` заблокирована зависимостями (`Depends-On`), старт отложен.
 
 ## 6. Политика языка и оформления

@@ -137,7 +137,8 @@
   - untracked-файлы не блокируют daemon-flow
   - на старте тика делает `github_outbox flush` (доставка отложенных GitHub-комментариев)
   - перед взятием новой задачи проверяет waiting-state по Issue-комментариям (`daemon_check_replies.sh`)
-  - при `WAIT_USER_REPLY` не берет новые задачи
+  - при `WAIT_USER_REPLY`/`WAIT_REVIEW_FEEDBACK` не берет новые задачи
+  - если в `In Review` пришел новый комментарий (`REVIEW_FEEDBACK`), автоматически переводит задачу обратно в `In Progress` и возобновляет executor
   - при наличии `daemon_active_task.txt` не берет новые задачи до финализации, но продолжает проверять ответы в Issue
   - для активной задачи вызывает `executor_tick.sh`, который запускает/мониторит headless executor (`codex exec`)
   - перед критичными GitHub-операциями делает preflight (`github_health_check.sh`)
@@ -197,7 +198,8 @@
   - выполняет commit/push в `development`
   - создает PR `development -> main` или обновляет существующий
   - переводит задачу в `Status=Review`, `Flow=In Review` (можно переопределить через `FINAL_STATUS` и `FINAL_FLOW`)
-  - очищает входные файлы commit/PR и активный daemon-state (active/waiting), чтобы избежать повторного использования старых данных
+  - публикует `CODEX_SIGNAL: AGENT_IN_REVIEW` и включает waiting-контекст `REVIEW_FEEDBACK` для комментариев в Issue
+  - очищает входные файлы commit/PR и активный daemon-state (active), сохраняя review-waiting контекст
 - `executor_build_prompt.sh <task-id> <issue-number> <output-file>`
   - собирает prompt executor из текста Issue и последнего ответа пользователя
 - `executor_start.sh <task-id> <issue-number>`
@@ -219,10 +221,16 @@
   - при временной недоступности GitHub кладет комментарий в outbox и включает pending-waiting state
   - сохраняет waiting-state в `.tmp/codex/`, чтобы daemon ждал ответ пользователя
 - `daemon_check_replies.sh`
-  - если daemon в waiting-state, проверяет новые комментарии Issue после вопроса
-  - первый пользовательский комментарий (без `CODEX_SIGNAL:`) принимает как ответ
+  - если daemon в waiting-state, проверяет новые комментарии Issue после вопроса/ревью
+  - для `AGENT_QUESTION/AGENT_BLOCKER` первый пользовательский комментарий (без `CODEX_SIGNAL:`) принимает как ответ
+  - для `REVIEW_FEEDBACK` принимает только не-системный комментарий автора Issue
+  - для `REVIEW_FEEDBACK` различает режимы:
+    - `QUESTION` -> публикует `CODEX_SIGNAL: AGENT_ANSWER` и оставляет задачу в `WAIT_REVIEW_FEEDBACK`
+    - `REWORK` -> публикует `CODEX_SIGNAL: AGENT_RESUMED_REVIEW` и передает задачу в доработку
+  - поддерживает явный override в комментарии: `CODEX_MODE: QUESTION|REWORK`
+  - пишет явные маркеры review-feedback цикла: `WAIT_REVIEW_FEEDBACK`, `REVIEW_FEEDBACK_RECEIVED`, `REVIEW_FEEDBACK_RESUMED`
   - сохраняет ответ в `.tmp/codex/daemon_user_reply.txt`
-  - публикует `CODEX_SIGNAL: AGENT_RESUMED`; если GitHub недоступен, кладет ack в outbox
+  - публикует `CODEX_SIGNAL: AGENT_RESUMED`, `CODEX_SIGNAL: AGENT_RESUMED_REVIEW` или `CODEX_SIGNAL: AGENT_ANSWER`; если GitHub недоступен, кладет ответ/ack в outbox
   - при pending-question (`вопрос еще не доставлен`) удерживает `WAIT_USER_REPLY`, не теряя контекст
 - `gh_retry.sh <command> [args...]`
   - retry/backoff для нестабильных ошибок GitHub API/DNS
@@ -258,6 +266,10 @@
 - `.tmp/codex/watchdog.launchd.out.log` — stdout watchdog-агента
 - `.tmp/codex/watchdog.launchd.err.log` — stderr watchdog-агента
 - `.tmp/codex/daemon_user_reply.txt` — последний ответ пользователя из Issue-комментариев
+- `.tmp/codex/daemon_review_task_id.txt` — задача, ожидающая review-feedback
+- `.tmp/codex/daemon_review_item_id.txt` — project item id задачи в review-feedback режиме
+- `.tmp/codex/daemon_review_issue_number.txt` — issue number задачи в review-feedback режиме
+- `.tmp/codex/daemon_review_pr_number.txt` — PR number для review-feedback режима
 - `.tmp/codex/daemon_state.txt` — текущий агрегированный state демона (`IDLE_NO_TASKS`, `WAIT_OPEN_PR`, `WAIT_GITHUB_OFFLINE` и т.д.)
 - `.tmp/codex/daemon_state_detail.txt` — краткая причина/деталь текущего state, включая признаки деградации (`DEGRADED=GITHUB_DNS_OFFLINE`, `DEGRADED=PENDING_OUTBOX:<n>` и т.п.)
 - `.tmp/codex/daemon_notify_mode.txt` — последний режим уведомлений (`degraded|healthy`)

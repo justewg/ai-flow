@@ -140,6 +140,8 @@ classify_success_state() {
     echo "EXECUTOR_DONE"
   elif printf '%s' "$output" | grep -q '^EXECUTOR_WAIT_USER_REPLY=1'; then
     echo "WAIT_USER_REPLY"
+  elif printf '%s' "$output" | grep -q '^WAIT_REVIEW_FEEDBACK=1'; then
+    echo "WAIT_REVIEW_FEEDBACK"
   elif printf '%s' "$output" | grep -q '^CLAIMED_TASK_ID='; then
     echo "ACTIVE_TASK_CLAIMED"
   elif printf '%s' "$output" | grep -q '^USER_REPLY_RECEIVED=1'; then
@@ -191,6 +193,10 @@ build_success_detail() {
       ;;
     WAIT_USER_REPLY)
       line="$(printf '%s\n' "$output" | grep -m1 -E '^(WAIT_USER_REPLY=1|EXECUTOR_WAIT_USER_REPLY=1)' || true)"
+      ;;
+    WAIT_REVIEW_FEEDBACK)
+      line="$(printf '%s\n' "$output" | grep -m1 '^QUESTION_KIND=' || true)"
+      [[ -z "$line" ]] && line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_REVIEW_FEEDBACK=1' || true)"
       ;;
     USER_REPLY_RECEIVED)
       line="$(printf '%s\n' "$output" | grep -m1 '^USER_REPLY_RECEIVED=1' || true)"

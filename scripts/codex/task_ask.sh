@@ -81,9 +81,6 @@ format_recent_executor_paragraphs() {
       gsub(/\n+/, " ", p)
       gsub(/[[:space:]]+/, " ", p)
       gsub(/^[[:space:]]+|[[:space:]]+$/, "", p)
-      if (length(p) > 320) {
-        p = substr(p, 1, 317) "..."
-      }
       return p
     }
     function store(p) {
@@ -122,15 +119,22 @@ extract_recent_codex_blocks_from_log() {
     return 0
   fi
 
+  local start_line=""
+  local log_slice_file=""
+  start_line="$(grep -n '^=== EXECUTOR_RUN_START ' "${CODEX_DIR}/executor.log" | tail -n1 | cut -d: -f1 || true)"
+  log_slice_file="$(mktemp "${CODEX_DIR}/executor_log_slice.XXXXXX")"
+  if [[ -n "$start_line" ]]; then
+    sed -n "${start_line},\$p" "${CODEX_DIR}/executor.log" > "$log_slice_file"
+  else
+    tail -n 1200 "${CODEX_DIR}/executor.log" > "$log_slice_file"
+  fi
+
   awk '
     function normalize(p) {
       gsub(/\r/, "", p)
       gsub(/\n+/, " ", p)
       gsub(/[[:space:]]+/, " ", p)
       gsub(/^[[:space:]]+|[[:space:]]+$/, "", p)
-      if (length(p) > 320) {
-        p = substr(p, 1, 317) "..."
-      }
       return p
     }
     function store_block(p) {
@@ -176,7 +180,9 @@ extract_recent_codex_blocks_from_log() {
         rank++
       }
     }
-  ' "${CODEX_DIR}/executor.log" 2>/dev/null || true
+  ' "$log_slice_file" 2>/dev/null || true
+
+  rm -f "$log_slice_file"
 }
 
 strip_technical_lines() {

@@ -94,6 +94,7 @@ const state = {
   parentControl: {
     gateOpen: false,
     panelOpen: false,
+    returnToPanelAfterGate: false,
     pinMode: "parent",
     pinInput: "",
     pinError: "",
@@ -496,28 +497,31 @@ function renderParentControlUi() {
   parentPanelStatusEl.textContent = state.parentControl.statusMessage;
 }
 
-function openPinGate(mode, keepParentPanelOpen) {
+function openPinGate(mode, returnToParentPanel = false) {
   state.parentControl.pinMode = mode;
   state.parentControl.pinInput = "";
+  state.parentControl.returnToPanelAfterGate = Boolean(returnToParentPanel);
   state.parentControl.pinError = isPinBlocked()
     ? "Слишком много попыток. Подожди 10 секунд."
     : "";
   state.parentControl.gateOpen = true;
-  state.parentControl.panelOpen = keepParentPanelOpen;
+  state.parentControl.panelOpen = false;
   renderParentControlUi();
 }
 
-function closePinGate(keepParentPanelOpen) {
+function closePinGate() {
   state.parentControl.gateOpen = false;
   state.parentControl.pinInput = "";
   state.parentControl.pinError = "";
-  state.parentControl.panelOpen = keepParentPanelOpen;
+  state.parentControl.panelOpen = state.parentControl.returnToPanelAfterGate;
+  state.parentControl.returnToPanelAfterGate = false;
   renderParentControlUi();
 }
 
 function openParentPanel(statusMessage = "Режим родителя активирован.") {
   state.parentControl.gateOpen = false;
   state.parentControl.panelOpen = true;
+  state.parentControl.returnToPanelAfterGate = false;
   state.parentControl.pinInput = "";
   state.parentControl.pinError = "";
   state.parentControl.statusMessage = statusMessage;
@@ -527,6 +531,7 @@ function openParentPanel(statusMessage = "Режим родителя актив
 function closeParentPanel() {
   state.parentControl.gateOpen = false;
   state.parentControl.panelOpen = false;
+  state.parentControl.returnToPanelAfterGate = false;
   state.parentControl.pinInput = "";
   state.parentControl.pinError = "";
   state.parentControl.statusMessage = "";
@@ -552,7 +557,7 @@ function validatePin() {
   if (state.parentControl.pinInput !== expectedPin) {
     lockPinInputWithDelay();
     showToast("PIN неверный. Попробуй снова через 10 секунд.", "error");
-    closePinGate(state.parentControl.pinMode === "system");
+    closePinGate();
     return;
   }
 
@@ -690,13 +695,13 @@ langToggleEl.addEventListener("pointerdown", cancelParentTriggerAttempt);
 clearButtonEl.addEventListener("pointerdown", cancelParentTriggerAttempt);
 themeToggleEl.addEventListener("pointerdown", cancelParentTriggerAttempt);
 parentPinCancelEl.addEventListener("click", () => {
-  closePinGate(state.parentControl.pinMode === "system");
+  closePinGate();
 });
 parentPinOverlayEl.addEventListener("click", (event) => {
   if (event.target !== parentPinOverlayEl || !state.parentControl.gateOpen) {
     return;
   }
-  closePinGate(state.parentControl.pinMode === "system");
+  closePinGate();
 });
 
 for (const pinDigitEl of pinDigitEls) {

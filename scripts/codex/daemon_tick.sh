@@ -12,6 +12,10 @@ repo="${GITHUB_REPO:-justewg/planka}"
 trigger_status="${TRIGGER_STATUS:-Todo}"
 target_status="${TARGET_STATUS:-In Progress}"
 target_flow="${TARGET_FLOW:-In Progress}"
+review_task_file="${CODEX_DIR}/daemon_review_task_id.txt"
+review_item_file="${CODEX_DIR}/daemon_review_item_id.txt"
+review_issue_file="${CODEX_DIR}/daemon_review_issue_number.txt"
+review_pr_file="${CODEX_DIR}/daemon_review_pr_number.txt"
 
 emit_lines() {
   local text="$1"
@@ -175,6 +179,17 @@ notify_dependency_blocked_once() {
   return 0
 }
 
+is_review_feedback_kind() {
+  local kind="$1"
+  [[ "$(printf '%s' "$kind" | tr '[:lower:]' '[:upper:]')" == "REVIEW_FEEDBACK" ]]
+}
+
+extract_kv() {
+  local text="$1"
+  local key="$2"
+  printf '%s\n' "$text" | sed -n "s/^${key}=//p" | head -n1
+}
+
 if ! git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- ||
   ! git -C "${ROOT_DIR}" diff --cached --quiet --ignore-submodules --; then
   echo "WAIT_DIRTY_WORKTREE_TRACKED=1"
@@ -208,6 +223,73 @@ while IFS= read -r line; do
 done <<< "$reply_probe_out"
 if printf '%s' "$reply_probe_out" | grep -q '^WAIT_USER_REPLY=1'; then
   exit 0
+fi
+if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
+  reply_kind="$(extract_kv "$reply_probe_out" "REPLY_KIND")"
+  if is_review_feedback_kind "$reply_kind"; then
+    review_task_id="$(extract_kv "$reply_probe_out" "TASK_ID")"
+    review_issue_number="$(extract_kv "$reply_probe_out" "ISSUE_NUMBER")"
+    review_item_id=""
+    review_task_file_value=""
+    if [[ -s "$review_task_file" ]]; then
+      review_task_file_value="$(<"$review_task_file")"
+    fi
+    if [[ -s "$review_item_file" ]]; then
+      review_item_id="$(<"$review_item_file")"
+    fi
+    if [[ -n "$review_task_file_value" && "$review_task_file_value" != "$review_task_id" ]]; then
+      review_item_id=""
+    fi
+
+    if [[ -z "$review_task_id" || -z "$review_issue_number" ]]; then
+      echo "BLOCKED_REVIEW_FEEDBACK_CONTEXT=1"
+      echo "REVIEW_FEEDBACK_TASK_ID=${review_task_id}"
+      echo "REVIEW_FEEDBACK_ISSUE_NUMBER=${review_issue_number}"
+      exit 0
+    fi
+
+    status_target="$review_task_id"
+    if [[ -n "$review_item_id" ]]; then
+      status_target="$review_item_id"
+    fi
+
+    if status_out="$("${ROOT_DIR}/scripts/codex/project_set_status.sh" "$status_target" "$target_status" "$target_flow" 2>&1)"; then
+      :
+    else
+      rc=$?
+      emit_lines "$status_out"
+      if is_github_network_error "$status_out" || [[ "$rc" -eq 75 ]]; then
+        echo "WAIT_GITHUB_API_UNSTABLE=1"
+        echo "WAIT_GITHUB_STAGE=REVIEW_RESUME_STATUS_UPDATE"
+        exit 0
+      fi
+      exit "$rc"
+    fi
+    emit_lines "$status_out"
+
+    printf '%s\n' "$review_task_id" > "${CODEX_DIR}/daemon_active_task.txt"
+    if [[ -n "$review_item_id" ]]; then
+      printf '%s\n' "$review_item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"
+    else
+      : > "${CODEX_DIR}/daemon_active_item_id.txt"
+    fi
+    printf '%s\n' "$review_issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
+    printf '%s\n' "$review_task_id" > "${CODEX_DIR}/project_task_id.txt"
+    "${ROOT_DIR}/scripts/codex/executor_reset.sh" >/dev/null
+
+    : > "$review_task_file"
+    : > "$review_item_file"
+    : > "$review_issue_file"
+    : > "$review_pr_file"
+
+    echo "REVIEW_FEEDBACK_RESUMED=1"
+    echo "REVIEW_FEEDBACK_TASK_ID=$review_task_id"
+    echo "REVIEW_FEEDBACK_ISSUE_NUMBER=$review_issue_number"
+
+    exec_out="$("${ROOT_DIR}/scripts/codex/executor_tick.sh" "$review_task_id" "$review_issue_number" 2>&1)"
+    emit_lines "$exec_out"
+    exit 0
+  fi
 fi
 
 if [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]]; then
@@ -648,6 +730,10 @@ fi
 emit_lines "$status_out"
 
 rm -f "${CODEX_DIR}/daemon_dependency_blocked_signature.txt"
+: > "$review_task_file"
+: > "$review_item_file"
+: > "$review_issue_file"
+: > "$review_pr_file"
 
 printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_active_task.txt"
 printf '%s\n' "$item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"

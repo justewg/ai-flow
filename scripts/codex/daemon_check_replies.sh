@@ -11,6 +11,26 @@ question_id_file="${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
 kind_file="${CODEX_DIR}/daemon_waiting_kind.txt"
 pending_post_file="${CODEX_DIR}/daemon_waiting_pending_post.txt"
 
+is_review_feedback_kind() {
+  local value="$1"
+  [[ "$(printf '%s' "$value" | tr '[:lower:]' '[:upper:]')" == "REVIEW_FEEDBACK" ]]
+}
+
+emit_wait_state() {
+  local task_id="$1"
+  local issue_number="$2"
+  local question_comment_id="$3"
+  local kind_label="$4"
+  echo "WAIT_USER_REPLY=1"
+  echo "TASK_ID=$task_id"
+  echo "ISSUE_NUMBER=$issue_number"
+  echo "QUESTION_COMMENT_ID=$question_comment_id"
+  echo "QUESTION_KIND=$kind_label"
+  if is_review_feedback_kind "$kind_label"; then
+    echo "WAIT_REVIEW_FEEDBACK=1"
+  fi
+}
+
 clear_waiting_state() {
   : > "$issue_file"
   : > "$task_file"
@@ -44,11 +64,7 @@ if [[ "$pending_post" == "1" ]]; then
     [[ -z "$outbox_count" ]] && outbox_count="0"
   fi
 
-  echo "WAIT_USER_REPLY=1"
-  echo "TASK_ID=$task_id"
-  echo "ISSUE_NUMBER=$issue_number"
-  echo "QUESTION_COMMENT_ID=$question_comment_id"
-  echo "QUESTION_KIND=$kind_label"
+  emit_wait_state "$task_id" "$issue_number" "$question_comment_id" "$kind_label"
   echo "WAIT_GITHUB_API_UNSTABLE=1"
   echo "WAITING_FOR_QUESTION_POST=1"
   echo "OUTBOX_PENDING_COUNT=$outbox_count"
@@ -64,11 +80,7 @@ if ! [[ "$question_comment_id" =~ ^[0-9]+$ ]]; then
   )"; then
     rc=$?
     if [[ "$rc" -eq 75 ]]; then
-      echo "WAIT_USER_REPLY=1"
-      echo "TASK_ID=$task_id"
-      echo "ISSUE_NUMBER=$issue_number"
-      echo "QUESTION_COMMENT_ID=$question_comment_id"
-      echo "QUESTION_KIND=$kind_label"
+      emit_wait_state "$task_id" "$issue_number" "$question_comment_id" "$kind_label"
       echo "WAIT_GITHUB_API_UNSTABLE=1"
       echo "WAITING_FOR_VALID_QUESTION_ID=1"
       exit 0
@@ -76,26 +88,34 @@ if ! [[ "$question_comment_id" =~ ^[0-9]+$ ]]; then
     exit "$rc"
   fi
 
-  recovered_qid="$(
-    printf '%s' "$comments_json" |
-      jq -r '
-        [ .[]
-          | select(((.body // "") | test("(?m)^CODEX_SIGNAL: (AGENT_QUESTION|AGENT_BLOCKER)$")))
-          | select(((.body // "") | test("(?m)^CODEX_EXPECT: USER_REPLY$")))
-        ][-1].id // empty
-      '
-  )"
+  if is_review_feedback_kind "$kind_label"; then
+    recovered_qid="$(
+      printf '%s' "$comments_json" |
+        jq -r '
+          [ .[]
+            | select(((.body // "") | test("(?m)^CODEX_SIGNAL: AGENT_IN_REVIEW$")))
+            | select(((.body // "") | test("(?m)^CODEX_EXPECT: USER_REVIEW$")))
+          ][-1].id // empty
+        '
+    )"
+  else
+    recovered_qid="$(
+      printf '%s' "$comments_json" |
+        jq -r '
+          [ .[]
+            | select(((.body // "") | test("(?m)^CODEX_SIGNAL: (AGENT_QUESTION|AGENT_BLOCKER)$")))
+            | select(((.body // "") | test("(?m)^CODEX_EXPECT: USER_REPLY$")))
+          ][-1].id // empty
+        '
+    )"
+  fi
 
   if [[ -n "$recovered_qid" ]]; then
     question_comment_id="$recovered_qid"
     printf '%s\n' "$question_comment_id" > "$question_id_file"
     echo "RECOVERED_QUESTION_COMMENT_ID=$question_comment_id"
   else
-    echo "WAIT_USER_REPLY=1"
-    echo "TASK_ID=$task_id"
-    echo "ISSUE_NUMBER=$issue_number"
-    echo "QUESTION_COMMENT_ID=$question_comment_id"
-    echo "QUESTION_KIND=$kind_label"
+    emit_wait_state "$task_id" "$issue_number" "$question_comment_id" "$kind_label"
     echo "WAITING_FOR_VALID_QUESTION_ID=1"
     exit 0
   fi
@@ -108,11 +128,7 @@ if [[ -z "$comments_json" ]]; then
   )"; then
     rc=$?
     if [[ "$rc" -eq 75 ]]; then
-      echo "WAIT_USER_REPLY=1"
-      echo "TASK_ID=$task_id"
-      echo "ISSUE_NUMBER=$issue_number"
-      echo "QUESTION_COMMENT_ID=$question_comment_id"
-      echo "QUESTION_KIND=$kind_label"
+      emit_wait_state "$task_id" "$issue_number" "$question_comment_id" "$kind_label"
       echo "WAIT_GITHUB_API_UNSTABLE=1"
       exit 0
     fi
@@ -132,11 +148,7 @@ reply_json="$(
 )"
 
 if [[ -z "$reply_json" ]]; then
-  echo "WAIT_USER_REPLY=1"
-  echo "TASK_ID=$task_id"
-  echo "ISSUE_NUMBER=$issue_number"
-  echo "QUESTION_COMMENT_ID=$question_comment_id"
-  echo "QUESTION_KIND=$kind_label"
+  emit_wait_state "$task_id" "$issue_number" "$question_comment_id" "$kind_label"
   exit 0
 fi
 
@@ -157,12 +169,19 @@ printf '%s\n' "$now_utc" > "${CODEX_DIR}/daemon_user_reply_at_utc.txt"
 
 clear_waiting_state
 
+ack_signal="AGENT_RESUMED"
+ack_message="Ответ получен, продолжаю работу по задаче."
+if is_review_feedback_kind "$kind_label"; then
+  ack_signal="AGENT_RESUMED_REVIEW"
+  ack_message="Фидбэк в Review получен, возвращаюсь к доработке."
+fi
+
 ack_body="$(cat <<EOF_ACK
-CODEX_SIGNAL: AGENT_RESUMED
+CODEX_SIGNAL: ${ack_signal}
 CODEX_TASK: ${task_id}
 CODEX_SOURCE_REPLY_COMMENT_ID: ${reply_id}
 
-Ответ получен, продолжаю работу по задаче.
+${ack_message}
 EOF_ACK
 )"
 
@@ -197,6 +216,7 @@ fi
 echo "USER_REPLY_RECEIVED=1"
 echo "TASK_ID=$task_id"
 echo "ISSUE_NUMBER=$issue_number"
+echo "REPLY_KIND=$kind_label"
 echo "REPLY_COMMENT_ID=$reply_id"
 echo "REPLY_AUTHOR=$reply_user"
 echo "REPLY_URL=$reply_url"

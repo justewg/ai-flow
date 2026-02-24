@@ -13,6 +13,10 @@ task_file="${CODEX_DIR}/project_task_id.txt"
 active_task_file="${CODEX_DIR}/daemon_active_task.txt"
 active_item_file="${CODEX_DIR}/daemon_active_item_id.txt"
 active_issue_file="${CODEX_DIR}/daemon_active_issue_number.txt"
+review_task_file="${CODEX_DIR}/daemon_review_task_id.txt"
+review_item_file="${CODEX_DIR}/daemon_review_item_id.txt"
+review_issue_file="${CODEX_DIR}/daemon_review_issue_number.txt"
+review_pr_file="${CODEX_DIR}/daemon_review_pr_number.txt"
 title_file="${CODEX_DIR}/pr_title.txt"
 body_file="${CODEX_DIR}/pr_body.txt"
 pr_number_file="${CODEX_DIR}/pr_number.txt"
@@ -254,6 +258,14 @@ EOF
   fi
 }
 
+emit_nonempty_lines() {
+  local text="$1"
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "$line"
+  done <<< "$text"
+}
+
 mkdir -p "$CODEX_DIR"
 
 commit_message="$(require_nonempty_file "$commit_file")"
@@ -341,13 +353,74 @@ fi
 
 mark_pr_ready_if_draft "$pr_number"
 
-post_in_review_issue_comment "$task_id" "$pr_number" "$pr_url"
+in_review_comment_out="$(
+  post_in_review_issue_comment "$task_id" "$pr_number" "$pr_url"
+)"
+emit_nonempty_lines "$in_review_comment_out"
+
+review_issue_number="$(printf '%s\n' "$in_review_comment_out" | sed -n 's/^FINAL_ISSUE_NUMBER=//p' | tail -n1)"
+review_comment_id="$(printf '%s\n' "$in_review_comment_out" | sed -n 's/^FINAL_ISSUE_COMMENT_ID=//p' | tail -n1)"
+review_comment_url="$(printf '%s\n' "$in_review_comment_out" | sed -n 's/^FINAL_ISSUE_COMMENT_URL=//p' | tail -n1)"
+review_pending_post="0"
+if printf '%s\n' "$in_review_comment_out" | grep -q '^FINAL_ISSUE_COMMENT_QUEUED_OUTBOX=1$'; then
+  review_pending_post="1"
+fi
 
 printf '%s\n' "$pr_number" > "$pr_number_file"
 if [[ -n "$active_item_id" ]]; then
   "${ROOT_DIR}/scripts/codex/project_set_status.sh" "$active_item_id" "$FINAL_STATUS" "$FINAL_FLOW"
 else
   "${ROOT_DIR}/scripts/codex/project_set_status.sh" "$task_id" "$FINAL_STATUS" "$FINAL_FLOW"
+fi
+
+# После перевода в Review включаем канал review-feedback через комментарии Issue.
+if [[ -n "$review_issue_number" ]]; then
+  printf '%s\n' "$task_id" > "$review_task_file"
+  printf '%s\n' "$review_issue_number" > "$review_issue_file"
+  printf '%s\n' "$pr_number" > "$review_pr_file"
+  if [[ -n "$active_item_id" ]]; then
+    printf '%s\n' "$active_item_id" > "$review_item_file"
+  else
+    : > "$review_item_file"
+  fi
+
+  printf '%s\n' "$review_issue_number" > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
+  printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_waiting_task_id.txt"
+  printf '%s\n' "REVIEW_FEEDBACK" > "${CODEX_DIR}/daemon_waiting_kind.txt"
+  if [[ -n "$review_comment_id" ]]; then
+    printf '%s\n' "$review_comment_id" > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
+  else
+    printf '0\n' > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
+  fi
+  if [[ -n "$review_comment_url" ]]; then
+    printf '%s\n' "$review_comment_url" > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
+  else
+    : > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
+  fi
+  printf '%s\n' "$review_pending_post" > "${CODEX_DIR}/daemon_waiting_pending_post.txt"
+  date -u '+%Y-%m-%dT%H:%M:%SZ' > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
+  if [[ -n "$review_comment_id" ]]; then
+    echo "REVIEW_FEEDBACK_WAIT_ENABLED=1"
+    echo "REVIEW_FEEDBACK_ANCHOR_COMMENT_ID=$review_comment_id"
+  else
+    echo "REVIEW_FEEDBACK_WAIT_ENABLED=1"
+    echo "REVIEW_FEEDBACK_ANCHOR_COMMENT_ID=missing"
+  fi
+  if [[ "$review_pending_post" == "1" ]]; then
+    echo "REVIEW_FEEDBACK_ANCHOR_PENDING_OUTBOX=1"
+  fi
+else
+  : > "$review_task_file"
+  : > "$review_item_file"
+  : > "$review_issue_file"
+  : > "$review_pr_file"
+  : > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
+  : > "${CODEX_DIR}/daemon_waiting_task_id.txt"
+  : > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
+  : > "${CODEX_DIR}/daemon_waiting_kind.txt"
+  : > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
+  : > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
+  : > "${CODEX_DIR}/daemon_waiting_pending_post.txt"
 fi
 
 : > "$commit_file"
@@ -357,13 +430,6 @@ fi
 : > "$active_task_file"
 : > "$active_item_file"
 : > "$active_issue_file"
-: > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
-: > "${CODEX_DIR}/daemon_waiting_task_id.txt"
-: > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
-: > "${CODEX_DIR}/daemon_waiting_kind.txt"
-: > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
-: > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
-: > "${CODEX_DIR}/daemon_waiting_pending_post.txt"
 "${ROOT_DIR}/scripts/codex/executor_reset.sh" >/dev/null
 
 echo "FINALIZED_TASK_ID=$task_id"

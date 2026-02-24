@@ -25,19 +25,20 @@
   .reveal, .reveal.slide { opacity: 1 !important; transform: none !important; }
   .parallax { transform: none !important; position: static !important; height: auto !important; }
   .hero-photo .ph { opacity: 1 !important; height: 120mm; }
+  .hero-photo .media-image { opacity: 1 !important; height: 120mm; object-fit: cover; }
 
   /* Layout tweaks per section */
   #intro .display { font-size: 28pt !important; }
 
   #evolution .screens { grid-template-columns: 1fr; gap: 10mm; }
-  #evolution .ph { min-height: 60mm; }
+  #evolution .ph, #evolution .media-image { min-height: 60mm; height: 60mm; object-fit: cover; }
   #evolution figcaption { font-size: 11pt; }
 
   #environment .grid-12 { grid-template-columns: repeat(12, 1fr); }
   #environment .refs { opacity: .25; }
 
   #designing .grid-12 { grid-template-columns: repeat(3, 1fr); gap: 6mm; }
-  #designing .ph { min-height: 50mm; }
+  #designing .ph, #designing .media-image { min-height: 50mm; height: 50mm; object-fit: cover; }
 
   #gesture .stage { break-inside: avoid; }
   #gesture .media-row { grid-template-columns: 2fr 1fr; }
@@ -48,7 +49,7 @@
   #principles .pill { padding: 6mm; text-align: center; }
 
   #object .screens { grid-template-columns: 1fr 1fr; gap: 8mm; }
-  #object .ph { min-height: 60mm; }
+  #object .ph, #object .media-image { min-height: 60mm; height: 60mm; object-fit: cover; }
 
   #layers .screens { grid-template-columns: 1fr 1fr; gap: 8mm; }
 
@@ -59,4 +60,3 @@
   #final .logo { font-size: 14pt; text-align: left; margin: 4mm 0; }
   #final .footnote { font-size: 10pt; color: #bbb; }
 }
-

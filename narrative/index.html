@@ -14,10 +14,9 @@
     <main id="narrative" class="narrative">
       <!-- SECTION 0 — Intro -->
       <section id="intro" class="section section-0 is-dark">
-        <!-- Placeholder: Lifestyle photo of Andryusha (no tech). Subtle parallax in web; static in PDF. -->
-        <!-- scenario: static portrait; slow parallax translateY(10–20px) on scroll -->
+        <!-- Hero image with subtle parallax in web; static in PDF -->
         <div class="media hero-photo parallax" data-parallax="0.18" aria-hidden="true">
-          <div class="ph ph-photo">PHOTO • ANDRYUSHA LIFESTYLE</div>
+          <img class="media-image hero-image" src="./assets/img/pad_in_hands.png" alt="Андрюша держит устройство ПЛАНКА" loading="eager" />
         </div>
         <div class="container v-center">
           <p class="kicker">PLANKA / ИНЖЕНЕРНЫЙ МАНИФЕСТ</p>
@@ -32,26 +31,24 @@
           <div class="screens">
             <!-- Each screen fades in on scroll; PDF uses large image + caption. -->
             <figure class="screen reveal" data-animate="fade">
-              <!-- placeholder: documentary photo of PECS cards -->
-              <!-- comment: show texture, labeling clarity -->
-              <div class="ph ph-photo">PECS • DOCUMENTARY PHOTO</div>
+              <img class="media-image" src="./assets/img/pecs.png" alt="Карточки PECS как визуальная опора" loading="lazy" />
               <figcaption>PECS — визуальная опора</figcaption>
             </figure>
             <figure class="screen reveal" data-animate="fade">
-              <div class="ph ph-photo">МАГНИТНЫЕ БУКВЫ • DOCUMENTARY</div>
+              <img class="media-image" src="./assets/img/magnet.png" alt="Магнитные буквы для сборки слов" loading="lazy" />
               <figcaption>Магнитные буквы — сборка слов</figcaption>
             </figure>
             <figure class="screen reveal" data-animate="fade">
-              <div class="ph ph-photo">ПЛАСТИЛИН • DOCUMENTARY</div>
+              <img class="media-image" src="./assets/img/plastic.png" alt="Пластилин как моторная вовлеченность в коммуникацию" loading="lazy" />
               <figcaption>Пластилин — моторная вовлечённость</figcaption>
             </figure>
             <figure class="screen reveal" data-animate="fade">
-              <div class="ph ph-photo">ТЕЛЕВИЗОР • DOCUMENTARY</div>
-              <figcaption>Телевизор — общие сюжеты</figcaption>
+              <img class="media-image" src="./assets/img/stickers.png" alt="Визуальные стикеры и опорные элементы для общих сюжетов" loading="lazy" />
+              <figcaption>Стикеры — визуальные якоря сюжета</figcaption>
             </figure>
             <figure class="screen reveal" data-animate="fade">
-              <div class="ph ph-photo">ЭРУДИТ • DOCUMENTARY</div>
-              <figcaption>Эрудит — буквенная структура</figcaption>
+              <img class="media-image" src="./assets/img/pad_wire_light.png" alt="Переход к цифровому прототипу ПЛАНКА" loading="lazy" />
+              <figcaption>Цифровой прототип — следующий шаг</figcaption>
             </figure>
           </div>
         </div>
@@ -92,20 +89,16 @@
           <p class="subtitle">Мы начали с проектирования. Изучения. Чертежа.</p>
           <div class="grid-12 gap row">
             <figure class="col-span-4 reveal" data-animate="fade">
-              <!-- placeholder: hand-drawn sketch photo -->
-              <!-- comment: paper sketch, pencil, proportions -->
-              <div class="ph ph-photo">ЧЕРТЁЖ ОТ РУКИ</div>
-              <figcaption>Чертёж от руки</figcaption>
+              <img class="media-image" src="./assets/img/pad_wire_light.png" alt="Эскиз и компоновка устройства ПЛАНКА" loading="lazy" />
+              <figcaption>Эскиз и компоновка</figcaption>
             </figure>
             <figure class="col-span-4 reveal" data-animate="fade">
-              <!-- placeholder: device wireframe -->
-              <div class="ph ph-wire">WIREFRAME • DEVICE</div>
+              <img class="media-image" src="./assets/img/pad_wire_dark.png" alt="Wireframe устройства ПЛАНКА" loading="lazy" />
               <figcaption>Wireframe устройства</figcaption>
             </figure>
             <figure class="col-span-4 reveal" data-animate="fade">
-              <!-- placeholder: webview prototype screenshot -->
-              <div class="ph ph-screen">WEBVIEW ПРОТОТИП</div>
-              <figcaption>Webview‑прототип</figcaption>
+              <img class="media-image" src="./assets/img/pad_in_hands_with_fullscreen_clean.png" alt="Прототип интерфейса в полноэкранном режиме" loading="lazy" />
+              <figcaption>Полноэкранный прототип</figcaption>
             </figure>
           </div>
         </div>
@@ -121,12 +114,11 @@
             <!-- scenario: finger types ВИННИПУХ; switch hand R→L; visceral tactile feel -->
             <header class="stage-title">Письмо</header>
             <div class="media-row">
-              <div class="ph ph-video reveal" data-animate="fade">VIDEO • НАБОР «ВИННИПУХ»</div>
+              <img class="media-image reveal" data-animate="fade" src="./assets/img/pad_with_right_hand_tap.png" alt="Палец набирает текст на устройстве ПЛАНКА" loading="lazy" />
               <p class="note">Палец набирает «ВИННИПУХ». Смена руки. Телесность.</p>
             </div>
             <div class="only-print alt">
-              <!-- PDF alternative: still photo + partial text "ВИННИПУ" -->
-              <div class="ph ph-photo">PRINT • СТАТИКА «ВИННИПУ»</div>
+              <img class="media-image" src="./assets/img/pad_with_right_hand_tap.png" alt="Статичный кадр набора текста" loading="lazy" />
             </div>
           </article>
 
@@ -135,12 +127,11 @@
             <!-- scenario: device tilts; side view; screen not visible -->
             <header class="stage-title">Намерение</header>
             <div class="media-row">
-              <div class="ph ph-video reveal" data-animate="fade">VIDEO • НАКЛОН УСТРОЙСТВА</div>
+              <img class="media-image reveal" data-animate="fade" src="./assets/img/pad_in_hands.png" alt="Наклон устройства в руках" loading="lazy" />
               <p class="note">Устройство наклоняется. Вид сбоку. Экран скрыт.</p>
             </div>
             <div class="only-print alt">
-              <!-- PDF alternative: intermediate tilt + dotted arrow -->
-              <div class="ph ph-diagram">PRINT • НАКЛОН + ПУНКТИР</div>
+              <img class="media-image" src="./assets/img/pad_in_hands.png" alt="Промежуточный кадр наклона устройства" loading="lazy" />
             </div>
           </article>
 
@@ -149,12 +140,11 @@
             <!-- scenario: text flips; adult balloon: «Хорошо, посмотри.» -->
             <header class="stage-title">Показ</header>
             <div class="media-row">
-              <div class="ph ph-video reveal" data-animate="fade">VIDEO • РАЗВОРОТ ТЕКСТА</div>
+              <img class="media-image reveal" data-animate="fade" src="./assets/img/pad_in_hands_with_fullscreen_clean.png" alt="Разворот текста для собеседника" loading="lazy" />
               <p class="note">Текст разворачивается. Взрослый: «Хорошо, посмотри.»</p>
             </div>
             <div class="only-print alt">
-              <!-- PDF alternative: flipped text + trajectory arrow -->
-              <div class="ph ph-diagram">PRINT • ПОВОРОТ + ТРАЕКТОРИЯ</div>
+              <img class="media-image" src="./assets/img/pad_in_hands_with_fullscreen_clean.png" alt="Статичный кадр разворота текста" loading="lazy" />
             </div>
           </article>
 
@@ -163,11 +153,11 @@
             <!-- scenario: print returns text to personal mode; cursor appears -->
             <header class="stage-title">Продолжение</header>
             <div class="media-row">
-              <div class="ph ph-video reveal" data-animate="fade">VIDEO • ВОЗВРАТ В ПЕРСОНАЛЬНЫЙ РЕЖИМ</div>
+              <img class="media-image reveal" data-animate="fade" src="./assets/img/pad_single.png" alt="Возврат в персональный режим ввода" loading="lazy" />
               <p class="note">Текст возвращается. Курсор готов к вводу.</p>
             </div>
             <div class="only-print alt">
-              <div class="ph ph-photo">PRINT • ДВА КАДРА: ПОКАЗ / ВОЗВРАТ</div>
+              <img class="media-image" src="./assets/img/pad_single.png" alt="Статичный кадр возврата в персональный режим" loading="lazy" />
             </div>
           </article>
 
@@ -198,12 +188,12 @@
           <div class="screens">
             <!-- Screen 1: front view; Screen 2: back view. Crossfade on scroll. -->
             <figure class="screen reveal" data-animate="fade">
-              <div class="ph ph-render">RENDER • ФРОНТ</div>
+              <img class="media-image" src="./assets/img/pad_single.png" alt="Фронтальный вид устройства ПЛАНКА" loading="lazy" />
               <figcaption>Фронт устройства</figcaption>
             </figure>
             <figure class="screen reveal" data-animate="fade">
-              <div class="ph ph-render">RENDER • ЗАДНИК</div>
-              <figcaption>Задняя сторона</figcaption>
+              <img class="media-image" src="./assets/img/pad_wire_dark.png" alt="Конструктив и обратная сторона устройства ПЛАНКА" loading="lazy" />
+              <figcaption>Конструктив и задняя сторона</figcaption>
             </figure>
           </div>
         </div>
@@ -215,12 +205,12 @@
           <h2 class="title">Разделение слоёв</h2>
           <div class="screens">
             <figure class="screen reveal" data-animate="fade">
-              <div class="ph ph-photo">РУКИ С УСТРОЙСТВОМ</div>
+              <img class="media-image" src="./assets/img/pad_in_hands.png" alt="Устройство ПЛАНКА в руках подростка" loading="lazy" />
               <figcaption>Для него — инструмент.</figcaption>
             </figure>
             <figure class="screen reveal" data-animate="fade">
-              <div class="ph ph-screen">ИНТЕРФЕЙС ВЗРОСЛОГО ДАШБОРДА</div>
-              <figcaption>Для взрослого — отдельный аналитический контур.</figcaption>
+              <img class="media-image" src="./assets/img/pad_in_hands_with_fullscreen_clean.png" alt="Отдельный слой отображения для взаимодействия со взрослым" loading="lazy" />
+              <figcaption>Для взрослого — отдельный слой наблюдения и поддержки.</figcaption>
             </figure>
           </div>
         </div>
@@ -268,4 +258,3 @@
     <script src="./main.js"></script>
   </body>
   </html>
-

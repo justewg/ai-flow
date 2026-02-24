@@ -42,6 +42,379 @@ project_task_file="${CODEX_DIR}/project_task_id.txt"
 active_issue_file="${CODEX_DIR}/daemon_active_issue_number.txt"
 pending_post_file="${CODEX_DIR}/daemon_waiting_pending_post.txt"
 
+extract_question_line() {
+  local text="$1"
+  printf '%s\n' "$text" \
+    | sed 's/\r$//' \
+    | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' \
+    | sed '/^$/d' \
+    | grep -E '.+\?' \
+    | tail -n1 \
+    | sed -E 's/^[*-][[:space:]]*//'
+}
+
+extract_decision_line() {
+  local text="$1"
+  printf '%s\n' "$text" \
+    | sed 's/\r$//' \
+    | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' \
+    | sed '/^$/d' \
+    | grep -Ei '\b(продолжай|продолжить|финализируй|финализировать|подтверди|выбери|как действовать|нужен ответ|ответь)\b' \
+    | tail -n1 \
+    | sed -E 's/^[*-][[:space:]]*//'
+}
+
+sanitize_executor_remark_text() {
+  local text="$1"
+  printf '%s\n' "$text" \
+    | sed 's/\r$//' \
+    | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' \
+    | sed '/^$/d' \
+    | grep -Eiv '^(thinking|exec|codex|viewed image|reconnecting|error:|warning:|tokens used|=== EXECUTOR_|/bin/zsh|```|USE THESE RULES|IMPORTANT:|Open the referenced issue|Plan:|^-\s+Progress updates|^-\s+Use only approved commands|^-\s+Act as a coding agent)'
+}
+
+format_recent_executor_paragraphs() {
+  local text="$1"
+  printf '%s\n' "$text" | awk '
+    function normalize(p) {
+      gsub(/\r/, "", p)
+      gsub(/\n+/, " ", p)
+      gsub(/[[:space:]]+/, " ", p)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", p)
+      return p
+    }
+    function store(p) {
+      p = normalize(p)
+      if (p == "") return
+      idx = (count % 3) + 1
+      arr[idx] = p
+      count++
+    }
+    {
+      if ($0 ~ /^[[:space:]]*$/) {
+        store(buf)
+        buf = ""
+        next
+      }
+      if (buf == "") buf = $0
+      else buf = buf "\n" $0
+    }
+    END {
+      store(buf)
+      if (count == 0) exit
+      start = (count > 3 ? count - 2 : 1)
+      rank = 1
+      for (i = start; i <= count; i++) {
+        idx = ((i - 1) % 3) + 1
+        printf "%d) %s", rank, arr[idx]
+        if (i < count) printf "\n"
+        rank++
+      }
+    }
+  '
+}
+
+extract_recent_codex_blocks_from_log() {
+  if [[ ! -f "${CODEX_DIR}/executor.log" ]]; then
+    return 0
+  fi
+
+  local start_line=""
+  local log_slice_file=""
+  start_line="$(grep -n '^=== EXECUTOR_RUN_START ' "${CODEX_DIR}/executor.log" | tail -n1 | cut -d: -f1 || true)"
+  log_slice_file="$(mktemp "${CODEX_DIR}/executor_log_slice.XXXXXX")"
+  if [[ -n "$start_line" ]]; then
+    sed -n "${start_line},\$p" "${CODEX_DIR}/executor.log" > "$log_slice_file"
+  else
+    tail -n 1200 "${CODEX_DIR}/executor.log" > "$log_slice_file"
+  fi
+
+  awk '
+    function normalize(p) {
+      gsub(/\r/, "", p)
+      gsub(/\n+/, " ", p)
+      gsub(/[[:space:]]+/, " ", p)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", p)
+      return p
+    }
+    function store_block(p) {
+      p = normalize(p)
+      if (p == "") return
+      idx = (count % 3) + 1
+      arr[idx] = p
+      count++
+    }
+    function flush_buffer() {
+      if (buffer != "") {
+        store_block(buffer)
+        buffer = ""
+      }
+    }
+    BEGIN { capture = 0; buffer = ""; count = 0 }
+    {
+      line = $0
+      if (line == "codex") {
+        flush_buffer()
+        capture = 1
+        next
+      }
+      if (capture == 1) {
+        if (line ~ /^(thinking|exec|viewed image|Reconnecting|ERROR:|Warning:|tokens used|=== EXECUTOR_|\/bin\/zsh|$)/) {
+          flush_buffer()
+          capture = 0
+          next
+        }
+        if (buffer == "") buffer = line
+        else buffer = buffer "\n" line
+      }
+    }
+    END {
+      flush_buffer()
+      if (count == 0) exit
+      start = (count > 3 ? count - 2 : 1)
+      rank = 1
+      for (i = start; i <= count; i++) {
+        idx = ((i - 1) % 3) + 1
+        printf "%d) %s", rank, arr[idx]
+        if (i < count) printf "\n"
+        rank++
+      }
+    }
+  ' "$log_slice_file" 2>/dev/null || true
+
+  rm -f "$log_slice_file"
+}
+
+strip_technical_lines() {
+  local text="$1"
+  printf '%s\n' "$text" \
+    | sed 's/\r$//' \
+    | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' \
+    | sed '/^$/d' \
+    | grep -Eiv '(^Task:|^Issue:|^Exit code:|\.tmp/codex/executor\.log|^Проверь лог|^Проверь логи)'
+}
+
+extract_context_line() {
+  local text="$1"
+  strip_technical_lines "$text" | head -n1
+}
+
+normalize_executor_question() {
+  local line="$1"
+  local normalized=""
+  normalized="$(printf '%s' "$line" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+  normalized="$(printf '%s' "$normalized" | sed -E 's#\.tmp/codex/executor\.log#лог задачи#g')"
+
+  if printf '%s' "$normalized" | grep -Eiq 'дай команду как действовать дальше|как действовать дальше'; then
+    printf 'Как действовать дальше?'
+    return 0
+  fi
+
+  normalized="$(printf '%s' "$normalized" | sed -E 's/^Проверь логи[^.]*\.[[:space:]]*//I')"
+  normalized="$(printf '%s' "$normalized" | sed -E 's/^Проверь лог[^.]*\.[[:space:]]*//I')"
+  normalized="$(printf '%s' "$normalized" | sed -E 's/[[:space:]]+/ /g')"
+  normalized="$(printf '%s' "$normalized" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+
+  if [[ -z "$normalized" ]]; then
+    printf 'Какой следующий шаг?'
+    return 0
+  fi
+
+  printf '%s' "$normalized"
+}
+
+is_generic_executor_question() {
+  local line="$1"
+  local value
+  value="$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')"
+  [[ "$value" == "как действовать дальше?" || "$value" == "какой следующий шаг?" || "$value" == "что дальше?" ]]
+}
+
+build_smart_options() {
+  local raw_text="$1"
+  local question_text="$2"
+  local remark_text="$3"
+  local kind="$4"
+  local merged
+  merged="$(printf '%s\n%s\n%s\n' "$raw_text" "$question_text" "$remark_text" | tr '[:upper:]' '[:lower:]')"
+
+  if printf '%s' "$merged" | grep -Eiq '(завершил текущий прогон без финализации|ждет твоего решения|финализируй|finalize|готов к ревью)'; then
+    cat <<'EOF'
+1) продолжай — запусти следующий рабочий прогон.
+2) финализируй — заверши задачу и подготовь PR к ревью.
+3) уточни: <что проверить перед финализацией>.
+EOF
+    return 0
+  fi
+
+  if printf '%s' "$merged" | grep -Eiq '(не смог продолжить|failed|exit code|ошибка|reconnecting|stream disconnected|api\.github|dns|network|таймаут|timeout|unreachable)'; then
+    cat <<'EOF'
+1) продолжай — перезапусти прогон и продолжи с последнего шага.
+2) продолжай без сети — делай локальные правки/коммиты, GitHub-операции отложи.
+3) опиши блокер — коротко: причина, что уже проверено, что нужно от меня.
+EOF
+    return 0
+  fi
+
+  if [[ "$kind" == "BLOCKER" ]]; then
+    cat <<'EOF'
+1) продолжай — выбери лучший следующий шаг и выполняй.
+2) уточни — задай один конкретный вопрос, если данных недостаточно.
+3) финализируй — останови реализацию и подготовь PR к ревью.
+EOF
+    return 0
+  fi
+
+  cat <<'EOF'
+1) продолжай — выполняй следующий шаг по задаче.
+2) финализируй — завершай задачу и готовь PR к ревью.
+3) уточни — задай один конкретный вопрос перед продолжением.
+EOF
+}
+
+detect_recommended_option() {
+  local raw_text="$1"
+  local question_text="$2"
+  local remark_text="$3"
+  local merged
+  merged="$(printf '%s\n%s\n%s\n' "$raw_text" "$question_text" "$remark_text" | tr '[:upper:]' '[:lower:]')"
+
+  if printf '%s' "$merged" | grep -Eiq '(завершил текущий прогон без финализации|ждет твоего решения|готов к ревью)'; then
+    printf '2'
+    return 0
+  fi
+
+  printf '1'
+}
+
+infer_executor_question() {
+  local candidate=""
+  local src_text=""
+
+  if [[ -s "${CODEX_DIR}/executor_last_message.txt" ]]; then
+    src_text="$(<"${CODEX_DIR}/executor_last_message.txt")"
+    candidate="$(extract_question_line "$src_text")"
+    if [[ -z "$candidate" ]]; then
+      candidate="$(extract_decision_line "$src_text")"
+    fi
+  fi
+
+  if [[ -z "$candidate" && -f "${CODEX_DIR}/executor.log" ]]; then
+    src_text="$(tail -n 400 "${CODEX_DIR}/executor.log" 2>/dev/null || true)"
+    candidate="$(extract_question_line "$src_text")"
+    if [[ -z "$candidate" ]]; then
+      candidate="$(extract_decision_line "$src_text")"
+    fi
+  fi
+
+  printf '%s' "$candidate"
+}
+
+infer_executor_remark() {
+  local remark=""
+  local src_text=""
+  local cleaned=""
+  local formatted=""
+
+  if [[ -s "${CODEX_DIR}/executor_last_message.txt" ]]; then
+    src_text="$(<"${CODEX_DIR}/executor_last_message.txt")"
+    cleaned="$(sanitize_executor_remark_text "$src_text")"
+    formatted="$(format_recent_executor_paragraphs "$cleaned")"
+    if [[ -n "$formatted" ]]; then
+      remark="$formatted"
+    fi
+  fi
+
+  if [[ -z "$remark" ]]; then
+    remark="$(extract_recent_codex_blocks_from_log)"
+  fi
+
+  printf '%s' "$remark"
+}
+
+render_question_message() {
+  local text="$1"
+  local kind="$2"
+  local explicit_q=""
+  local explicit_decision=""
+  local inferred_q=""
+  local fallback_q=""
+  local selected_q=""
+  local context_line=""
+  local executor_remark=""
+  local smart_options=""
+  local recommended_option=""
+
+  explicit_q="$(extract_question_line "$text")"
+  explicit_decision="$(extract_decision_line "$text")"
+
+  if [[ -n "$explicit_q" ]]; then
+    selected_q="$explicit_q"
+  elif [[ -n "$explicit_decision" ]]; then
+    selected_q="$explicit_decision"
+  fi
+
+  if [[ -z "$selected_q" ]]; then
+    inferred_q="$(infer_executor_question)"
+    if [[ -n "$inferred_q" ]]; then
+      selected_q="$inferred_q"
+    fi
+  fi
+
+  if [[ -z "$selected_q" ]]; then
+    fallback_q="$(extract_context_line "$text")"
+    if [[ -z "$fallback_q" ]]; then
+      fallback_q="$(printf '%s\n' "$text" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' | sed '/^$/d' | head -n1)"
+    fi
+    selected_q="$fallback_q"
+  fi
+
+  selected_q="$(normalize_executor_question "$selected_q")"
+  if is_generic_executor_question "$selected_q"; then
+    selected_q="Выбери следующий шаг для executor."
+  fi
+  context_line="$(extract_context_line "$text")"
+  executor_remark="$(infer_executor_remark)"
+  smart_options="$(build_smart_options "$text" "$selected_q" "$executor_remark" "$kind")"
+  recommended_option="$(detect_recommended_option "$text" "$selected_q" "$executor_remark")"
+
+  if [[ -n "$selected_q" ]]; then
+    if [[ -n "$executor_remark" && "$executor_remark" != "$selected_q" && "$executor_remark" != "$context_line" ]]; then
+      cat <<EOF_RENDER
+Последние ремарки executor:
+${executor_remark}
+
+EOF_RENDER
+    fi
+
+    if [[ -n "$context_line" && "$context_line" != "$selected_q" ]]; then
+      cat <<EOF_RENDER
+Контекст:
+${context_line}
+
+Вопрос executor:
+${selected_q}
+
+Варианты ответа:
+${smart_options}
+Рекомендовано: ${recommended_option}
+EOF_RENDER
+    else
+      cat <<EOF_RENDER
+Вопрос executor:
+${selected_q}
+
+Варианты ответа:
+${smart_options}
+Рекомендовано: ${recommended_option}
+EOF_RENDER
+    fi
+    return 0
+  fi
+
+  printf '%s' "$text"
+}
+
 post_issue_comment() {
   local issue_number="$1"
   local body="$2"
@@ -115,6 +488,11 @@ fi
 
 now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
+comment_message_text="$message_text"
+if [[ "$kind_label" == "QUESTION" || "$kind_label" == "BLOCKER" ]]; then
+  comment_message_text="$(render_question_message "$message_text" "$kind_label")"
+fi
+
 comment_body="$(cat <<EOF_COMMENT
 CODEX_SIGNAL: ${signal}
 CODEX_TASK: ${task_id}
@@ -123,7 +501,7 @@ CODEX_EXPECT: USER_REPLY
 
 Нужен твой ответ для продолжения работы по задаче.
 
-${message_text}
+${comment_message_text}
 
 Ответь комментарием в этот Issue обычным текстом.
 EOF_COMMENT

@@ -35,12 +35,106 @@ log() {
   printf '%s %s\n' "$ts" "$*" >> "$LOG_FILE"
 }
 
+strip_quotes() {
+  local value="$1"
+  value="${value%\"}"
+  value="${value#\"}"
+  value="${value%\'}"
+  value="${value#\'}"
+  printf '%s' "$value"
+}
+
+read_key_from_env_file() {
+  local file_path="$1"
+  local key="$2"
+  [[ -f "$file_path" ]] || return 1
+  local raw
+  raw="$(grep -E "^${key}=" "$file_path" | tail -n1 | cut -d'=' -f2- || true)"
+  [[ -n "$raw" ]] || return 1
+  strip_quotes "$raw"
+}
+
+resolve_config_value() {
+  local key="$1"
+  local default_value="${2:-}"
+  local env_value="${!key:-}"
+  if [[ -n "$env_value" ]]; then
+    printf '%s' "$env_value"
+    return 0
+  fi
+
+  local env_candidates=()
+  if [[ -n "${DAEMON_GH_ENV_FILE:-}" ]]; then
+    env_candidates+=("${DAEMON_GH_ENV_FILE}")
+  fi
+  env_candidates+=("${ROOT_DIR}/.env")
+  env_candidates+=("${ROOT_DIR}/.env.deploy")
+
+  local env_file value
+  for env_file in "${env_candidates[@]}"; do
+    value="$(read_key_from_env_file "$env_file" "$key" || true)"
+    if [[ -n "$value" ]]; then
+      printf '%s' "$value"
+      return 0
+    fi
+  done
+
+  printf '%s' "$default_value"
+}
+
+is_truthy() {
+  local raw_value="$1"
+  local value
+  value="$(printf '%s' "$raw_value" | tr '[:upper:]' '[:lower:]')"
+  case "$value" in
+    1|true|yes|on)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 AUTH_LAST_DETAIL=""
+AUTH_RUNTIME_DETAIL=""
+AUTH_FALLBACK_ENABLED="0"
+AUTH_FALLBACK_TOKEN_PRESENT="0"
+AUTH_FALLBACK_REASON="DISABLED"
+AUTH_FALLBACK_SOURCE=""
 
 refresh_daemon_github_token() {
-  local auth_log_file token line rc
+  local auth_log_file token line rc fallback_enabled_raw fallback_token
   AUTH_LAST_DETAIL=""
+  AUTH_RUNTIME_DETAIL=""
+  AUTH_FALLBACK_ENABLED="0"
+  AUTH_FALLBACK_TOKEN_PRESENT="0"
+  AUTH_FALLBACK_REASON="DISABLED"
+  AUTH_FALLBACK_SOURCE=""
   auth_log_file="$(mktemp "${CODEX_DIR}/daemon_auth.XXXXXX")"
+
+  fallback_enabled_raw="$(resolve_config_value "DAEMON_GH_TOKEN_FALLBACK_ENABLED" "")"
+  if [[ -z "$fallback_enabled_raw" ]]; then
+    fallback_enabled_raw="$(resolve_config_value "CODEX_GH_TOKEN_FALLBACK_ENABLED" "0")"
+  fi
+  if is_truthy "$fallback_enabled_raw"; then
+    AUTH_FALLBACK_ENABLED="1"
+    AUTH_FALLBACK_REASON="TOKEN_MISSING"
+  fi
+
+  fallback_token="$(resolve_config_value "DAEMON_GH_TOKEN" "")"
+  if [[ -n "$fallback_token" ]]; then
+    AUTH_FALLBACK_SOURCE="DAEMON_GH_TOKEN"
+  else
+    fallback_token="$(resolve_config_value "CODEX_GH_TOKEN" "")"
+    if [[ -n "$fallback_token" ]]; then
+      AUTH_FALLBACK_SOURCE="CODEX_GH_TOKEN"
+    fi
+  fi
+  fallback_token="$(printf '%s' "$fallback_token" | tr -d '\r\n')"
+  if [[ -n "$fallback_token" ]]; then
+    AUTH_FALLBACK_TOKEN_PRESENT="1"
+  fi
 
   if token="$("${ROOT_DIR}/scripts/codex/gh_app_auth_token.sh" 2>"$auth_log_file")"; then
     token="$(printf '%s' "$token" | tr -d '\r\n')"
@@ -68,6 +162,18 @@ refresh_daemon_github_token() {
   rm -f "$auth_log_file"
   if [[ -z "$AUTH_LAST_DETAIL" ]]; then
     AUTH_LAST_DETAIL="AUTH_ERROR_CODE=AUTH_SERVICE_UNREACHABLE"
+  fi
+
+  if [[ "$AUTH_FALLBACK_ENABLED" == "1" && "$AUTH_FALLBACK_TOKEN_PRESENT" == "1" ]]; then
+    export GH_TOKEN="$fallback_token"
+    AUTH_FALLBACK_REASON="ACTIVE"
+    AUTH_RUNTIME_DETAIL="AUTH_DEGRADED=1; DEGRADED=AUTH_SERVICE_UNAVAILABLE; AUTH_MODE=PAT_FALLBACK; AUTH_FALLBACK_SOURCE=${AUTH_FALLBACK_SOURCE}; AUTH_PRIMARY_RC=${rc}; ${AUTH_LAST_DETAIL}"
+    log "AUTH_FALLBACK_ACTIVE source=${AUTH_FALLBACK_SOURCE}; auth_rc=${rc}; auth_detail=${AUTH_LAST_DETAIL}"
+    return 0
+  fi
+
+  if [[ "$AUTH_FALLBACK_ENABLED" == "1" ]]; then
+    AUTH_FALLBACK_REASON="TOKEN_MISSING"
   fi
   return "$rc"
 }
@@ -307,7 +413,7 @@ notify_if_needed() {
   local detail="$2"
 
   local mode="healthy"
-  if [[ "$detail" == *"DEGRADED="* ]]; then
+  if [[ "$detail" == *"DEGRADED="* || "$detail" == *"AUTH_DEGRADED=1"* ]]; then
     mode="degraded"
   fi
 
@@ -406,7 +512,10 @@ while true; do
   if ! refresh_daemon_github_token; then
     rc=$?
     degradation="$(detect_flow_degradation)"
-    detail="AUTH_UNAVAILABLE=1; AUTH_RC=${rc}; ${AUTH_LAST_DETAIL}"
+    detail="AUTH_UNAVAILABLE=1; AUTH_DEGRADED=1; DEGRADED=AUTH_SERVICE_UNAVAILABLE; AUTH_RC=${rc}; ${AUTH_LAST_DETAIL}; AUTH_FALLBACK_ENABLED=${AUTH_FALLBACK_ENABLED}; AUTH_FALLBACK_TOKEN_PRESENT=${AUTH_FALLBACK_TOKEN_PRESENT}; AUTH_FALLBACK_REASON=${AUTH_FALLBACK_REASON}"
+    if [[ -n "$AUTH_FALLBACK_SOURCE" ]]; then
+      detail="${detail}; AUTH_FALLBACK_SOURCE=${AUTH_FALLBACK_SOURCE}"
+    fi
     if [[ -n "$degradation" ]]; then
       detail="${detail} | ${degradation}"
     fi
@@ -425,6 +534,13 @@ while true; do
     first_line="$(build_success_detail "$state" "$output" | tr '\n' ' ')"
     degradation="$(detect_flow_degradation)"
     detail="$first_line"
+    if [[ -n "$AUTH_RUNTIME_DETAIL" ]]; then
+      if [[ -n "$detail" ]]; then
+        detail="${detail} | ${AUTH_RUNTIME_DETAIL}"
+      else
+        detail="$AUTH_RUNTIME_DETAIL"
+      fi
+    fi
     if [[ -n "$degradation" ]]; then
       detail="${detail} | ${degradation}"
     fi
@@ -440,6 +556,9 @@ while true; do
     first_line="$(printf '%s' "$output" | head -n1 | tr '\n' ' ')"
     degradation="$(detect_flow_degradation)"
     detail="rc=$rc; ${first_line}"
+    if [[ -n "$AUTH_RUNTIME_DETAIL" ]]; then
+      detail="${detail} | ${AUTH_RUNTIME_DETAIL}"
+    fi
     if [[ -n "$degradation" ]]; then
       detail="${detail} | ${degradation}"
     fi

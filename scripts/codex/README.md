@@ -80,6 +80,11 @@
 - `GH_APP_INTERNAL_SECRET` — обязателен не только для auth-сервиса, но и для daemon/watchdog-клиента токена (`GET /token`).
 - `DAEMON_GH_AUTH_TIMEOUT_SEC` — timeout запроса daemon/watchdog к локальному auth endpoint (по умолчанию `8` сек).
 - `DAEMON_GH_AUTH_TOKEN_URL` — опциональный явный URL `GET /token` (по умолчанию `http://${GH_APP_BIND:-127.0.0.1}:${GH_APP_PORT:-8787}/token`).
+- `DAEMON_GH_TOKEN_FALLBACK_ENABLED` (или `CODEX_GH_TOKEN_FALLBACK_ENABLED`) — feature flag аварийного fallback на PAT.
+  - По умолчанию `0` (fallback выключен).
+  - Truthy-значения: `1`, `true`, `yes`, `on`.
+  - При `1` и недоступном auth endpoint daemon/watchdog берут токен из `DAEMON_GH_TOKEN`/`CODEX_GH_TOKEN`.
+  - При auth-деградации в `state/detail` пишется явная причина (`AUTH_DEGRADED=1`, `AUTH_FALLBACK_*`), daemon отправляет Telegram-сигнал.
 - `DAEMON_GH_TOKEN` (или `CODEX_GH_TOKEN`) — отдельный GitHub token для daemon/watchdog.
   - Применяется к действиям автоматики: комментарии в Issue, update/create PR, update Project status.
   - Автор этих действий в GitHub будет владельцем этого токена.
@@ -160,7 +165,10 @@
 - `daemon_loop.sh [interval-sec]`
   - крутит `daemon_tick.sh` в цикле с lock-файлом и heartbeat-логом
   - перед каждым тиком получает свежий `GH_TOKEN` из локального auth endpoint (`/token`)
-  - при ошибке auth-сервиса не запускает GitHub-действия и выставляет `WAIT_AUTH_SERVICE`
+  - при ошибке auth-сервиса:
+    - если включен `DAEMON_GH_TOKEN_FALLBACK_ENABLED` и доступен PAT (`DAEMON_GH_TOKEN`/`CODEX_GH_TOKEN`) — продолжает работу через fallback
+    - иначе выставляет `WAIT_AUTH_SERVICE`
+  - при auth-деградации пишет в detail явную причину (`AUTH_DEGRADED=1`, `AUTH_FALLBACK_*`) и отправляет Telegram-сигнал
   - пишет в `daemon_state_detail` явные health-маркеры: `GITHUB_STATUS=<...>` и `TELEGRAM_STATUS=<...>`
   - различает сетевую деградацию и веточный блокер синхронизации (`WAIT_BRANCH_SYNC`)
   - отправляет локальные Telegram-алерты по деградации без спама:
@@ -193,7 +201,7 @@
 - `watchdog_loop.sh [interval-sec]`
   - крутит `watchdog_tick.sh` в цикле с отдельным lock-файлом
   - перед каждым циклом обновляет `GH_TOKEN` через локальный auth endpoint
-  - при ошибке auth-сервиса выставляет `watchdog_state=WAIT_AUTH_SERVICE` и ждет восстановления
+  - при ошибке auth-сервиса использует тот же fallback-флаг `DAEMON_GH_TOKEN_FALLBACK_ENABLED`; без fallback выставляет `watchdog_state=WAIT_AUTH_SERVICE`
 - `watchdog_install.sh [label] [interval-sec]`
   - создает `~/Library/LaunchAgents/<label>.plist` для watchdog
 - `watchdog_uninstall.sh [label]`
@@ -305,6 +313,7 @@ chmod +x scripts/codex/*.sh
 - `DAEMON_TG_ENV_FILE` (путь к env-файлу; по умолчанию проверяются `.env`, `.env.deploy`)
 - `DAEMON_TG_REMINDER_SEC` (интервал reminder в секундах, минимум 60; по умолчанию 1800)
 - `DAEMON_TG_GH_DNS_REMINDER_SEC` (интервал напоминаний именно для деградации `GITHUB_DNS_OFFLINE` при доступном Telegram; минимум 60, по умолчанию 300)
+- `DAEMON_GH_TOKEN_FALLBACK_ENABLED` (или `CODEX_GH_TOKEN_FALLBACK_ENABLED`) — включает аварийный fallback на `DAEMON_GH_TOKEN`/`CODEX_GH_TOKEN` при недоступном auth endpoint
 - `WATCHDOG_DAEMON_LABEL` (какой daemon label перезапускать при hard recovery; по умолчанию `com.planka.codex-daemon`)
 - `WATCHDOG_DAEMON_INTERVAL_SEC` (интервал daemon после hard restart; по умолчанию 45)
 - `WATCHDOG_COOLDOWN_SEC` (минимальная пауза между recovery-действиями; по умолчанию 120)

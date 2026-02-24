@@ -32,6 +32,67 @@ log() {
   printf '%s %s\n' "$ts" "$*" >> "$LOG_FILE"
 }
 
+strip_quotes() {
+  local value="$1"
+  value="${value%\"}"
+  value="${value#\"}"
+  value="${value%\'}"
+  value="${value#\'}"
+  printf '%s' "$value"
+}
+
+read_key_from_env_file() {
+  local file_path="$1"
+  local key="$2"
+  [[ -f "$file_path" ]] || return 1
+  local raw
+  raw="$(grep -E "^${key}=" "$file_path" | tail -n1 | cut -d'=' -f2- || true)"
+  [[ -n "$raw" ]] || return 1
+  strip_quotes "$raw"
+}
+
+resolve_config_value() {
+  local key="$1"
+  local default_value="${2:-}"
+  local env_value="${!key:-}"
+  if [[ -n "$env_value" ]]; then
+    printf '%s' "$env_value"
+    return 0
+  fi
+
+  local env_candidates=()
+  if [[ -n "${DAEMON_GH_ENV_FILE:-}" ]]; then
+    env_candidates+=("${DAEMON_GH_ENV_FILE}")
+  fi
+  env_candidates+=("${ROOT_DIR}/.env")
+  env_candidates+=("${ROOT_DIR}/.env.deploy")
+
+  local env_file value
+  for env_file in "${env_candidates[@]}"; do
+    value="$(read_key_from_env_file "$env_file" "$key" || true)"
+    if [[ -n "$value" ]]; then
+      printf '%s' "$value"
+      return 0
+    fi
+  done
+
+  printf '%s' "$default_value"
+}
+
+is_truthy() {
+  local raw_value="$1"
+  local value
+  value="$(printf '%s' "$raw_value" | tr '[:upper:]' '[:lower:]')"
+  case "$value" in
+    1|true|yes|on)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 set_state() {
   local state="$1"
   local detail="${2:-}"
@@ -45,11 +106,42 @@ set_state() {
 }
 
 WATCHDOG_AUTH_LAST_DETAIL=""
+WATCHDOG_AUTH_FALLBACK_ENABLED="0"
+WATCHDOG_AUTH_FALLBACK_TOKEN_PRESENT="0"
+WATCHDOG_AUTH_FALLBACK_REASON="DISABLED"
+WATCHDOG_AUTH_FALLBACK_SOURCE=""
 
 refresh_watchdog_github_token() {
-  local auth_log_file token line rc
+  local auth_log_file token line rc fallback_enabled_raw fallback_token
   WATCHDOG_AUTH_LAST_DETAIL=""
+  WATCHDOG_AUTH_FALLBACK_ENABLED="0"
+  WATCHDOG_AUTH_FALLBACK_TOKEN_PRESENT="0"
+  WATCHDOG_AUTH_FALLBACK_REASON="DISABLED"
+  WATCHDOG_AUTH_FALLBACK_SOURCE=""
   auth_log_file="$(mktemp "${CODEX_DIR}/watchdog_auth.XXXXXX")"
+
+  fallback_enabled_raw="$(resolve_config_value "DAEMON_GH_TOKEN_FALLBACK_ENABLED" "")"
+  if [[ -z "$fallback_enabled_raw" ]]; then
+    fallback_enabled_raw="$(resolve_config_value "CODEX_GH_TOKEN_FALLBACK_ENABLED" "0")"
+  fi
+  if is_truthy "$fallback_enabled_raw"; then
+    WATCHDOG_AUTH_FALLBACK_ENABLED="1"
+    WATCHDOG_AUTH_FALLBACK_REASON="TOKEN_MISSING"
+  fi
+
+  fallback_token="$(resolve_config_value "DAEMON_GH_TOKEN" "")"
+  if [[ -n "$fallback_token" ]]; then
+    WATCHDOG_AUTH_FALLBACK_SOURCE="DAEMON_GH_TOKEN"
+  else
+    fallback_token="$(resolve_config_value "CODEX_GH_TOKEN" "")"
+    if [[ -n "$fallback_token" ]]; then
+      WATCHDOG_AUTH_FALLBACK_SOURCE="CODEX_GH_TOKEN"
+    fi
+  fi
+  fallback_token="$(printf '%s' "$fallback_token" | tr -d '\r\n')"
+  if [[ -n "$fallback_token" ]]; then
+    WATCHDOG_AUTH_FALLBACK_TOKEN_PRESENT="1"
+  fi
 
   if token="$("${ROOT_DIR}/scripts/codex/gh_app_auth_token.sh" 2>"$auth_log_file")"; then
     token="$(printf '%s' "$token" | tr -d '\r\n')"
@@ -78,6 +170,17 @@ refresh_watchdog_github_token() {
   if [[ -z "$WATCHDOG_AUTH_LAST_DETAIL" ]]; then
     WATCHDOG_AUTH_LAST_DETAIL="AUTH_ERROR_CODE=AUTH_SERVICE_UNREACHABLE"
   fi
+
+  if [[ "$WATCHDOG_AUTH_FALLBACK_ENABLED" == "1" && "$WATCHDOG_AUTH_FALLBACK_TOKEN_PRESENT" == "1" ]]; then
+    export GH_TOKEN="$fallback_token"
+    WATCHDOG_AUTH_FALLBACK_REASON="ACTIVE"
+    log "WATCHDOG_AUTH_FALLBACK_ACTIVE source=${WATCHDOG_AUTH_FALLBACK_SOURCE}; auth_rc=${rc}; auth_detail=${WATCHDOG_AUTH_LAST_DETAIL}"
+    return 0
+  fi
+
+  if [[ "$WATCHDOG_AUTH_FALLBACK_ENABLED" == "1" ]]; then
+    WATCHDOG_AUTH_FALLBACK_REASON="TOKEN_MISSING"
+  fi
   return "$rc"
 }
 
@@ -88,7 +191,10 @@ while true; do
   log "watchdog_heartbeat"
   if ! refresh_watchdog_github_token; then
     rc=$?
-    detail="AUTH_UNAVAILABLE=1; AUTH_RC=${rc}; ${WATCHDOG_AUTH_LAST_DETAIL}"
+    detail="AUTH_UNAVAILABLE=1; AUTH_DEGRADED=1; DEGRADED=AUTH_SERVICE_UNAVAILABLE; AUTH_RC=${rc}; ${WATCHDOG_AUTH_LAST_DETAIL}; AUTH_FALLBACK_ENABLED=${WATCHDOG_AUTH_FALLBACK_ENABLED}; AUTH_FALLBACK_TOKEN_PRESENT=${WATCHDOG_AUTH_FALLBACK_TOKEN_PRESENT}; AUTH_FALLBACK_REASON=${WATCHDOG_AUTH_FALLBACK_REASON}"
+    if [[ -n "$WATCHDOG_AUTH_FALLBACK_SOURCE" ]]; then
+      detail="${detail}; AUTH_FALLBACK_SOURCE=${WATCHDOG_AUTH_FALLBACK_SOURCE}"
+    fi
     set_state "WAIT_AUTH_SERVICE" "$detail"
     sleep "$interval"
     continue

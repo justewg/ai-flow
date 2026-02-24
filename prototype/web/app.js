@@ -12,6 +12,12 @@ const LAYOUTS = {
 };
 
 const NUMBER_ROW = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
+const PARENT_TRIGGER_SYMBOL = "Р";
+const PARENT_ENTRY_PIN = "2580";
+const SYSTEM_EXIT_PIN = "9000";
+const PIN_LENGTH = 4;
+const PIN_LOCKOUT_MS = 10_000;
+const PARENT_TRIGGER_WINDOW_MS = 2_000;
 
 const state = {
   lang: "RU",
@@ -19,6 +25,24 @@ const state = {
   theme: "light",
   clearArmed: false,
   clearTimerId: null,
+  parentTrigger: {
+    rHoldActive: false,
+    windowActive: false,
+    comboMatched: false,
+    windowTimerId: null,
+    volumeUpPressed: false,
+    volumeDownPressed: false,
+  },
+  parentControl: {
+    gateOpen: false,
+    panelOpen: false,
+    pinMode: "parent",
+    pinInput: "",
+    pinError: "",
+    pinBlockUntil: 0,
+    pinBlockTimerId: null,
+    statusMessage: "",
+  },
 };
 
 const STORAGE_KEY = "planka-prototype-state-v1";
@@ -30,6 +54,22 @@ const langToggleEl = document.getElementById("lang-toggle");
 const clearButtonEl = document.getElementById("clear-btn");
 const themeToggleEl = document.getElementById("theme-toggle");
 const themeIconEl = document.getElementById("theme-icon");
+const parentPinOverlayEl = document.getElementById("parent-pin-overlay");
+const parentPinSubtitleEl = document.getElementById("parent-pin-subtitle");
+const parentPinDotsEl = document.getElementById("parent-pin-dots");
+const parentPinErrorEl = document.getElementById("parent-pin-error");
+const parentPinCancelEl = document.getElementById("parent-pin-cancel");
+const pinDigitEls = Array.from(document.querySelectorAll("[data-pin-digit]"));
+const pinBackspaceEl = document.querySelector("[data-pin-action='backspace']");
+const parentPanelEl = document.getElementById("parent-panel");
+const parentPanelStatusEl = document.getElementById("parent-panel-status");
+const parentSystemBtnEl = document.getElementById("parent-system-btn");
+const parentCloseBtnEl = document.getElementById("parent-close-btn");
+const parentActionEls = Array.from(document.querySelectorAll("[data-parent-action]"));
+
+function isParentUiOpen() {
+  return state.parentControl.gateOpen || state.parentControl.panelOpen;
+}
 
 function setKeyLabel(keyEl, label) {
   const labelEl = document.createElement("span");
@@ -67,6 +107,9 @@ function armClear() {
 }
 
 function appendText(symbol) {
+  if (isParentUiOpen()) {
+    return;
+  }
   state.text += symbol;
   renderDisplay();
   disarmClear();
@@ -74,6 +117,9 @@ function appendText(symbol) {
 }
 
 function backspace() {
+  if (isParentUiOpen()) {
+    return;
+  }
   if (!state.text) {
     return;
   }
@@ -84,6 +130,9 @@ function backspace() {
 }
 
 function handleClear() {
+  if (isParentUiOpen()) {
+    return;
+  }
   if (!state.clearArmed) {
     armClear();
     return;
@@ -96,6 +145,9 @@ function handleClear() {
 }
 
 function switchLanguage() {
+  if (isParentUiOpen()) {
+    return;
+  }
   state.lang = state.lang === "RU" ? "EN" : "RU";
   langToggleEl.textContent = state.lang;
   renderKeyboard();
@@ -108,6 +160,27 @@ function createLetterKey(symbol) {
   keyEl.type = "button";
   keyEl.className = "key letter";
   setKeyLabel(keyEl, symbol);
+
+  if (symbol === PARENT_TRIGGER_SYMBOL) {
+    keyEl.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      startParentTriggerHold();
+    });
+
+    const release = () => {
+      finishParentTriggerHold();
+    };
+    keyEl.addEventListener("pointerup", release);
+    keyEl.addEventListener("pointercancel", release);
+    keyEl.addEventListener("pointerleave", (event) => {
+      if (event.buttons === 0) {
+        release();
+      }
+    });
+
+    return keyEl;
+  }
+
   keyEl.addEventListener("click", () => appendText(symbol));
   return keyEl;
 }
@@ -165,6 +238,245 @@ function renderKeyboard() {
   );
 }
 
+function clearParentTriggerWindowTimer() {
+  if (state.parentTrigger.windowTimerId) {
+    window.clearTimeout(state.parentTrigger.windowTimerId);
+    state.parentTrigger.windowTimerId = null;
+  }
+}
+
+function resetParentTriggerState() {
+  clearParentTriggerWindowTimer();
+  state.parentTrigger.rHoldActive = false;
+  state.parentTrigger.windowActive = false;
+  state.parentTrigger.comboMatched = false;
+}
+
+function resetParentTriggerHardwareState() {
+  state.parentTrigger.volumeUpPressed = false;
+  state.parentTrigger.volumeDownPressed = false;
+}
+
+function startParentTriggerHold() {
+  if (isParentUiOpen() || state.lang !== "RU") {
+    return;
+  }
+
+  clearParentTriggerWindowTimer();
+  state.parentTrigger.rHoldActive = true;
+  state.parentTrigger.comboMatched = false;
+  state.parentTrigger.windowActive = true;
+  state.parentTrigger.windowTimerId = window.setTimeout(() => {
+    state.parentTrigger.windowActive = false;
+    state.parentTrigger.windowTimerId = null;
+  }, PARENT_TRIGGER_WINDOW_MS);
+}
+
+function finishParentTriggerHold() {
+  if (!state.parentTrigger.rHoldActive) {
+    return;
+  }
+
+  const shouldTypeSymbol = !state.parentTrigger.comboMatched && !isParentUiOpen();
+  resetParentTriggerState();
+  if (shouldTypeSymbol) {
+    appendText(PARENT_TRIGGER_SYMBOL);
+  }
+}
+
+function getVolumeKeyType(event) {
+  const key = String(event.key || "");
+  const code = String(event.code || "");
+
+  if (key === "AudioVolumeUp" || code === "AudioVolumeUp" || key === "F9" || code === "F9") {
+    return "up";
+  }
+  if (
+    key === "AudioVolumeDown" ||
+    code === "AudioVolumeDown" ||
+    key === "F10" ||
+    code === "F10"
+  ) {
+    return "down";
+  }
+
+  return null;
+}
+
+function tryOpenParentPinGateFromTrigger() {
+  const triggerReady =
+    state.parentTrigger.rHoldActive &&
+    state.parentTrigger.windowActive &&
+    state.parentTrigger.volumeUpPressed &&
+    state.parentTrigger.volumeDownPressed;
+
+  if (!triggerReady) {
+    return false;
+  }
+
+  state.parentTrigger.comboMatched = true;
+  openPinGate("parent", false);
+  resetParentTriggerState();
+  resetParentTriggerHardwareState();
+  return true;
+}
+
+function isPinBlocked() {
+  return Date.now() < state.parentControl.pinBlockUntil;
+}
+
+function clearPinBlockTimer() {
+  if (state.parentControl.pinBlockTimerId) {
+    window.clearTimeout(state.parentControl.pinBlockTimerId);
+    state.parentControl.pinBlockTimerId = null;
+  }
+}
+
+function buildPinDots() {
+  parentPinDotsEl.innerHTML = "";
+  for (let i = 0; i < PIN_LENGTH; i += 1) {
+    const dotEl = document.createElement("span");
+    dotEl.className = "pin-dot";
+    if (i < state.parentControl.pinInput.length) {
+      dotEl.classList.add("filled");
+    }
+    parentPinDotsEl.appendChild(dotEl);
+  }
+}
+
+function renderParentControlUi() {
+  parentPinOverlayEl.hidden = !state.parentControl.gateOpen;
+  parentPanelEl.hidden = !state.parentControl.panelOpen;
+
+  if (state.parentControl.gateOpen) {
+    parentPinSubtitleEl.textContent =
+      state.parentControl.pinMode === "system"
+        ? "Уровень 2: подтверждение выхода в системный режим"
+        : "Удерживай Р + обе громкости, затем введи PIN";
+    buildPinDots();
+
+    const blocked = isPinBlocked();
+    const hasError = state.parentControl.pinError.length > 0;
+    parentPinErrorEl.textContent = hasError ? state.parentControl.pinError : "";
+    parentPinErrorEl.hidden = !hasError;
+
+    const controlsDisabled = blocked;
+    for (const pinDigitEl of pinDigitEls) {
+      pinDigitEl.disabled = controlsDisabled;
+    }
+    pinBackspaceEl.disabled = controlsDisabled;
+  }
+
+  parentPanelStatusEl.textContent = state.parentControl.statusMessage;
+}
+
+function openPinGate(mode, keepParentPanelOpen) {
+  state.parentControl.pinMode = mode;
+  state.parentControl.pinInput = "";
+  state.parentControl.pinError = isPinBlocked()
+    ? "Слишком много попыток. Подожди 10 секунд."
+    : "";
+  state.parentControl.gateOpen = true;
+  state.parentControl.panelOpen = keepParentPanelOpen;
+  renderParentControlUi();
+}
+
+function closePinGate(keepParentPanelOpen) {
+  state.parentControl.gateOpen = false;
+  state.parentControl.pinInput = "";
+  state.parentControl.pinError = "";
+  state.parentControl.panelOpen = keepParentPanelOpen;
+  renderParentControlUi();
+}
+
+function openParentPanel(statusMessage = "Режим родителя активирован.") {
+  state.parentControl.gateOpen = false;
+  state.parentControl.panelOpen = true;
+  state.parentControl.pinInput = "";
+  state.parentControl.pinError = "";
+  state.parentControl.statusMessage = statusMessage;
+  renderParentControlUi();
+}
+
+function closeParentPanel() {
+  state.parentControl.gateOpen = false;
+  state.parentControl.panelOpen = false;
+  state.parentControl.pinInput = "";
+  state.parentControl.pinError = "";
+  state.parentControl.statusMessage = "";
+  renderParentControlUi();
+}
+
+function lockPinInputWithDelay() {
+  state.parentControl.pinInput = "";
+  state.parentControl.pinBlockUntil = Date.now() + PIN_LOCKOUT_MS;
+  state.parentControl.pinError = "Неверный PIN. Повтори через 10 секунд.";
+  clearPinBlockTimer();
+  state.parentControl.pinBlockTimerId = window.setTimeout(() => {
+    state.parentControl.pinBlockUntil = 0;
+    state.parentControl.pinError = "";
+    state.parentControl.pinBlockTimerId = null;
+    renderParentControlUi();
+  }, PIN_LOCKOUT_MS);
+}
+
+function validatePin() {
+  const expectedPin =
+    state.parentControl.pinMode === "system" ? SYSTEM_EXIT_PIN : PARENT_ENTRY_PIN;
+  if (state.parentControl.pinInput !== expectedPin) {
+    lockPinInputWithDelay();
+    renderParentControlUi();
+    return;
+  }
+
+  if (state.parentControl.pinMode === "system") {
+    openParentPanel(
+      "Уровень 2 подтверждён. В native-shell здесь будет переход в Android.",
+    );
+    return;
+  }
+
+  openParentPanel();
+}
+
+function appendPinDigit(digit) {
+  if (!state.parentControl.gateOpen || isPinBlocked()) {
+    return;
+  }
+
+  if (state.parentControl.pinInput.length >= PIN_LENGTH) {
+    return;
+  }
+
+  state.parentControl.pinError = "";
+  state.parentControl.pinInput += digit;
+  renderParentControlUi();
+
+  if (state.parentControl.pinInput.length === PIN_LENGTH) {
+    validatePin();
+  }
+}
+
+function removePinDigit() {
+  if (!state.parentControl.gateOpen || isPinBlocked()) {
+    return;
+  }
+
+  state.parentControl.pinInput = state.parentControl.pinInput.slice(0, -1);
+  state.parentControl.pinError = "";
+  renderParentControlUi();
+}
+
+function handleParentAction(action) {
+  const messages = {
+    sync: "История помечена к выгрузке в бэкенд (демо-интерфейс).",
+    stats: "Сегодня: 47 минут использования, 136 символов (демо).",
+    wifi: "Сетевые настройки доступны после PIN уровня 2.",
+  };
+  state.parentControl.statusMessage = messages[action] || "";
+  renderParentControlUi();
+}
+
 function persistState() {
   const snapshot = {
     text: state.text,
@@ -205,6 +517,9 @@ function renderTheme() {
 }
 
 function toggleTheme() {
+  if (isParentUiOpen()) {
+    return;
+  }
   state.theme = state.theme === "dark" ? "light" : "dark";
   renderTheme();
   persistState();
@@ -242,8 +557,43 @@ async function tryLockLandscape() {
 langToggleEl.addEventListener("click", switchLanguage);
 clearButtonEl.addEventListener("click", handleClear);
 themeToggleEl.addEventListener("click", toggleTheme);
+parentPinCancelEl.addEventListener("click", () => {
+  closePinGate(state.parentControl.pinMode === "system");
+});
+
+for (const pinDigitEl of pinDigitEls) {
+  pinDigitEl.addEventListener("click", () => {
+    appendPinDigit(pinDigitEl.dataset.pinDigit);
+  });
+}
+
+pinBackspaceEl.addEventListener("click", removePinDigit);
+parentSystemBtnEl.addEventListener("click", () => openPinGate("system", true));
+parentCloseBtnEl.addEventListener("click", closeParentPanel);
+
+for (const parentActionEl of parentActionEls) {
+  parentActionEl.addEventListener("click", () => {
+    handleParentAction(parentActionEl.dataset.parentAction);
+  });
+}
 
 document.addEventListener("keydown", (event) => {
+  const volumeKeyType = getVolumeKeyType(event);
+  if (volumeKeyType) {
+    event.preventDefault();
+    if (volumeKeyType === "up") {
+      state.parentTrigger.volumeUpPressed = true;
+    } else {
+      state.parentTrigger.volumeDownPressed = true;
+    }
+    tryOpenParentPinGateFromTrigger();
+    return;
+  }
+
+  if (isParentUiOpen()) {
+    return;
+  }
+
   if (event.key === "Backspace") {
     event.preventDefault();
     backspace();
@@ -262,12 +612,25 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+document.addEventListener("keyup", (event) => {
+  const volumeKeyType = getVolumeKeyType(event);
+  if (!volumeKeyType) {
+    return;
+  }
+  if (volumeKeyType === "up") {
+    state.parentTrigger.volumeUpPressed = false;
+  } else {
+    state.parentTrigger.volumeDownPressed = false;
+  }
+});
+
 window.addEventListener("resize", applyOrientationClass);
 window.addEventListener("orientationchange", applyOrientationClass);
 
 restoreState();
 renderTheme();
 renderClearButtonState();
+renderParentControlUi();
 langToggleEl.textContent = state.lang;
 renderDisplay();
 renderKeyboard();

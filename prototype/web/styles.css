@@ -77,6 +77,16 @@ body {
   gap: var(--layout-gap);
 }
 
+.dev-volume-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dev-volume-controls[hidden] {
+  display: none;
+}
+
 .shell-btn {
   border: 2px solid var(--line);
   border-radius: 10px;
@@ -97,6 +107,13 @@ body {
 .shell-btn-lang {
   min-width: 58px;
   font-size: 18px;
+}
+
+.shell-btn-volume {
+  min-width: 58px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
 }
 
 .shell-btn-danger {

@@ -18,6 +18,11 @@ const SYSTEM_EXIT_PIN = "9000";
 const PIN_LENGTH = 4;
 const PIN_LOCKOUT_MS = 10_000;
 const PARENT_TRIGGER_WINDOW_MS = 2_000;
+const PARENT_TRIGGER_MODE_QUERY_KEYS = ["parentTriggerMode", "parent_mode"];
+const PARENT_TRIGGER_MODE = Object.freeze({
+  PROD: "prod",
+  DEV: "dev",
+});
 
 const state = {
   lang: "RU",
@@ -54,6 +59,9 @@ const langToggleEl = document.getElementById("lang-toggle");
 const clearButtonEl = document.getElementById("clear-btn");
 const themeToggleEl = document.getElementById("theme-toggle");
 const themeIconEl = document.getElementById("theme-icon");
+const parentTriggerDevControlsEl = document.getElementById("parent-trigger-dev-controls");
+const parentVolumeUpDevEl = document.getElementById("parent-volume-up-dev");
+const parentVolumeDownDevEl = document.getElementById("parent-volume-down-dev");
 const parentPinOverlayEl = document.getElementById("parent-pin-overlay");
 const parentPinSubtitleEl = document.getElementById("parent-pin-subtitle");
 const parentPinDotsEl = document.getElementById("parent-pin-dots");
@@ -66,9 +74,44 @@ const parentPanelStatusEl = document.getElementById("parent-panel-status");
 const parentSystemBtnEl = document.getElementById("parent-system-btn");
 const parentCloseBtnEl = document.getElementById("parent-close-btn");
 const parentActionEls = Array.from(document.querySelectorAll("[data-parent-action]"));
+const parentTriggerMode = detectParentTriggerMode();
+
+function isAppleMobileTouchDevice() {
+  const ua = String(window.navigator.userAgent || "");
+  const platform = String(window.navigator.platform || "");
+  const touchPoints = Number(window.navigator.maxTouchPoints || 0);
+  return (
+    /iPad|iPhone|iPod/i.test(ua) ||
+    (platform === "MacIntel" && touchPoints > 1)
+  );
+}
+
+function detectParentTriggerMode() {
+  const params = new URLSearchParams(window.location.search);
+  for (const key of PARENT_TRIGGER_MODE_QUERY_KEYS) {
+    const mode = String(params.get(key) || "")
+      .trim()
+      .toLowerCase();
+    if (mode === PARENT_TRIGGER_MODE.PROD || mode === PARENT_TRIGGER_MODE.DEV) {
+      return mode;
+    }
+  }
+  return isAppleMobileTouchDevice() ? PARENT_TRIGGER_MODE.DEV : PARENT_TRIGGER_MODE.PROD;
+}
+
+function isParentTriggerDevMode() {
+  return parentTriggerMode === PARENT_TRIGGER_MODE.DEV;
+}
 
 function isParentUiOpen() {
   return state.parentControl.gateOpen || state.parentControl.panelOpen;
+}
+
+function applyParentTriggerModeUi() {
+  const isDevMode = isParentTriggerDevMode();
+  if (parentTriggerDevControlsEl) {
+    parentTriggerDevControlsEl.hidden = !isDevMode;
+  }
 }
 
 function setKeyLabel(keyEl, label) {
@@ -303,6 +346,49 @@ function getVolumeKeyType(event) {
   return null;
 }
 
+function setVolumeKeyPressed(volumeKeyType, isPressed) {
+  if (volumeKeyType === "up") {
+    state.parentTrigger.volumeUpPressed = isPressed;
+    return;
+  }
+  state.parentTrigger.volumeDownPressed = isPressed;
+}
+
+function onVolumeKeyPressed(volumeKeyType) {
+  setVolumeKeyPressed(volumeKeyType, true);
+  tryOpenParentPinGateFromTrigger();
+}
+
+function onVolumeKeyReleased(volumeKeyType) {
+  setVolumeKeyPressed(volumeKeyType, false);
+}
+
+function bindDevVolumeControl(buttonEl, volumeKeyType) {
+  if (!buttonEl) {
+    return;
+  }
+
+  buttonEl.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    onVolumeKeyPressed(volumeKeyType);
+  });
+
+  const release = (event) => {
+    if (event) {
+      event.preventDefault();
+    }
+    onVolumeKeyReleased(volumeKeyType);
+  };
+
+  buttonEl.addEventListener("pointerup", release);
+  buttonEl.addEventListener("pointercancel", release);
+  buttonEl.addEventListener("pointerleave", (event) => {
+    if (event.buttons === 0) {
+      release(event);
+    }
+  });
+}
+
 function tryOpenParentPinGateFromTrigger() {
   const triggerReady =
     state.parentTrigger.rHoldActive &&
@@ -352,7 +438,9 @@ function renderParentControlUi() {
     parentPinSubtitleEl.textContent =
       state.parentControl.pinMode === "system"
         ? "Уровень 2: подтверждение выхода в системный режим"
-        : "Удерживай Р + обе громкости, затем введи PIN";
+        : isParentTriggerDevMode()
+          ? "Dev-режим: удерживай Р + VOL+/VOL- на экране (или F9/F10), затем введи PIN"
+          : "Удерживай Р + обе громкости (или F9/F10), затем введи PIN";
     buildPinDots();
 
     const blocked = isPinBlocked();
@@ -577,16 +665,16 @@ for (const parentActionEl of parentActionEls) {
   });
 }
 
+if (isParentTriggerDevMode()) {
+  bindDevVolumeControl(parentVolumeUpDevEl, "up");
+  bindDevVolumeControl(parentVolumeDownDevEl, "down");
+}
+
 document.addEventListener("keydown", (event) => {
   const volumeKeyType = getVolumeKeyType(event);
   if (volumeKeyType) {
     event.preventDefault();
-    if (volumeKeyType === "up") {
-      state.parentTrigger.volumeUpPressed = true;
-    } else {
-      state.parentTrigger.volumeDownPressed = true;
-    }
-    tryOpenParentPinGateFromTrigger();
+    onVolumeKeyPressed(volumeKeyType);
     return;
   }
 
@@ -617,16 +705,20 @@ document.addEventListener("keyup", (event) => {
   if (!volumeKeyType) {
     return;
   }
-  if (volumeKeyType === "up") {
-    state.parentTrigger.volumeUpPressed = false;
-  } else {
-    state.parentTrigger.volumeDownPressed = false;
-  }
+  event.preventDefault();
+  onVolumeKeyReleased(volumeKeyType);
 });
 
 window.addEventListener("resize", applyOrientationClass);
 window.addEventListener("orientationchange", applyOrientationClass);
+window.addEventListener("blur", resetParentTriggerHardwareState);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    resetParentTriggerHardwareState();
+  }
+});
 
+applyParentTriggerModeUi();
 restoreState();
 renderTheme();
 renderClearButtonState();

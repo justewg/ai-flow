@@ -65,7 +65,6 @@
             <span id="theme-icon" aria-hidden="true">☾</span>
           </button>
         </div>
-        <p id="parent-trigger-hint" class="parent-trigger-hint" aria-live="polite"></p>
       </header>
 
       <div class="split-layout">
@@ -82,7 +81,6 @@
     <div id="parent-pin-overlay" class="parent-overlay" hidden>
       <section class="parent-card" role="dialog" aria-modal="true" aria-labelledby="parent-pin-title">
         <h2 id="parent-pin-title" class="parent-title">Родительский контроль</h2>
-        <p id="parent-pin-subtitle" class="parent-subtitle"></p>
         <div id="parent-pin-dots" class="pin-dots" aria-live="polite" aria-label="Ввод PIN"></div>
         <p id="parent-pin-error" class="parent-error" aria-live="polite"></p>
 
@@ -132,6 +130,8 @@
         </div>
       </section>
     </div>
+
+    <div id="toast" class="app-toast" role="status" aria-live="polite" hidden></div>
 
     <script src="./app.js"></script>
   </body>

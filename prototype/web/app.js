@@ -14,12 +14,69 @@ const LAYOUTS = {
 const NUMBER_ROW = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
 const PARENT_TRIGGER_SEQUENCE = Object.freeze(["Р", "О", "Д"]);
 const PARENT_TRIGGER_KEY_SET = new Set(PARENT_TRIGGER_SEQUENCE);
-const PARENT_ENTRY_PIN = "2580";
+const DEFAULT_PARENT_ENTRY_PIN = "2580";
 const SYSTEM_EXIT_PIN = "9000";
 const PIN_LENGTH = 4;
 const PIN_LOCKOUT_MS = 10_000;
+const PIN_RESULT_TOAST_MS = 5_000;
 const PARENT_TRIGGER_STEP_TIMEOUT_MS = 3_000;
 const PARENT_TRIGGER_HOLD_MS = 3_000;
+const ENV_PARENT_PIN_KEYS = Object.freeze([
+  "PLANKA_PARENT_PIN",
+  "PARENT_ENTRY_PIN",
+  "PARENT_PIN",
+]);
+
+function asValidPin(candidate) {
+  if (typeof candidate !== "string" && typeof candidate !== "number") {
+    return null;
+  }
+  const normalized = String(candidate).trim();
+  if (!/^\d{4}$/.test(normalized)) {
+    return null;
+  }
+  return normalized;
+}
+
+function resolveParentEntryPin() {
+  const runtimeConfig =
+    typeof globalThis.__PLANKA_ENV__ === "object" &&
+    globalThis.__PLANKA_ENV__ !== null
+      ? globalThis.__PLANKA_ENV__
+      : null;
+  const processEnv =
+    typeof globalThis.process === "object" &&
+    globalThis.process !== null &&
+    typeof globalThis.process.env === "object" &&
+    globalThis.process.env !== null
+      ? globalThis.process.env
+      : null;
+
+  const candidates = [
+    globalThis.__PLANKA_PARENT_PIN__,
+    globalThis.PLANKA_PARENT_PIN,
+  ];
+
+  for (const key of ENV_PARENT_PIN_KEYS) {
+    if (runtimeConfig && key in runtimeConfig) {
+      candidates.push(runtimeConfig[key]);
+    }
+    if (processEnv && key in processEnv) {
+      candidates.push(processEnv[key]);
+    }
+  }
+
+  for (const candidate of candidates) {
+    const pin = asValidPin(candidate);
+    if (pin) {
+      return pin;
+    }
+  }
+
+  return DEFAULT_PARENT_ENTRY_PIN;
+}
+
+const PARENT_ENTRY_PIN = resolveParentEntryPin();
 
 const state = {
   lang: "RU",
@@ -55,9 +112,7 @@ const langToggleEl = document.getElementById("lang-toggle");
 const clearButtonEl = document.getElementById("clear-btn");
 const themeToggleEl = document.getElementById("theme-toggle");
 const themeIconEl = document.getElementById("theme-icon");
-const parentTriggerHintEl = document.getElementById("parent-trigger-hint");
 const parentPinOverlayEl = document.getElementById("parent-pin-overlay");
-const parentPinSubtitleEl = document.getElementById("parent-pin-subtitle");
 const parentPinDotsEl = document.getElementById("parent-pin-dots");
 const parentPinErrorEl = document.getElementById("parent-pin-error");
 const parentPinCancelEl = document.getElementById("parent-pin-cancel");
@@ -68,16 +123,37 @@ const parentPanelStatusEl = document.getElementById("parent-panel-status");
 const parentSystemBtnEl = document.getElementById("parent-system-btn");
 const parentCloseBtnEl = document.getElementById("parent-close-btn");
 const parentActionEls = Array.from(document.querySelectorAll("[data-parent-action]"));
+const toastEl = document.getElementById("toast");
+let toastTimerId = null;
 
 function isParentUiOpen() {
   return state.parentControl.gateOpen || state.parentControl.panelOpen;
 }
 
-function renderParentTriggerHint() {
-  if (parentTriggerHintEl) {
-    parentTriggerHintEl.textContent =
-      "Родительский вход: нажми Р, О, Д по порядку и удерживай Д 3 секунды.";
+function clearToastTimer() {
+  if (toastTimerId) {
+    window.clearTimeout(toastTimerId);
+    toastTimerId = null;
   }
+}
+
+function showToast(message, type = "success") {
+  if (!toastEl) {
+    return;
+  }
+
+  clearToastTimer();
+  toastEl.hidden = false;
+  toastEl.textContent = message;
+  toastEl.classList.remove("toast-success", "toast-error");
+  toastEl.classList.add(type === "error" ? "toast-error" : "toast-success");
+
+  toastTimerId = window.setTimeout(() => {
+    toastEl.hidden = true;
+    toastEl.textContent = "";
+    toastEl.classList.remove("toast-success", "toast-error");
+    toastTimerId = null;
+  }, PIN_RESULT_TOAST_MS);
 }
 
 function isParentTriggerSymbol(symbol) {
@@ -403,10 +479,6 @@ function renderParentControlUi() {
   parentPanelEl.hidden = !state.parentControl.panelOpen;
 
   if (state.parentControl.gateOpen) {
-    parentPinSubtitleEl.textContent =
-      state.parentControl.pinMode === "system"
-        ? "Уровень 2: подтверждение выхода в системный режим"
-        : "Комбинация Р+О+Д подтверждена. Введи PIN для входа в родительский режим.";
     buildPinDots();
 
     const blocked = isPinBlocked();
@@ -479,7 +551,8 @@ function validatePin() {
     state.parentControl.pinMode === "system" ? SYSTEM_EXIT_PIN : PARENT_ENTRY_PIN;
   if (state.parentControl.pinInput !== expectedPin) {
     lockPinInputWithDelay();
-    renderParentControlUi();
+    showToast("PIN неверный. Попробуй снова через 10 секунд.", "error");
+    closePinGate(state.parentControl.pinMode === "system");
     return;
   }
 
@@ -487,10 +560,12 @@ function validatePin() {
     openParentPanel(
       "Уровень 2 подтверждён. В native-shell здесь будет переход в Android.",
     );
+    showToast("PIN принят. Уровень 2 подтверждён.");
     return;
   }
 
   openParentPanel();
+  showToast("PIN принят. Режим родителя активирован.");
 }
 
 function appendPinDigit(digit) {
@@ -693,7 +768,6 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-renderParentTriggerHint();
 restoreState();
 renderTheme();
 renderClearButtonState();

@@ -51,6 +51,60 @@
       </div>
     </main>
 
+    <div id="parent-pin-overlay" class="parent-overlay" hidden>
+      <section class="parent-card" role="dialog" aria-modal="true" aria-labelledby="parent-pin-title">
+        <h2 id="parent-pin-title" class="parent-title">Родительский контроль</h2>
+        <p id="parent-pin-subtitle" class="parent-subtitle"></p>
+        <div id="parent-pin-dots" class="pin-dots" aria-live="polite" aria-label="Ввод PIN"></div>
+        <p id="parent-pin-error" class="parent-error" aria-live="polite"></p>
+
+        <div class="pin-pad">
+          <button class="pin-key" type="button" data-pin-digit="1">1</button>
+          <button class="pin-key" type="button" data-pin-digit="2">2</button>
+          <button class="pin-key" type="button" data-pin-digit="3">3</button>
+          <button class="pin-key" type="button" data-pin-digit="4">4</button>
+          <button class="pin-key" type="button" data-pin-digit="5">5</button>
+          <button class="pin-key" type="button" data-pin-digit="6">6</button>
+          <button class="pin-key" type="button" data-pin-digit="7">7</button>
+          <button class="pin-key" type="button" data-pin-digit="8">8</button>
+          <button class="pin-key" type="button" data-pin-digit="9">9</button>
+          <button class="pin-key pin-key-wide" type="button" data-pin-action="backspace">⌫</button>
+          <button class="pin-key" type="button" data-pin-digit="0">0</button>
+          <button class="pin-key pin-key-wide" type="button" id="parent-pin-cancel">Отмена</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="parent-panel" class="parent-overlay" hidden>
+      <section class="parent-card parent-panel-card" role="dialog" aria-modal="true" aria-labelledby="parent-panel-title">
+        <h2 id="parent-panel-title" class="parent-title">Панель родителя</h2>
+        <p class="parent-subtitle">Уровень 1: быстрые функции PLANKA</p>
+
+        <div class="parent-actions">
+          <button class="parent-action-btn" type="button" data-parent-action="sync">
+            Сбросить историю в бэкенд
+          </button>
+          <button class="parent-action-btn" type="button" data-parent-action="stats">
+            Сводка использования за сегодня
+          </button>
+          <button class="parent-action-btn" type="button" data-parent-action="wifi">
+            Проверить настройки Wi-Fi
+          </button>
+        </div>
+
+        <p id="parent-panel-status" class="parent-status" aria-live="polite"></p>
+
+        <div class="parent-actions parent-actions-footer">
+          <button id="parent-system-btn" class="parent-action-btn parent-action-btn-primary" type="button">
+            Системные настройки (уровень 2)
+          </button>
+          <button id="parent-close-btn" class="parent-action-btn" type="button">
+            Вернуться в режим Андрюши
+          </button>
+        </div>
+      </section>
+    </div>
+
     <script src="./app.js"></script>
   </body>
 </html>

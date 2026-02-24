@@ -18,7 +18,8 @@ const PARENT_ENTRY_PIN = "2580";
 const SYSTEM_EXIT_PIN = "9000";
 const PIN_LENGTH = 4;
 const PIN_LOCKOUT_MS = 10_000;
-const PARENT_TRIGGER_SEQUENCE_WINDOW_MS = 3_000;
+const PARENT_TRIGGER_STEP_TIMEOUT_MS = 3_000;
+const PARENT_TRIGGER_HOLD_MS = 3_000;
 
 const state = {
   lang: "RU",
@@ -29,6 +30,8 @@ const state = {
   parentTrigger: {
     active: false,
     timerId: null,
+    holdTimerId: null,
+    holdSymbol: null,
     sequenceIndex: 0,
   },
   parentControl: {
@@ -73,7 +76,7 @@ function isParentUiOpen() {
 function renderParentTriggerHint() {
   if (parentTriggerHintEl) {
     parentTriggerHintEl.textContent =
-      "Родительский вход: нажми Р, О, Д по порядку в течение 3 секунд.";
+      "Родительский вход: нажми Р, О, Д по порядку и удерживай Д 3 секунды.";
   }
 }
 
@@ -176,6 +179,12 @@ function createLetterKey(symbol) {
       event.preventDefault();
       onParentTriggerKeyPressed(symbol);
     });
+    keyEl.addEventListener("pointerup", () => {
+      onParentTriggerKeyReleased(symbol);
+    });
+    keyEl.addEventListener("pointercancel", () => {
+      onParentTriggerKeyReleased(symbol);
+    });
 
   } else {
     keyEl.addEventListener("pointerdown", cancelParentTriggerAttempt);
@@ -246,19 +255,43 @@ function clearParentTriggerTimer() {
   }
 }
 
+function clearParentTriggerHoldTimer() {
+  if (state.parentTrigger.holdTimerId) {
+    window.clearTimeout(state.parentTrigger.holdTimerId);
+    state.parentTrigger.holdTimerId = null;
+  }
+}
+
+function restartParentTriggerStepTimeout() {
+  clearParentTriggerTimer();
+  state.parentTrigger.timerId = window.setTimeout(() => {
+    resetParentTriggerState();
+  }, PARENT_TRIGGER_STEP_TIMEOUT_MS);
+}
+
 function resetParentTriggerState() {
   clearParentTriggerTimer();
+  clearParentTriggerHoldTimer();
   state.parentTrigger.active = false;
+  state.parentTrigger.holdSymbol = null;
   state.parentTrigger.sequenceIndex = 0;
 }
 
 function startParentTriggerAttempt() {
   state.parentTrigger.active = true;
   state.parentTrigger.sequenceIndex = 1;
+  state.parentTrigger.holdSymbol = null;
+  restartParentTriggerStepTimeout();
+}
+
+function startParentTriggerHold(symbol) {
   clearParentTriggerTimer();
-  state.parentTrigger.timerId = window.setTimeout(() => {
+  clearParentTriggerHoldTimer();
+  state.parentTrigger.holdSymbol = symbol;
+  state.parentTrigger.holdTimerId = window.setTimeout(() => {
+    openPinGate("parent", false);
     resetParentTriggerState();
-  }, PARENT_TRIGGER_SEQUENCE_WINDOW_MS);
+  }, PARENT_TRIGGER_HOLD_MS);
 }
 
 function onParentTriggerKeyPressed(symbol) {
@@ -278,13 +311,26 @@ function onParentTriggerKeyPressed(symbol) {
     return true;
   }
 
+  if (state.parentTrigger.holdSymbol) {
+    if (symbol === state.parentTrigger.holdSymbol) {
+      return true;
+    }
+    if (symbol === PARENT_TRIGGER_SEQUENCE[0]) {
+      startParentTriggerAttempt();
+      return true;
+    }
+    resetParentTriggerState();
+    return true;
+  }
+
   const expected = PARENT_TRIGGER_SEQUENCE[state.parentTrigger.sequenceIndex];
   if (symbol === expected) {
     state.parentTrigger.sequenceIndex += 1;
     if (state.parentTrigger.sequenceIndex === PARENT_TRIGGER_SEQUENCE.length) {
-      openPinGate("parent", false);
-      resetParentTriggerState();
+      startParentTriggerHold(symbol);
+      return true;
     }
+    restartParentTriggerStepTimeout();
     return true;
   }
 
@@ -295,6 +341,17 @@ function onParentTriggerKeyPressed(symbol) {
 
   resetParentTriggerState();
   return true;
+}
+
+function onParentTriggerKeyReleased(symbol) {
+  if (
+    !state.parentTrigger.active ||
+    !state.parentTrigger.holdSymbol ||
+    symbol !== state.parentTrigger.holdSymbol
+  ) {
+    return;
+  }
+  resetParentTriggerState();
 }
 
 function cancelParentTriggerAttempt() {
@@ -624,6 +681,7 @@ document.addEventListener("keyup", (event) => {
     return;
   }
   event.preventDefault();
+  onParentTriggerKeyReleased(triggerSymbol);
 });
 
 window.addEventListener("resize", applyOrientationClass);

@@ -147,3 +147,9 @@
 - `APP-04 + APP-05 + APP-06 -> APP-07`
 - `APP-04 -> APP-08`
 - `APP-08 -> APP-09`
+
+## Актуальная Mermaid-диаграмма APP-зависимостей
+Обновление диаграммы перед docs/PR:
+1. Выполнить `scripts/codex/run.sh app_deps_mermaid`.
+2. Проверить/вставить файл `docs/app-issues-dependency-diagram.md`.
+3. Если нужен другой путь вывода: `scripts/codex/run.sh app_deps_mermaid <output-file>`.

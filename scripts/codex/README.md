@@ -20,6 +20,7 @@
 - `scripts/codex/run.sh project_add_task`
 - `scripts/codex/run.sh project_set_status`
 - `scripts/codex/run.sh next_task` — показать следующую задачу со статусом `Planned` (приоритет P0→P1→P2, затем по номеру `PL-xxx`).
+- `scripts/codex/run.sh app_deps_mermaid [output-file]` — построить Mermaid DAG зависимостей APP-issues из `Flow Meta` (`Depends-On/Blocks`) и записать markdown-файл (по умолчанию `docs/app-issues-dependency-diagram.md`).
 - `scripts/codex/run.sh daemon_tick` — один цикл демона: проверка `Todo`, подхват задачи, перевод в `In Progress`.
 - `scripts/codex/run.sh daemon_loop [interval-sec]` — непрерывный polling-цикл демона (по умолчанию 45 сек).
 - `scripts/codex/run.sh daemon_install [label] [interval-sec]` — установка и запуск `launchd`-агента.
@@ -148,6 +149,10 @@
   - после создания делает verify `Status/Flow`; при сетевой деградации возвращает ошибку, чтобы не считать задачу корректно инициализированной
 - `next_task.sh`
   - выводит `NEXT_TASK_ID=...` и `NEXT_TITLE=...` для ближайшей задачи (статус `Planned`)
+- `generate_app_dependencies_mermaid.sh [output-file]`
+  - читает APP-issues через GitHub API и парсит `Flow Meta -> Depends-On/Blocks`
+  - строит Mermaid DAG в markdown (по умолчанию `docs/app-issues-dependency-diagram.md`)
+  - ошибки парсинга отдельных токенов не прерывают генерацию, а добавляются в раздел `Ошибки парсинга`
 - `daemon_tick.sh`
   - останавливается только при изменениях tracked-файлов (staged/unstaged)
   - untracked-файлы не блокируют daemon-flow

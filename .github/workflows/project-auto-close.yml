@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.PROJECT_AUTOMATION_TOKEN }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
       PR_TITLE: ${{ github.event.pull_request.title }}
       PR_BODY: ${{ github.event.pull_request.body }}
 
@@ -27,10 +28,30 @@ jobs:
       - name: Extract task ids from PR title/body
         id: extract
         run: |
+          PR_TEXT="$(printf '%s\n%s\n' "${PR_TITLE}" "${PR_BODY}")"
+          RAW_TASK_IDS="$(
+            printf '%s\n' "${PR_TEXT}" \
+              | grep -Eo 'PL-[0-9]{3}|ISSUE-[0-9]+' || true
+          )"
+          REF_ISSUE_NUMBERS="$(
+            {
+              printf '%s\n' "${PR_TEXT}" | grep -Eo '#[0-9]+' | tr -d '#' || true
+              printf '%s\n' "${PR_TEXT}" | grep -Eo '/issues/[0-9]+' | grep -Eo '[0-9]+' || true
+            } | sort -u
+          )"
+          NORMALIZED_REF_IDS=""
+          while IFS= read -r issue_number; do
+            [[ -z "${issue_number}" ]] && continue
+            if [[ "${issue_number}" == "${PR_NUMBER}" ]]; then
+              continue
+            fi
+            NORMALIZED_REF_IDS+=$'ISSUE-'"${issue_number}"$'\n'
+          done <<< "${REF_ISSUE_NUMBERS}"
           TASK_IDS="$(
-            printf '%s\n%s\n' "${PR_TITLE}" "${PR_BODY}" \
-              | grep -Eo 'PL-[0-9]{3}|ISSUE-[0-9]+' \
-              | sort -u || true
+            {
+              printf '%s\n' "${RAW_TASK_IDS}"
+              printf '%s' "${NORMALIZED_REF_IDS}"
+            } | sed '/^$/d' | sort -u
           )"
           if [[ -z "${TASK_IDS}" ]]; then
             echo "has_tasks=false" >> "${GITHUB_OUTPUT}"

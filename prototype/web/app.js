@@ -37,6 +37,8 @@ const state = {
     windowTimerId: null,
     volumeUpPressed: false,
     volumeDownPressed: false,
+    volumeUpSeen: false,
+    volumeDownSeen: false,
   },
   parentControl: {
     gateOpen: false,
@@ -59,6 +61,7 @@ const langToggleEl = document.getElementById("lang-toggle");
 const clearButtonEl = document.getElementById("clear-btn");
 const themeToggleEl = document.getElementById("theme-toggle");
 const themeIconEl = document.getElementById("theme-icon");
+const parentTriggerHintEl = document.getElementById("parent-trigger-hint");
 const parentTriggerDevControlsEl = document.getElementById("parent-trigger-dev-controls");
 const parentVolumeUpDevEl = document.getElementById("parent-volume-up-dev");
 const parentVolumeDownDevEl = document.getElementById("parent-volume-down-dev");
@@ -111,6 +114,11 @@ function applyParentTriggerModeUi() {
   const isDevMode = isParentTriggerDevMode();
   if (parentTriggerDevControlsEl) {
     parentTriggerDevControlsEl.hidden = !isDevMode;
+  }
+  if (parentTriggerHintEl) {
+    parentTriggerHintEl.textContent = isDevMode
+      ? "Режим DEV: удерживай Р и нажми VOL+ и VOL- (можно по очереди). Fallback: F9/F10 или +/-."
+      : "Режим PROD: удерживай Р и нажми обе громкости. Fallback: F9/F10, +/- или Alt+↑/Alt+↓.";
   }
 }
 
@@ -298,6 +306,8 @@ function resetParentTriggerState() {
 function resetParentTriggerHardwareState() {
   state.parentTrigger.volumeUpPressed = false;
   state.parentTrigger.volumeDownPressed = false;
+  state.parentTrigger.volumeUpSeen = false;
+  state.parentTrigger.volumeDownSeen = false;
 }
 
 function startParentTriggerHold() {
@@ -306,6 +316,7 @@ function startParentTriggerHold() {
   }
 
   clearParentTriggerWindowTimer();
+  resetParentTriggerHardwareState();
   state.parentTrigger.rHoldActive = true;
   state.parentTrigger.comboMatched = false;
   state.parentTrigger.windowActive = true;
@@ -331,14 +342,27 @@ function getVolumeKeyType(event) {
   const key = String(event.key || "");
   const code = String(event.code || "");
 
-  if (key === "AudioVolumeUp" || code === "AudioVolumeUp" || key === "F9" || code === "F9") {
+  if (
+    key === "AudioVolumeUp" ||
+    key === "VolumeUp" ||
+    code === "AudioVolumeUp" ||
+    key === "F9" ||
+    code === "F9" ||
+    code === "Equal" ||
+    code === "NumpadAdd" ||
+    (code === "ArrowUp" && event.altKey)
+  ) {
     return "up";
   }
   if (
     key === "AudioVolumeDown" ||
+    key === "VolumeDown" ||
     code === "AudioVolumeDown" ||
     key === "F10" ||
-    code === "F10"
+    code === "F10" ||
+    code === "Minus" ||
+    code === "NumpadSubtract" ||
+    (code === "ArrowDown" && event.altKey)
   ) {
     return "down";
   }
@@ -356,6 +380,11 @@ function setVolumeKeyPressed(volumeKeyType, isPressed) {
 
 function onVolumeKeyPressed(volumeKeyType) {
   setVolumeKeyPressed(volumeKeyType, true);
+  if (volumeKeyType === "up") {
+    state.parentTrigger.volumeUpSeen = true;
+  } else {
+    state.parentTrigger.volumeDownSeen = true;
+  }
   tryOpenParentPinGateFromTrigger();
 }
 
@@ -393,8 +422,8 @@ function tryOpenParentPinGateFromTrigger() {
   const triggerReady =
     state.parentTrigger.rHoldActive &&
     state.parentTrigger.windowActive &&
-    state.parentTrigger.volumeUpPressed &&
-    state.parentTrigger.volumeDownPressed;
+    state.parentTrigger.volumeUpSeen &&
+    state.parentTrigger.volumeDownSeen;
 
   if (!triggerReady) {
     return false;
@@ -439,8 +468,8 @@ function renderParentControlUi() {
       state.parentControl.pinMode === "system"
         ? "Уровень 2: подтверждение выхода в системный режим"
         : isParentTriggerDevMode()
-          ? "Dev-режим: удерживай Р + VOL+/VOL- на экране (или F9/F10), затем введи PIN"
-          : "Удерживай Р + обе громкости (или F9/F10), затем введи PIN";
+          ? "Dev-режим: удерживай Р + VOL+/VOL- на экране (можно по очереди), затем введи PIN"
+          : "Удерживай Р + обе громкости (или F9/F10, +/-), затем введи PIN";
     buildPinDots();
 
     const blocked = isPinBlocked();
@@ -678,6 +707,12 @@ document.addEventListener("keydown", (event) => {
     return;
   }
 
+  if ((event.key === "р" || event.key === "Р" || event.key === "r" || event.key === "R") && !event.repeat) {
+    event.preventDefault();
+    startParentTriggerHold();
+    return;
+  }
+
   if (isParentUiOpen()) {
     return;
   }
@@ -701,6 +736,12 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("keyup", (event) => {
+  if (event.key === "р" || event.key === "Р" || event.key === "r" || event.key === "R") {
+    event.preventDefault();
+    finishParentTriggerHold();
+    return;
+  }
+
   const volumeKeyType = getVolumeKeyType(event);
   if (!volumeKeyType) {
     return;

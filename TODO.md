@@ -36,6 +36,17 @@
 | PL-020 | Провести smoke-тест автозакрытия задач `PL-xxx` на merged PR в `main` | MVP | P0 | Done | После merge PR с ID `PL-019` и `PL-020` workflow `Project Auto Close Tasks` завершился успешно и обе карточки ушли в `Done` |
 | PL-021 | Добавить Telegram push-уведомления о merge PR в `main` | MVP | P1 | Done | Поднят Telegram-канал уведомлений через GitHub Actions и secrets (`TG_BOT_TOKEN`, `TG_CHAT_ID`) |
 | PL-022 | Добавить Telegram-сигналы на PR-ревью и финальные статусы post-merge workflow | MVP | P1 | In Progress | При создании/обновлении PR в `main` приходит сигнал на ревью; после merge приходят статусы `Deploy Main to Hosting` и `Project Auto Close Tasks` |
+| PL-034 | Narrative patch stage 1: Intro без бренда и без kicker | MVP | P1 | Planned | SECTION 0 содержит только фото + 2 строки (`Андрюша уже умеет говорить.` / `Просто не голосом.`), без `PLANKA` и без `ИНЖЕНЕРНЫЙ МАНИФЕСТ` |
+| PL-035 | Narrative patch stage 2: Эволюция без wireframe в SECTION 1 | MVP | P1 | Planned | В SECTION 1 5-й шаг заменен на TV/Поиск или placeholder (`TODO_TV.png`), wireframe полностью убран из эволюции |
+| PL-036 | Narrative patch stage 3: Связанные тезисы в SECTION 2 | MVP | P1 | Planned | SECTION 2 переписан на 5 связанных тезисов (PECS/пластилин/эрудит/TV/бумага), без абстрактных формулировок |
+| PL-037 | Narrative patch stage 4: Мостик текста и порядок кадров в SECTION 3 | MVP | P1 | Planned | В SECTION 3 добавлены 2-3 строки мостика и зафиксирован порядок кадров: wireframe -> прототип UI |
+| PL-038 | Narrative patch stage 5: Жест "СМОТРИ" в 4 кадра | MVP | P0 | Planned | SECTION 4 разложен на Письмо -> Намерение -> Показ -> Продолжил, добавлена финальная строка цикла (`Написал -> Показал -> Получил реакцию -> Продолжил.`) |
+| PL-039 | Narrative patch stage 6: Корректные принципы в SECTION 5 | MVP | P1 | Planned | SECTION 5 содержит обновленный список принципов (без тезиса `без скрытых жестов`) и краткие формулировки |
+| PL-040 | Narrative patch stage 7: Предметность SECTION 6 (фронт + задник) | MVP | P1 | Planned | SECTION 6 показывает фронт устройства и отдельный кадр задника/фактуры (реальный ассет или placeholder `TODO_BACK.png`) |
+| PL-041 | Narrative patch stage 8: Разделение слоев в SECTION 7 | MVP | P1 | Planned | SECTION 7: кадр 1 `инструмент для него`, кадр 2 `dashboard взрослого слоя` (реальный ассет или placeholder `TODO_DASHBOARD.png`) |
+| PL-042 | Narrative patch stage 9: Пространство роста в SECTION 8 | MVP | P1 | Planned | SECTION 8 разделяет центр/периферию слов и фиксирует периферийные фразы (`ХОЧУ ГУЛЯТЬ`, `БОЛИТ ЖИВОТ`, `Я НЕ ХОЧУ ЭТО`, `МНЕ НУЖЕН ПУЛЬТ`) |
+| PL-043 | Narrative patch stage 10: Финал разделен на 9a и 9b | MVP | P1 | Planned | Финал разбит на две секции: 9a (посыл) и 9b (почти пустой экран с логотипом и сноской Планка) |
+| PL-044 | Narrative patch stage 11: Print-режим по секциям | MVP | P0 | Planned | В `print.css` для всех narrative-секций подтвержден разрыв страницы (`page-break-after`) и корректная печать без слияния блоков |
 | PL-005 | Добавить backspace с удержанием, безопасную очистку и переключение языка удержанием | MVP | P1 | Planned | Поведение клавиш стабильно и защищено от случайных нажатий |
 | PL-006 | Добавить TTS-кнопку "Сказать" без модификации введенного текста | MVP | P1 | Planned | Текст проговаривается как введен, без автоисправлений |
 | PL-007 | Добавить переворот только текстовой зоны на 180° по данным датчиков | MVP | P1 | Planned | При наклоне меняется только ориентация текста, клавиатура неизменна |

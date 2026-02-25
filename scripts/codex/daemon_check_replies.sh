@@ -20,8 +20,14 @@ is_review_feedback_kind() {
   [[ "$(printf '%s' "$value" | tr '[:lower:]' '[:upper:]')" == "REVIEW_FEEDBACK" ]]
 }
 
-detect_review_reply_mode() {
-  local body="$1"
+is_blocker_kind() {
+  local value="$1"
+  [[ "$(printf '%s' "$value" | tr '[:lower:]' '[:upper:]')" == "BLOCKER" ]]
+}
+
+detect_reply_mode() {
+  local kind="$1"
+  local body="$2"
   local explicit_mode=""
   explicit_mode="$(
     printf '%s\n' "$body" |
@@ -31,6 +37,27 @@ detect_review_reply_mode() {
   )"
   if [[ "$explicit_mode" == "QUESTION" || "$explicit_mode" == "REWORK" ]]; then
     printf '%s' "$explicit_mode"
+    return 0
+  fi
+
+  if is_blocker_kind "$kind"; then
+    if printf '%s' "$body" | grep -q '?' ||
+      printf '%s' "$body" | grep -Eiq '(^|[[:space:]])(что|как|почему|зачем|когда|где|какой|какая|какие|можно ли|все ли|опиши|поясни|уточни|расскажи|объясни)\b'; then
+      printf 'QUESTION'
+      return 0
+    fi
+
+    if printf '%s' "$body" | grep -Eiq '(продолж|возобнов|выполняй|делай дальше|go|lgtm|approve|approved|можно продолжать|разрешаю|ок[, ]*продолж)'; then
+      printf 'REWORK'
+      return 0
+    fi
+
+    if printf '%s' "$body" | grep -Eiq '(сделай|добавь|исправ|поправ|измени|доработ|реализ|перепиши|убери|удали|перенеси|нужно|надо|требуется|поменяй|обнови)'; then
+      printf 'REWORK'
+      return 0
+    fi
+
+    printf 'QUESTION'
     return 0
   fi
 
@@ -48,10 +75,11 @@ detect_review_reply_mode() {
   printf 'REWORK'
 }
 
-build_review_answer_comment() {
-  local task_id="$1"
-  local issue_number="$2"
-  local reply_id="$3"
+build_answer_comment() {
+  local kind_label="$1"
+  local task_id="$2"
+  local issue_number="$3"
+  local reply_id="$4"
 
   local status_hint="Review"
   local flow_hint="In Review"
@@ -61,11 +89,24 @@ build_review_answer_comment() {
   local pr_number=""
   local pr_state="UNKNOWN"
   local pr_url=""
+  local question_comment_url=""
+  local question_comment_id=""
+  local last_note=""
 
   [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]] && active_task="$(<"${CODEX_DIR}/daemon_active_task.txt")"
   [[ -s "${CODEX_DIR}/executor_state.txt" ]] && exec_state="$(<"${CODEX_DIR}/executor_state.txt")"
   [[ -s "${CODEX_DIR}/executor_pid.txt" ]] && exec_pid="$(<"${CODEX_DIR}/executor_pid.txt")"
   [[ -s "${CODEX_DIR}/daemon_review_pr_number.txt" ]] && pr_number="$(<"${CODEX_DIR}/daemon_review_pr_number.txt")"
+  [[ -s "${CODEX_DIR}/daemon_waiting_comment_url.txt" ]] && question_comment_url="$(<"${CODEX_DIR}/daemon_waiting_comment_url.txt")"
+  [[ -s "${CODEX_DIR}/daemon_waiting_question_comment_id.txt" ]] && question_comment_id="$(<"${CODEX_DIR}/daemon_waiting_question_comment_id.txt")"
+  if [[ -s "${CODEX_DIR}/executor_last_message.txt" ]]; then
+    last_note="$(tr '\n' ' ' < "${CODEX_DIR}/executor_last_message.txt" | sed 's/[[:space:]]\+/ /g' | cut -c1-260)"
+  fi
+
+  if is_blocker_kind "$kind_label"; then
+    status_hint="In Progress"
+    flow_hint="In Progress"
+  fi
 
   if [[ "$active_task" == "$task_id" ]]; then
     status_hint="In Progress"
@@ -97,6 +138,42 @@ build_review_answer_comment() {
     pr_line="- PR #${pr_number}: ${pr_state}"
   else
     pr_line="- PR: не найден в review-контексте"
+  fi
+
+  local blocker_line=""
+  if [[ -n "$question_comment_url" ]]; then
+    blocker_line="- Исходный блокер: ${question_comment_url}"
+  elif [[ -n "$question_comment_id" ]]; then
+    blocker_line="- Исходный блокер: comment id ${question_comment_id}"
+  else
+    blocker_line="- Исходный блокер: см. предыдущий комментарий CODEX_SIGNAL: AGENT_BLOCKER"
+  fi
+
+  local last_note_line=""
+  if [[ -n "$last_note" ]]; then
+    last_note_line="- Последняя ремарка executor: ${last_note}"
+  fi
+
+  if is_blocker_kind "$kind_label"; then
+    cat <<EOF
+CODEX_SIGNAL: AGENT_ANSWER
+CODEX_TASK: ${task_id}
+CODEX_SOURCE_REPLY_COMMENT_ID: ${reply_id}
+CODEX_MODE: QUESTION
+
+Короткий ответ: вижу запрос на уточнение блокера. Блокер активен, работу не возобновлял.
+
+Текущий контекст:
+- Задача #${issue_number}: ${status_hint} / ${flow_hint}
+${blocker_line}
+${last_note_line}
+- Executor: ${exec_state}
+
+Чтобы продолжить работу, напиши отдельный комментарий:
+CODEX_MODE: REWORK
+<что делать дальше>
+EOF
+    return 0
   fi
 
   cat <<EOF
@@ -337,16 +414,14 @@ reply_body="$(printf '%s' "$reply_json" | jq -r '.body // ""')"
 reply_preview="$(printf '%s' "$reply_body" | tr '\n' ' ' | cut -c1-180)"
 now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
-reply_mode="REWORK"
-if is_review_feedback_kind "$kind_label"; then
-  reply_mode="$(detect_review_reply_mode "$reply_body")"
-fi
+reply_mode="$(detect_reply_mode "$kind_label" "$reply_body")"
 
-if is_review_feedback_kind "$kind_label" && [[ "$reply_mode" == "QUESTION" ]]; then
+if [[ "$reply_mode" == "QUESTION" ]]; then
   printf '%s\n' "$reply_id" > "$question_id_file"
   date -u '+%Y-%m-%dT%H:%M:%SZ' > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
+  printf '%s\n' "$reply_url" > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
 
-  answer_body="$(build_review_answer_comment "$task_id" "$issue_number" "$reply_id")"
+  answer_body="$(build_answer_comment "$kind_label" "$task_id" "$issue_number" "$reply_id")"
   if ! answer_out="$("${ROOT_DIR}/scripts/codex/gh_retry.sh" gh api "repos/${REPO}/issues/${issue_number}/comments" -f body="$answer_body" 2>&1)"; then
     rc=$?
     if [[ "$rc" -eq 75 ]]; then
@@ -378,8 +453,12 @@ if is_review_feedback_kind "$kind_label" && [[ "$reply_mode" == "QUESTION" ]]; t
   fi
 
   emit_wait_state "$task_id" "$issue_number" "$reply_id" "$kind_label"
-  echo "REVIEW_FEEDBACK_RECEIVED=1"
-  echo "REVIEW_FEEDBACK_ISSUE_AUTHOR=$issue_author"
+  if is_review_feedback_kind "$kind_label"; then
+    echo "REVIEW_FEEDBACK_RECEIVED=1"
+    echo "REVIEW_FEEDBACK_ISSUE_AUTHOR=$issue_author"
+  else
+    echo "BLOCKER_CLARIFICATION_RECEIVED=1"
+  fi
   echo "USER_REPLY_RECEIVED=1"
   echo "TASK_ID=$task_id"
   echo "ISSUE_NUMBER=$issue_number"

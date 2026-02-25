@@ -250,7 +250,10 @@
   - сохраняет waiting-state в `.tmp/codex/`, чтобы daemon ждал ответ пользователя
 - `daemon_check_replies.sh`
   - если daemon в waiting-state, проверяет новые комментарии Issue после вопроса/ревью
-  - для `AGENT_QUESTION/AGENT_BLOCKER` первый пользовательский комментарий (без `CODEX_SIGNAL:`) принимает как ответ
+  - для `AGENT_QUESTION/AGENT_BLOCKER` первый пользовательский комментарий (без `CODEX_SIGNAL:`) классифицирует как `QUESTION` или `REWORK`
+    - `QUESTION` -> публикует `CODEX_SIGNAL: AGENT_ANSWER` и оставляет задачу в `WAIT_USER_REPLY`
+    - `REWORK` -> публикует `CODEX_SIGNAL: AGENT_RESUMED` и передает задачу в работу
+    - для явного продолжения после blocker используй `CODEX_MODE: REWORK`
   - для `REVIEW_FEEDBACK` принимает только не-системный комментарий автора Issue
   - для `REVIEW_FEEDBACK` различает режимы:
     - `QUESTION` -> публикует `CODEX_SIGNAL: AGENT_ANSWER` и оставляет задачу в `WAIT_REVIEW_FEEDBACK`

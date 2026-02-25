@@ -16,8 +16,21 @@
   .section {
     min-height: auto !important;
     height: auto !important;
+    break-before: page;
+    page-break-before: always;
     break-after: page;
+    page-break-after: always;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
     background: #ffffff !important;
+  }
+  .section:first-of-type {
+    break-before: auto;
+    page-break-before: auto;
+  }
+  .section:last-of-type {
+    break-after: auto;
+    page-break-after: auto;
   }
   .section.is-dark { background: #f4f8fd !important; }
   .container { padding: 0; }
@@ -32,7 +45,7 @@
   #intro .intro-copy { max-width: none !important; }
 
   /* Layout tweaks per section */
-  #intro .display { font-size: 28pt !important; }
+  #intro .display { font-size: 28pt !important; line-height: 1.12 !important; max-width: 20ch; }
 
   #evolution .screens { grid-template-columns: 1fr; gap: 10mm; }
   #evolution .ph, #evolution .media-image { min-height: 60mm; height: 60mm; object-fit: cover; }
@@ -45,6 +58,8 @@
   #designing .ph, #designing .media-image { min-height: 50mm; height: 50mm; object-fit: cover; }
 
   #gesture .stage { break-inside: avoid; }
+  #gesture .stage-title { font-size: 11pt; line-height: 1.25; }
+  #gesture .note { font-size: 10.5pt; line-height: 1.35; }
   #gesture .media-row { grid-template-columns: 2fr 1fr; }
   #gesture .only-print { display: block !important; }
   #gesture .only-screen { display: none !important; }
@@ -72,5 +87,5 @@
   #final-b .final-line { width: 72mm; margin-top: 2mm; }
   #final-b .plank { width: 72mm; max-width: none; height: 0.7mm; }
   #final-b .keys-rhythm { width: 72mm; max-width: none; height: 2mm; animation: none !important; }
-  #final-b .footnote { font-size: 10pt; color: #5f6f81; margin-top: 3mm; max-width: 82mm; }
+  #final-b .footnote { font-size: 10pt; line-height: 1.35; color: #5f6f81; margin-top: 3mm; max-width: 82mm; }
 }

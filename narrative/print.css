@@ -41,7 +41,7 @@
   #environment .grid-12 { grid-template-columns: repeat(12, 1fr); }
   #environment .refs { opacity: .5; }
 
-  #designing .grid-12 { grid-template-columns: repeat(3, 1fr); gap: 6mm; }
+  #designing .grid-12 { grid-template-columns: repeat(2, 1fr); gap: 6mm; }
   #designing .ph, #designing .media-image { min-height: 50mm; height: 50mm; object-fit: cover; }
 
   #gesture .stage { break-inside: avoid; }

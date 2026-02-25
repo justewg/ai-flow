@@ -137,6 +137,32 @@ figcaption { margin-top: var(--space-2); color: var(--muted); font-size: 0.9rem;
   border-radius: 0;
   opacity: 0.52;
 }
+#intro { isolation: isolate; }
+#intro::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(8, 10, 14, 0.78) 0%, rgba(8, 10, 14, 0.62) 38%, rgba(8, 10, 14, 0.28) 58%, rgba(8, 10, 14, 0.08) 74%, rgba(8, 10, 14, 0) 100%);
+}
+#intro .hero-photo { z-index: 0; }
+#intro .hero-photo .media-image { opacity: 0.88; object-position: center; }
+#intro .intro-layout {
+  position: relative;
+  z-index: 2;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+}
+#intro .intro-copy {
+  grid-column: 1;
+  max-width: 620px;
+  text-align: left;
+}
+#intro .intro-copy .kicker { margin-bottom: var(--space-3); }
+#intro .intro-copy .display { text-align: left; }
 
 /* Screens stack inside a section */
 .screens { display: grid; gap: var(--space-4); }
@@ -207,4 +233,9 @@ figcaption { margin-top: var(--space-2); color: var(--muted); font-size: 0.9rem;
 
 @media (max-width: 640px) {
   .media-row { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 900px) {
+  #intro .intro-layout { grid-template-columns: 1fr; }
+  #intro .intro-copy { max-width: 100%; padding-right: var(--space-3); }
 }

@@ -62,7 +62,15 @@
   #growth .word.center { opacity: 0.9; font-weight: 700; }
   #growth .word.periphery { opacity: 0.55; font-weight: 500; }
 
-  #final .final-line, #final .only-screen { display: none !important; }
-  #final .logo { font-size: 14pt; text-align: left; margin: 4mm 0; }
-  #final .footnote { font-size: 10pt; color: #5f6f81; }
+  #final-a .container, #final-b .container { min-height: auto !important; }
+  #final-a .final-message { font-size: 28pt; text-align: left; max-width: none; line-height: 1.12; }
+  #final-a .final-support { font-size: 12pt; text-align: left; margin: 4mm 0 0; color: #5f6f81; max-width: none; }
+
+  #final-b .final-b-layout { display: block !important; min-height: auto !important; }
+  #final-b .final-anchor { width: auto !important; max-width: none !important; }
+  #final-b .final-logo { width: 28mm; }
+  #final-b .final-line { width: 72mm; margin-top: 2mm; }
+  #final-b .plank { width: 72mm; max-width: none; height: 0.7mm; }
+  #final-b .keys-rhythm { width: 72mm; max-width: none; height: 2mm; animation: none !important; }
+  #final-b .footnote { font-size: 10pt; color: #5f6f81; margin-top: 3mm; max-width: 82mm; }
 }

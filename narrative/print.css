@@ -1,5 +1,5 @@
 /* Print styles for PDF export
-   Goal: static, grid-based pages, dark theme preserved. */
+   Goal: static, grid-based pages, light theme preserved. */
 
 @media print {
   :root {
@@ -7,8 +7,8 @@
     --dur-1: 0ms; --dur-2: 0ms;
   }
 
-  html { background: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body { background: #000; color: #fff; }
+  html { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { background: #fff; color: #1f2b37; }
 
   /* Page setup */
   @page { size: A4; margin: 14mm; }
@@ -17,8 +17,9 @@
     min-height: auto !important;
     height: auto !important;
     break-after: page;
-    background: #0b0c10 !important;
+    background: #ffffff !important;
   }
+  .section.is-dark { background: #f4f8fd !important; }
   .container { padding: 0; }
 
   /* Remove animations and parallax */
@@ -38,7 +39,7 @@
   #evolution figcaption { font-size: 11pt; }
 
   #environment .grid-12 { grid-template-columns: repeat(12, 1fr); }
-  #environment .refs { opacity: .25; }
+  #environment .refs { opacity: .5; }
 
   #designing .grid-12 { grid-template-columns: repeat(3, 1fr); gap: 6mm; }
   #designing .ph, #designing .media-image { min-height: 50mm; height: 50mm; object-fit: cover; }
@@ -61,5 +62,5 @@
 
   #final .final-line, #final .only-screen { display: none !important; }
   #final .logo { font-size: 14pt; text-align: left; margin: 4mm 0; }
-  #final .footnote { font-size: 10pt; color: #bbb; }
+  #final .footnote { font-size: 10pt; color: #5f6f81; }
 }

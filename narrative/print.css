@@ -58,7 +58,9 @@
   #layers .screens { grid-template-columns: 1fr 1fr; gap: 8mm; }
 
   #growth .word-field { display: grid; grid-auto-rows: min-content; min-height: auto; }
-  #growth .word { position: static; opacity: 0.7; margin: 2mm 0; animation: none !important; }
+  #growth .word { position: static; margin: 2mm 0; animation: none !important; transform: none !important; }
+  #growth .word.center { opacity: 0.9; font-weight: 700; }
+  #growth .word.periphery { opacity: 0.55; font-weight: 500; }
 
   #final .final-line, #final .only-screen { display: none !important; }
   #final .logo { font-size: 14pt; text-align: left; margin: 4mm 0; }

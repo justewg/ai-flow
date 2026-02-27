@@ -184,6 +184,7 @@
   - при `WAIT_USER_REPLY`/`WAIT_REVIEW_FEEDBACK` не берет новые задачи
   - если в `In Review` пришел новый комментарий (`REVIEW_FEEDBACK`), автоматически переводит задачу обратно в `In Progress` и возобновляет executor
   - при наличии `daemon_active_task.txt` не берет новые задачи до финализации, но продолжает проверять ответы в Issue
+  - если активная задача вручную выведена из `In Progress` (например, возвращена в `Todo`), автоматически сбрасывает stale active-state и снова включает обычный claim из очереди
   - для активной задачи вызывает `executor_tick.sh`, который запускает/мониторит headless executor (`codex exec`)
   - перед критичными GitHub-операциями делает preflight (`github_health_check.sh`)
   - сетевые вызовы к GitHub выполняет через `gh_retry.sh`, чтобы кратковременные DNS/API-сбои не роняли flow

@@ -48,3 +48,4 @@
 - `[APP-07]` Для команды `COMMIT` в dirty-gate добавлен временный override (аналогично `IGNORE`), чтобы daemon не зацикливался в `WAIT_DIRTY_WORKTREE` после `AGENT_RESUMED`.
 - `[APP-07]` Добавлен реальный auto-`COMMIT` в dirty-gate: daemon при ответе `COMMIT` делает commit+push tracked-изменений через `dev_commit_push.sh` (на `development`) и только после успеха продолжает flow.
 - `[APP-07]` Устранен `ERROR_LOCAL_FLOW` при dirty-override: daemon пропускает `sync_branches` (`checkout main`) в режиме `WAIT_DIRTY_WORKTREE_OVERRIDE_ACTIVE=1`.
+- `[APP-07]` Доработан `COMMIT` в dirty-gate до полного цикла: commit/push -> PR `development -> main` -> merge PR -> перевод dirty-gate в Done и закрытие issue, после чего daemon возвращается к штатному подхвату Todo.

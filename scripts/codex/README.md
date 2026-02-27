@@ -173,7 +173,8 @@
     - `WAIT_DIRTY_WORKTREE_TRACKED_FILES=<csv preview>`
   - для dirty-gate reply (`COMMIT`/`STASH`/`REVERT`/`IGNORE`) пишет `WAIT_DIRTY_WORKTREE_GATE_ACTION=...`
   - при рабочем ответе (`REWORK`) переводит карточку dirty-gate issue в `Status/Flow=In Progress`
-  - `COMMIT` запускает auto-commit tracked-файлов через `dev_commit_push.sh`; при успехе включает override (`WAIT_DIRTY_WORKTREE_OVERRIDE_SET=1`)
+  - `COMMIT` запускает полный dirty-gate flow: auto-commit tracked-файлов (`dev_commit_push.sh`) -> PR `development -> main` -> merge PR -> закрытие dirty-gate issue
+  - по успешному завершению пишет `WAIT_DIRTY_WORKTREE_COMMIT_FLOW_DONE=1` и снимает dirty-gate state
   - auto-`COMMIT` выполняется только из ветки `development` (иначе пишет `WAIT_DIRTY_WORKTREE_COMMIT_BLOCKED_BRANCH=...`)
   - `IGNORE` включает временный override (`WAIT_DIRTY_WORKTREE_OVERRIDE_SET=1`) для текущей dirty-signature без коммита
   - при активном dirty-override пропускает `sync_branches` (`WAIT_BRANCH_SYNC_SKIPPED_DIRTY_OVERRIDE=1`), чтобы не падать на `checkout main`

@@ -25,6 +25,7 @@ dirty_gate_comment_signature_file="${CODEX_DIR}/dirty_gate_comment_signature.txt
 dirty_gate_blocked_issue_file="${CODEX_DIR}/dirty_gate_blocked_issue_number.txt"
 dirty_gate_blocked_title_file="${CODEX_DIR}/dirty_gate_blocked_issue_title.txt"
 dirty_gate_override_signature_file="${CODEX_DIR}/dirty_gate_override_signature.txt"
+dirty_gate_last_reply_id_file="${CODEX_DIR}/dirty_gate_last_reply_comment_id.txt"
 gql_stats_log_file="${CODEX_DIR}/graphql_rate_stats.log"
 gql_window_state_file="${CODEX_DIR}/graphql_rate_window_state.txt"
 gql_window_start_epoch_file="${CODEX_DIR}/graphql_rate_window_start_epoch.txt"
@@ -654,6 +655,187 @@ auto_commit_dirty_worktree() {
   return 1
 }
 
+ensure_dirty_gate_commit_pr() {
+  local gate_issue_number="$1"
+  local pr_list_json pr_number pr_url create_out create_url rc
+
+  DIRTY_GATE_COMMIT_PR_NUMBER=""
+  DIRTY_GATE_COMMIT_PR_URL=""
+
+  if ! pr_list_json="$(
+    run_gh_retry_capture \
+      gh pr list \
+        --repo "$repo" \
+        --state open \
+        --base main \
+        --head development \
+        --json number,url \
+        --jq '.'
+  )"; then
+    rc=$?
+    if [[ "$rc" -eq 75 ]]; then
+      echo "WAIT_GITHUB_API_UNSTABLE=1"
+      echo "WAIT_GITHUB_STAGE=DIRTY_GATE_COMMIT_PR_LIST"
+      return 75
+    fi
+    return "$rc"
+  fi
+
+  pr_number="$(printf '%s' "$pr_list_json" | jq -r '.[0].number // ""')"
+  pr_url="$(printf '%s' "$pr_list_json" | jq -r '.[0].url // ""')"
+
+  if [[ -z "$pr_number" ]]; then
+    if ! create_out="$(
+      run_gh_retry_capture \
+        gh pr create \
+          --repo "$repo" \
+          --base main \
+          --head development \
+          --title "chore: dirty-gate auto-commit" \
+          --body "CODEX_SIGNAL: DIRTY_GATE_AUTO_COMMIT_PR
+
+Source: DIRTY-GATE-ISSUE-${gate_issue_number}
+This PR was created automatically after COMMIT reply in dirty-gate flow."
+    )"; then
+      rc=$?
+      if [[ "$rc" -eq 75 ]]; then
+        echo "WAIT_GITHUB_API_UNSTABLE=1"
+        echo "WAIT_GITHUB_STAGE=DIRTY_GATE_COMMIT_PR_CREATE"
+        return 75
+      fi
+      return "$rc"
+    fi
+
+    create_url="$(printf '%s\n' "$create_out" | tail -n1 | tr -d '[:space:]')"
+    if [[ "$create_url" =~ /pull/([0-9]+)$ ]]; then
+      pr_number="${BASH_REMATCH[1]}"
+      pr_url="$create_url"
+    fi
+    emit_lines "$create_out"
+  fi
+
+  if [[ -z "$pr_number" ]]; then
+    echo "WAIT_DIRTY_WORKTREE_COMMIT_PR_MISSING=1"
+    return 1
+  fi
+
+  DIRTY_GATE_COMMIT_PR_NUMBER="$pr_number"
+  DIRTY_GATE_COMMIT_PR_URL="$pr_url"
+  echo "WAIT_DIRTY_WORKTREE_COMMIT_PR_NUMBER=${pr_number}"
+  [[ -n "$pr_url" ]] && echo "WAIT_DIRTY_WORKTREE_COMMIT_PR_URL=${pr_url}"
+  return 0
+}
+
+merge_dirty_gate_commit_pr() {
+  local pr_number="$1"
+  local merge_out pr_view_json pr_state pr_merged_at rc
+
+  if ! merge_out="$(
+    run_gh_retry_capture \
+      gh pr merge "$pr_number" \
+        --repo "$repo" \
+        --merge
+  )"; then
+    rc=$?
+    if [[ "$rc" -eq 75 ]]; then
+      echo "WAIT_GITHUB_API_UNSTABLE=1"
+      echo "WAIT_GITHUB_STAGE=DIRTY_GATE_COMMIT_PR_MERGE"
+      return 75
+    fi
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "DIRTY_GATE_PR_MERGE_WARN(rc=$rc): $line"
+    done <<< "$merge_out"
+    echo "WAIT_DIRTY_WORKTREE_COMMIT_PR_NOT_MERGED=1"
+    return 1
+  fi
+  emit_lines "$merge_out"
+
+  if ! pr_view_json="$(
+    run_gh_retry_capture \
+      gh pr view "$pr_number" \
+        --repo "$repo" \
+        --json state,mergedAt \
+        --jq '.'
+  )"; then
+    rc=$?
+    if [[ "$rc" -eq 75 ]]; then
+      echo "WAIT_GITHUB_API_UNSTABLE=1"
+      echo "WAIT_GITHUB_STAGE=DIRTY_GATE_COMMIT_PR_VIEW"
+      return 75
+    fi
+    return "$rc"
+  fi
+
+  pr_state="$(printf '%s' "$pr_view_json" | jq -r '.state // ""')"
+  pr_merged_at="$(printf '%s' "$pr_view_json" | jq -r '.mergedAt // ""')"
+  if [[ "$pr_state" == "MERGED" || -n "$pr_merged_at" ]]; then
+    echo "WAIT_DIRTY_WORKTREE_COMMIT_PR_MERGED=1"
+    echo "WAIT_DIRTY_WORKTREE_COMMIT_PR_MERGED_AT=${pr_merged_at}"
+    return 0
+  fi
+
+  echo "WAIT_DIRTY_WORKTREE_COMMIT_PR_NOT_MERGED=1"
+  return 1
+}
+
+finalize_dirty_gate_after_commit_merge() {
+  local gate_issue_number="$1"
+  local close_out rc current_waiting_issue
+
+  if ! set_dirty_gate_project_status "$gate_issue_number" "Done" "Done" "DIRTY_GATE_CLOSE_STATUS"; then
+    rc=$?
+    [[ "$rc" -eq 75 ]] && return 75
+  fi
+
+  if ! close_out="$(
+    run_gh_retry_capture \
+      gh issue close "$gate_issue_number" \
+        --repo "$repo" \
+        --comment "CODEX_SIGNAL: DIRTY_GATE_RESOLVED
+CODEX_TASK: DIRTY-GATE-ISSUE-${gate_issue_number}
+
+Dirty worktree resolved by COMMIT flow (commit + PR + merge)."
+  )"; then
+    rc=$?
+    if [[ "$rc" -eq 75 ]]; then
+      echo "WAIT_GITHUB_API_UNSTABLE=1"
+      echo "WAIT_GITHUB_STAGE=DIRTY_GATE_CLOSE_ISSUE"
+      return 75
+    fi
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "DIRTY_GATE_CLOSE_WARN: $line"
+    done <<< "$close_out"
+  else
+    emit_lines "$close_out"
+  fi
+
+  : > "$dirty_gate_issue_file"
+  : > "$dirty_gate_issue_url_file"
+  : > "$dirty_gate_signature_file"
+  : > "$dirty_gate_comment_signature_file"
+  : > "$dirty_gate_blocked_issue_file"
+  : > "$dirty_gate_blocked_title_file"
+  : > "$dirty_gate_override_signature_file"
+  : > "$dirty_gate_last_reply_id_file"
+
+  current_waiting_issue=""
+  [[ -s "${CODEX_DIR}/daemon_waiting_issue_number.txt" ]] && current_waiting_issue="$(<"${CODEX_DIR}/daemon_waiting_issue_number.txt")"
+  if [[ "$current_waiting_issue" == "$gate_issue_number" ]]; then
+    : > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
+    : > "${CODEX_DIR}/daemon_waiting_task_id.txt"
+    : > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
+    : > "${CODEX_DIR}/daemon_waiting_kind.txt"
+    : > "${CODEX_DIR}/daemon_waiting_pending_post.txt"
+    : > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
+    : > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
+  fi
+
+  echo "WAIT_DIRTY_WORKTREE_GATE_RESOLVED=1"
+  return 0
+}
+
 restore_dirty_gate_waiting_state() {
   local gate_issue_number="$1"
   local comments_json question_id question_url task_id
@@ -966,6 +1148,7 @@ maybe_process_dirty_gate_reply() {
   local gate_issue_number waiting_issue waiting_kind reply_probe_out reply_body reply_mode dirty_action rc
   local reply_comment_id reply_url task_id
   local commit_ok="0" set_override="0"
+  local commit_flow_resolved="0"
 
   [[ -s "$dirty_gate_issue_file" ]] || return 0
   gate_issue_number="$(<"$dirty_gate_issue_file")"
@@ -1007,6 +1190,12 @@ maybe_process_dirty_gate_reply() {
   reply_mode="$(extract_kv "$reply_probe_out" "REPLY_MODE")"
   reply_comment_id="$(extract_kv "$reply_probe_out" "REPLY_COMMENT_ID")"
   reply_url="$(extract_kv "$reply_probe_out" "REPLY_URL")"
+
+  if [[ -n "$reply_comment_id" && -s "$dirty_gate_last_reply_id_file" && "$(<"$dirty_gate_last_reply_id_file")" == "$reply_comment_id" ]]; then
+    echo "WAIT_DIRTY_WORKTREE_REPLY_ALREADY_PROCESSED=${reply_comment_id}"
+    return 0
+  fi
+
   dirty_action="$(detect_dirty_gate_action "$reply_body" "$reply_mode")"
   echo "WAIT_DIRTY_WORKTREE_GATE_ACTION=${dirty_action}"
 
@@ -1015,7 +1204,13 @@ maybe_process_dirty_gate_reply() {
   elif [[ "$dirty_action" == "COMMIT" ]]; then
     if auto_commit_dirty_worktree "$gate_issue_number" "$reply_comment_id"; then
       commit_ok="1"
-      set_override="1"
+      if ensure_dirty_gate_commit_pr "$gate_issue_number" && merge_dirty_gate_commit_pr "$DIRTY_GATE_COMMIT_PR_NUMBER" && finalize_dirty_gate_after_commit_merge "$gate_issue_number"; then
+        commit_flow_resolved="1"
+      else
+        rc=$?
+        [[ "$rc" -eq 75 ]] && return 0
+        set_dirty_gate_waiting_at_reply "$gate_issue_number" "$reply_comment_id" "$reply_url"
+      fi
     else
       commit_ok="0"
       set_override="0"
@@ -1028,13 +1223,20 @@ maybe_process_dirty_gate_reply() {
     echo "WAIT_DIRTY_WORKTREE_OVERRIDE_SET=1"
     echo "WAIT_DIRTY_WORKTREE_OVERRIDE_MODE=${dirty_action}"
     [[ "$dirty_action" == "COMMIT" ]] && echo "WAIT_DIRTY_WORKTREE_COMMIT_OK=${commit_ok}"
+  elif [[ "$dirty_action" == "COMMIT" && "$commit_flow_resolved" == "1" ]]; then
+    : > "$dirty_gate_override_signature_file"
+    echo "WAIT_DIRTY_WORKTREE_OVERRIDE_SET=0"
+    echo "WAIT_DIRTY_WORKTREE_COMMIT_OK=${commit_ok}"
+    echo "WAIT_DIRTY_WORKTREE_COMMIT_FLOW_DONE=1"
   else
     : > "$dirty_gate_override_signature_file"
     echo "WAIT_DIRTY_WORKTREE_OVERRIDE_SET=0"
     set_dirty_gate_waiting_at_reply "$gate_issue_number" "$reply_comment_id" "$reply_url"
   fi
 
-  if [[ "$(printf '%s' "$reply_mode" | tr '[:lower:]' '[:upper:]')" == "REWORK" ]]; then
+  [[ -n "$reply_comment_id" ]] && printf '%s\n' "$reply_comment_id" > "$dirty_gate_last_reply_id_file"
+
+  if [[ "$commit_flow_resolved" != "1" && "$(printf '%s' "$reply_mode" | tr '[:lower:]' '[:upper:]')" == "REWORK" ]]; then
     if ! set_dirty_gate_project_status "$gate_issue_number" "$target_status" "$target_flow" "DIRTY_GATE_REPLY_STATUS"; then
       rc=$?
       [[ "$rc" -eq 75 ]] && return 0

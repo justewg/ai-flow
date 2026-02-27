@@ -47,12 +47,74 @@
   /* Layout tweaks per section */
   #intro .display { font-size: 28pt !important; line-height: 1.12 !important; max-width: 20ch; }
 
-  #evolution .screens { grid-template-columns: 1fr; gap: 10mm; }
-  #evolution .ph, #evolution .media-image { min-height: 60mm; height: 60mm; object-fit: cover; }
+  #evolution { break-inside: auto; page-break-inside: auto; }
+  #evolution .evolution-stage {
+    min-height: auto !important;
+    padding: 0;
+    break-after: page;
+    page-break-after: always;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  #evolution .evolution-stage:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  #evolution .stage-grid { grid-template-columns: 1fr; gap: 5mm; }
+  #evolution .stage-media .media-image,
+  #evolution .stage-media-placeholder {
+    min-height: 60mm;
+    height: 60mm;
+    object-fit: cover;
+  }
   #evolution figcaption { font-size: 11pt; }
 
-  #environment .grid-12 { grid-template-columns: repeat(12, 1fr); }
-  #environment .refs { opacity: .5; }
+  #requirements {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+  #requirements .req-sticky {
+    display: none !important;
+  }
+  #requirements .req-stages { display: block; }
+  #requirements .stage {
+    min-height: auto !important;
+    margin: 0;
+    padding: 0;
+    border: none;
+    break-after: page;
+    page-break-after: always;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  #requirements .stage:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  #requirements .stage::before {
+    content: "Требования к следующей среде";
+    display: block;
+    margin-bottom: 4mm;
+    font-size: 13pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  #requirements .stage-grid { grid-template-columns: 1fr; gap: 4mm; }
+  #requirements .stage-media .media-image,
+  #requirements .stage-media-placeholder {
+    min-height: 56mm;
+    height: 56mm;
+    object-fit: cover;
+  }
+  #requirements .stage-name { font-size: 10pt; }
+  #requirements .stage-strong,
+  #requirements .stage-but,
+  #requirements .stage-need {
+    max-width: none;
+    font-size: 11pt;
+    line-height: 1.35;
+  }
 
   #designing .grid-12 { grid-template-columns: repeat(2, 1fr); gap: 6mm; }
   #designing .ph, #designing .media-image { min-height: 50mm; height: 50mm; object-fit: cover; }

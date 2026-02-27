@@ -13,14 +13,15 @@
   <body>
     <main id="narrative" class="narrative">
       <!-- SECTION 0 — Intro -->
-      <section id="intro" class="section section-0 is-dark">
+       <section id="intro" class="section section-0 is-dark">
         <!-- Hero image with subtle parallax in web; static in PDF -->
         <div class="media hero-photo parallax" data-parallax="0.18" aria-hidden="true">
-          <img class="media-image hero-image" src="./assets/img/start_screen.png" alt="Фоновое изображение первого экрана нарратива" loading="eager" />
+          <img class="media-image hero-image" src="./assets/img/start_screen_transp.png" alt="Фоновое изображение первого экрана нарратива" loading="eager">
         </div>
         <div class="container intro-layout">
           <div class="intro-copy">
-            <h1 class="display">Андрюша уже умеет говорить.<br/>Просто не голосом.</h1>
+            <h1 class="display">Андрюша уже умеет говорить</h1>
+            <p class="subtitle">Просто не голосом</p>
           </div>
         </div>
       </section>
@@ -29,55 +30,181 @@
       <section id="evolution" class="section section-1">
         <div class="container">
           <h2 class="title">Эволюция формы общения</h2>
-          <div class="screens">
-            <!-- Each screen fades in on scroll; PDF uses large image + caption. -->
-            <figure class="screen reveal" data-animate="fade">
-              <img class="media-image" src="./assets/img/pecs.png" alt="Карточки PECS как визуальная опора" loading="lazy" />
-              <figcaption>PECS — визуальная опора</figcaption>
-            </figure>
-            <figure class="screen reveal" data-animate="fade">
-              <img class="media-image" src="./assets/img/magnet.png" alt="Магнитные буквы для сборки слов" loading="lazy" />
-              <figcaption>Магнитные буквы — сборка слов</figcaption>
-            </figure>
-            <figure class="screen reveal" data-animate="fade">
-              <img class="media-image" src="./assets/img/stickers.png" alt="Листочки как простая физическая форма сборки фраз" loading="lazy" />
-              <figcaption>Листочки — сборка фраз</figcaption>
-            </figure>
-            <figure class="screen reveal" data-animate="fade">
-              <img class="media-image" src="./assets/img/plastic.png" alt="Пластилин как моторная вовлеченность в коммуникацию" loading="lazy" />
-              <figcaption>Пластилин — моторная вовлечённость</figcaption>
-            </figure>
-            <figure class="screen reveal" data-animate="fade">
-              <img class="media-image" src="./assets/img/TODO_TV.png" alt="TV и поиск как следующий этап экранной среды общения" loading="lazy" />
-              <figcaption>TV/Поиск — следующий этап</figcaption>
-            </figure>
+          <p class="subtitle">Шесть этапов, которые последовательно расширяли способ выражать мысль.</p>
+          <div class="evolution-stages">
+            <section class="evolution-stage" data-stage="pecs">
+              <div class="stage-grid">
+                <figure class="stage-media reveal stage-step-1" data-animate="fade">
+                  <img class="media-image" src="./assets/img/pecs.png" alt="Карточки PECS как визуальная опора" loading="lazy" />
+                  <figcaption>PECS — визуальная опора</figcaption>
+                </figure>
+                <div class="stage-copy">
+                  <p class="stage-name reveal stage-step-1" data-animate="fade">PECS</p>
+                  <p class="stage-summary reveal stage-step-2" data-animate="fade">Старт в коммуникации через понятную структуру карточек.</p>
+                </div>
+              </div>
+            </section>
+
+            <section class="evolution-stage is-reverse" data-stage="magnets">
+              <div class="stage-grid">
+                <figure class="stage-media reveal stage-step-1" data-animate="fade">
+                  <img class="media-image" src="./assets/img/magnet.png" alt="Магнитные буквы для сборки слов" loading="lazy" />
+                  <figcaption>Магнитные буквы — сборка слов</figcaption>
+                </figure>
+                <div class="stage-copy">
+                  <p class="stage-name reveal stage-step-1" data-animate="fade">Магнитные буквы</p>
+                  <p class="stage-summary reveal stage-step-2" data-animate="fade">Свобода составления слов в стабильной и предсказуемой сетке.</p>
+                </div>
+              </div>
+            </section>
+
+            <section class="evolution-stage" data-stage="notes">
+              <div class="stage-grid">
+                <figure class="stage-media reveal stage-step-1" data-animate="fade">
+                  <img class="media-image" src="./assets/img/stickers.png" alt="Листочки как простая физическая форма сборки фраз" loading="lazy" />
+                  <figcaption>Листочки — собственное письмо</figcaption>
+                </figure>
+                <div class="stage-copy">
+                  <p class="stage-name reveal stage-step-1" data-animate="fade">Листочки</p>
+                  <p class="stage-summary reveal stage-step-2" data-animate="fade">Переход к авторству: он сам пишет и собирает фразы.</p>
+                </div>
+              </div>
+            </section>
+
+            <section class="evolution-stage is-reverse" data-stage="clay">
+              <div class="stage-grid">
+                <figure class="stage-media reveal stage-step-1" data-animate="fade">
+                  <img class="media-image" src="./assets/img/plastic.png" alt="Пластилин как моторная вовлеченность в коммуникацию" loading="lazy" />
+                  <figcaption>Пластилин — моторная вовлеченность</figcaption>
+                </figure>
+                <div class="stage-copy">
+                  <p class="stage-name reveal stage-step-1" data-animate="fade">Пластилин</p>
+                  <p class="stage-summary reveal stage-step-2" data-animate="fade">Символ и мысль рождаются из движения и концентрации.</p>
+                </div>
+              </div>
+            </section>
+
+            <section class="evolution-stage" data-stage="tv">
+              <div class="stage-grid">
+                <figure class="stage-media reveal stage-step-1" data-animate="fade">
+                  <img class="media-image" src="./assets/img/TODO_TV.png" alt="Телевизор и поиск как этап экранной среды общения" loading="lazy" />
+                  <figcaption>Телевизор / поиск — экранная среда</figcaption>
+                </figure>
+                <div class="stage-copy">
+                  <p class="stage-name reveal stage-step-1" data-animate="fade">Телевизор / поиск</p>
+                  <p class="stage-summary reveal stage-step-2" data-animate="fade">Экран помогает с орфографией, но не становится личным коммуникатором.</p>
+                </div>
+              </div>
+            </section>
+
+            <section class="evolution-stage is-reverse" data-stage="erudit">
+              <div class="stage-grid">
+                <figure class="stage-media">
+                  <div class="stage-media-placeholder reveal stage-step-1" data-animate="fade" role="img" aria-label="Плейсхолдер изображения этапа Эрудит">TODO_ERUDIT.png</div>
+                  <figcaption>Эрудит — поле и ограничения пространства</figcaption>
+                </figure>
+                <div class="stage-copy">
+                  <p class="stage-name reveal stage-step-1" data-animate="fade">Эрудит</p>
+                  <p class="stage-summary reveal stage-step-2" data-animate="fade">Сетка и предсказуемость есть, но длина мысли упирается в поле.</p>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
       </section>
 
-      <!-- SECTION 2 — Требования к среде -->
-      <section id="environment" class="section section-2 is-dark">
+      <!-- SECTION 2 — Требования к следующей среде -->
+      <section id="requirements" class="section section-2 is-dark requirements">
         <div class="container">
-          <h2 class="title">Требования к среде</h2>
-          <div class="grid-12 gap">
-            <!-- Right slide-in theses; semi-transparent references to previous forms as background motifs -->
-            <div class="col-span-7 refs">
-              <!-- placeholder ghosts of previous forms -->
-              <div class="ghost-row">
-                <div class="ghost">PECS</div>
-                <div class="ghost">БУКВЫ</div>
-                <div class="ghost">ПЛАСТИЛИН</div>
+          <div class="req-sticky">
+            <h2 class="title">Требования к следующей среде</h2>
+            <p class="subtitle">Каждый этап уже показал сильные стороны — и свои границы.</p>
+          </div>
+
+          <div class="req-stages">
+            <section class="stage" data-stage="pecs">
+              <div class="stage-grid">
+                <figure class="stage-media reveal stage-step-1" data-animate="fade">
+                  <img class="media-image" src="./assets/img/pecs.png" alt="Карточки PECS как визуальная опора" loading="lazy" />
+                </figure>
+                <article class="stage-copy">
+                  <p class="stage-name reveal stage-step-1" data-animate="fade">PECS</p>
+                  <p class="stage-strong reveal stage-step-2" data-animate="fade"><span>Сильные стороны:</span> Структура. Быстрый старт. Базовые коммуникации.</p>
+                  <p class="stage-but reveal stage-step-3" data-animate="fade"><span>НО:</span> Набор конечен.</p>
+                  <p class="stage-need reveal stage-step-4" data-animate="fade"><span>Требование:</span> <strong>Среда должна быть открытой и легко масштабируемой.</strong></p>
+                </article>
               </div>
-            </div>
-            <div class="col-span-5">
-              <ul class="theses">
-                <li class="reveal" data-animate="slide"><strong>Среда должна масштабироваться.</strong> PECS не напечатаешь на все случаи жизни.</li>
-                <li class="reveal" data-animate="slide"><strong>Среда не должна вмешиваться в мысль.</strong> Пластилин молчалив и отзывчив, но с собой много не унесёшь.</li>
-                <li class="reveal" data-animate="slide"><strong>Среда должна быть предсказуемой.</strong> Эрудит самодостаточен и понятен, но на поле мало места.</li>
-                <li class="reveal" data-animate="slide"><strong>Среда должна быть носимой.</strong> TV помогает запомнить слово, но это не личный инструмент.</li>
-                <li class="reveal" data-animate="slide"><strong>Среда должна сохранять форму мысли.</strong> Бумага хранит слова, но не хранит историю целиком.</li>
-              </ul>
-            </div>
+            </section>
+
+            <section class="stage is-reverse" data-stage="magnets">
+              <div class="stage-grid">
+                <figure class="stage-media reveal stage-step-1" data-animate="fade">
+                  <img class="media-image" src="./assets/img/magnet.png" alt="Магнитные буквы для сборки слов" loading="lazy" />
+                </figure>
+                <article class="stage-copy">
+                  <p class="stage-name reveal stage-step-1" data-animate="fade">Магнитные буквы</p>
+                  <p class="stage-strong reveal stage-step-2" data-animate="fade"><span>Сильные стороны:</span> Свобода составления. Моторика. Понятная сетка.</p>
+                  <p class="stage-but reveal stage-step-3" data-animate="fade"><span>НО:</span> Физический набор букв конечен и может ломаться/теряться.</p>
+                  <p class="stage-need reveal stage-step-4" data-animate="fade"><span>Требование:</span> <strong>Среда должна быть бесконечной по словарю и не зависеть от физического набора.</strong></p>
+                </article>
+              </div>
+            </section>
+
+            <section class="stage" data-stage="notes">
+              <div class="stage-grid">
+                <figure class="stage-media reveal stage-step-1" data-animate="fade">
+                  <img class="media-image" src="./assets/img/stickers.png" alt="Листочки как простая физическая форма сборки фраз" loading="lazy" />
+                </figure>
+                <article class="stage-copy">
+                  <p class="stage-name reveal stage-step-1" data-animate="fade">Листочки</p>
+                  <p class="stage-strong reveal stage-step-2" data-animate="fade"><span>Сильные стороны:</span> Он сам пишет буквы — это уже авторство. Можно организовать «везде».</p>
+                  <p class="stage-but reveal stage-step-3" data-animate="fade"><span>НО:</span> Мысли множатся и теряются. Нет единого пространства и истории.</p>
+                  <p class="stage-need reveal stage-step-4" data-animate="fade"><span>Требование:</span> <strong>Среда должна сохранять и структурировать мысль.</strong></p>
+                </article>
+              </div>
+            </section>
+
+            <section class="stage is-reverse" data-stage="clay">
+              <div class="stage-grid">
+                <figure class="stage-media reveal stage-step-1" data-animate="fade">
+                  <img class="media-image" src="./assets/img/plastic.png" alt="Пластилин как моторная вовлеченность в коммуникацию" loading="lazy" />
+                </figure>
+                <article class="stage-copy">
+                  <p class="stage-name reveal stage-step-1" data-animate="fade">Пластилин</p>
+                  <p class="stage-strong reveal stage-step-2" data-animate="fade"><span>Сильные стороны:</span> Символ рождается из движения. Письмо и творчество вместе.</p>
+                  <p class="stage-but reveal stage-step-3" data-animate="fade"><span>НО:</span> Длинные слова сложно переносить и предъявлять целиком.</p>
+                  <p class="stage-need reveal stage-step-4" data-animate="fade"><span>Требование:</span> <strong>Среда должна принимать мысль, не подсказывая её.</strong></p>
+                </article>
+              </div>
+            </section>
+
+            <section class="stage" data-stage="tv">
+              <div class="stage-grid">
+                <figure class="stage-media reveal stage-step-1" data-animate="fade">
+                  <img class="media-image" src="./assets/img/TODO_TV.png" alt="Телевизор и поиск как этап экранной среды общения" loading="lazy" />
+                </figure>
+                <article class="stage-copy">
+                  <p class="stage-name reveal stage-step-1" data-animate="fade">Телевизор / поиск</p>
+                  <p class="stage-strong reveal stage-step-2" data-animate="fade"><span>Сильные стороны:</span> Орфография. Запоминание написания.</p>
+                  <p class="stage-but reveal stage-step-3" data-animate="fade"><span>НО:</span> Это чужой интерфейс и инструмент потребления, не личный коммуникатор.</p>
+                  <p class="stage-need reveal stage-step-4" data-animate="fade"><span>Требование:</span> <strong>Среда должна быть личным инструментом коммуникации.</strong></p>
+                </article>
+              </div>
+            </section>
+
+            <section class="stage is-reverse" data-stage="erudit">
+              <div class="stage-grid">
+                <figure class="stage-media">
+                  <div class="stage-media-placeholder reveal stage-step-1" data-animate="fade" role="img" aria-label="Плейсхолдер изображения этапа Эрудит">TODO_ERUDIT.png</div>
+                </figure>
+                <article class="stage-copy">
+                  <p class="stage-name reveal stage-step-1" data-animate="fade">Эрудит</p>
+                  <p class="stage-strong reveal stage-step-2" data-animate="fade"><span>Сильные стороны:</span> Предсказуемость. Сетка. Концентрация.</p>
+                  <p class="stage-but reveal stage-step-3" data-animate="fade"><span>НО:</span> Поле ограничено — длина мысли упирается в пространство.</p>
+                  <p class="stage-need reveal stage-step-4" data-animate="fade"><span>Требование:</span> <strong>Среда должна быть предсказуемой и масштабируемой по длине мысли.</strong></p>
+                </article>
+              </div>
+            </section>
           </div>
         </div>
       </section>
@@ -250,10 +377,6 @@
         <div class="container final-b-layout">
           <div class="final-anchor">
             <img class="final-logo" src="./assets/img/logo_light_transp.png" alt="Логотип PLANKA" loading="lazy" />
-            <div class="final-line" aria-hidden="true">
-              <div class="plank"></div>
-              <div class="keys-rhythm"></div>
-            </div>
             <footer class="footnote">
               <em>Постоянная Планка связывает энергию кванта с его частотой. Коммуникация тоже состоит из «квантов» — предъявленных мыслей.</em>
             </footer>

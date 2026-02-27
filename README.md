@@ -7,6 +7,7 @@
 - `TODO.md` — roadmap и статусы задач.
 - `CHANGELOG.md` — журнал выполненных изменений.
 - `AGENT.md` — рабочие договоренности и flow.
+- `docs/gh-app-daemon-integration-plan.md` — план и runbook по включению GitHub App auth-сервиса (permissions, installation, smoke, onboarding).
 
 ## Текущий прототип
 - `prototype/web/` — MVP UI-прототип экрана 50/50 (задача `PL-003`).

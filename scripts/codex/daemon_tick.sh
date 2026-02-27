@@ -60,6 +60,67 @@ run_gh_retry_capture() {
   fi
 }
 
+strip_quotes() {
+  local value="$1"
+  value="${value%\"}"
+  value="${value#\"}"
+  value="${value%\'}"
+  value="${value#\'}"
+  printf '%s' "$value"
+}
+
+read_key_from_env_file() {
+  local file_path="$1"
+  local key="$2"
+  [[ -f "$file_path" ]] || return 1
+  local raw
+  raw="$(grep -E "^${key}=" "$file_path" | tail -n1 | cut -d'=' -f2- || true)"
+  [[ -n "$raw" ]] || return 1
+  strip_quotes "$raw"
+}
+
+resolve_config_value() {
+  local key="$1"
+  local default_value="${2:-}"
+  local env_value="${!key:-}"
+  if [[ -n "$env_value" ]]; then
+    printf '%s' "$env_value"
+    return 0
+  fi
+
+  local env_candidates=()
+  if [[ -n "${DAEMON_GH_ENV_FILE:-}" ]]; then
+    env_candidates+=("${DAEMON_GH_ENV_FILE}")
+  fi
+  env_candidates+=("${ROOT_DIR}/.env")
+  env_candidates+=("${ROOT_DIR}/.env.deploy")
+
+  local env_file value
+  for env_file in "${env_candidates[@]}"; do
+    value="$(read_key_from_env_file "$env_file" "$key" || true)"
+    if [[ -n "$value" ]]; then
+      printf '%s' "$value"
+      return 0
+    fi
+  done
+
+  printf '%s' "$default_value"
+}
+
+project_gh_token="$(resolve_config_value "DAEMON_GH_PROJECT_TOKEN" "")"
+if [[ -z "$project_gh_token" ]]; then
+  project_gh_token="$(resolve_config_value "CODEX_GH_PROJECT_TOKEN" "")"
+fi
+project_gh_token="$(printf '%s' "$project_gh_token" | tr -d '\r\n')"
+
+run_gh_retry_capture_project() {
+  if [[ -n "$project_gh_token" ]]; then
+    GH_TOKEN="$project_gh_token" run_gh_retry_capture "$@"
+  else
+    run_gh_retry_capture "$@"
+  fi
+}
+
 read_file_or_default() {
   local file_path="$1"
   local default_value="$2"
@@ -484,7 +545,7 @@ fi
 
 project_json=""
 if project_json="$(
-  run_gh_retry_capture \
+  run_gh_retry_capture_project \
     gh api graphql \
     -f query='
 query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
@@ -629,7 +690,7 @@ fi
 if (( queue_count == 0 )); then
   fallback_items_json=""
   if fallback_items_json="$(
-    run_gh_retry_capture \
+    run_gh_retry_capture_project \
       gh project item-list "$project_number" \
       --owner "$project_owner" \
       --limit "$project_items_limit" \

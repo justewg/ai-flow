@@ -31,3 +31,14 @@
 - `[PL-020]` Проведен успешный smoke-тест автозакрытия: после merge PR задачи `PL-019` и `PL-020` автоматически переведены в `Done`.
 - `[PL-021]` Добавлены Telegram push-уведомления из GitHub Actions через `TG_BOT_TOKEN` и `TG_CHAT_ID`.
 - `[PL-022]` Добавлены Telegram-сигналы на события PR-ревью и финальные статусы post-merge workflow (`Deploy Main to Hosting`, `Project Auto Close Tasks`).
+- `[APP-07]` Добавлен детальный runbook `APP-07.5` в `docs/gh-app-daemon-integration-plan.md`: выдача доступа GitHub App к Project v2, обновление installation и верификация через App token.
+- `[APP-07]` Добавлен onboarding-checklist включения auth-сервиса GitHub App в `docs/gh-app-daemon-integration-plan.md` (env, pm2, launchd, деградация/recovery).
+- `[APP-07]` Обновлен `README.md`: добавлена ссылка на runbook/онбординг GitHub App auth-сервиса.
+- `[APP-07]` Обновлен `scripts/codex/README.md`: добавлены указания по Project v2 permissions для App и быстрый health-check включения сервиса.
+- `[APP-07]` Созданы smoke-артефакты проверки авторства через App token: `Issue #142` и `PR #143`.
+- `[APP-07]` Зафиксирован hybrid-режим для user-owned Project v2: App token для `Issue/PR`, отдельный `DAEMON_GH_PROJECT_TOKEN` для Project операций.
+- `[APP-07]` В `docs/gh-app-daemon-integration-plan.md` добавлена инструкция, где выпускать PAT для `DAEMON_GH_PROJECT_TOKEN` и как проверять доступы.
+
+### Fixed
+- `[APP-05]` Исправлено логирование auth-ошибок в `daemon_loop.sh` и `watchdog_loop.sh`: корректный `AUTH_RC` сохраняется в `WAIT_AUTH_SERVICE` (раньше в части кейсов логировался `rc=0`).
+- `[APP-07]` Добавлена поддержка `DAEMON_GH_PROJECT_TOKEN`/`CODEX_GH_PROJECT_TOKEN` в project-скриптах и `daemon_tick`, чтобы daemon мог работать с user-owned Project v2 при App token для `Issue/PR`.

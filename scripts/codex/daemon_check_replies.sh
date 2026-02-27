@@ -41,6 +41,12 @@ detect_reply_mode() {
   fi
 
   if is_blocker_kind "$kind"; then
+    # Explicit dirty-gate commands should resume blocker flow, not stay in QUESTION.
+    if printf '%s' "$body" | grep -Eiq '(^|[[:space:]])(COMMIT|STASH|REVERT|IGNORE|IGNOR|ИГНОР|ПРОПУСТИ|ПРОДОЛЖАЙ С DIRTY)($|[[:space:]])'; then
+      printf 'REWORK'
+      return 0
+    fi
+
     if printf '%s' "$body" | grep -q '?' ||
       printf '%s' "$body" | grep -Eiq '(^|[[:space:]])(что|как|почему|зачем|когда|где|какой|какая|какие|можно ли|все ли|опиши|поясни|уточни|расскажи|объясни)\b'; then
       printf 'QUESTION'

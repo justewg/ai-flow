@@ -168,6 +168,16 @@
   - ошибки парсинга отдельных токенов не прерывают генерацию, а добавляются в раздел `Ошибки парсинга`
 - `daemon_tick.sh`
   - останавливается только при изменениях tracked-файлов (staged/unstaged)
+  - при блокировке на tracked-изменениях пишет явные маркеры:
+    - `WAIT_DIRTY_WORKTREE_TRACKED_COUNT=<n>`
+    - `WAIT_DIRTY_WORKTREE_TRACKED_FILES=<csv preview>`
+  - для dirty-gate reply (`COMMIT`/`STASH`/`REVERT`/`IGNORE`) пишет `WAIT_DIRTY_WORKTREE_GATE_ACTION=...`
+  - при рабочем ответе (`REWORK`) переводит карточку dirty-gate issue в `Status/Flow=In Progress`
+  - `COMMIT` запускает полный dirty-gate flow: auto-commit tracked-файлов (`dev_commit_push.sh`) -> PR `development -> main` -> merge PR -> закрытие dirty-gate issue
+  - по успешному завершению пишет `WAIT_DIRTY_WORKTREE_COMMIT_FLOW_DONE=1` и снимает dirty-gate state
+  - auto-`COMMIT` выполняется только из ветки `development` (иначе пишет `WAIT_DIRTY_WORKTREE_COMMIT_BLOCKED_BRANCH=...`)
+  - `IGNORE` включает временный override (`WAIT_DIRTY_WORKTREE_OVERRIDE_SET=1`) для текущей dirty-signature без коммита
+  - при активном dirty-override пропускает `sync_branches` (`WAIT_BRANCH_SYNC_SKIPPED_DIRTY_OVERRIDE=1`), чтобы не падать на `checkout main`
   - untracked-файлы не блокируют daemon-flow
   - на старте тика делает `github_outbox flush` (доставка отложенных GitHub-комментариев)
   - перед взятием новой задачи проверяет waiting-state по Issue-комментариям (`daemon_check_replies.sh`)
@@ -200,6 +210,11 @@
   - при auth-деградации пишет в detail явную причину (`AUTH_DEGRADED=1`, `AUTH_FALLBACK_*`) и отправляет Telegram-сигнал
   - пишет в `daemon_state_detail` явные health-маркеры: `GITHUB_STATUS=<...>` и `TELEGRAM_STATUS=<...>`
   - state `WAIT_GITHUB_RATE_LIMIT` трактуется как деградация `DEGRADED=GITHUB_GRAPHQL_RATE_LIMIT` и отправляет Telegram-алерт по тем же anti-spam правилам
+  - state `WAIT_DIRTY_WORKTREE` отправляет отдельные Telegram-алерты блокировки:
+    - вход (`WAIT_DIRTY_WORKTREE_ENTER`)
+    - изменение набора файлов (`WAIT_DIRTY_WORKTREE_CHANGED`)
+    - reminder (`WAIT_DIRTY_WORKTREE_REMINDER`)
+    - снятие блокировки (`DIRTY_WORKTREE_RESOLVED`)
   - различает сетевую деградацию и веточный блокер синхронизации (`WAIT_BRANCH_SYNC`)
   - отправляет локальные Telegram-алерты по деградации без спама:
     - вход в деградацию (`ENTER_DEGRADED`)
@@ -270,6 +285,7 @@
   - для `AGENT_QUESTION/AGENT_BLOCKER` первый пользовательский комментарий (без `CODEX_SIGNAL:`) классифицирует как `QUESTION` или `REWORK`
     - `QUESTION` -> публикует `CODEX_SIGNAL: AGENT_ANSWER` и оставляет задачу в `WAIT_USER_REPLY`
     - `REWORK` -> публикует `CODEX_SIGNAL: AGENT_RESUMED` и передает задачу в работу
+    - команды dirty-gate (`COMMIT`/`STASH`/`REVERT`/`IGNORE`) считаются `REWORK`
     - для явного продолжения после blocker используй `CODEX_MODE: REWORK`
   - для `REVIEW_FEEDBACK` принимает только не-системный комментарий автора Issue
   - для `REVIEW_FEEDBACK` различает режимы:
@@ -380,6 +396,7 @@ chmod +x scripts/codex/*.sh
 - `DAEMON_TG_ENV_FILE` (путь к env-файлу; по умолчанию проверяются `.env`, `.env.deploy`)
 - `DAEMON_TG_REMINDER_SEC` (интервал reminder в секундах, минимум 60; по умолчанию 1800)
 - `DAEMON_TG_GH_DNS_REMINDER_SEC` (интервал напоминаний именно для деградации `GITHUB_DNS_OFFLINE` при доступном Telegram; минимум 60, по умолчанию 300)
+- `DAEMON_TG_DIRTY_REMINDER_SEC` (интервал reminder для блокировки `WAIT_DIRTY_WORKTREE`; минимум 60, по умолчанию 600)
 - `DAEMON_GH_TOKEN_FALLBACK_ENABLED` (или `CODEX_GH_TOKEN_FALLBACK_ENABLED`) — включает аварийный fallback на `DAEMON_GH_TOKEN`/`CODEX_GH_TOKEN` при недоступном auth endpoint
 - `DAEMON_GH_PROJECT_TOKEN` (или `CODEX_GH_PROJECT_TOKEN`) — отдельный PAT для Project v2 в hybrid mode (если Project user-owned)
 - `WATCHDOG_DAEMON_LABEL` (какой daemon label перезапускать при hard recovery; по умолчанию `com.planka.codex-daemon`)

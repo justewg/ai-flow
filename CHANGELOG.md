@@ -42,3 +42,10 @@
 ### Fixed
 - `[APP-05]` Исправлено логирование auth-ошибок в `daemon_loop.sh` и `watchdog_loop.sh`: корректный `AUTH_RC` сохраняется в `WAIT_AUTH_SERVICE` (раньше в части кейсов логировался `rc=0`).
 - `[APP-07]` Добавлена поддержка `DAEMON_GH_PROJECT_TOKEN`/`CODEX_GH_PROJECT_TOKEN` в project-скриптах и `daemon_tick`, чтобы daemon мог работать с user-owned Project v2 при App token для `Issue/PR`.
+- `[APP-07]` Добавлены Telegram-алерты блокировки `WAIT_DIRTY_WORKTREE` (enter/changed/reminder/resolved), чтобы блокер tracked-изменений был виден без просмотра логов.
+- `[APP-07]` `daemon_tick` теперь пишет детали dirty-worktree (`WAIT_DIRTY_WORKTREE_TRACKED_COUNT`, `WAIT_DIRTY_WORKTREE_TRACKED_FILES`) для state/detail и уведомлений.
+- `[APP-07]` Исправлен dirty-gate reply flow: `COMMIT/STASH/REVERT/IGNORE` теперь распознаются как `REWORK`-ответы blocker, а карточка dirty-gate issue переводится в `In Progress` при обработке ответа.
+- `[APP-07]` Для команды `COMMIT` в dirty-gate добавлен временный override (аналогично `IGNORE`), чтобы daemon не зацикливался в `WAIT_DIRTY_WORKTREE` после `AGENT_RESUMED`.
+- `[APP-07]` Добавлен реальный auto-`COMMIT` в dirty-gate: daemon при ответе `COMMIT` делает commit+push tracked-изменений через `dev_commit_push.sh` (на `development`) и только после успеха продолжает flow.
+- `[APP-07]` Устранен `ERROR_LOCAL_FLOW` при dirty-override: daemon пропускает `sync_branches` (`checkout main`) в режиме `WAIT_DIRTY_WORKTREE_OVERRIDE_ACTIVE=1`.
+- `[APP-07]` Доработан `COMMIT` в dirty-gate до полного цикла: commit/push -> PR `development -> main` -> merge PR -> перевод dirty-gate в Done и закрытие issue, после чего daemon возвращается к штатному подхвату Todo.

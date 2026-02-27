@@ -311,6 +311,21 @@ build_success_detail() {
       ;;
     WAIT_DIRTY_WORKTREE)
       line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_DIRTY_WORKTREE_TRACKED=1' || true)"
+      local dirty_count_line dirty_files_line dirty_blocked_ref_line dirty_blocked_issue_line dirty_blocked_title_line dirty_gate_issue_line dirty_gate_item_line
+      dirty_count_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_DIRTY_WORKTREE_TRACKED_COUNT=' || true)"
+      dirty_files_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_DIRTY_WORKTREE_TRACKED_FILES=' || true)"
+      dirty_blocked_ref_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_DIRTY_WORKTREE_BLOCKED_REF=' || true)"
+      dirty_blocked_issue_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_DIRTY_WORKTREE_BLOCKED_ISSUE_NUMBER=' || true)"
+      dirty_blocked_title_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_DIRTY_WORKTREE_BLOCKED_ISSUE_TITLE=' || true)"
+      dirty_gate_issue_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_DIRTY_WORKTREE_GATE_ISSUE_NUMBER=' || true)"
+      dirty_gate_item_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_DIRTY_WORKTREE_GATE_PROJECT_ITEM_ID=' || true)"
+      [[ -n "$dirty_count_line" ]] && line="${line}; ${dirty_count_line}"
+      [[ -n "$dirty_files_line" ]] && line="${line}; ${dirty_files_line}"
+      [[ -n "$dirty_blocked_ref_line" ]] && line="${line}; ${dirty_blocked_ref_line}"
+      [[ -n "$dirty_blocked_issue_line" ]] && line="${line}; ${dirty_blocked_issue_line}"
+      [[ -n "$dirty_blocked_title_line" ]] && line="${line}; ${dirty_blocked_title_line}"
+      [[ -n "$dirty_gate_issue_line" ]] && line="${line}; ${dirty_gate_issue_line}"
+      [[ -n "$dirty_gate_item_line" ]] && line="${line}; ${dirty_gate_item_line}"
       ;;
     ACTIVE_TASK_CLAIMED)
       line="$(printf '%s\n' "$output" | grep -m1 '^CLAIMED_TASK_ID=' || true)"
@@ -418,11 +433,26 @@ build_notify_message() {
   now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
   local msg
-  msg=$'PLANKA: daemon degradation signal\n'
-  msg+="Reason: ${reason}"$'\n'
-  msg+="State: ${state}"$'\n'
-  msg+="Detail: ${detail}"$'\n'
-  msg+="Time: ${now_utc}"
+  if [[ "$reason" == WAIT_DIRTY_WORKTREE_* ]]; then
+    msg=$'PLANKA: daemon paused (dirty worktree)\n'
+    msg+="Reason: ${reason}"$'\n'
+    msg+="State: ${state}"$'\n'
+    msg+="Detail: ${detail}"$'\n'
+    msg+=$'Action: daemon waits for decision по измененным tracked-файлам (commit/stash/revert).\n'
+    msg+="Time: ${now_utc}"
+  elif [[ "$reason" == "DIRTY_WORKTREE_RESOLVED" ]]; then
+    msg=$'PLANKA: dirty worktree resolved\n'
+    msg+="Reason: ${reason}"$'\n'
+    msg+="State: ${state}"$'\n'
+    msg+="Detail: ${detail}"$'\n'
+    msg+="Time: ${now_utc}"
+  else
+    msg=$'PLANKA: daemon degradation signal\n'
+    msg+="Reason: ${reason}"$'\n'
+    msg+="State: ${state}"$'\n'
+    msg+="Detail: ${detail}"$'\n'
+    msg+="Time: ${now_utc}"
+  fi
   printf '%s' "$msg"
 }
 
@@ -431,7 +461,9 @@ notify_if_needed() {
   local detail="$2"
 
   local mode="healthy"
-  if [[ "$detail" == *"DEGRADED="* || "$detail" == *"AUTH_DEGRADED=1"* ]]; then
+  if [[ "$state" == "WAIT_DIRTY_WORKTREE" ]]; then
+    mode="dirty_worktree"
+  elif [[ "$detail" == *"DEGRADED="* || "$detail" == *"AUTH_DEGRADED=1"* ]]; then
     mode="degraded"
   fi
 
@@ -444,6 +476,10 @@ notify_if_needed() {
   local github_dns_reminder_sec="${DAEMON_TG_GH_DNS_REMINDER_SEC:-300}"
   if ! [[ "$github_dns_reminder_sec" =~ ^[0-9]+$ ]] || (( github_dns_reminder_sec < 60 )); then
     github_dns_reminder_sec=300
+  fi
+  local dirty_reminder_sec="${DAEMON_TG_DIRTY_REMINDER_SEC:-600}"
+  if ! [[ "$dirty_reminder_sec" =~ ^[0-9]+$ ]] || (( dirty_reminder_sec < 60 )); then
+    dirty_reminder_sec=600
   fi
 
   local signature
@@ -466,7 +502,18 @@ notify_if_needed() {
     github_dns_via_telegram="1"
   fi
 
-  if [[ "$mode" == "degraded" ]]; then
+  if [[ "$mode" == "dirty_worktree" ]]; then
+    if [[ "$last_mode" != "dirty_worktree" ]]; then
+      should_notify="1"
+      reason="WAIT_DIRTY_WORKTREE_ENTER"
+    elif [[ "$last_signature" != "$signature" ]]; then
+      should_notify="1"
+      reason="WAIT_DIRTY_WORKTREE_CHANGED"
+    elif (( now_epoch - last_epoch >= dirty_reminder_sec )); then
+      should_notify="1"
+      reason="WAIT_DIRTY_WORKTREE_REMINDER"
+    fi
+  elif [[ "$mode" == "degraded" ]]; then
     if [[ "$github_dns_via_telegram" == "1" ]]; then
       if [[ "$last_mode" != "degraded" ]]; then
         should_notify="1"
@@ -494,6 +541,9 @@ notify_if_needed() {
     if [[ "$last_mode" == "degraded" ]]; then
       should_notify="1"
       reason="RECOVERED"
+    elif [[ "$last_mode" == "dirty_worktree" ]]; then
+      should_notify="1"
+      reason="DIRTY_WORKTREE_RESOLVED"
     fi
   fi
 

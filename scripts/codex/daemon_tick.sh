@@ -508,6 +508,91 @@ query($projectId: ID!, $itemsFirst: Int!) {
   ' | head -n1
 }
 
+find_project_item_status_by_id() {
+  local item_id="$1"
+  local project_json
+
+  if ! project_json="$(
+    run_gh_retry_capture_project \
+      gh api graphql \
+      -f query='
+query($projectId: ID!, $itemsFirst: Int!) {
+  node(id: $projectId) {
+    ... on ProjectV2 {
+      items(first: $itemsFirst) {
+        nodes {
+          id
+          status: fieldValueByName(name: "Status") {
+            __typename
+            ... on ProjectV2ItemFieldSingleSelectValue { name }
+          }
+        }
+      }
+    }
+  }
+}
+' \
+      -f projectId="$project_id" \
+      -F itemsFirst=100
+  )"; then
+    return "$?"
+  fi
+
+  printf '%s' "$project_json" | jq -r --arg id "$item_id" '
+    .data.node.items.nodes[]
+    | select((.id // "") == $id)
+    | (.status.name // "")
+  ' | head -n1
+}
+
+normalize_status_name() {
+  local value="$1"
+  printf '%s' "$value" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'
+}
+
+maybe_release_active_task_on_status_mismatch() {
+  local active_task_file="${CODEX_DIR}/daemon_active_task.txt"
+  local active_item_file="${CODEX_DIR}/daemon_active_item_id.txt"
+  local active_issue_file="${CODEX_DIR}/daemon_active_issue_number.txt"
+  local active_task active_item status_name status_norm target_norm rc
+
+  [[ -s "$active_task_file" ]] || return 0
+  active_task="$(<"$active_task_file")"
+  [[ -n "$active_task" ]] || return 0
+
+  active_item=""
+  [[ -s "$active_item_file" ]] && active_item="$(<"$active_item_file")"
+  [[ -n "$active_item" ]] || return 0
+
+  if ! status_name="$(find_project_item_status_by_id "$active_item")"; then
+    rc=$?
+    if [[ "$rc" -eq 75 ]]; then
+      echo "WAIT_GITHUB_API_UNSTABLE=1"
+      echo "WAIT_GITHUB_STAGE=ACTIVE_TASK_STATUS_CHECK"
+      return 75
+    fi
+    return 0
+  fi
+  [[ -n "$status_name" ]] || return 0
+
+  status_norm="$(normalize_status_name "$status_name")"
+  target_norm="$(normalize_status_name "$target_status")"
+  if [[ "$status_norm" == "$target_norm" ]]; then
+    return 0
+  fi
+
+  echo "ACTIVE_TASK_RELEASED_STATUS_MISMATCH=1"
+  echo "ACTIVE_TASK_RELEASED_TASK_ID=${active_task}"
+  echo "ACTIVE_TASK_RELEASED_STATUS=${status_name}"
+  echo "ACTIVE_TASK_EXPECTED_STATUS=${target_status}"
+  "${ROOT_DIR}/scripts/codex/executor_reset.sh" >/dev/null || true
+  : > "$active_task_file"
+  : > "$active_item_file"
+  : > "$active_issue_file"
+  : > "${CODEX_DIR}/project_task_id.txt"
+  return 0
+}
+
 detect_dirty_gate_action() {
   local reply_body="$1"
   local reply_mode="$2"
@@ -1509,6 +1594,11 @@ if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
     emit_lines "$exec_out"
     exit 0
   fi
+fi
+
+if ! maybe_release_active_task_on_status_mismatch; then
+  rc=$?
+  [[ "$rc" -eq 75 ]] && exit 0
 fi
 
 if [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]]; then

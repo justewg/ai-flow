@@ -602,7 +602,7 @@ set_dirty_gate_waiting_at_reply() {
 auto_commit_dirty_worktree() {
   local gate_issue_number="$1"
   local reply_comment_id="$2"
-  local current_branch blocked_issue commit_message commit_out rc
+  local current_branch blocked_issue commit_message commit_out rc retry_out retry_rc
   local -a stage_paths=()
 
   current_branch="$(git -C "${ROOT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
@@ -643,6 +643,30 @@ auto_commit_dirty_worktree() {
   fi
 
   rc=$?
+  if printf '%s' "$commit_out" | grep -Eq 'non-fast-forward|failed to push some refs'; then
+    echo "WAIT_DIRTY_WORKTREE_COMMIT_PUSH_RETRY=1"
+    if retry_out="$(
+      {
+        git -C "${ROOT_DIR}" pull --rebase origin development
+        git -C "${ROOT_DIR}" push origin development
+      } 2>&1
+    )"; then
+      emit_lines "$retry_out"
+      echo "WAIT_DIRTY_WORKTREE_COMMIT_APPLIED=1"
+      echo "WAIT_DIRTY_WORKTREE_COMMIT_PATHS_COUNT=${#stage_paths[@]}"
+      [[ -n "$reply_comment_id" ]] && echo "WAIT_DIRTY_WORKTREE_COMMIT_REPLY_ID=${reply_comment_id}"
+      return 0
+    fi
+    retry_rc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "DIRTY_GATE_COMMIT_RETRY_ERROR(rc=$retry_rc): $line"
+    done <<< "$retry_out"
+  fi
+  if printf '%s' "$commit_out" | grep -Eiq 'nothing to commit|no changes added to commit'; then
+    echo "WAIT_DIRTY_WORKTREE_COMMIT_SKIPPED=NOTHING_TO_COMMIT"
+    return 0
+  fi
   if is_github_network_error "$commit_out"; then
     echo "WAIT_GITHUB_API_UNSTABLE=1"
     echo "WAIT_GITHUB_STAGE=DIRTY_GATE_AUTO_COMMIT_PUSH"
@@ -662,7 +686,7 @@ ensure_dirty_gate_commit_pr() {
   DIRTY_GATE_COMMIT_PR_NUMBER=""
   DIRTY_GATE_COMMIT_PR_URL=""
 
-  if ! pr_list_json="$(
+  if pr_list_json="$(
     run_gh_retry_capture \
       gh pr list \
         --repo "$repo" \
@@ -672,6 +696,8 @@ ensure_dirty_gate_commit_pr() {
         --json number,url \
         --jq '.'
   )"; then
+    :
+  else
     rc=$?
     if [[ "$rc" -eq 75 ]]; then
       echo "WAIT_GITHUB_API_UNSTABLE=1"
@@ -685,7 +711,7 @@ ensure_dirty_gate_commit_pr() {
   pr_url="$(printf '%s' "$pr_list_json" | jq -r '.[0].url // ""')"
 
   if [[ -z "$pr_number" ]]; then
-    if ! create_out="$(
+    if create_out="$(
       run_gh_retry_capture \
         gh pr create \
           --repo "$repo" \
@@ -697,6 +723,8 @@ ensure_dirty_gate_commit_pr() {
 Source: DIRTY-GATE-ISSUE-${gate_issue_number}
 This PR was created automatically after COMMIT reply in dirty-gate flow."
     )"; then
+      :
+    else
       rc=$?
       if [[ "$rc" -eq 75 ]]; then
         echo "WAIT_GITHUB_API_UNSTABLE=1"
@@ -730,12 +758,14 @@ merge_dirty_gate_commit_pr() {
   local pr_number="$1"
   local merge_out pr_view_json pr_state pr_merged_at rc
 
-  if ! merge_out="$(
+  if merge_out="$(
     run_gh_retry_capture \
       gh pr merge "$pr_number" \
         --repo "$repo" \
         --merge
   )"; then
+    :
+  else
     rc=$?
     if [[ "$rc" -eq 75 ]]; then
       echo "WAIT_GITHUB_API_UNSTABLE=1"
@@ -751,13 +781,15 @@ merge_dirty_gate_commit_pr() {
   fi
   emit_lines "$merge_out"
 
-  if ! pr_view_json="$(
+  if pr_view_json="$(
     run_gh_retry_capture \
       gh pr view "$pr_number" \
         --repo "$repo" \
         --json state,mergedAt \
         --jq '.'
   )"; then
+    :
+  else
     rc=$?
     if [[ "$rc" -eq 75 ]]; then
       echo "WAIT_GITHUB_API_UNSTABLE=1"
@@ -783,12 +815,14 @@ finalize_dirty_gate_after_commit_merge() {
   local gate_issue_number="$1"
   local close_out rc current_waiting_issue
 
-  if ! set_dirty_gate_project_status "$gate_issue_number" "Done" "Done" "DIRTY_GATE_CLOSE_STATUS"; then
+  if set_dirty_gate_project_status "$gate_issue_number" "Done" "Done" "DIRTY_GATE_CLOSE_STATUS"; then
+    :
+  else
     rc=$?
     [[ "$rc" -eq 75 ]] && return 75
   fi
 
-  if ! close_out="$(
+  if close_out="$(
     run_gh_retry_capture \
       gh issue close "$gate_issue_number" \
         --repo "$repo" \
@@ -797,6 +831,8 @@ CODEX_TASK: DIRTY-GATE-ISSUE-${gate_issue_number}
 
 Dirty worktree resolved by COMMIT flow (commit + PR + merge)."
   )"; then
+    emit_lines "$close_out"
+  else
     rc=$?
     if [[ "$rc" -eq 75 ]]; then
       echo "WAIT_GITHUB_API_UNSTABLE=1"
@@ -807,8 +843,6 @@ Dirty worktree resolved by COMMIT flow (commit + PR + merge)."
       [[ -z "$line" ]] && continue
       echo "DIRTY_GATE_CLOSE_WARN: $line"
     done <<< "$close_out"
-  else
-    emit_lines "$close_out"
   fi
 
   : > "$dirty_gate_issue_file"
@@ -838,7 +872,7 @@ Dirty worktree resolved by COMMIT flow (commit + PR + merge)."
 
 restore_dirty_gate_waiting_state() {
   local gate_issue_number="$1"
-  local comments_json question_id question_url task_id
+  local comments_json question_id question_url task_id last_reply_id
   local waiting_issue_file="${CODEX_DIR}/daemon_waiting_issue_number.txt"
   local waiting_task_file="${CODEX_DIR}/daemon_waiting_task_id.txt"
   local waiting_question_file="${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
@@ -847,10 +881,12 @@ restore_dirty_gate_waiting_state() {
   local waiting_since_file="${CODEX_DIR}/daemon_waiting_since_utc.txt"
   local waiting_comment_url_file="${CODEX_DIR}/daemon_waiting_comment_url.txt"
 
-  if ! comments_json="$(
+  if comments_json="$(
     run_gh_retry_capture \
       gh api "repos/${repo}/issues/${gate_issue_number}/comments?per_page=100"
   )"; then
+    :
+  else
     local rc=$?
     if [[ "$rc" -eq 75 ]]; then
       echo "WAIT_GITHUB_API_UNSTABLE=1"
@@ -883,6 +919,22 @@ restore_dirty_gate_waiting_state() {
   )"
 
   [[ -n "$question_id" ]] || return 1
+
+  # If we already processed a reply, set waiting anchor to that reply id.
+  # This prevents daemon_check_replies from re-reading the same comment
+  # and re-posting AGENT_RESUMED on every tick.
+  last_reply_id=""
+  [[ -s "$dirty_gate_last_reply_id_file" ]] && last_reply_id="$(<"$dirty_gate_last_reply_id_file")"
+  if [[ "$last_reply_id" =~ ^[0-9]+$ ]]; then
+    if [[ ! "$question_id" =~ ^[0-9]+$ || "$last_reply_id" -gt "$question_id" ]]; then
+      question_id="$last_reply_id"
+      question_url="$(
+        printf '%s' "$comments_json" | jq -r --argjson qid "$question_id" '
+          [ .[] | select((.id|tonumber) == $qid) ][0].html_url // empty
+        '
+      )"
+    fi
+  fi
 
   printf '%s\n' "$gate_issue_number" > "$waiting_issue_file"
   printf '%s\n' "$task_id" > "$waiting_task_file"

@@ -12,6 +12,13 @@
 3. Токен живет коротко, сервис обновляет его заранее.
 4. Fallback: если App-сервис недоступен, можно временно включить `DAEMON_GH_TOKEN`.
 
+## Ограничение user-owned Project v2
+Если Project принадлежит пользователю (owner type `User`, endpoint вида `/users/{username}/projectsV2`), GitHub App installation token не дает полноценный доступ к Project API.
+
+Практический режим без организации (hybrid):
+1. App token — для `Issue/PR` (бот-авторство сохраняется).
+2. `DAEMON_GH_PROJECT_TOKEN` — для операций Project v2 (чтение карточек/смена `Status/Flow`).
+
 ## Шаги в GitHub UI
 1. Создать GitHub App (`Settings -> Developer settings -> GitHub Apps`).
 2. Выдать минимальные permissions:
@@ -41,6 +48,13 @@
   - источник: PAT (лучше от отдельного bot-аккаунта)
   - путь в UI: `Settings -> Developer settings -> Personal access tokens`
   - минимальные scopes для текущего flow: `repo`, `read:project`, `project`
+
+Для user-owned Project v2 (hybrid mode):
+- `DAEMON_GH_PROJECT_TOKEN=...`
+  - отдельный PAT только для Project v2 операций.
+  - где получить: `GitHub -> Settings -> Developer settings -> Personal access tokens`.
+  - рекомендуемый тип: `Tokens (classic)` для совместимости с user-owned Project API.
+  - минимальные scopes: `repo`, `read:project`, `project`.
 
 ## Мини-сервис (Node.js)
 ### Обязательные endpoint-ы
@@ -111,6 +125,12 @@
 1. `node` не `null`, без `Resource not accessible by integration`.
 2. `project_set_status.sh` завершается успешно (`Updated ...`).
 
+Если у вас user-owned Project и ответ стабильно `Resource not accessible by integration`:
+1. Это известное ограничение GitHub App для user-owned Project API.
+2. Включите hybrid mode через `DAEMON_GH_PROJECT_TOKEN`.
+3. Повторите проверку Project-операций через:
+`GH_TOKEN="$DAEMON_GH_PROJECT_TOKEN" scripts/codex/project_set_status.sh <project-item-id> "Todo" "Ready"`
+
 ### Шаг 4. Повторить smoke daemon-flow по Project
 1. Перевести тестовую карточку в `Status=Todo, Flow=Ready`.
 2. Дождаться claim демоном в `In Progress`.
@@ -125,6 +145,10 @@
 2. `Could not resolve to a ProjectV2 ...` в daemon-log:
 - токен App есть, но нет доступа к конкретному Project;
 - проверить owner/тип Project (user vs org) и соответствующий permission scope.
+3. Для user-owned project ошибка не исчезает после переустановки App:
+- включить hybrid mode с `DAEMON_GH_PROJECT_TOKEN`;
+- перезапустить daemon/watchdog;
+- повторить smoke.
 
 ## Критерии приемки
 1. Комментарии в Issue от `app-name[bot]`.
@@ -147,19 +171,21 @@
 2. Убедиться, что fallback выключен (штатный режим App):
 - не задавать `DAEMON_GH_TOKEN_FALLBACK_ENABLED=1`
 - не задавать `DAEMON_GH_TOKEN` / `CODEX_GH_TOKEN`, если аварийный fallback не нужен
-3. Запустить auth-сервис:
+3. Для user-owned Project v2 задать hybrid token:
+- `DAEMON_GH_PROJECT_TOKEN=<PAT с repo,read:project,project>`
+4. Запустить auth-сервис:
 - `scripts/codex/run.sh gh_app_auth_pm2_start`
 - `scripts/codex/run.sh gh_app_auth_pm2_health`
-4. Перезапустить automation:
+5. Перезапустить automation:
 - `scripts/codex/run.sh daemon_uninstall com.planka.codex-daemon`
 - `scripts/codex/run.sh daemon_install com.planka.codex-daemon 90`
 - `scripts/codex/run.sh watchdog_uninstall com.planka.codex-watchdog`
 - `scripts/codex/run.sh watchdog_install com.planka.codex-watchdog 90`
-5. Проверить state:
+6. Проверить state:
 - `cat .tmp/codex/daemon_state.txt`
 - `cat .tmp/codex/daemon_state_detail.txt`
 - `cat .tmp/codex/watchdog_state.txt`
-6. Проверить деградацию/восстановление auth:
+7. Проверить деградацию/восстановление auth:
 - `scripts/codex/run.sh gh_app_auth_pm2_stop` -> ожидать `WAIT_AUTH_SERVICE` + Telegram `ENTER_DEGRADED`
 - `scripts/codex/run.sh gh_app_auth_pm2_start` -> ожидать выход из `WAIT_AUTH_SERVICE` + Telegram `RECOVERED`
 

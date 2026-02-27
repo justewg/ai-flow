@@ -90,15 +90,23 @@
 - `GH_APP_INTERNAL_SECRET` — обязателен не только для auth-сервиса, но и для daemon/watchdog-клиента токена (`GET /token`).
 - Для корректной работы `daemon_tick` с Project v2 у GitHub App должен быть доступ `Projects: Read and write` на уровне `Account permissions` (user-owned project) или `Organization permissions` (org-owned project).
   - Если в daemon-логе есть `Resource not accessible by integration`, сначала проверить permissions App и обновить installation (`Configure`), затем повторить smoke.
+- Для user-owned Project v2 рекомендуется hybrid mode:
+  - `DAEMON_GH_PROJECT_TOKEN` (или `CODEX_GH_PROJECT_TOKEN`) используется только для Project-операций (`item-list`, `Status/Flow` update, claim из `Todo`);
+  - `Issue/PR` продолжают работать на App token из auth-сервиса.
 - `DAEMON_GH_AUTH_TIMEOUT_SEC` — timeout запроса daemon/watchdog к локальному auth endpoint (по умолчанию `8` сек).
 - `DAEMON_GH_AUTH_TOKEN_URL` — опциональный явный URL `GET /token` (по умолчанию `http://${GH_APP_BIND:-127.0.0.1}:${GH_APP_PORT:-8787}/token`).
+- `DAEMON_GH_PROJECT_TOKEN` (или `CODEX_GH_PROJECT_TOKEN`) — отдельный PAT для Project v2 операций.
+  - Где получить: `GitHub -> Settings -> Developer settings -> Personal access tokens`.
+  - Рекомендуемый тип: `Tokens (classic)` для user-owned Project API.
+  - Минимальные scopes: `repo`, `read:project`, `project`.
+  - После изменения значения перезапустить `daemon` и `watchdog`.
 - `DAEMON_GH_TOKEN_FALLBACK_ENABLED` (или `CODEX_GH_TOKEN_FALLBACK_ENABLED`) — feature flag аварийного fallback на PAT.
   - По умолчанию `0` (fallback выключен).
   - Truthy-значения: `1`, `true`, `yes`, `on`.
   - При `1` и недоступном auth endpoint daemon/watchdog берут токен из `DAEMON_GH_TOKEN`/`CODEX_GH_TOKEN`.
   - При auth-деградации в `state/detail` пишется явная причина (`AUTH_DEGRADED=1`, `AUTH_FALLBACK_*`), daemon отправляет Telegram-сигнал.
 - `DAEMON_GH_TOKEN` (или `CODEX_GH_TOKEN`) — отдельный GitHub token для daemon/watchdog.
-  - Применяется к действиям автоматики: комментарии в Issue, update/create PR, update Project status.
+  - Применяется ко всем действиям автоматики только в режиме fallback (`DAEMON_GH_TOKEN_FALLBACK_ENABLED=1`).
   - Автор этих действий в GitHub будет владельцем этого токена.
   - Читается из env процесса или из `.env`/`.env.deploy`.
   - Роль в архитектуре:
@@ -171,6 +179,7 @@
   - сетевые вызовы к GitHub выполняет через `gh_retry.sh`, чтобы кратковременные DNS/API-сбои не роняли flow
   - если активной задачи нет, проверяет открытые PR `development -> main` и при наличии ждет merge/close
   - читает Project через GraphQL (без нестабильного `gh project item-list`)
+  - в hybrid mode для Project-операций использует `DAEMON_GH_PROJECT_TOKEN`/`CODEX_GH_PROJECT_TOKEN` (если задан), сохраняя App token для `Issue/PR`
   - при исчерпании GraphQL rate limit пишет `WAIT_GITHUB_RATE_LIMIT=1` + детали (`..._STAGE`, `..._MSG`) и не берет новую задачу
   - ведет статистику окон между rate-limit событиями в `.tmp/codex/graphql_rate_stats.log` (`requests`, `duration_sec`, `start_utc`, `end_utc`)
   - берет задачу только из `Status=Todo`
@@ -372,6 +381,7 @@ chmod +x scripts/codex/*.sh
 - `DAEMON_TG_REMINDER_SEC` (интервал reminder в секундах, минимум 60; по умолчанию 1800)
 - `DAEMON_TG_GH_DNS_REMINDER_SEC` (интервал напоминаний именно для деградации `GITHUB_DNS_OFFLINE` при доступном Telegram; минимум 60, по умолчанию 300)
 - `DAEMON_GH_TOKEN_FALLBACK_ENABLED` (или `CODEX_GH_TOKEN_FALLBACK_ENABLED`) — включает аварийный fallback на `DAEMON_GH_TOKEN`/`CODEX_GH_TOKEN` при недоступном auth endpoint
+- `DAEMON_GH_PROJECT_TOKEN` (или `CODEX_GH_PROJECT_TOKEN`) — отдельный PAT для Project v2 в hybrid mode (если Project user-owned)
 - `WATCHDOG_DAEMON_LABEL` (какой daemon label перезапускать при hard recovery; по умолчанию `com.planka.codex-daemon`)
 - `WATCHDOG_DAEMON_INTERVAL_SEC` (интервал daemon после hard restart; по умолчанию 45)
 - `WATCHDOG_COOLDOWN_SEC` (минимальная пауза между recovery-действиями; по умолчанию 120)

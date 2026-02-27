@@ -157,9 +157,9 @@ refresh_watchdog_github_token() {
     done < "$auth_log_file"
     rm -f "$auth_log_file"
     return 0
+  else
+    rc=$?
   fi
-
-  rc=$?
   unset GH_TOKEN || true
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
@@ -189,7 +189,9 @@ set_state "BOOTING" "watchdog_loop started"
 
 while true; do
   log "watchdog_heartbeat"
-  if ! refresh_watchdog_github_token; then
+  if refresh_watchdog_github_token; then
+    :
+  else
     rc=$?
     detail="AUTH_UNAVAILABLE=1; AUTH_DEGRADED=1; DEGRADED=AUTH_SERVICE_UNAVAILABLE; AUTH_RC=${rc}; ${WATCHDOG_AUTH_LAST_DETAIL}; AUTH_FALLBACK_ENABLED=${WATCHDOG_AUTH_FALLBACK_ENABLED}; AUTH_FALLBACK_TOKEN_PRESENT=${WATCHDOG_AUTH_FALLBACK_TOKEN_PRESENT}; AUTH_FALLBACK_REASON=${WATCHDOG_AUTH_FALLBACK_REASON}"
     if [[ -n "$WATCHDOG_AUTH_FALLBACK_SOURCE" ]]; then

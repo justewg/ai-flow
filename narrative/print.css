@@ -91,10 +91,9 @@
     break-after: auto;
     page-break-after: auto;
   }
-  #requirements .stage::before {
-    content: "Требования к следующей среде";
-    display: block;
-    margin-bottom: 4mm;
+  #requirements .stage-print-header {
+    display: block !important;
+    margin: 0 0 4mm;
     font-size: 13pt;
     font-weight: 700;
     text-transform: uppercase;

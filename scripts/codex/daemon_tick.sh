@@ -16,6 +16,13 @@ review_task_file="${CODEX_DIR}/daemon_review_task_id.txt"
 review_item_file="${CODEX_DIR}/daemon_review_item_id.txt"
 review_issue_file="${CODEX_DIR}/daemon_review_issue_number.txt"
 review_pr_file="${CODEX_DIR}/daemon_review_pr_number.txt"
+gql_stats_log_file="${CODEX_DIR}/graphql_rate_stats.log"
+gql_window_state_file="${CODEX_DIR}/graphql_rate_window_state.txt"
+gql_window_start_epoch_file="${CODEX_DIR}/graphql_rate_window_start_epoch.txt"
+gql_window_start_utc_file="${CODEX_DIR}/graphql_rate_window_start_utc.txt"
+gql_window_requests_file="${CODEX_DIR}/graphql_rate_window_requests.txt"
+gql_last_success_utc_file="${CODEX_DIR}/graphql_rate_last_success_utc.txt"
+gql_last_limit_utc_file="${CODEX_DIR}/graphql_rate_last_limit_utc.txt"
 
 emit_lines() {
   local text="$1"
@@ -51,6 +58,129 @@ run_gh_retry_capture() {
     printf '%s\n' "$out" >&2
     return "$rc"
   fi
+}
+
+read_file_or_default() {
+  local file_path="$1"
+  local default_value="$2"
+  if [[ -s "$file_path" ]]; then
+    cat "$file_path"
+  else
+    printf '%s' "$default_value"
+  fi
+}
+
+read_int_file_or_default() {
+  local file_path="$1"
+  local default_value="$2"
+  local raw
+  raw="$(read_file_or_default "$file_path" "$default_value")"
+  if [[ "$raw" =~ ^[0-9]+$ ]]; then
+    printf '%s' "$raw"
+  else
+    printf '%s' "$default_value"
+  fi
+}
+
+sanitize_for_log() {
+  local value="$1"
+  printf '%s' "$value" | tr '\n' ' ' | tr '\t' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//'
+}
+
+graphql_payload_has_rate_limit() {
+  local payload="$1"
+  printf '%s' "$payload" | jq -e '
+    (.errors // [])
+    | any(
+        (.type // "" | ascii_downcase) == "rate_limit"
+        or (.extensions.code // "" | ascii_downcase) == "graphql_rate_limit"
+        or ((.message // "" | ascii_downcase) | test("rate limit"))
+      )
+  ' >/dev/null 2>&1
+}
+
+graphql_payload_first_rate_limit_message() {
+  local payload="$1"
+  local message
+  message="$(
+    printf '%s' "$payload" | jq -r '
+      (
+        (.errors // [])
+        | map(
+            select(
+              (.type // "" | ascii_downcase) == "rate_limit"
+              or (.extensions.code // "" | ascii_downcase) == "graphql_rate_limit"
+              or ((.message // "" | ascii_downcase) | test("rate limit"))
+            )
+            | .message
+          )
+        | .[0]
+      ) // ""
+    ' 2>/dev/null || true
+  )"
+  if [[ -z "$message" ]]; then
+    message="GraphQL rate limit reached"
+  fi
+  sanitize_for_log "$message"
+}
+
+gql_stats_on_success() {
+  local now_epoch now_utc state requests
+  now_epoch="$(date +%s)"
+  now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+  state="$(read_file_or_default "$gql_window_state_file" "WAIT_SUCCESS")"
+  if [[ "$state" != "RUNNING" ]]; then
+    printf '%s\n' "RUNNING" > "$gql_window_state_file"
+    printf '%s\n' "$now_epoch" > "$gql_window_start_epoch_file"
+    printf '%s\n' "$now_utc" > "$gql_window_start_utc_file"
+    printf '%s\n' "1" > "$gql_window_requests_file"
+  else
+    requests="$(read_int_file_or_default "$gql_window_requests_file" "0")"
+    requests=$(( requests + 1 ))
+    printf '%s\n' "$requests" > "$gql_window_requests_file"
+  fi
+
+  printf '%s\n' "$now_utc" > "$gql_last_success_utc_file"
+}
+
+gql_stats_on_limit() {
+  local stage="$1"
+  local message="$2"
+  local now_epoch now_utc state start_epoch start_utc requests duration
+  now_epoch="$(date +%s)"
+  now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+  state="$(read_file_or_default "$gql_window_state_file" "WAIT_SUCCESS")"
+  start_epoch="$(read_int_file_or_default "$gql_window_start_epoch_file" "0")"
+  start_utc="$(read_file_or_default "$gql_window_start_utc_file" "")"
+  requests="$(read_int_file_or_default "$gql_window_requests_file" "0")"
+  duration="0"
+
+  if [[ "$state" == "RUNNING" && "$start_epoch" -gt 0 && "$requests" -gt 0 ]]; then
+    if (( now_epoch > start_epoch )); then
+      duration=$(( now_epoch - start_epoch ))
+    fi
+  fi
+
+  mkdir -p "$CODEX_DIR"
+  printf '%s\tEVENT=RATE_LIMIT\tstage=%s\trequests=%s\tduration_sec=%s\tstart_utc=%s\tend_utc=%s\tmessage=%s\n' \
+    "$now_utc" \
+    "$(sanitize_for_log "$stage")" \
+    "$requests" \
+    "$duration" \
+    "$(sanitize_for_log "$start_utc")" \
+    "$now_utc" \
+    "$(sanitize_for_log "$message")" \
+    >> "$gql_stats_log_file"
+
+  printf '%s\n' "$now_utc" > "$gql_last_limit_utc_file"
+  printf '%s\n' "WAIT_SUCCESS" > "$gql_window_state_file"
+  : > "$gql_window_start_epoch_file"
+  : > "$gql_window_start_utc_file"
+  printf '%s\n' "0" > "$gql_window_requests_file"
+
+  printf '%s|%s|%s|%s' "$requests" "$duration" "$start_utc" "$now_utc"
 }
 
 trim() {
@@ -408,7 +538,20 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
     -F fieldsFirst=100 \
     -F itemsFirst=100
 )"; then
-  :
+  if graphql_payload_has_rate_limit "$project_json"; then
+    rate_msg="$(graphql_payload_first_rate_limit_message "$project_json")"
+    stats_payload="$(gql_stats_on_limit "PROJECT_QUERY" "$rate_msg")"
+    IFS='|' read -r stats_requests stats_duration stats_start_utc stats_end_utc <<< "$stats_payload"
+    echo "WAIT_GITHUB_RATE_LIMIT=1"
+    echo "WAIT_GITHUB_RATE_LIMIT_STAGE=PROJECT_QUERY"
+    echo "WAIT_GITHUB_RATE_LIMIT_MSG=$rate_msg"
+    echo "GQL_STATS_WINDOW_REQUESTS=$stats_requests"
+    echo "GQL_STATS_WINDOW_DURATION_SEC=$stats_duration"
+    [[ -n "$stats_start_utc" ]] && echo "GQL_STATS_WINDOW_START_UTC=$stats_start_utc"
+    [[ -n "$stats_end_utc" ]] && echo "GQL_STATS_WINDOW_END_UTC=$stats_end_utc"
+    exit 0
+  fi
+  gql_stats_on_success
 else
   rc=$?
   if [[ "$rc" -eq 75 ]]; then

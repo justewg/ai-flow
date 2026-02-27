@@ -166,6 +166,8 @@
   - сетевые вызовы к GitHub выполняет через `gh_retry.sh`, чтобы кратковременные DNS/API-сбои не роняли flow
   - если активной задачи нет, проверяет открытые PR `development -> main` и при наличии ждет merge/close
   - читает Project через GraphQL (без нестабильного `gh project item-list`)
+  - при исчерпании GraphQL rate limit пишет `WAIT_GITHUB_RATE_LIMIT=1` + детали (`..._STAGE`, `..._MSG`) и не берет новую задачу
+  - ведет статистику окон между rate-limit событиями в `.tmp/codex/graphql_rate_stats.log` (`requests`, `duration_sec`, `start_utc`, `end_utc`)
   - берет задачу только из `Status=Todo`
   - перед подхватом читает `Flow Meta` у Issue и проверяет `Depends-On`
   - при незакрытых зависимостях не берет задачу, пишет `WAIT_DEPENDENCIES...` в вывод и отправляет одноразовый сигнал `CODEX_SIGNAL: AGENT_DEPENDENCY_BLOCKED` (через outbox при офлайне GitHub)
@@ -183,6 +185,7 @@
     - иначе выставляет `WAIT_AUTH_SERVICE`
   - при auth-деградации пишет в detail явную причину (`AUTH_DEGRADED=1`, `AUTH_FALLBACK_*`) и отправляет Telegram-сигнал
   - пишет в `daemon_state_detail` явные health-маркеры: `GITHUB_STATUS=<...>` и `TELEGRAM_STATUS=<...>`
+  - state `WAIT_GITHUB_RATE_LIMIT` трактуется как деградация `DEGRADED=GITHUB_GRAPHQL_RATE_LIMIT` и отправляет Telegram-алерт по тем же anti-spam правилам
   - различает сетевую деградацию и веточный блокер синхронизации (`WAIT_BRANCH_SYNC`)
   - отправляет локальные Telegram-алерты по деградации без спама:
     - вход в деградацию (`ENTER_DEGRADED`)
@@ -320,6 +323,13 @@
 - `.tmp/codex/daemon_notify_mode.txt` — последний режим уведомлений (`degraded|healthy`)
 - `.tmp/codex/daemon_notify_last_epoch.txt` — timestamp последней попытки локального Telegram-уведомления
 - `.tmp/codex/daemon_notify_last_signature.txt` — подпись последнего состояния, по которой определяется `DEGRADED_CHANGED`
+- `.tmp/codex/graphql_rate_stats.log` — журнал rate-limit событий GraphQL (одно событие = окно от первого успешного запроса после лимита до нового лимита)
+- `.tmp/codex/graphql_rate_window_state.txt` — состояние текущего окна (`WAIT_SUCCESS|RUNNING`)
+- `.tmp/codex/graphql_rate_window_start_epoch.txt` — epoch старта текущего окна
+- `.tmp/codex/graphql_rate_window_start_utc.txt` — UTC-старт текущего окна
+- `.tmp/codex/graphql_rate_window_requests.txt` — число успешных GraphQL-запросов в текущем окне
+- `.tmp/codex/graphql_rate_last_success_utc.txt` — время последнего успешного GraphQL-запроса
+- `.tmp/codex/graphql_rate_last_limit_utc.txt` — время последнего зафиксированного rate-limit события
 - `.tmp/codex/executor.log` — полный лог автономного executor
 - `.tmp/codex/executor_state.txt` — состояние executor (`RUNNING|DONE|FAILED`)
 - `.tmp/codex/executor_pid.txt` — pid фонового executor-процесса
@@ -329,6 +339,13 @@
 - `.tmp/codex/outbox/` — pending GitHub-действия (очередь)
 - `.tmp/codex/outbox_payloads/` — payload-файлы для pending действий
 - `.tmp/codex/outbox_failed/` — non-retryable ошибки outbox
+
+Быстрый анализ частоты GraphQL rate limit:
+- последние события: `tail -n 20 .tmp/codex/graphql_rate_stats.log`
+- среднее число успешных GraphQL-запросов до нового лимита:
+  `awk -F'\t' '/EVENT=RATE_LIMIT/ { for(i=1;i<=NF;i++) if($i ~ /^requests=/){ split($i,a,"="); sum+=a[2]; n++ } } END { if(n) printf("avg_requests=%.2f events=%d\n", sum/n, n); else print "no_data" }' .tmp/codex/graphql_rate_stats.log`
+- средняя длительность окна (сек):
+  `awk -F'\t' '/EVENT=RATE_LIMIT/ { for(i=1;i<=NF;i++) if($i ~ /^duration_sec=/){ split($i,a,"="); sum+=a[2]; n++ } } END { if(n) printf("avg_duration_sec=%.2f events=%d\n", sum/n, n); else print "no_data" }' .tmp/codex/graphql_rate_stats.log`
 
 ## Подготовка
 Скрипты должны быть исполняемыми:

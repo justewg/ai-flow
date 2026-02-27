@@ -202,7 +202,9 @@ set_state() {
 
 classify_success_state() {
   local output="$1"
-  if printf '%s' "$output" | grep -q '^WAIT_GITHUB_API_UNSTABLE=1'; then
+  if printf '%s' "$output" | grep -q '^WAIT_GITHUB_RATE_LIMIT=1'; then
+    echo "WAIT_GITHUB_RATE_LIMIT"
+  elif printf '%s' "$output" | grep -q '^WAIT_GITHUB_API_UNSTABLE=1'; then
     echo "WAIT_GITHUB_OFFLINE"
   elif printf '%s' "$output" | grep -q '^WAIT_BRANCH_SYNC_REQUIRED=1'; then
     echo "WAIT_BRANCH_SYNC"
@@ -289,6 +291,20 @@ build_success_detail() {
     WAIT_GITHUB_OFFLINE)
       line="$(printf '%s\n' "$output" | grep -m1 -E '^(WAIT_GITHUB_STAGE=|WAIT_GITHUB_API_UNSTABLE=1)' || true)"
       ;;
+    WAIT_GITHUB_RATE_LIMIT)
+      local stage_line msg_line req_line dur_line
+      local parts=()
+      stage_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_RATE_LIMIT_STAGE=' || true)"
+      msg_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_RATE_LIMIT_MSG=' || true)"
+      req_line="$(printf '%s\n' "$output" | grep -m1 '^GQL_STATS_WINDOW_REQUESTS=' || true)"
+      dur_line="$(printf '%s\n' "$output" | grep -m1 '^GQL_STATS_WINDOW_DURATION_SEC=' || true)"
+      parts+=("DEGRADED=GITHUB_GRAPHQL_RATE_LIMIT")
+      [[ -n "$stage_line" ]] && parts+=("$stage_line")
+      [[ -n "$msg_line" ]] && parts+=("$msg_line")
+      [[ -n "$req_line" ]] && parts+=("$req_line")
+      [[ -n "$dur_line" ]] && parts+=("$dur_line")
+      line="$(IFS=';'; echo "${parts[*]}")"
+      ;;
     WAIT_BRANCH_SYNC)
       line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_BRANCH_SYNC_REQUIRED=1' || true)"
       [[ -z "$line" ]] && line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_BRANCH_STAGE=' || true)"
@@ -309,7 +325,9 @@ build_success_detail() {
 
 classify_error_state() {
   local output="$1"
-  if printf '%s' "$output" | grep -Eiq 'error connecting to api\.github\.com|could not resolve host: api\.github\.com|could not resolve host: github\.com|connection timed out|tls handshake timeout|temporary failure in name resolution|failed to connect'; then
+  if printf '%s' "$output" | grep -Eiq 'graphql:.*rate limit|api rate limit exceeded|rate limit exceeded'; then
+    echo "WAIT_GITHUB_RATE_LIMIT"
+  elif printf '%s' "$output" | grep -Eiq 'error connecting to api\.github\.com|could not resolve host: api\.github\.com|could not resolve host: github\.com|connection timed out|tls handshake timeout|temporary failure in name resolution|failed to connect'; then
     echo "WAIT_GITHUB_OFFLINE"
   else
     echo "ERROR_LOCAL_FLOW"

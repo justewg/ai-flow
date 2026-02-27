@@ -5,6 +5,9 @@
 ## Рекомендуемый вход (один префикс)
 - `scripts/codex/run.sh <command>`
 
+Для полного онбординга GitHub App auth-сервиса см.:
+- `docs/gh-app-daemon-integration-plan.md` (разделы `Runbook: APP-07.5` и `Онбординг сервиса`).
+
 Команды:
 - `scripts/codex/run.sh help`
 - `scripts/codex/run.sh clear <key>`
@@ -85,6 +88,8 @@
 ## Важные env-переменные
 - `node` (Node.js runtime, рекомендуется LTS >= 18) — обязателен для `gh_app_auth_*` скриптов и сервиса `gh_app_auth_service.js`.
 - `GH_APP_INTERNAL_SECRET` — обязателен не только для auth-сервиса, но и для daemon/watchdog-клиента токена (`GET /token`).
+- Для корректной работы `daemon_tick` с Project v2 у GitHub App должен быть доступ `Projects: Read and write` на уровне `Account permissions` (user-owned project) или `Organization permissions` (org-owned project).
+  - Если в daemon-логе есть `Resource not accessible by integration`, сначала проверить permissions App и обновить installation (`Configure`), затем повторить smoke.
 - `DAEMON_GH_AUTH_TIMEOUT_SEC` — timeout запроса daemon/watchdog к локальному auth endpoint (по умолчанию `8` сек).
 - `DAEMON_GH_AUTH_TOKEN_URL` — опциональный явный URL `GET /token` (по умолчанию `http://${GH_APP_BIND:-127.0.0.1}:${GH_APP_PORT:-8787}/token`).
 - `DAEMON_GH_TOKEN_FALLBACK_ENABLED` (или `CODEX_GH_TOKEN_FALLBACK_ENABLED`) — feature flag аварийного fallback на PAT.
@@ -346,6 +351,12 @@
   `awk -F'\t' '/EVENT=RATE_LIMIT/ { for(i=1;i<=NF;i++) if($i ~ /^requests=/){ split($i,a,"="); sum+=a[2]; n++ } } END { if(n) printf("avg_requests=%.2f events=%d\n", sum/n, n); else print "no_data" }' .tmp/codex/graphql_rate_stats.log`
 - средняя длительность окна (сек):
   `awk -F'\t' '/EVENT=RATE_LIMIT/ { for(i=1;i<=NF;i++) if($i ~ /^duration_sec=/){ split($i,a,"="); sum+=a[2]; n++ } } END { if(n) printf("avg_duration_sec=%.2f events=%d\n", sum/n, n); else print "no_data" }' .tmp/codex/graphql_rate_stats.log`
+
+Быстрая проверка включения App auth:
+- `scripts/codex/run.sh gh_app_auth_pm2_health`
+- `cat .tmp/codex/daemon_state.txt`
+- `cat .tmp/codex/daemon_state_detail.txt`
+- при необходимости: `tail -n 80 .tmp/codex/daemon.log`
 
 ## Подготовка
 Скрипты должны быть исполняемыми:

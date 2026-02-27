@@ -72,12 +72,96 @@
 2. Нехватка scopes/permissions при установке App.
 3. Ошибки ротации токена (протухание, недоступность auth-сервиса).
 
+## Runbook: APP-07.5 (доступ GitHub App к Project v2)
+Цель: убрать блокер `Resource not accessible by integration` и подтвердить, что App может читать/менять карточки Project.
+
+### Шаг 1. Проверить permissions GitHub App в UI
+Путь: `GitHub -> Settings -> Developer settings -> GitHub Apps -> <ваш app> -> Permissions & events`.
+
+Что должно быть включено:
+1. `Repository permissions`:
+- `Issues: Read and write`
+- `Pull requests: Read and write`
+- `Metadata: Read-only`
+- `Contents: Read-only`
+2. `Account permissions` (для user-owned project) или `Organization permissions` (для org-owned project):
+- `Projects: Read and write`
+
+Важно:
+1. Если меняли permissions, нажать `Save changes`.
+2. После сохранения обязательно обновить installation (следующий шаг), иначе новые права не применятся к installation token.
+
+### Шаг 2. Обновить installation App
+Путь: `GitHub -> Settings -> Applications -> Installed GitHub Apps -> <ваш app> -> Configure`.
+
+Что сделать:
+1. Убедиться, что installation активен для owner `justewg`.
+2. В `Repository access` выбрать `Only selected repositories` и проверить, что `planka` включен.
+3. Подтвердить/re-authorize, если GitHub запрашивает подтверждение после изменения permissions.
+
+### Шаг 3. Проверить доступ к Project через App token (локально)
+1. Получить installation token:
+`app_token="$(scripts/codex/gh_app_auth_token.sh)"`
+2. Проверить чтение Project:
+`GH_TOKEN="$app_token" gh api graphql -f query='query($projectId:ID!){ node(id:$projectId){ __typename ... on ProjectV2 { id title number } } }' -f projectId='PVT_kwHOAPt_Q84BPyyr'`
+3. Проверить мутацию Project (на тестовом item id):
+`GH_TOKEN="$app_token" scripts/codex/project_set_status.sh <project-item-id> "Todo" "Ready"`
+
+Ожидаемый результат:
+1. `node` не `null`, без `Resource not accessible by integration`.
+2. `project_set_status.sh` завершается успешно (`Updated ...`).
+
+### Шаг 4. Повторить smoke daemon-flow по Project
+1. Перевести тестовую карточку в `Status=Todo, Flow=Ready`.
+2. Дождаться claim демоном в `In Progress`.
+3. Подтвердить actor в Project events = `app-name[bot]`.
+4. Завершить цикл до `Review/Done`.
+
+### Диагностика типовых ошибок
+1. `Resource not accessible by integration`:
+- не выданы `Projects` permissions App;
+- installation не обновлен после изменения permissions;
+- App установлен не на того owner или не на тот repo.
+2. `Could not resolve to a ProjectV2 ...` в daemon-log:
+- токен App есть, но нет доступа к конкретному Project;
+- проверить owner/тип Project (user vs org) и соответствующий permission scope.
+
 ## Критерии приемки
 1. Комментарии в Issue от `app-name[bot]`.
 2. PR create/edit от `app-name[bot]`.
 3. Обновление статусов Project от `app-name[bot]`.
 4. Daemon работает >65 минут без auth-сбоев.
 5. При недоступном auth-сервисе daemon корректно уходит в ожидание и сигнализирует.
+
+## Онбординг сервиса (включение App auth в текущем окружении)
+Минимальный checklist для нового хоста/аккаунта:
+1. Заполнить `.env`:
+- `GH_APP_ID`
+- `GH_APP_INSTALLATION_ID`
+- `GH_APP_PRIVATE_KEY_PATH`
+- `GH_APP_INTERNAL_SECRET`
+- `GH_APP_OWNER=justewg`
+- `GH_APP_REPO=planka`
+- `GH_APP_BIND=127.0.0.1`
+- `GH_APP_PORT=8787`
+2. Убедиться, что fallback выключен (штатный режим App):
+- не задавать `DAEMON_GH_TOKEN_FALLBACK_ENABLED=1`
+- не задавать `DAEMON_GH_TOKEN` / `CODEX_GH_TOKEN`, если аварийный fallback не нужен
+3. Запустить auth-сервис:
+- `scripts/codex/run.sh gh_app_auth_pm2_start`
+- `scripts/codex/run.sh gh_app_auth_pm2_health`
+4. Перезапустить automation:
+- `scripts/codex/run.sh daemon_uninstall com.planka.codex-daemon`
+- `scripts/codex/run.sh daemon_install com.planka.codex-daemon 90`
+- `scripts/codex/run.sh watchdog_uninstall com.planka.codex-watchdog`
+- `scripts/codex/run.sh watchdog_install com.planka.codex-watchdog 90`
+5. Проверить state:
+- `cat .tmp/codex/daemon_state.txt`
+- `cat .tmp/codex/daemon_state_detail.txt`
+- `cat .tmp/codex/watchdog_state.txt`
+6. Проверить деградацию/восстановление auth:
+- `scripts/codex/run.sh gh_app_auth_pm2_stop` -> ожидать `WAIT_AUTH_SERVICE` + Telegram `ENTER_DEGRADED`
+- `scripts/codex/run.sh gh_app_auth_pm2_start` -> ожидать выход из `WAIT_AUTH_SERVICE` + Telegram `RECOVERED`
 
 ## Разбиение на задачи (для Project)
 1. `APP-01` Создать GitHub App и выдать permissions.

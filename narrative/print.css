@@ -147,6 +147,7 @@
   #growth .word { position: static; margin: 2mm 0; animation: none !important; transform: none !important; }
   #growth .word.center { opacity: 0.9; font-weight: 700; }
   #growth .word.periphery { opacity: 0.55; font-weight: 500; }
+  #growth .growth-legend { font-size: 11pt; line-height: 1.35; color: #3f556b; margin: 4mm 0 0; }
 
   #final-a .container, #final-b .container { min-height: auto !important; }
   #final-a .final-message { font-size: 28pt; text-align: left; max-width: none; line-height: 1.12; }

@@ -379,6 +379,14 @@ figcaption { margin-top: var(--space-2); color: var(--muted); font-size: 0.9rem;
 .periphery-3 { top: 18%; left: 84%; }
 .periphery-4 { top: 84%; left: 80%; }
 
+.growth-legend {
+  margin: var(--space-2) auto 0;
+  max-width: 62ch;
+  color: #4a5f74;
+  font-size: clamp(14px, 1.3vw, 18px);
+  line-height: 1.42;
+}
+
 .word.center:nth-of-type(2) { animation-delay: 0.2s; }
 .word.center:nth-of-type(3) { animation-delay: 0.4s; }
 .word.center:nth-of-type(4) { animation-delay: 0.6s; }

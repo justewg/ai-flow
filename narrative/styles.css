@@ -47,10 +47,14 @@ body {
   display: flex;
   align-items: stretch;
   justify-content: center;
-  background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+  --section-bg: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+  background: var(--section-bg);
 }
 .section + .section { border-top: 1px solid var(--line); }
-.section.is-dark { background: linear-gradient(180deg, #f2f7fd 0%, var(--bg-2) 100%); }
+.section.is-dark {
+  --section-bg: linear-gradient(180deg, #f2f7fd 0%, var(--bg-2) 100%);
+  background: var(--section-bg);
+}
 
 .container {
   width: min(100%, var(--base-width));
@@ -266,6 +270,7 @@ figcaption { margin-top: var(--space-2); color: var(--muted); font-size: 0.9rem;
 .is-reverse .stage-media { order: 2; }
 .is-reverse .stage-copy { order: 1; }
 
+.section-sticky,
 .req-sticky {
   position: sticky;
   top: 0;
@@ -274,9 +279,11 @@ figcaption { margin-top: var(--space-2); color: var(--muted); font-size: 0.9rem;
   display: grid;
   align-content: end;
   padding: var(--space-3) 0 var(--space-2);
-  background: linear-gradient(180deg, #f2f7fd 0%, var(--bg-2) 100%);
+  background: var(--section-bg);
 }
+.section-sticky .title,
 .req-sticky .title { margin-bottom: var(--space-1); }
+.section-sticky .subtitle,
 .req-sticky .subtitle {
   margin-bottom: 0;
   max-width: 68ch;

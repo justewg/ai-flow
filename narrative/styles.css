@@ -135,7 +135,8 @@ figcaption {
 }
 
 /* =========================
-   HERO (#intro) — FIXED
+   HERO (#intro) — FIX v3
+   Full-bleed + cover + CSS fades
    ========================= */
 
 :root{
@@ -145,36 +146,77 @@ figcaption {
   --hero-bg: #ffffff;
 }
 
+/* 0) Full-bleed: вырываем hero из любого контейнера с max-width */
 .planka-hero{
   position: relative;
   min-height: var(--hero-min-h);
-  width: 100%;
+
+  /* critical full-bleed trick */
+  width: 100vw;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+
   overflow: hidden;
   background-color: var(--hero-bg);
 
-  /* Desktop по умолчанию */
+  /* background always on section */
   background-image: url("./assets/img/planka_hero_desktop_final.png");
   background-size: cover;
   background-repeat: no-repeat;
   background-position: right center;
 }
 
-/* Текстовый слой поверх фона */
+/* 1) Fade слева (desktop/landscape): белый в ноль */
+.planka-hero::before{
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+
+  /* left -> transparent */
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,1) 0%,
+    rgba(255,255,255,1) 32%,
+    rgba(255,255,255,0.85) 42%,
+    rgba(255,255,255,0.0) 58%
+  );
+}
+
+/* 2) Bottom scrim (portrait): по умолчанию выключен */
+.planka-hero::after{
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+  background: linear-gradient(
+    0deg,
+    rgba(255,255,255,0.98) 0%,
+    rgba(255,255,255,0.70) 18%,
+    rgba(255,255,255,0.0) 46%
+  );
+}
+
+/* текст всегда сверху */
 .planka-hero__content{
   position: relative;
   z-index: 1;
   min-height: var(--hero-min-h);
-
   padding: var(--hero-pad);
+
   display: flex;
   flex-direction: column;
   justify-content: center;
 
-  /* Desktop: текст слева ~ пол-экрана */
   max-width: min(52ch, 48vw);
 
-  /* КРИТИЧНО: НЕ ставить background:white здесь на всю высоту,
-     иначе получим “белый прямоугольник” на мобиле */
+  /* ВАЖНО: НЕ задавать background тут */
+  background: transparent;
 }
 
 .planka-hero__title{
@@ -196,15 +238,19 @@ figcaption {
   line-height: 1.35;
 }
 
-/* ============ MOBILE: portrait (телефоны) ============ */
+/* ========= iPhone / Mobile portrait ========= */
 @media (max-width: 768px) and (orientation: portrait){
   .planka-hero{
     background-image: url("./assets/img/planka_hero_mobile_final.png");
-    background-position: center top; /* лицо сверху */
+    background-position: center top;
   }
 
+  /* на мобиле выключаем левый фейд, включаем нижний */
+  .planka-hero::before{ opacity: 0; }
+  .planka-hero::after{ opacity: 1; }
+
   .planka-hero__content{
-    justify-content: flex-end; /* текст вниз */
+    justify-content: flex-end;
     padding-bottom: calc(var(--hero-pad) + 12px);
     max-width: min(32ch, 70vw);
   }
@@ -214,12 +260,15 @@ figcaption {
   }
 }
 
-/* ============ iPad portrait (важно!) ============ */
+/* ========= iPad portrait ========= */
 @media (min-width: 769px) and (max-width: 1024px) and (orientation: portrait){
   .planka-hero{
     background-image: url("./assets/img/planka_hero_mobile_final.png");
     background-position: center top;
   }
+
+  .planka-hero::before{ opacity: 0; }
+  .planka-hero::after{ opacity: 1; }
 
   .planka-hero__content{
     justify-content: flex-end;
@@ -232,13 +281,17 @@ figcaption {
   }
 }
 
-/* ============ iPhone landscape / низкая высота ============ */
+/* ========= Low-height landscape (iPhone landscape) ========= */
 @media (max-height: 520px) and (orientation: landscape){
   .planka-hero{
-    min-height: 100vh; /* страховка */
+    min-height: 100vh;
     background-image: url("./assets/img/planka_hero_desktop_final.png");
     background-position: right center;
   }
+
+  /* левый фейд нужен и тут */
+  .planka-hero::before{ opacity: 1; }
+  .planka-hero::after{ opacity: 0; }
 
   .planka-hero__content{
     padding: clamp(10px, 3vw, 28px);
@@ -253,18 +306,6 @@ figcaption {
   .planka-hero__subtitle{
     margin-top: 8px;
     font-size: 14px;
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .planka-hero {
-    transform: translateZ(0);
-    opacity: 0;
-    transition: opacity 600ms ease;
-    will-change: background-position;
-  }
-  .planka-hero.is-ready {
-    opacity: 1;
   }
 }
 

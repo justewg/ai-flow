@@ -165,6 +165,10 @@ figcaption { margin-top: var(--space-2); color: var(--muted); font-size: 0.9rem;
 }
 #intro .intro-copy .kicker { margin-bottom: var(--space-3); }
 #intro .intro-copy .display { text-align: left; }
+#intro .intro-copy .subtitle {
+  font-size: clamp(14px, 2.5vw, 32px);
+  line-height: 1.2;
+}
 
 /* Screens stack inside a section */
 .screens { display: grid; gap: var(--space-4); }

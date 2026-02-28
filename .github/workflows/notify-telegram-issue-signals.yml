@@ -87,21 +87,38 @@ jobs:
           CHECK_NOW: ${{ steps.parse.outputs.check_now }}
           STAGE_LABEL: ${{ steps.parse.outputs.stage }}
         run: |
-          MESSAGE=$'PLANKA: issue signal\n'
-          MESSAGE+="Signal: ${SIGNAL}"$'\n'
-          MESSAGE+="Stage: ${STAGE_LABEL}"$'\n'
-          MESSAGE+="Check now: ${CHECK_NOW}"$'\n'
-          MESSAGE+="Issue #${ISSUE_NUMBER}: ${ISSUE_TITLE}"$'\n'
-          MESSAGE+="Task: ${TASK_ID}"$'\n'
-          MESSAGE+="Author: @${COMMENT_AUTHOR}"$'\n'
-          MESSAGE+="Issue: ${ISSUE_URL}"$'\n'
-          MESSAGE+="Comment: ${COMMENT_URL}"
+          html_escape() {
+            jq -rn --arg v "${1:-}" '$v|@html'
+          }
+
+          CHECK_BADGE="💤 IDLE"
+          HEADER="<b>💬 Issue signal</b>"
+          if [[ "${CHECK_NOW}" == "YES" ]]; then
+            CHECK_BADGE="🚨 НУЖНА РЕАКЦИЯ"
+            HEADER="<b>🚨 Issue signal</b>"
+          fi
+
+          NOW_UTC="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          MESSAGE="${HEADER}"$'\n'
+          MESSAGE+="<b>🧭 CHECK NOW:</b> ${CHECK_BADGE}"$'\n'
+          MESSAGE+="<b>🪧 Stage:</b> $(html_escape "${STAGE_LABEL}")"$'\n'
+          MESSAGE+="📌 <a href=\"$(html_escape "${ISSUE_URL}")\">Issue #${ISSUE_NUMBER}</a> — <b>$(html_escape "${ISSUE_TITLE}")</b>"$'\n'
+          if [[ "${TASK_ID}" != "none" ]]; then
+            MESSAGE+="<b>🎯 Task:</b> <code>$(html_escape "${TASK_ID}")</code>"$'\n'
+          fi
+          MESSAGE+="🗨️ <a href=\"$(html_escape "${COMMENT_URL}")\">Комментарий</a>"$'\n'
+
+          AUX=$'SIGNAL='"${SIGNAL}"$'\n'
+          AUX+=$'AUTHOR='"${COMMENT_AUTHOR}"$'\n'
+          AUX+=$'CHECK_NOW='"${CHECK_NOW}"$'\n'
+          AUX+=$'TIME_UTC='"${NOW_UTC}"
+          MESSAGE+="<blockquote><code>$(html_escape "${AUX}")</code></blockquote>"
 
           payload="$(
             jq -n \
               --arg chat_id "${TG_CHAT_ID}" \
               --arg text "${MESSAGE}" \
-              '{chat_id: $chat_id, text: $text, disable_web_page_preview: true}'
+              '{chat_id: $chat_id, text: $text, parse_mode: "HTML", disable_web_page_preview: true}'
           )"
 
           curl -fsS \

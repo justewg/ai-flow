@@ -107,18 +107,34 @@ daemon_loop_running() {
   pgrep -f "${ROOT_DIR}/scripts/codex/daemon_loop.sh" >/dev/null 2>&1
 }
 
+html_escape() {
+  local value="${1:-}"
+  jq -rn --arg v "$value" '$v|@html'
+}
+
 notify_action() {
   local action="$1"
   local reason="$2"
   local detail="$3"
   local msg_file
   msg_file="$(mktemp "${CODEX_DIR}/watchdog_notify.XXXXXX")"
+  local now_utc check_badge aux_text aux_escaped
+  now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  if [[ "$action" == "NONE" ]]; then
+    check_badge="💤 IDLE"
+  else
+    check_badge="🚨 НУЖНА РЕАКЦИЯ"
+  fi
+  aux_text=$'ACTION='"${action}"$'\n'
+  aux_text+=$'REASON='"${reason}"$'\n'
+  aux_text+=$'DETAIL='"${detail}"$'\n'
+  aux_text+=$'TIME_UTC='"${now_utc}"
+  aux_escaped="$(html_escape "$aux_text")"
   cat > "$msg_file" <<EOF
-PLANKA: watchdog recovery signal
-Action: ${action}
-Reason: ${reason}
-Detail: ${detail}
-Time: $(date -u '+%Y-%m-%dT%H:%M:%SZ')
+<b>🛟 WATCHDOG: recovery signal</b>
+<b>🧭 CHECK NOW:</b> ${check_badge}
+<b>⚙️ Action:</b> <code>$(html_escape "$action")</code> · <b>Reason:</b> <code>$(html_escape "$reason")</code>
+<blockquote><code>${aux_escaped}</code></blockquote>
 EOF
   local out rc
   if out="$("${ROOT_DIR}/scripts/codex/telegram_local_notify.sh" "$msg_file" 2>&1)"; then

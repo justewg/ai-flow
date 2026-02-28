@@ -34,6 +34,14 @@
   }
   .section.is-dark { background: #f4f8fd !important; }
   .container { padding: 0; }
+  .section-sticky {
+    position: static !important;
+    top: auto !important;
+    z-index: auto !important;
+    min-height: auto !important;
+    padding: 0 0 4mm !important;
+    background: transparent !important;
+  }
 
   /* Remove animations and parallax */
   .reveal, .reveal.slide { opacity: 1 !important; transform: none !important; }

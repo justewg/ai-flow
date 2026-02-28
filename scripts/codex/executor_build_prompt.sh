@@ -55,7 +55,13 @@ ${reply_text}
 6) По итогам рабочего шага:
    - заполни .tmp/codex/commit_message.txt
    - заполни .tmp/codex/stage_paths.txt
-   - при необходимости обнови .tmp/codex/pr_title.txt и .tmp/codex/pr_body.txt
+   - обнови .tmp/codex/pr_title.txt и .tmp/codex/pr_body.txt
+   - в .tmp/codex/pr_body.txt обязательно зафиксируй:
+     * что конкретно сделано по пунктам Issue;
+     * какие файлы/секции изменены;
+     * какие проверки выполнены и результат проверок;
+     * что осталось вне scope текущей дельты (если есть)
+   - не используй расплывчатые формулировки вроде "всё сделано по задаче" без детализации
    - выполни: scripts/codex/run.sh task_finalize
 7) Если задача финализирована для ревью:
    - переведи PR в ready_for_review.

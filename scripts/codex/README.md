@@ -227,7 +227,7 @@
     - изменение набора файлов (`WAIT_DIRTY_WORKTREE_CHANGED`)
     - reminder (`WAIT_DIRTY_WORKTREE_REMINDER`)
     - снятие блокировки (`DIRTY_WORKTREE_RESOLVED`)
-  - формат dirty-worktree Telegram-алертов унифицирован с merge/watchdog-паттерном: заголовок начинается с `🚨/💤`, отдельной строкой идет `⚙️ Reason`, служебные поля остаются в `blockquote + code`
+  - формат dirty-worktree Telegram-алертов: заголовок `PLANKA: ...`, структурированные строки `Reason/State/Blocked/Tracked/Action/Time`, служебные поля остаются в `blockquote + code`
   - dirty-worktree алерты отправляются только если реально блокируется карточка из `Todo` (`WAIT_DIRTY_WORKTREE_BLOCKING_TODO=1`); в `idle` без `Todo` уведомления не шлются
   - различает сетевую деградацию и веточный блокер синхронизации (`WAIT_BRANCH_SYNC`)
   - отправляет локальные Telegram-алерты по деградации без спама:

@@ -82,7 +82,7 @@ run_project_gh() {
   fi
 }
 
-project_json="$(
+fetch_project_initial() {
   run_project_gh api graphql \
     -f query='
 query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
@@ -113,6 +113,10 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
         }
       }
       items(first: $itemsFirst) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
         nodes {
           id
           content {
@@ -136,15 +140,76 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
     -f projectId="$project_id" \
     -F fieldsFirst=100 \
     -F itemsFirst=100
+}
+
+fetch_project_items_page() {
+  local after_cursor="$1"
+  run_project_gh api graphql \
+    -f query='
+query($projectId: ID!, $itemsFirst: Int!, $after: String!) {
+  node(id: $projectId) {
+    ... on ProjectV2 {
+      items(first: $itemsFirst, after: $after) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          id
+          content {
+            __typename
+            ... on DraftIssue { title }
+            ... on Issue { title number }
+            ... on PullRequest { title number }
+          }
+          fieldValueByName(name: "Task ID") {
+            __typename
+            ... on ProjectV2ItemFieldTextValue {
+              text
+            }
+          }
+        }
+      }
+    }
+  }
+}
+' \
+    -f projectId="$project_id" \
+    -F itemsFirst=100 \
+    -f after="$after_cursor"
+}
+
+project_json="$(
+  fetch_project_initial
 )"
+
+all_items_json="$(printf '%s' "$project_json" | jq -c '.data.node.items.nodes // []')"
+has_next_page="$(printf '%s' "$project_json" | jq -r '.data.node.items.pageInfo.hasNextPage // false')"
+end_cursor="$(printf '%s' "$project_json" | jq -r '.data.node.items.pageInfo.endCursor // ""')"
+
+if [[ "$task_or_item_id" != PVTI_* && "$has_next_page" == "true" ]]; then
+  for _ in {1..50}; do
+    [[ "$has_next_page" != "true" ]] && break
+    [[ -z "$end_cursor" || "$end_cursor" == "null" ]] && break
+
+    page_json="$(
+      fetch_project_items_page "$end_cursor"
+    )"
+
+    page_items_json="$(printf '%s' "$page_json" | jq -c '.data.node.items.nodes // []')"
+    all_items_json="$(jq -c -n --argjson acc "$all_items_json" --argjson page "$page_items_json" '$acc + $page')"
+    has_next_page="$(printf '%s' "$page_json" | jq -r '.data.node.items.pageInfo.hasNextPage // false')"
+    end_cursor="$(printf '%s' "$page_json" | jq -r '.data.node.items.pageInfo.endCursor // ""')"
+  done
+fi
 
 if [[ "$task_or_item_id" == PVTI_* ]]; then
   item_id="$task_or_item_id"
 else
   item_id="$(
-    printf '%s' "$project_json" |
+    printf '%s' "$all_items_json" |
       jq -r --arg task "$task_or_item_id" --arg issue_num "$issue_number_hint" '
-        .data.node.items.nodes[]
+        .[]
         | select(
             (.fieldValueByName.text // "") == $task
             or ((.content.title // "") | contains($task))

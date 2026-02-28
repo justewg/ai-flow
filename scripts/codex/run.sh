@@ -24,6 +24,8 @@ Commands:
   commit_push
   project_add_task
   project_set_status
+  project_status_runtime
+  log_summary
   next_task
   app_deps_mermaid
   backlog_seed_apply
@@ -234,6 +236,20 @@ case "$cmd" in
     else
       "${ROOT_DIR}/scripts/codex/project_set_status.sh" "$task_id" "$status_name"
     fi
+    ;;
+
+  project_status_runtime)
+    if [[ $# -lt 2 ]]; then
+      echo "Usage: scripts/codex/run.sh project_status_runtime <enqueue|apply|list|clear> [args...]"
+      exit 1
+    fi
+    shift 1
+    "${ROOT_DIR}/scripts/codex/project_status_runtime.sh" "$@"
+    ;;
+
+  log_summary)
+    shift 1
+    "${ROOT_DIR}/scripts/codex/log_summary.sh" "$@"
     ;;
 
   next_task)

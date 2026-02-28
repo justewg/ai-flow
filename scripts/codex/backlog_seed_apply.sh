@@ -250,14 +250,22 @@ apply_task_to_project_backlog() {
     fi
     rc=$?
     if [[ "$rc" -eq 75 ]]; then
-      echo "BACKLOG_SEED_WAIT_GITHUB=1"
-      echo "BACKLOG_SEED_WAIT_STAGE=PROJECT_SET_STATUS"
-      return 75
+      echo "BACKLOG_SEED_PROJECT_STATUS_DEFERRED=1"
+      runtime_out="$("${ROOT_DIR}/scripts/codex/project_status_runtime.sh" enqueue "ISSUE-${issue_number}" "Backlog" "Backlog" "backlog-seed:${issue_number}" 2>&1 || true)"
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        echo "$line"
+      done <<< "$runtime_out"
+      return 0
     fi
     if printf '%s' "$set_out" | grep -Eiq 'error connecting to api\.github\.com|could not resolve host|connection timed out|tls handshake timeout|temporary failure in name resolution'; then
-      echo "BACKLOG_SEED_WAIT_GITHUB=1"
-      echo "BACKLOG_SEED_WAIT_STAGE=PROJECT_SET_STATUS"
-      return 75
+      echo "BACKLOG_SEED_PROJECT_STATUS_DEFERRED=1"
+      runtime_out="$("${ROOT_DIR}/scripts/codex/project_status_runtime.sh" enqueue "ISSUE-${issue_number}" "Backlog" "Backlog" "backlog-seed:${issue_number}" 2>&1 || true)"
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        echo "$line"
+      done <<< "$runtime_out"
+      return 0
     fi
     sleep 2
   done

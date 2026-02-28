@@ -314,7 +314,18 @@ figcaption { margin-top: var(--space-2); color: var(--muted); font-size: 0.9rem;
 .screens .screen { }
 
 /* Layers */
-/* ... uses defaults */
+.layers-note {
+  margin: 6px 0 0;
+  color: #445a70;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+.layers-thesis {
+  margin: var(--space-3) 0 0;
+  color: var(--fg);
+  font-size: clamp(1rem, 1.3vw, 1.18rem);
+  font-weight: 600;
+}
 
 /* Word field */
 .word-field {

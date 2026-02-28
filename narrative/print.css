@@ -41,6 +41,24 @@
     min-height: auto !important;
     padding: 0 0 4mm !important;
     background: transparent !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    break-after: avoid-page;
+    page-break-after: avoid;
+  }
+
+  /* Keep headings tied to the next block in print flow */
+  h1, h2, h3, h4,
+  .display, .title, .stage-print-header, .stage-name,
+  #gesture .stage-title {
+    break-after: avoid-page;
+    page-break-after: avoid;
+  }
+  h1 + *, h2 + *, h3 + *, h4 + *,
+  .display + *, .title + *, .stage-print-header + *, .stage-name + *,
+  #gesture .stage-title + * {
+    break-before: avoid-page;
+    page-break-before: avoid;
   }
 
   /* Remove animations and parallax */
@@ -86,13 +104,13 @@
   }
   #requirements .req-stages { display: block; }
   #requirements .stage {
-    min-height: auto !important;
+    min-height: 0 !important;
     margin: 0;
     padding: 0;
     border: none;
     break-after: page;
     page-break-after: always;
-    break-inside: avoid;
+    break-inside: avoid-page;
     page-break-inside: avoid;
   }
   #requirements .stage:last-child {
@@ -107,11 +125,21 @@
     text-transform: uppercase;
     letter-spacing: 0.03em;
   }
-  #requirements .stage-grid { grid-template-columns: 1fr; gap: 4mm; }
+  #requirements .stage-grid {
+    grid-template-columns: 1fr;
+    gap: 3.5mm;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  #requirements .stage-copy,
+  #requirements .stage-media {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
   #requirements .stage-media .media-image,
   #requirements .stage-media-placeholder {
-    min-height: 56mm;
-    height: 56mm;
+    min-height: 52mm;
+    height: 52mm;
     object-fit: cover;
   }
   #requirements .stage-name { font-size: 10pt; }

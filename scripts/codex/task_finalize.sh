@@ -555,6 +555,44 @@ if printf '%s\n' "$in_review_comment_out" | grep -q '^FINAL_ISSUE_COMMENT_QUEUED
   review_pending_post="1"
 fi
 
+# Safety net: если review-контекст уже включаем, но якорный комментарий не получен
+# и outbox не активирован, ставим recovery-комментарий в outbox.
+if [[ -n "$review_issue_number" && -z "$review_comment_id" && "$review_pending_post" != "1" ]]; then
+  echo "REVIEW_FEEDBACK_ANCHOR_RECOVER=1"
+  recover_body_file="$(mktemp "${CODEX_DIR}/review_anchor_recover.XXXXXX")"
+  cat > "$recover_body_file" <<EOF
+CODEX_SIGNAL: AGENT_IN_REVIEW
+CODEX_TASK: ${task_id}
+CODEX_PR_NUMBER: ${pr_number}
+CODEX_EXPECT: USER_REVIEW
+
+Работу по задаче завершил, PR готов к проверке.
+Жду твою проверку и решение по PR: ${pr_url}
+EOF
+  recover_queue_out=""
+  if recover_queue_out="$(
+    "${ROOT_DIR}/scripts/codex/github_outbox.sh" \
+      enqueue_issue_comment \
+      "$REPO" \
+      "$review_issue_number" \
+      "$recover_body_file" \
+      "$task_id" \
+      "REVIEW_FEEDBACK" \
+      "1" 2>&1
+  )"; then
+    emit_nonempty_lines "$recover_queue_out"
+    review_pending_post="1"
+    echo "REVIEW_FEEDBACK_ANCHOR_RECOVER_QUEUED=1"
+  else
+    recover_qrc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "REVIEW_FEEDBACK_ANCHOR_RECOVER_ERROR(rc=$recover_qrc): $line"
+    done <<< "$recover_queue_out"
+  fi
+  rm -f "$recover_body_file"
+fi
+
 printf '%s\n' "$pr_number" > "$pr_number_file"
 if [[ -n "$active_item_id" ]]; then
   "${ROOT_DIR}/scripts/codex/project_set_status.sh" "$active_item_id" "$FINAL_STATUS" "$FINAL_FLOW"

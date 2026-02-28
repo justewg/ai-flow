@@ -60,3 +60,4 @@
 - `[APP-07]` Усилен парсинг `Depends-On`: daemon корректно обрабатывает склеенный формат `#162#163` (без запятой), разбивает его на отдельные зависимости и устраняет ложный блок `WAIT_DEPENDENCIES`.
 - `[APP-07]` Усилены правила для executor по оформлению PR: обязательная детализация фактических изменений, затронутых файлов, проверок и scope; fallback `task_finalize` теперь генерирует более информативный PR body со списком stage-paths.
 - `[APP-07]` Добавлен recovery якоря review-комментария в `task_finalize`: если `AGENT_IN_REVIEW` не вернул `comment_id` и outbox не активирован, скрипт автоматически ставит recovery-комментарий в GitHub outbox (`REVIEW_FEEDBACK`, `set_waiting=1`), чтобы ссылка на PR не терялась.
+- `[APP-07]` Исправлен перевод `DIRTY-GATE` в `In Progress`: при создании/линковке gate-issue daemon использует уже полученный `project item id` для `project_set_status`, чтобы исключить race-condition (`Task not found in project: ISSUE-xxx`) в тот же тик.

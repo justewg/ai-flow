@@ -707,9 +707,14 @@ set_dirty_gate_project_status() {
   local status_name="$2"
   local flow_name="$3"
   local stage_name="$4"
+  local preferred_item_id="${5:-}"
   local item_id status_target status_out rc
 
-  item_id="$(find_project_issue_item_id "$issue_number" || true)"
+  if [[ "$preferred_item_id" == PVTI_* ]]; then
+    item_id="$preferred_item_id"
+  else
+    item_id="$(find_project_issue_item_id "$issue_number" || true)"
+  fi
   if [[ -n "$item_id" ]]; then
     echo "WAIT_DIRTY_WORKTREE_GATE_PROJECT_ITEM_ID=${item_id}"
     status_target="$item_id"
@@ -1206,7 +1211,7 @@ mutation($projectId: ID!, $contentId: ID!) {
     [[ -n "$item_id" ]] && echo "WAIT_DIRTY_WORKTREE_GATE_PROJECT_ITEM_ID=${item_id}"
   fi
 
-  if ! set_dirty_gate_project_status "$issue_number" "$target_status" "$target_flow" "DIRTY_GATE_PROJECT_STATUS"; then
+  if ! set_dirty_gate_project_status "$issue_number" "$target_status" "$target_flow" "DIRTY_GATE_PROJECT_STATUS" "$item_id"; then
     rc=$?
     if [[ "$rc" -eq 75 ]]; then
       return 75

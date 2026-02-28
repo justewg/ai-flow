@@ -578,6 +578,60 @@ normalize_status_name() {
   printf '%s' "$value" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'
 }
 
+is_resolved_project_status() {
+  local value="$1"
+  local normalized
+  normalized="$(normalize_status_name "$value")"
+  [[ "$normalized" == "done" || "$normalized" == "closed" ]]
+}
+
+dependency_issue_resolved() {
+  local dep_issue_number="$1"
+  local dep_state dep_item_id dep_status rc
+
+  if dep_state="$(
+    run_gh_retry_capture \
+      gh issue view "$dep_issue_number" \
+      --repo "$repo" \
+      --json state \
+      --jq '.state'
+  )"; then
+    :
+  else
+    rc=$?
+    [[ "$rc" -eq 75 ]] && return 75
+    return "$rc"
+  fi
+
+  if [[ "$dep_state" == "CLOSED" ]]; then
+    return 0
+  fi
+
+  if dep_item_id="$(find_project_issue_item_id "$dep_issue_number")"; then
+    :
+  else
+    rc=$?
+    [[ "$rc" -eq 75 ]] && return 75
+    return "$rc"
+  fi
+
+  [[ -n "$dep_item_id" ]] || return 1
+
+  if dep_status="$(find_project_item_status_by_id "$dep_item_id")"; then
+    :
+  else
+    rc=$?
+    [[ "$rc" -eq 75 ]] && return 75
+    return "$rc"
+  fi
+
+  if is_resolved_project_status "$dep_status"; then
+    return 0
+  fi
+
+  return 1
+}
+
 maybe_release_active_task_on_status_mismatch() {
   local active_task_file="${CODEX_DIR}/daemon_active_task.txt"
   local active_item_file="${CODEX_DIR}/daemon_active_item_id.txt"
@@ -2085,42 +2139,42 @@ if [[ "$depends_line" != "none" ]]; then
       continue
     fi
 
-    dep_issue_number=""
+    dep_issue_numbers=()
     if [[ "$dep_token" =~ ^#([0-9]+)$ ]]; then
-      dep_issue_number="${BASH_REMATCH[1]}"
+      dep_issue_numbers+=("${BASH_REMATCH[1]}")
     elif [[ "$dep_token" =~ ^ISSUE-([0-9]+)$ ]]; then
-      dep_issue_number="${BASH_REMATCH[1]}"
+      dep_issue_numbers+=("${BASH_REMATCH[1]}")
     elif [[ "$dep_token" =~ ^([0-9]+)$ ]]; then
-      dep_issue_number="${BASH_REMATCH[1]}"
+      dep_issue_numbers+=("${BASH_REMATCH[1]}")
+    elif [[ "$dep_token" =~ ^(#[0-9]+)+$ ]]; then
+      while IFS= read -r dep_num; do
+        [[ -z "$dep_num" ]] && continue
+        dep_issue_numbers+=("$dep_num")
+      done < <(printf '%s' "$dep_token" | grep -oE '[0-9]+')
     fi
 
-    if [[ -z "$dep_issue_number" ]]; then
+    if (( ${#dep_issue_numbers[@]} == 0 )); then
       blocked_dependencies+=("$dep_token")
       continue
     fi
 
-    dep_state=""
-    if dep_state="$(
-      run_gh_retry_capture \
-        gh issue view "$dep_issue_number" \
-        --repo "$repo" \
-        --json state \
-        --jq '.state'
-    )"; then
-      :
-    else
-      rc=$?
-      if [[ "$rc" -eq 75 ]]; then
-        echo "WAIT_GITHUB_API_UNSTABLE=1"
-        echo "WAIT_GITHUB_STAGE=DEPENDENCY_CHECK"
-        exit 0
+    for dep_issue_number in "${dep_issue_numbers[@]}"; do
+      dep_resolved_rc=0
+      if dependency_issue_resolved "$dep_issue_number"; then
+        :
+      else
+        dep_resolved_rc=$?
+        if [[ "$dep_resolved_rc" -eq 75 ]]; then
+          echo "WAIT_GITHUB_API_UNSTABLE=1"
+          echo "WAIT_GITHUB_STAGE=DEPENDENCY_CHECK"
+          exit 0
+        fi
+        if [[ "$dep_resolved_rc" -ne 1 ]]; then
+          exit "$dep_resolved_rc"
+        fi
+        blocked_dependencies+=("#${dep_issue_number}")
       fi
-      exit "$rc"
-    fi
-
-    if [[ "$dep_state" != "CLOSED" ]]; then
-      blocked_dependencies+=("#${dep_issue_number}")
-    fi
+    done
   done
 fi
 

@@ -23,6 +23,14 @@ RETRY_REPLY_FILE="${CODEX_DIR}/executor_last_retry_reply_comment_id.txt"
 
 mkdir -p "$CODEX_DIR"
 
+runtime_status_out="$("${ROOT_DIR}/scripts/codex/project_status_runtime.sh" apply 3 2>&1 || true)"
+if [[ -n "$runtime_status_out" ]]; then
+  while IFS= read -r line; do
+    [[ -z "$line" || "$line" == "RUNTIME_PROJECT_STATUS_QUEUE_ABSENT=1" ]] && continue
+    echo "$line"
+  done <<< "$runtime_status_out"
+fi
+
 is_waiting_user="0"
 if [[ -s "${CODEX_DIR}/daemon_waiting_issue_number.txt" ]]; then
   is_waiting_user="1"

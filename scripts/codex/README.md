@@ -22,6 +22,7 @@
 - `scripts/codex/run.sh commit_push`
 - `scripts/codex/run.sh project_add_task`
 - `scripts/codex/run.sh project_set_status`
+- `scripts/codex/run.sh project_status_runtime <enqueue|apply|list|clear> ...` — runtime-очередь отложенных обновлений `Project Status/Flow`.
 - `scripts/codex/run.sh next_task` — показать следующую задачу со статусом `Planned` (приоритет P0→P1→P2, затем по номеру `PL-xxx`).
 - `scripts/codex/run.sh app_deps_mermaid [output-file]` — построить Mermaid DAG зависимостей APP-issues из `Flow Meta` (`Depends-On/Blocks`) и записать markdown-файл (по умолчанию `docs/app-issues-dependency-diagram.md`).
 - `scripts/codex/run.sh backlog_seed_apply` — применить runtime-план создания backlog-задач из `.tmp/codex/backlog_seed_plan.json` (по умолчанию 1 задача за запуск).
@@ -158,6 +159,10 @@
   - обновление title/body PR
 - `project_set_status.sh <task-id|project-item-id> <status-name> [flow-name]`
   - синхронное обновление полей `Status` и `Flow` карточки проекта
+- `project_status_runtime.sh <enqueue|apply|list|clear> ...`
+  - runtime-очередь действий `project_set_status` в `.tmp/codex/project_status_runtime_queue.json`
+  - при деградации GitHub (`network/rate-limit`) сохраняет intent и не теряет изменение
+  - `apply` по тикам аккуратно подчищает очередь при восстановлении GitHub API
 - `project_add_task.sh <task-id> <title-file> <scope> <priority> [status] [flow]`
   - создание карточки задачи в проекте с заполнением `Task ID`, `Scope`, `Priority`, `Status`, `Flow`
   - после создания делает verify `Status/Flow`; при сетевой деградации возвращает ошибку, чтобы не считать задачу корректно инициализированной
@@ -188,9 +193,11 @@
   - при активном dirty-override пропускает `sync_branches` (`WAIT_BRANCH_SYNC_SKIPPED_DIRTY_OVERRIDE=1`), чтобы не падать на `checkout main`
   - untracked-файлы не блокируют daemon-flow
   - на старте тика делает `github_outbox flush` (доставка отложенных GitHub-комментариев)
+  - на старте тика делает `project_status_runtime apply` (подчистка отложенных status-апдейтов)
   - перед взятием новой задачи проверяет waiting-state по Issue-комментариям (`daemon_check_replies.sh`)
   - при `WAIT_USER_REPLY`/`WAIT_REVIEW_FEEDBACK` не берет новые задачи
   - если в `In Review` пришел новый комментарий (`REVIEW_FEEDBACK`), автоматически переводит задачу обратно в `In Progress` и возобновляет executor
+    - если перевод `Status/Flow` временно недоступен, action откладывается в runtime-очередь и выполнение продолжается
   - при наличии `daemon_active_task.txt` не берет новые задачи до финализации, но продолжает проверять ответы в Issue
   - если активная задача вручную выведена из `In Progress` (например, возвращена в `Todo`), автоматически сбрасывает stale active-state и снова включает обычный claim из очереди
   - для активной задачи вызывает `executor_tick.sh`, который запускает/мониторит headless executor (`codex exec`)
@@ -212,6 +219,7 @@
   - `Task ID` берет из поля, либо извлекает `PL-xxx` из title
   - если `PL-xxx` отсутствует, использует fallback `ISSUE-<number>` по номеру Issue
   - при единственной задаче переводит ее в `Status/Flow=In Progress`
+    - если `Status/Flow` апдейт временно недоступен, апдейт откладывается в runtime-очередь, claim не теряется
   - сохраняет текущий `Task ID` в `.tmp/codex/project_task_id.txt` для последующего `task_finalize`
 - `daemon_loop.sh [interval-sec]`
   - крутит `daemon_tick.sh` в цикле с lock-файлом и heartbeat-логом
@@ -273,6 +281,7 @@
   - выполняет commit/push в `development`
   - создает PR `development -> main` или обновляет существующий
   - переводит задачу в `Status=Review`, `Flow=In Review` (можно переопределить через `FINAL_STATUS` и `FINAL_FLOW`)
+  - если апдейт статуса временно недоступен, откладывает его в runtime-очередь без остановки финализации
   - публикует `CODEX_SIGNAL: AGENT_IN_REVIEW` и включает waiting-контекст `REVIEW_FEEDBACK` для комментариев в Issue
   - очищает входные файлы commit/PR и активный daemon-state (active), сохраняя review-waiting контекст
 - `executor_build_prompt.sh <task-id> <issue-number> <output-file>`
@@ -284,6 +293,7 @@
   - пишет результат в `.tmp/codex/executor.log` и обновляет state (`DONE/FAILED`)
   - обновляет heartbeat-файлы для диагностики "жив/завис"
 - `executor_tick.sh <task-id> <issue-number>`
+  - на каждом тике делает `project_status_runtime apply` (executor тоже подчищает отложенные status-апдейты)
   - проверяет живость executor по pid/state
   - при `FAILED` автоматически публикует blocker-комментарий в Issue (один раз на задачу)
   - после нового ответа пользователя в Issue делает retry executor без ручного сброса state

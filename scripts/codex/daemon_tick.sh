@@ -49,6 +49,24 @@ is_github_network_error() {
     'error connecting to api\.github\.com|could not resolve host: api\.github\.com|could not resolve host: github\.com|could not resolve hostname github\.com|temporary failure in name resolution|connection timed out|operation timed out|tls handshake timeout|failed to connect'
 }
 
+enqueue_project_status_runtime() {
+  local target="$1"
+  local status_name="$2"
+  local flow_name="$3"
+  local reason="$4"
+  local runtime_out runtime_rc
+  if runtime_out="$("${ROOT_DIR}/scripts/codex/project_status_runtime.sh" enqueue "$target" "$status_name" "$flow_name" "$reason" 2>&1)"; then
+    emit_lines "$runtime_out"
+    return 0
+  fi
+  runtime_rc=$?
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "PROJECT_STATUS_RUNTIME_ENQUEUE_ERROR(rc=${runtime_rc}): $line"
+  done <<< "$runtime_out"
+  return "$runtime_rc"
+}
+
 run_gh_retry_capture() {
   local out=""
   local err_file
@@ -731,7 +749,9 @@ set_dirty_gate_project_status() {
   if [[ "$rc" -eq 75 ]] || is_github_network_error "$status_out"; then
     echo "WAIT_GITHUB_API_UNSTABLE=1"
     echo "WAIT_GITHUB_STAGE=${stage_name}"
-    return 75
+    enqueue_project_status_runtime "$status_target" "$status_name" "$flow_name" "dirty-gate:${stage_name}" || true
+    echo "DIRTY_GATE_PROJECT_STATUS_DEFERRED=1"
+    return 0
   fi
 
   while IFS= read -r line; do
@@ -1695,6 +1715,15 @@ if [[ -n "$pending_actions" && "$pending_actions" != "0" ]]; then
   echo "WAIT_GITHUB_PENDING_ACTIONS=$pending_actions"
 fi
 
+# Затем пробуем применить отложенные status-операции Project v2.
+runtime_status_out="$("${ROOT_DIR}/scripts/codex/project_status_runtime.sh" apply 5 2>&1 || true)"
+if [[ -n "$runtime_status_out" ]]; then
+  while IFS= read -r line; do
+    [[ -z "$line" || "$line" == "RUNTIME_PROJECT_STATUS_QUEUE_ABSENT=1" ]] && continue
+    echo "$line"
+  done <<< "$runtime_status_out"
+fi
+
 reply_probe_out="$("${ROOT_DIR}/scripts/codex/daemon_check_replies.sh" 2>&1)"
 while IFS= read -r line; do
   [[ -z "$line" || "$line" == "NO_WAITING_USER_REPLY=1" ]] && continue
@@ -1733,18 +1762,19 @@ if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
     fi
 
     if status_out="$("${ROOT_DIR}/scripts/codex/project_set_status.sh" "$status_target" "$target_status" "$target_flow" 2>&1)"; then
-      :
+      emit_lines "$status_out"
     else
       rc=$?
       emit_lines "$status_out"
       if is_github_network_error "$status_out" || [[ "$rc" -eq 75 ]]; then
         echo "WAIT_GITHUB_API_UNSTABLE=1"
         echo "WAIT_GITHUB_STAGE=REVIEW_RESUME_STATUS_UPDATE"
-        exit 0
+        enqueue_project_status_runtime "$status_target" "$target_status" "$target_flow" "review-feedback-resume" || true
+        echo "REVIEW_FEEDBACK_STATUS_DEFERRED=1"
+      else
+        exit "$rc"
       fi
-      exit "$rc"
     fi
-    emit_lines "$status_out"
 
     printf '%s\n' "$review_task_id" > "${CODEX_DIR}/daemon_active_task.txt"
     if [[ -n "$review_item_id" ]]; then
@@ -2240,18 +2270,19 @@ if (( skip_sync_branches == 0 )); then
 fi
 
 if status_out="$("${ROOT_DIR}/scripts/codex/project_set_status.sh" "$item_id" "$target_status" "$target_flow" 2>&1)"; then
-  :
+  emit_lines "$status_out"
 else
   rc=$?
   emit_lines "$status_out"
-  if is_github_network_error "$status_out"; then
+  if is_github_network_error "$status_out" || [[ "$rc" -eq 75 ]]; then
     echo "WAIT_GITHUB_API_UNSTABLE=1"
     echo "WAIT_GITHUB_STAGE=PROJECT_STATUS_UPDATE"
-    exit 0
+    enqueue_project_status_runtime "$item_id" "$target_status" "$target_flow" "claim-task:${task_id}" || true
+    echo "PROJECT_STATUS_UPDATE_DEFERRED=1"
+  else
+    exit "$rc"
   fi
-  exit "$rc"
 fi
-emit_lines "$status_out"
 
 rm -f "${CODEX_DIR}/daemon_dependency_blocked_signature.txt"
 : > "$review_task_file"

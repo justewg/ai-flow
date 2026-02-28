@@ -594,10 +594,24 @@ EOF
 fi
 
 printf '%s\n' "$pr_number" > "$pr_number_file"
+status_target="$task_id"
 if [[ -n "$active_item_id" ]]; then
-  "${ROOT_DIR}/scripts/codex/project_set_status.sh" "$active_item_id" "$FINAL_STATUS" "$FINAL_FLOW"
+  status_target="$active_item_id"
+fi
+
+if final_status_out="$("${ROOT_DIR}/scripts/codex/project_set_status.sh" "$status_target" "$FINAL_STATUS" "$FINAL_FLOW" 2>&1)"; then
+  emit_nonempty_lines "$final_status_out"
 else
-  "${ROOT_DIR}/scripts/codex/project_set_status.sh" "$task_id" "$FINAL_STATUS" "$FINAL_FLOW"
+  final_status_rc=$?
+  emit_nonempty_lines "$final_status_out"
+  if [[ "$final_status_rc" -eq 75 ]] || printf '%s' "$final_status_out" | grep -Eiq \
+    'error connecting to api\.github\.com|could not resolve host: api\.github\.com|could not resolve host: github\.com|could not resolve hostname github\.com|temporary failure in name resolution|connection timed out|operation timed out|tls handshake timeout|failed to connect|api rate limit already exceeded|graphql_rate_limit|rate limit'; then
+    echo "FINAL_STATUS_DEFERRED=1"
+    runtime_out="$("${ROOT_DIR}/scripts/codex/project_status_runtime.sh" enqueue "$status_target" "$FINAL_STATUS" "$FINAL_FLOW" "task-finalize:${task_id}" 2>&1 || true)"
+    emit_nonempty_lines "$runtime_out"
+  else
+    exit "$final_status_rc"
+  fi
 fi
 
 # После перевода в Review включаем канал review-feedback через комментарии Issue.

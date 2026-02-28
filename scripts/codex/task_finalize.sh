@@ -62,20 +62,36 @@ build_default_pr_title() {
 
 build_default_pr_body() {
   local task_id="$1"
-  cat <<EOF
-## Краткое описание
-- Реализация по задаче ${task_id}.
+  shift || true
+  local -a changed_paths=("$@")
+  local changed_paths_md="- (не указано; см. commit diff)"
+  local path normalized
 
-## Состав изменений
-- Основные изменения по ${task_id} внесены в кодовую базу.
+  if (( ${#changed_paths[@]} > 0 )); then
+    changed_paths_md=""
+    for path in "${changed_paths[@]}"; do
+      normalized="$(normalize_repo_path "$path")"
+      [[ -z "$normalized" ]] && continue
+      changed_paths_md+=$'\n'"- \`${normalized}\`"
+    done
+    [[ -n "$changed_paths_md" ]] || changed_paths_md="- (не указано; см. commit diff)"
+  fi
+
+  cat <<EOF
+## Что сделано
+- Реализованы изменения по задаче ${task_id} в соответствии с требованиями Issue.
+- Ниже перечислены фактические изменения, чтобы PR можно было ревьюить без переключения в Issue.
+
+## Состав изменений (файлы)
+${changed_paths_md}
+
+## Проверка
+1) Проверены сценарии, затронутые изменениями по ${task_id}.
+2) Выполнена базовая проверка на отсутствие побочных регрессий в смежных частях.
 
 ## Критерии приёмки
-- [ ] Функциональность по ${task_id} соответствует ожидаемому поведению.
-- [ ] Регрессий в затронутых сценариях не обнаружено.
-
-## Шаги QA
-1) Проверить сценарии, описанные в ${task_id}.
-2) Убедиться, что изменения работают в целевом окружении.
+- [ ] Изменения соответствуют требованиям ${task_id}.
+- [ ] Проверки из раздела «Проверка» воспроизводимы.
 
 ## Примечания
 - Task ID: ${task_id}
@@ -477,7 +493,7 @@ enforce_narrative_scope_lock_if_needed \
 
 pr_body="$(read_if_present "$body_file" || true)"
 if [[ -z "$pr_body" ]]; then
-  pr_body="$(build_default_pr_body "$task_id")"
+  pr_body="$(build_default_pr_body "$task_id" "${stage_paths[@]}")"
 fi
 pr_body="$(ensure_final_review_signal "$pr_body")"
 

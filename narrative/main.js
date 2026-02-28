@@ -25,18 +25,19 @@
 
   // Intro hero: enter-state + subtle background parallax on desktop
   const intro = document.getElementById('intro');
+  const introBg = intro?.querySelector('.planka-hero__bg');
   if (intro) {
     requestAnimationFrame(() => intro.classList.add('is-ready'));
   }
 
   const desktopMq = window.matchMedia('(min-width: 769px)');
-  if (intro && desktopMq.matches && !prefersReduced) {
+  if (intro && introBg && desktopMq.matches && !prefersReduced) {
     let rafId = 0;
     let tx = 0;
     let ty = 0;
 
     const applyParallax = () => {
-      intro.style.backgroundPosition = `calc(100% + ${tx.toFixed(2)}px) calc(50% + ${ty.toFixed(2)}px)`;
+      introBg.style.backgroundPosition = `calc(100% + ${tx.toFixed(2)}px) calc(50% + ${ty.toFixed(2)}px)`;
       rafId = 0;
     };
 
@@ -62,7 +63,7 @@
         cancelAnimationFrame(rafId);
         rafId = 0;
       }
-      intro.style.backgroundPosition = 'right center';
+      introBg.style.backgroundPosition = 'right center';
     };
 
     intro.addEventListener('pointermove', onPointerMove, { passive: true });

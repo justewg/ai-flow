@@ -227,6 +227,7 @@
     - изменение набора файлов (`WAIT_DIRTY_WORKTREE_CHANGED`)
     - reminder (`WAIT_DIRTY_WORKTREE_REMINDER`)
     - снятие блокировки (`DIRTY_WORKTREE_RESOLVED`)
+  - формат dirty-worktree Telegram-алертов унифицирован с merge/watchdog-паттерном: заголовок начинается с `🚨/💤`, отдельной строкой идет `⚙️ Reason`, служебные поля остаются в `blockquote + code`
   - dirty-worktree алерты отправляются только если реально блокируется карточка из `Todo` (`WAIT_DIRTY_WORKTREE_BLOCKING_TODO=1`); в `idle` без `Todo` уведомления не шлются
   - различает сетевую деградацию и веточный блокер синхронизации (`WAIT_BRANCH_SYNC`)
   - отправляет локальные Telegram-алерты по деградации без спама:
@@ -255,6 +256,7 @@
     - `MEDIUM_RESET_EXECUTOR` (`executor_reset` + `daemon_tick`)
     - `HARD_RESTART_DAEMON` (`daemon_uninstall` + `daemon_install`)
   - использует cooldown, чтобы не спамить recovery-действиями
+  - в Telegram-алерте `Action` остается только в заголовке (`🛟 WATCHDOG: <ACTION>`), отдельный блок в теле содержит только `⚙️ Reason`
   - отправляет Telegram-сигнал о срабатывании recovery (если доступен бот)
 - `watchdog_loop.sh [interval-sec]`
   - крутит `watchdog_tick.sh` в цикле с отдельным lock-файлом

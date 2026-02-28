@@ -13,10 +13,13 @@
   <body>
     <main id="narrative" class="narrative">
       <!-- SECTION 0 — Intro -->
-       <section id="intro" class="section section-0 is-dark">
-        <!-- Hero image with subtle parallax in web; static in PDF -->
-        <div class="media hero-photo parallax" data-parallax="0.18" aria-hidden="true">
-          <img class="media-image hero-image" src="./assets/img/start_screen_transp.png" alt="Фоновое изображение первого экрана нарратива" loading="eager">
+       <section id="intro" class="section section-0 is-dark" aria-label="PLANKA hero">
+        <div class="media hero-photo" aria-hidden="true">
+          <picture class="hero-picture">
+            <source media="(max-width: 768px)" srcset="./assets/img/planka_hero_mobile.jpg" />
+            <img class="media-image hero-image" src="./assets/img/planka_hero_desktop.jpg" alt="" loading="eager" fetchpriority="high" />
+          </picture>
+          <div class="hero-scrim"></div>
         </div>
         <div class="container intro-layout">
           <div class="intro-copy">

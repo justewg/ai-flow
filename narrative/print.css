@@ -75,6 +75,7 @@
   .parallax { transform: none !important; position: static !important; height: auto !important; }
   .hero-photo .ph { opacity: 1 !important; height: 120mm; }
   .hero-photo .media-image { opacity: 1 !important; height: 120mm; object-fit: cover; }
+  #intro .hero-scrim { display: none !important; }
   #intro::after { display: none !important; }
   #intro .intro-layout { min-height: auto !important; grid-template-columns: 1fr !important; }
   #intro .intro-copy { max-width: none !important; }

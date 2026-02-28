@@ -47,20 +47,15 @@ jobs:
             jq -rn --arg v "${1:-}" '$v|@html'
           }
 
-          STATUS_LINE="🟢 SUCCESS"
-          CHECK_BADGE="💤 IDLE"
-          HEADER="<b>✅ Post-merge workflow</b>"
+          CHECK_ICON="💤"
+          HEADER_STATUS_ICON="✅"
           if [[ "${WF_CONCLUSION}" != "success" ]]; then
-            STATUS_LINE="🔴 FAIL: ${WF_CONCLUSION}"
-            CHECK_BADGE="🚨 НУЖНА РЕАКЦИЯ"
-            HEADER="<b>❌ Post-merge workflow</b>"
+            CHECK_ICON="🚨"
+            HEADER_STATUS_ICON="❌"
           fi
 
           NOW_UTC="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-          MESSAGE="${HEADER}"$'\n'
-          MESSAGE+="<b>🧭 CHECK NOW:</b> ${CHECK_BADGE}"$'\n'
-          MESSAGE+="<b>⚙️ Workflow:</b> $(html_escape "${WF_NAME}")"$'\n'
-          MESSAGE+="<b>📊 Status:</b> $(html_escape "${STATUS_LINE}")"$'\n'
+          MESSAGE="<b>${CHECK_ICON} ${HEADER_STATUS_ICON} $(html_escape "${WF_NAME}")</b>"$'\n'
           if [[ -n "${PR_NUMBER}" && -n "${PR_URL}" ]]; then
             MESSAGE+="🔗 <a href=\"$(html_escape "${PR_URL}")\">𝐏𝐑#${PR_NUMBER}</a>"$'\n'
           fi

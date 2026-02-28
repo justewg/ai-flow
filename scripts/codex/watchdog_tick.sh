@@ -118,21 +118,21 @@ notify_action() {
   local detail="$3"
   local msg_file
   msg_file="$(mktemp "${CODEX_DIR}/watchdog_notify.XXXXXX")"
-  local now_utc check_badge aux_text aux_escaped
+  local now_utc check_icon title aux_text aux_escaped
   now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   if [[ "$action" == "NONE" ]]; then
-    check_badge="💤 IDLE"
+    check_icon="💤"
   else
-    check_badge="🚨 НУЖНА РЕАКЦИЯ"
+    check_icon="🚨"
   fi
+  title="<b>${check_icon} 🛟 WATCHDOG: $(html_escape "$action")</b>"
   aux_text=$'ACTION='"${action}"$'\n'
   aux_text+=$'REASON='"${reason}"$'\n'
   aux_text+=$'DETAIL='"${detail}"$'\n'
   aux_text+=$'TIME_UTC='"${now_utc}"
   aux_escaped="$(html_escape "$aux_text")"
   cat > "$msg_file" <<EOF
-<b>🛟 WATCHDOG: recovery signal</b>
-<b>🧭 CHECK NOW:</b> ${check_badge}
+${title}
 <b>⚙️ Action:</b> <code>$(html_escape "$action")</code> · <b>Reason:</b> <code>$(html_escape "$reason")</code>
 <blockquote><code>${aux_escaped}</code></blockquote>
 EOF

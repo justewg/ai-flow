@@ -121,16 +121,15 @@ jobs:
           echo "DEBUG_CHECK_NOW=${CHECK_NOW}"
 
           NOW_UTC="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-          CHECK_BADGE="💤 IDLE"
-          HEADER="<b>🧪 PR: промежуточный сигнал</b>"
+          CHECK_ICON="💤"
+          HEADER_TITLE="🧪 PR: промежуточный сигнал"
           if [[ "${CHECK_NOW}" == "YES" ]]; then
-            CHECK_BADGE="🚨 НУЖНА РЕАКЦИЯ"
-            HEADER="<b>🚀 PR: готово к ревью</b>"
+            CHECK_ICON="🚨"
+            HEADER_TITLE="🚀 PR: готово к ревью"
           fi
 
           PR_LINK="<a href=\"$(html_escape "${PR_URL}")\">𝐏𝐑#${PR_NUMBER}</a>"
-          MESSAGE="${HEADER}"$'\n'
-          MESSAGE+="<b>🧭 CHECK NOW:</b> ${CHECK_BADGE}"$'\n'
+          MESSAGE="<b>${CHECK_ICON} ${HEADER_TITLE}</b>"$'\n'
           MESSAGE+="🔗 ${PR_LINK} — <b>$(html_escape "${PR_TITLE}")</b>"$'\n'
           MESSAGE+="<b>🪧 Stage:</b> $(html_escape "${STAGE_LABEL}")"$'\n'
           if [[ "${TASK_IDS}" != "none" ]]; then

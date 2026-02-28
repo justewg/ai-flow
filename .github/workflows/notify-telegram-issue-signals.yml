@@ -91,16 +91,14 @@ jobs:
             jq -rn --arg v "${1:-}" '$v|@html'
           }
 
-          CHECK_BADGE="💤 IDLE"
-          HEADER="<b>💬 Issue signal</b>"
+          CHECK_ICON="💤"
+          HEADER_TITLE="💬 Issue signal"
           if [[ "${CHECK_NOW}" == "YES" ]]; then
-            CHECK_BADGE="🚨 НУЖНА РЕАКЦИЯ"
-            HEADER="<b>🚨 Issue signal</b>"
+            CHECK_ICON="🚨"
           fi
 
           NOW_UTC="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-          MESSAGE="${HEADER}"$'\n'
-          MESSAGE+="<b>🧭 CHECK NOW:</b> ${CHECK_BADGE}"$'\n'
+          MESSAGE="<b>${CHECK_ICON} ${HEADER_TITLE}</b>"$'\n'
           MESSAGE+="<b>🪧 Stage:</b> $(html_escape "${STAGE_LABEL}")"$'\n'
           MESSAGE+="📌 <a href=\"$(html_escape "${ISSUE_URL}")\">Issue #${ISSUE_NUMBER}</a> — <b>$(html_escape "${ISSUE_TITLE}")</b>"$'\n'
           if [[ "${TASK_ID}" != "none" ]]; then

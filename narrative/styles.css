@@ -134,45 +134,126 @@ figcaption {
   line-height: 1.42;
 }
 
-/* Intro hero */
-.planka-hero {
-  isolation: isolate;
-  display: block;
+/* =========================
+   HERO (#intro) — FIXED
+   ========================= */
+
+:root{
+  --hero-min-h: 100svh;
+  --hero-pad: clamp(16px, 4vw, 56px);
+  --hero-fg: #1f2a33;
+  --hero-bg: #ffffff;
+}
+
+.planka-hero{
+  position: relative;
   min-height: var(--hero-min-h);
   width: 100%;
   overflow: hidden;
-  background-color: #ffffff;
+  background-color: var(--hero-bg);
+
+  /* Desktop по умолчанию */
   background-image: url("./assets/img/planka_hero_desktop_final.png");
   background-size: cover;
   background-repeat: no-repeat;
   background-position: right center;
 }
-.planka-hero__content {
+
+/* Текстовый слой поверх фона */
+.planka-hero__content{
   position: relative;
   z-index: 1;
   min-height: var(--hero-min-h);
+
   padding: var(--hero-pad);
   display: flex;
   flex-direction: column;
   justify-content: center;
+
+  /* Desktop: текст слева ~ пол-экрана */
   max-width: min(52ch, 48vw);
+
+  /* КРИТИЧНО: НЕ ставить background:white здесь на всю высоту,
+     иначе получим “белый прямоугольник” на мобиле */
 }
-.planka-hero__title {
+
+.planka-hero__title{
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
-  line-height: 0.96;
-  color: #1f2a33;
+  letter-spacing: .02em;
+  line-height: .96;
+  color: var(--hero-fg);
   font-size: clamp(40px, 5.4vw, 82px);
 }
-.planka-hero__subtitle {
-  margin: 14px 0 0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  color: rgba(31, 42, 51, 0.78);
+
+.planka-hero__subtitle{
+  margin: 14px 0 0 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color: rgba(31,42,51,.78);
   font-size: clamp(16px, 1.4vw, 20px);
   line-height: 1.35;
+}
+
+/* ============ MOBILE: portrait (телефоны) ============ */
+@media (max-width: 768px) and (orientation: portrait){
+  .planka-hero{
+    background-image: url("./assets/img/planka_hero_mobile_final.png");
+    background-position: center top; /* лицо сверху */
+  }
+
+  .planka-hero__content{
+    justify-content: flex-end; /* текст вниз */
+    padding-bottom: calc(var(--hero-pad) + 12px);
+    max-width: min(32ch, 70vw);
+  }
+
+  .planka-hero__title{
+    font-size: clamp(34px, 9.2vw, 52px);
+  }
+}
+
+/* ============ iPad portrait (важно!) ============ */
+@media (min-width: 769px) and (max-width: 1024px) and (orientation: portrait){
+  .planka-hero{
+    background-image: url("./assets/img/planka_hero_mobile_final.png");
+    background-position: center top;
+  }
+
+  .planka-hero__content{
+    justify-content: flex-end;
+    max-width: min(36ch, 64vw);
+    padding-bottom: calc(var(--hero-pad) + 18px);
+  }
+
+  .planka-hero__title{
+    font-size: clamp(40px, 5.5vw, 56px);
+  }
+}
+
+/* ============ iPhone landscape / низкая высота ============ */
+@media (max-height: 520px) and (orientation: landscape){
+  .planka-hero{
+    min-height: 100vh; /* страховка */
+    background-image: url("./assets/img/planka_hero_desktop_final.png");
+    background-position: right center;
+  }
+
+  .planka-hero__content{
+    padding: clamp(10px, 3vw, 28px);
+    max-width: min(52ch, 52vw);
+  }
+
+  .planka-hero__title{
+    font-size: clamp(28px, 4.2vw, 44px);
+    line-height: .98;
+  }
+
+  .planka-hero__subtitle{
+    margin-top: 8px;
+    font-size: 14px;
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -577,19 +658,4 @@ figcaption {
   .final-support { font-size: clamp(14px, 4.4vw, 18px); }
   .final-anchor { width: min(100%, 420px); }
   .final-logo { width: clamp(96px, 34vw, 140px); }
-}
-
-@media (max-width: 768px) {
-  .planka-hero {
-    background-image: url("./assets/img/planka_hero_mobile_final.png");
-    background-position: center top;
-  }
-  .planka-hero__content {
-    justify-content: flex-end;
-    max-width: min(32ch, 70vw);
-    padding-bottom: calc(var(--hero-pad) + 12px);
-  }
-  .planka-hero__title {
-    font-size: clamp(36px, 9vw, 52px);
-  }
 }

@@ -47,8 +47,8 @@
 
       const dx = ((event.clientX - rect.left) / rect.width - 0.5) * 2;
       const dy = ((event.clientY - rect.top) / rect.height - 0.5) * 2;
-      tx = dx * 10;
-      ty = dy * 10;
+      tx = dx * 6;
+      ty = dy * 6;
 
       if (!rafId) {
         rafId = requestAnimationFrame(applyParallax);

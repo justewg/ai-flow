@@ -26,6 +26,7 @@ Commands:
   project_set_status
   next_task
   app_deps_mermaid
+  backlog_seed_apply
   daemon_tick
   daemon_loop
   daemon_install
@@ -245,6 +246,10 @@ case "$cmd" in
     else
       "${ROOT_DIR}/scripts/codex/generate_app_dependencies_mermaid.sh"
     fi
+    ;;
+
+  backlog_seed_apply)
+    "${ROOT_DIR}/scripts/codex/backlog_seed_apply.sh"
     ;;
 
   daemon_tick)

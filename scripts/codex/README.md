@@ -24,6 +24,7 @@
 - `scripts/codex/run.sh project_set_status`
 - `scripts/codex/run.sh next_task` — показать следующую задачу со статусом `Planned` (приоритет P0→P1→P2, затем по номеру `PL-xxx`).
 - `scripts/codex/run.sh app_deps_mermaid [output-file]` — построить Mermaid DAG зависимостей APP-issues из `Flow Meta` (`Depends-On/Blocks`) и записать markdown-файл (по умолчанию `docs/app-issues-dependency-diagram.md`).
+- `scripts/codex/run.sh backlog_seed_apply` — применить runtime-план создания backlog-задач из `.tmp/codex/backlog_seed_plan.json` (по умолчанию 1 задача за запуск).
 - `scripts/codex/run.sh daemon_tick` — один цикл демона: проверка `Todo`, подхват задачи, перевод в `In Progress`.
 - `scripts/codex/run.sh daemon_loop [interval-sec]` — непрерывный polling-цикл демона (по умолчанию 45 сек).
 - `scripts/codex/run.sh daemon_install [label] [interval-sec]` — установка и запуск `launchd`-агента.
@@ -167,6 +168,11 @@
   - строит Mermaid DAG в markdown (по умолчанию `docs/app-issues-dependency-diagram.md`)
   - ошибки парсинга отдельных токенов не прерывают генерацию, а добавляются в раздел `Ошибки парсинга`
 - `daemon_tick.sh`
+  - в начале каждого тика пытается применить runtime backlog-seed план (`.tmp/codex/backlog_seed_plan.json`) через `backlog_seed_apply.sh`
+  - в стандартной конфигурации создает/линкует не более 1 backlog-задачи за тик (`BACKLOG_SEED_MAX_PER_TICK=1`)
+  - если GitHub API недоступен, оставляет план нетронутым и повторит попытку на следующем тике
+  - по мере успешного создания задач автоматически сокращает план; при пустом плане удаляет `.tmp/codex/backlog_seed_plan.json` и `.tmp/codex/backlog_seed_plan.md`
+  - минимальный формат плана: JSON c корневым `tasks[]`, где каждая задача содержит `code`, `title`, `description`, опционально `plan_key`, `depends_on_codes[]`, `blocks_codes[]`
   - останавливается только при изменениях tracked-файлов (staged/unstaged)
   - при блокировке на tracked-изменениях пишет явные маркеры:
     - `WAIT_DIRTY_WORKTREE_TRACKED_COUNT=<n>`

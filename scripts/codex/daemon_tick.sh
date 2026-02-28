@@ -1537,6 +1537,18 @@ maybe_handle_dirty_worktree_gate() {
 
 mkdir -p "$CODEX_DIR"
 
+# Runtime backlog-seed apply:
+# if .tmp/codex/backlog_seed_plan.json exists, try to create/link one task per tick.
+if backlog_seed_out="$("${ROOT_DIR}/scripts/codex/backlog_seed_apply.sh" 2>&1)"; then
+  emit_lines "$backlog_seed_out"
+else
+  rc=$?
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "BACKLOG_SEED_APPLY_ERROR(rc=$rc): $line"
+  done <<< "$backlog_seed_out"
+fi
+
 if ! git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- ||
   ! git -C "${ROOT_DIR}" diff --cached --quiet --ignore-submodules --; then
   tracked_lines=""

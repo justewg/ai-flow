@@ -26,6 +26,7 @@ dirty_gate_blocked_issue_file="${CODEX_DIR}/dirty_gate_blocked_issue_number.txt"
 dirty_gate_blocked_title_file="${CODEX_DIR}/dirty_gate_blocked_issue_title.txt"
 dirty_gate_override_signature_file="${CODEX_DIR}/dirty_gate_override_signature.txt"
 dirty_gate_last_reply_id_file="${CODEX_DIR}/dirty_gate_last_reply_comment_id.txt"
+DIRTY_GATE_ISSUE_CREATED_THIS_TICK="0"
 gql_stats_log_file="${CODEX_DIR}/graphql_rate_stats.log"
 gql_window_state_file="${CODEX_DIR}/graphql_rate_window_state.txt"
 gql_window_start_epoch_file="${CODEX_DIR}/graphql_rate_window_start_epoch.txt"
@@ -984,7 +985,7 @@ Dirty worktree resolved by COMMIT flow (commit + PR + merge)."
 
 restore_dirty_gate_waiting_state() {
   local gate_issue_number="$1"
-  local comments_json question_id question_url task_id last_reply_id
+  local comments_json issue_json question_id question_url task_id last_reply_id
   local waiting_issue_file="${CODEX_DIR}/daemon_waiting_issue_number.txt"
   local waiting_task_file="${CODEX_DIR}/daemon_waiting_task_id.txt"
   local waiting_question_file="${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
@@ -1030,6 +1031,29 @@ restore_dirty_gate_waiting_state() {
     '
   )"
 
+  if [[ -z "$question_id" ]]; then
+    if ! issue_json="$(
+      run_gh_retry_capture \
+        gh issue view "$gate_issue_number" \
+          --repo "$repo" \
+          --json body,url,state \
+          --jq '.'
+    )"; then
+      local rc=$?
+      if [[ "$rc" -eq 75 ]]; then
+        echo "WAIT_GITHUB_API_UNSTABLE=1"
+        echo "WAIT_GITHUB_STAGE=DIRTY_GATE_WAITING_RESTORE_ISSUE"
+        return 75
+      fi
+      return "$rc"
+    fi
+    if [[ "$(printf '%s' "$issue_json" | jq -r '.state // ""')" == "OPEN" ]] &&
+      printf '%s' "$issue_json" | jq -r '.body // ""' | grep -q '^CODEX_SIGNAL: DIRTY_GATE_OPEN$'; then
+      question_id="0"
+      question_url="$(printf '%s' "$issue_json" | jq -r '.url // empty')"
+    fi
+  fi
+
   [[ -n "$question_id" ]] || return 1
 
   # If we already processed a reply, set waiting anchor to that reply id.
@@ -1072,68 +1096,70 @@ ensure_dirty_gate_issue_in_project() {
   item_id="$(find_project_issue_item_id "$issue_number" || true)"
   if [[ -n "$item_id" ]]; then
     echo "WAIT_DIRTY_WORKTREE_GATE_PROJECT_ITEM_ID=${item_id}"
-    return 0
-  fi
-
-  if ! issue_json="$(
-    run_gh_retry_capture \
-      gh api graphql \
-      -f query='
+  else
+    if ! issue_json="$(
+      run_gh_retry_capture \
+        gh api graphql \
+        -f query='
 query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
     issue(number: $number) { id }
   }
 }
 ' \
-      -f owner="$repo_owner" \
-      -f repo="$repo_name" \
-      -F number="$issue_number"
-  )"; then
-    rc=$?
-    if [[ "$rc" -eq 75 ]]; then
-      echo "WAIT_GITHUB_API_UNSTABLE=1"
-      echo "WAIT_GITHUB_STAGE=DIRTY_GATE_ISSUE_ID"
-      return 75
+        -f owner="$repo_owner" \
+        -f repo="$repo_name" \
+        -F number="$issue_number"
+    )"; then
+      rc=$?
+      if [[ "$rc" -eq 75 ]]; then
+        echo "WAIT_GITHUB_API_UNSTABLE=1"
+        echo "WAIT_GITHUB_STAGE=DIRTY_GATE_ISSUE_ID"
+        return 75
+      fi
+      return "$rc"
     fi
-    return "$rc"
-  fi
 
-  issue_id="$(printf '%s' "$issue_json" | jq -r '.data.repository.issue.id // ""')"
-  if [[ -z "$issue_id" || "$issue_id" == "null" ]]; then
-    echo "DIRTY_GATE_PROJECT_LINK_SKIP=ISSUE_ID_MISSING"
-    return 1
-  fi
+    issue_id="$(printf '%s' "$issue_json" | jq -r '.data.repository.issue.id // ""')"
+    if [[ -z "$issue_id" || "$issue_id" == "null" ]]; then
+      echo "DIRTY_GATE_PROJECT_LINK_SKIP=ISSUE_ID_MISSING"
+      return 1
+    fi
 
-  if ! add_json="$(
-    run_gh_retry_capture_project \
-      gh api graphql \
-      -f query='
+    if ! add_json="$(
+      run_gh_retry_capture_project \
+        gh api graphql \
+        -f query='
 mutation($projectId: ID!, $contentId: ID!) {
   addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
     item { id }
   }
 }
 ' \
-      -f projectId="$project_id" \
-      -f contentId="$issue_id"
-  )"; then
-    rc=$?
-    if [[ "$rc" -eq 75 ]]; then
-      echo "WAIT_GITHUB_API_UNSTABLE=1"
-      echo "WAIT_GITHUB_STAGE=DIRTY_GATE_PROJECT_ADD"
-      return 75
+        -f projectId="$project_id" \
+        -f contentId="$issue_id"
+    )"; then
+      rc=$?
+      if [[ "$rc" -eq 75 ]]; then
+        echo "WAIT_GITHUB_API_UNSTABLE=1"
+        echo "WAIT_GITHUB_STAGE=DIRTY_GATE_PROJECT_ADD"
+        return 75
+      fi
+      return "$rc"
     fi
-    return "$rc"
+
+    item_id="$(printf '%s' "$add_json" | jq -r '.data.addProjectV2ItemById.item.id // ""')"
+    [[ -n "$item_id" ]] && echo "WAIT_DIRTY_WORKTREE_GATE_PROJECT_ITEM_ID=${item_id}"
   fi
 
-  item_id="$(printf '%s' "$add_json" | jq -r '.data.addProjectV2ItemById.item.id // ""')"
-  [[ -n "$item_id" ]] && echo "WAIT_DIRTY_WORKTREE_GATE_PROJECT_ITEM_ID=${item_id}"
-
-  if ! set_dirty_gate_project_status "$issue_number" "Backlog" "Backlog" "DIRTY_GATE_PROJECT_STATUS"; then
+  if ! set_dirty_gate_project_status "$issue_number" "$target_status" "$target_flow" "DIRTY_GATE_PROJECT_STATUS"; then
     rc=$?
     if [[ "$rc" -eq 75 ]]; then
       return 75
     fi
+  else
+    echo "WAIT_DIRTY_WORKTREE_GATE_STATUS=${target_status}"
+    echo "WAIT_DIRTY_WORKTREE_GATE_FLOW=${target_flow}"
   fi
 
   return 0
@@ -1144,9 +1170,11 @@ ensure_dirty_gate_issue() {
   local blocked_title="$2"
   local tracked_count="$3"
   local tracked_preview="$4"
+  local signature="${5:-}"
 
   DIRTY_GATE_ISSUE_NUMBER=""
   DIRTY_GATE_ISSUE_URL=""
+  DIRTY_GATE_ISSUE_CREATED_THIS_TICK="0"
 
   if [[ -s "$dirty_gate_issue_file" ]]; then
     local existing_number existing_json existing_state existing_url
@@ -1209,7 +1237,21 @@ EOF
         DIRTY_GATE_ISSUE_URL="$create_url"
         printf '%s\n' "$DIRTY_GATE_ISSUE_NUMBER" > "$dirty_gate_issue_file"
         printf '%s\n' "$DIRTY_GATE_ISSUE_URL" > "$dirty_gate_issue_url_file"
+        if [[ -n "$signature" ]]; then
+          printf '%s\n' "$signature" > "$dirty_gate_comment_signature_file"
+        fi
+        printf '%s\n' "$DIRTY_GATE_ISSUE_NUMBER" > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
+        printf '%s\n' "DIRTY-GATE-ISSUE-${DIRTY_GATE_ISSUE_NUMBER}" > "${CODEX_DIR}/daemon_waiting_task_id.txt"
+        printf '%s\n' "0" > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
+        printf '%s\n' "BLOCKER" > "${CODEX_DIR}/daemon_waiting_kind.txt"
+        printf '%s\n' "0" > "${CODEX_DIR}/daemon_waiting_pending_post.txt"
+        date -u '+%Y-%m-%dT%H:%M:%SZ' > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
+        if [[ -n "$DIRTY_GATE_ISSUE_URL" ]]; then
+          printf '%s\n' "$DIRTY_GATE_ISSUE_URL" > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
+        fi
+        DIRTY_GATE_ISSUE_CREATED_THIS_TICK="1"
         echo "DIRTY_GATE_ISSUE_CREATED=1"
+        echo "WAIT_DIRTY_WORKTREE_GATE_COMMENT_ID=0"
       fi
     else
       local rc=$?
@@ -1479,13 +1521,16 @@ maybe_handle_dirty_worktree_gate() {
   signature="$(printf '%s|%s|%s|%s|%s' "$blocked_type" "$blocked_ref" "$blocked_title" "$tracked_count" "$tracked_preview" | shasum -a 1 | awk '{print $1}')"
   printf '%s\n' "$signature" > "$dirty_gate_signature_file"
 
-  if ! ensure_dirty_gate_issue "$blocked_ref" "$blocked_title" "$tracked_count" "$tracked_preview"; then
+  if ! ensure_dirty_gate_issue "$blocked_ref" "$blocked_title" "$tracked_count" "$tracked_preview" "$signature"; then
     rc=$?
     [[ "$rc" -eq 75 ]] && return 0
     return 0
   fi
 
   if [[ -n "$DIRTY_GATE_ISSUE_NUMBER" ]]; then
+    if [[ "$DIRTY_GATE_ISSUE_CREATED_THIS_TICK" == "1" ]]; then
+      return 0
+    fi
     maybe_post_dirty_gate_blocker "$DIRTY_GATE_ISSUE_NUMBER" "$blocked_ref" "$blocked_title" "$tracked_count" "$tracked_preview" "$signature" || true
   fi
 }

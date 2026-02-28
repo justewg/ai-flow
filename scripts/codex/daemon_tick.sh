@@ -2139,35 +2139,42 @@ if [[ "$depends_line" != "none" ]]; then
       continue
     fi
 
-    dep_issue_number=""
+    dep_issue_numbers=()
     if [[ "$dep_token" =~ ^#([0-9]+)$ ]]; then
-      dep_issue_number="${BASH_REMATCH[1]}"
+      dep_issue_numbers+=("${BASH_REMATCH[1]}")
     elif [[ "$dep_token" =~ ^ISSUE-([0-9]+)$ ]]; then
-      dep_issue_number="${BASH_REMATCH[1]}"
+      dep_issue_numbers+=("${BASH_REMATCH[1]}")
     elif [[ "$dep_token" =~ ^([0-9]+)$ ]]; then
-      dep_issue_number="${BASH_REMATCH[1]}"
+      dep_issue_numbers+=("${BASH_REMATCH[1]}")
+    elif [[ "$dep_token" =~ ^(#[0-9]+)+$ ]]; then
+      while IFS= read -r dep_num; do
+        [[ -z "$dep_num" ]] && continue
+        dep_issue_numbers+=("$dep_num")
+      done < <(printf '%s' "$dep_token" | grep -oE '[0-9]+')
     fi
 
-    if [[ -z "$dep_issue_number" ]]; then
+    if (( ${#dep_issue_numbers[@]} == 0 )); then
       blocked_dependencies+=("$dep_token")
       continue
     fi
 
-    dep_resolved_rc=0
-    if dependency_issue_resolved "$dep_issue_number"; then
-      :
-    else
-      dep_resolved_rc=$?
-      if [[ "$dep_resolved_rc" -eq 75 ]]; then
-        echo "WAIT_GITHUB_API_UNSTABLE=1"
-        echo "WAIT_GITHUB_STAGE=DEPENDENCY_CHECK"
-        exit 0
+    for dep_issue_number in "${dep_issue_numbers[@]}"; do
+      dep_resolved_rc=0
+      if dependency_issue_resolved "$dep_issue_number"; then
+        :
+      else
+        dep_resolved_rc=$?
+        if [[ "$dep_resolved_rc" -eq 75 ]]; then
+          echo "WAIT_GITHUB_API_UNSTABLE=1"
+          echo "WAIT_GITHUB_STAGE=DEPENDENCY_CHECK"
+          exit 0
+        fi
+        if [[ "$dep_resolved_rc" -ne 1 ]]; then
+          exit "$dep_resolved_rc"
+        fi
+        blocked_dependencies+=("#${dep_issue_number}")
       fi
-      if [[ "$dep_resolved_rc" -ne 1 ]]; then
-        exit "$dep_resolved_rc"
-      fi
-      blocked_dependencies+=("#${dep_issue_number}")
-    fi
+    done
   done
 fi
 

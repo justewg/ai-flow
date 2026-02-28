@@ -198,6 +198,7 @@
   - при незакрытых зависимостях не берет задачу, пишет `WAIT_DEPENDENCIES...` в вывод и отправляет одноразовый сигнал `CODEX_SIGNAL: AGENT_DEPENDENCY_BLOCKED` (через outbox при офлайне GitHub)
   - для автоподхвата учитывает только `Issue`; `DraftIssue` игнорируется
   - issue с заголовком `DIRTY-GATE:` исключаются из штатной claim-очереди (они служебные и обрабатываются только dirty-gate веткой)
+  - stale waiting по `DIRTY-GATE` не восстанавливается, если сейчас нет реальной блокируемой карточки в `Todo` (исключает ложный `WAIT_USER_REPLY` в idle)
   - для перевода статуса использует `project item id`, поэтому не зависит от ручного заполнения поля `Task ID`
   - `Task ID` берет из поля, либо извлекает `PL-xxx` из title
   - если `PL-xxx` отсутствует, использует fallback `ISSUE-<number>` по номеру Issue
@@ -217,6 +218,7 @@
     - изменение набора файлов (`WAIT_DIRTY_WORKTREE_CHANGED`)
     - reminder (`WAIT_DIRTY_WORKTREE_REMINDER`)
     - снятие блокировки (`DIRTY_WORKTREE_RESOLVED`)
+  - dirty-worktree алерты отправляются только если реально блокируется карточка из `Todo` (`WAIT_DIRTY_WORKTREE_BLOCKING_TODO=1`); в `idle` без `Todo` уведомления не шлются
   - различает сетевую деградацию и веточный блокер синхронизации (`WAIT_BRANCH_SYNC`)
   - отправляет локальные Telegram-алерты по деградации без спама:
     - вход в деградацию (`ENTER_DEGRADED`)

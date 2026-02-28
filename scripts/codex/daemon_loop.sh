@@ -312,6 +312,7 @@ build_success_detail() {
     WAIT_DIRTY_WORKTREE)
       line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_DIRTY_WORKTREE_TRACKED=1' || true)"
       local dirty_count_line dirty_files_line dirty_blocked_ref_line dirty_blocked_issue_line dirty_blocked_title_line dirty_gate_issue_line dirty_gate_item_line
+      local dirty_blocking_todo="0"
       dirty_count_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_DIRTY_WORKTREE_TRACKED_COUNT=' || true)"
       dirty_files_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_DIRTY_WORKTREE_TRACKED_FILES=' || true)"
       dirty_blocked_ref_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_DIRTY_WORKTREE_BLOCKED_REF=' || true)"
@@ -326,6 +327,10 @@ build_success_detail() {
       [[ -n "$dirty_blocked_title_line" ]] && line="${line}; ${dirty_blocked_title_line}"
       [[ -n "$dirty_gate_issue_line" ]] && line="${line}; ${dirty_gate_issue_line}"
       [[ -n "$dirty_gate_item_line" ]] && line="${line}; ${dirty_gate_item_line}"
+      if [[ -n "$dirty_blocked_ref_line" ]]; then
+        dirty_blocking_todo="1"
+      fi
+      line="${line}; WAIT_DIRTY_WORKTREE_BLOCKING_TODO=${dirty_blocking_todo}"
       ;;
     ACTIVE_TASK_CLAIMED)
       line="$(printf '%s\n' "$output" | grep -m1 '^CLAIMED_TASK_ID=' || true)"
@@ -461,7 +466,11 @@ notify_if_needed() {
   local detail="$2"
 
   local mode="healthy"
-  if [[ "$state" == "WAIT_DIRTY_WORKTREE" ]]; then
+  local dirty_blocking_todo="0"
+  if [[ "$detail" == *"WAIT_DIRTY_WORKTREE_BLOCKING_TODO=1"* ]]; then
+    dirty_blocking_todo="1"
+  fi
+  if [[ "$state" == "WAIT_DIRTY_WORKTREE" && "$dirty_blocking_todo" == "1" ]]; then
     mode="dirty_worktree"
   elif [[ "$detail" == *"DEGRADED="* || "$detail" == *"AUTH_DEGRADED=1"* ]]; then
     mode="degraded"

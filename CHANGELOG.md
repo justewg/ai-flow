@@ -51,3 +51,5 @@
 - `[APP-07]` Доработан `COMMIT` в dirty-gate до полного цикла: commit/push -> PR `development -> main` -> merge PR -> перевод dirty-gate в Done и закрытие issue, после чего daemon возвращается к штатному подхвату Todo.
 - `[APP-07]` Добавлен auto-release stale active-state: если карточку активной задачи вручную уводят из `In Progress` (например, обратно в `Todo`), daemon сбрасывает локальный `daemon_active_*` и снова клеймит очередь.
 - `[APP-07]` Убрано влияние служебных `DIRTY-GATE` issue на обычный claim: daemon исключает их из основной/fallback очереди `Todo`, чтобы они не блокировали подхват рабочих задач.
+- `[APP-07]` Dirty-worktree Telegram-алерты теперь отправляются только при реальном блоке задачи из `Todo`; в idle (нет `Todo`) уведомления о dirty-state не отправляются.
+- `[APP-07]` Устранено ложное ожидание `WAIT_USER_REPLY` в idle: daemon не восстанавливает stale waiting-контекст `DIRTY-GATE`, если нет текущей блокируемой карточки в `Todo`.

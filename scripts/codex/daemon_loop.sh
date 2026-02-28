@@ -496,9 +496,9 @@ build_notify_message() {
 
   local title
   if [[ "$reason" == WAIT_DIRTY_WORKTREE_* ]]; then
-    title="<b>🧹 DAEMON: dirty worktree</b>"
+    title="<b>🚨 🧹 DAEMON: dirty worktree</b>"
   elif [[ "$reason" == "DIRTY_WORKTREE_RESOLVED" ]]; then
-    title="<b>✅ DAEMON: dirty worktree resolved</b>"
+    title="<b>💤 ✅ DAEMON: dirty worktree resolved</b>"
   else
     title="<b>⚠️ DAEMON: degradation signal</b>"
   fi
@@ -541,6 +541,16 @@ build_notify_message() {
   aux_text+=$'DETAIL='"${detail}"$'\n'
   aux_text+=$'TIME_UTC='"${now_utc}"
   aux_escaped="$(html_escape "$aux_text")"
+
+  if [[ "$reason" == WAIT_DIRTY_WORKTREE_* || "$reason" == "DIRTY_WORKTREE_RESOLVED" ]]; then
+    msg="${title}"$'\n'
+    msg+="<b>⚙️ Reason:</b> <code>$(html_escape "$reason")</code>"$'\n'
+    msg+="<b>📌 State:</b> <code>$(html_escape "$state")</code>"$'\n'
+    msg+="<b>🌐 GitHub:</b> ${gh_icon} <code>$(html_escape "$gh_status")</code> · <b>Telegram:</b> ${tg_icon} <code>$(html_escape "$tg_status")</code>"
+    msg+=$'\n'"<blockquote><code>${aux_escaped}</code></blockquote>"
+    printf '%s' "$msg"
+    return 0
+  fi
 
   msg="${title}"$'\n'
   msg+="<b>🧭 CHECK NOW:</b> ${check_badge}"$'\n'

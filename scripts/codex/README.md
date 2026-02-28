@@ -23,6 +23,7 @@
 - `scripts/codex/run.sh project_add_task`
 - `scripts/codex/run.sh project_set_status`
 - `scripts/codex/run.sh project_status_runtime <enqueue|apply|list|clear> ...` — runtime-очередь отложенных обновлений `Project Status/Flow`.
+- `scripts/codex/run.sh log_summary [--hours N|--from ISO|--to ISO]` — агрегированный отчет по логам daemon/watchdog/runtime/graphql за период.
 - `scripts/codex/run.sh next_task` — показать следующую задачу со статусом `Planned` (приоритет P0→P1→P2, затем по номеру `PL-xxx`).
 - `scripts/codex/run.sh app_deps_mermaid [output-file]` — построить Mermaid DAG зависимостей APP-issues из `Flow Meta` (`Depends-On/Blocks`) и записать markdown-файл (по умолчанию `docs/app-issues-dependency-diagram.md`).
 - `scripts/codex/run.sh backlog_seed_apply` — применить runtime-план создания backlog-задач из `.tmp/codex/backlog_seed_plan.json` (по умолчанию 1 задача за запуск).
@@ -163,6 +164,13 @@
   - runtime-очередь действий `project_set_status` в `.tmp/codex/project_status_runtime_queue.json`
   - при деградации GitHub (`network/rate-limit`) сохраняет intent и не теряет изменение
   - `apply` по тикам аккуратно подчищает очередь при восстановлении GitHub API
+- `log_summary.sh [--hours N|--from ISO|--to ISO]`
+  - строит сводный отчет за период по:
+    - heartbeat/state daemon
+    - runtime-очереди (`enqueued/applied/wait/pending`)
+    - GitHub деградации (state-based и TG runtime transitions)
+    - GraphQL rate-limit окнам (`graphql_rate_stats.log`)
+    - watchdog heartbeat/recovery markers
 - `project_add_task.sh <task-id> <title-file> <scope> <priority> [status] [flow]`
   - создание карточки задачи в проекте с заполнением `Task ID`, `Scope`, `Priority`, `Status`, `Flow`
   - после создания делает verify `Status/Flow`; при сетевой деградации возвращает ошибку, чтобы не считать задачу корректно инициализированной

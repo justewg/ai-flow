@@ -25,6 +25,7 @@ Commands:
   project_add_task
   project_set_status
   project_status_runtime
+  log_summary
   next_task
   app_deps_mermaid
   backlog_seed_apply
@@ -244,6 +245,11 @@ case "$cmd" in
     fi
     shift 1
     "${ROOT_DIR}/scripts/codex/project_status_runtime.sh" "$@"
+    ;;
+
+  log_summary)
+    shift 1
+    "${ROOT_DIR}/scripts/codex/log_summary.sh" "$@"
     ;;
 
   next_task)

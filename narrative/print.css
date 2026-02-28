@@ -182,9 +182,28 @@
   #object .screens { grid-template-columns: 1fr 1fr; gap: 8mm; }
   #object .ph, #object .media-image { min-height: 60mm; height: 60mm; object-fit: cover; }
 
-  #layers .screens { grid-template-columns: 1fr 1fr; gap: 8mm; }
-  #layers .layers-note { font-size: 10.5pt; line-height: 1.35; color: #5f6f81; margin: 2mm 0 0; }
-  #layers .layers-thesis { font-size: 12pt; font-weight: 600; margin: 4mm 0 0; color: #1f2b37; }
+  #layers .screens { grid-template-columns: 1fr 1fr; gap: 10mm; }
+  #layers figcaption {
+    font-size: 11.3pt;
+    line-height: 1.4;
+    font-weight: 650;
+    color: #31485d;
+    margin: 2.8mm 0 0;
+  }
+  #layers .layers-note {
+    font-size: 11pt;
+    line-height: 1.42;
+    font-weight: 500;
+    color: #43586c;
+    margin: 2.3mm 0 0;
+  }
+  #layers .layers-thesis {
+    font-size: 12.6pt;
+    font-weight: 650;
+    line-height: 1.4;
+    margin: 5.5mm 0 0;
+    color: #1e3144;
+  }
 
   #growth .word-field { display: grid; grid-auto-rows: min-content; min-height: auto; }
   #growth .word { position: static; margin: 2mm 0; animation: none !important; transform: none !important; }

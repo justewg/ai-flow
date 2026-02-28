@@ -327,17 +327,43 @@ figcaption {
 .screens .screen { }
 
 /* Layers */
-.layers-note {
-  margin: 12px 0 0;
-  color: #3f556b;
-  font-size: 1.18rem;
-  line-height: 1.42;
+#layers .section-sticky {
+  padding-bottom: var(--space-3);
 }
-.layers-thesis {
-  margin: var(--space-3) 0 0;
-  color: var(--fg);
-  font-size: clamp(1rem, 1.3vw, 1.18rem);
-  font-weight: 600;
+#layers .screens {
+  margin-top: var(--space-2);
+  gap: clamp(28px, 3.4vw, 46px);
+}
+#layers .screen {
+  display: grid;
+  align-content: start;
+  gap: clamp(8px, 1.2vw, 14px);
+}
+#layers figcaption {
+  margin-top: clamp(16px, 1.7vw, 24px);
+  color: #2c4358;
+  font-size: clamp(1.12rem, 1.5vw, 1.32rem);
+  font-weight: 620;
+  line-height: 1.46;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.56);
+}
+#layers .layers-note {
+  margin: 0;
+  color: #344b61;
+  font-size: clamp(1.02rem, 1.22vw, 1.15rem);
+  font-weight: 500;
+  line-height: 1.5;
+  max-width: 36ch;
+  text-wrap: pretty;
+}
+#layers .layers-thesis {
+  margin: clamp(28px, 3vw, 42px) auto 0;
+  color: #223649;
+  font-size: clamp(1.12rem, 1.56vw, 1.38rem);
+  font-weight: 640;
+  line-height: 1.45;
+  max-width: 34ch;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.56);
 }
 
 /* Word field */

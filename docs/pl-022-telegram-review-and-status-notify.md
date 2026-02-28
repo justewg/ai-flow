@@ -8,14 +8,25 @@
 - PR review сигналы:
   - Workflow: `.github/workflows/notify-telegram-pr-review.yml`
   - Trigger: `pull_request` (`opened`, `reopened`, `synchronize`, `ready_for_review`, `edited`) для ветки `main`
-  - В сообщении: action, PR номер/title, `PL-xxx`, ветки, автор, объем изменений, ссылка на PR
+  - В сообщении (HTML): жирный заголовок типа сигнала, `CHECK NOW` эмодзи-мнемоника (`💤 IDLE` / `🚨 НУЖНА РЕАКЦИЯ`), ссылка `🔗 𝐏𝐑#<номер>`, компактный блок с задачами.
+  - Вспомогательные поля (signal/action/time) вынесены в `blockquote + code`.
+  - Убраны лишние поля: автор, направление веток, размер дельты.
 
 - Post-merge статусы:
   - Workflow: `.github/workflows/notify-telegram-main-merge.yml`
   - Trigger: `workflow_run.completed` для:
     - `Deploy Main to Hosting`
     - `Project Auto Close Tasks`
-  - В сообщении: имя workflow, `success/fail`, branch, sha, связанные PR, ссылка на run
+  - В сообщении (HTML): тип оповещения bold, `CHECK NOW` эмодзи, имя workflow, итог `🟢/🔴`, ссылка на run, ссылка `𝐏𝐑#<номер>` при наличии PR.
+  - Убраны `Repo` и `Linked PRs` (полный список).
+
+- Issue-сигналы агента:
+  - Workflow: `.github/workflows/notify-telegram-issue-signals.yml`
+  - Сообщение унифицировано: bold-заголовок, `CHECK NOW`, ссылка на Issue/комментарий, вспомогательный `blockquote + code`.
+
+- Локальные daemon/watchdog-сигналы:
+  - `scripts/codex/daemon_loop.sh`, `scripts/codex/watchdog_tick.sh`
+  - Добавлены мнемоники статусов GitHub/Telegram (`🟢/🟡/🔴/⚪`) и вспомогательный блок в цитате.
 
 ## Secrets
 - `TG_BOT_TOKEN`

@@ -22,11 +22,6 @@ jobs:
       PR_TITLE: ${{ github.event.pull_request.title }}
       PR_BODY: ${{ github.event.pull_request.body }}
       PR_URL: ${{ github.event.pull_request.html_url }}
-      PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-      PR_BASE: ${{ github.event.pull_request.base.ref }}
-      PR_HEAD: ${{ github.event.pull_request.head.ref }}
-      PR_COMMITS: ${{ github.event.pull_request.commits }}
-      PR_CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
       PR_DRAFT: ${{ github.event.pull_request.draft }}
 
     steps:
@@ -52,6 +47,10 @@ jobs:
         env:
           TASK_IDS: ${{ steps.extract.outputs.task_ids }}
         run: |
+          html_escape() {
+            jq -rn --arg v "${1:-}" '$v|@html'
+          }
+
           ACTION_LABEL="${PR_ACTION}"
           SIGNAL_LABEL="TEMP_PROGRESS"
           STAGE_LABEL="Временная дельта"
@@ -121,23 +120,35 @@ jobs:
           echo "DEBUG_ACTION_LABEL=${ACTION_LABEL}"
           echo "DEBUG_CHECK_NOW=${CHECK_NOW}"
 
-          MESSAGE=$'PLANKA: PR review signal\n'
-          MESSAGE+="Signal: ${SIGNAL_LABEL}"$'\n'
-          MESSAGE+="Action: ${ACTION_LABEL}"$'\n'
-          MESSAGE+="Stage: ${STAGE_LABEL}"$'\n'
-          MESSAGE+="Check now: ${CHECK_NOW}"$'\n'
-          MESSAGE+="PR #${PR_NUMBER}: ${PR_TITLE}"$'\n'
-          MESSAGE+="Tasks: ${TASK_IDS}"$'\n'
-          MESSAGE+="From ${PR_HEAD} -> ${PR_BASE}"$'\n'
-          MESSAGE+="Author: @${PR_AUTHOR}"$'\n'
-          MESSAGE+="Commits: ${PR_COMMITS}, files: ${PR_CHANGED_FILES}"$'\n'
-          MESSAGE+="PR: ${PR_URL}"
+          NOW_UTC="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          CHECK_BADGE="💤 IDLE"
+          HEADER="<b>🧪 PR: промежуточный сигнал</b>"
+          if [[ "${CHECK_NOW}" == "YES" ]]; then
+            CHECK_BADGE="🚨 НУЖНА РЕАКЦИЯ"
+            HEADER="<b>🚀 PR: готово к ревью</b>"
+          fi
+
+          PR_LINK="<a href=\"$(html_escape "${PR_URL}")\">𝐏𝐑#${PR_NUMBER}</a>"
+          MESSAGE="${HEADER}"$'\n'
+          MESSAGE+="<b>🧭 CHECK NOW:</b> ${CHECK_BADGE}"$'\n'
+          MESSAGE+="🔗 ${PR_LINK} — <b>$(html_escape "${PR_TITLE}")</b>"$'\n'
+          MESSAGE+="<b>🪧 Stage:</b> $(html_escape "${STAGE_LABEL}")"$'\n'
+          if [[ "${TASK_IDS}" != "none" ]]; then
+            MESSAGE+="<b>🎯 Tasks:</b> <code>$(html_escape "${TASK_IDS}")</code>"$'\n'
+          fi
+
+          AUX=$'SIGNAL='"${SIGNAL_LABEL}"$'\n'
+          AUX+=$'ACTION='"${ACTION_LABEL}"$'\n'
+          AUX+=$'CHECK_NOW='"${CHECK_NOW}"$'\n'
+          AUX+=$'TASK_IDS='"${TASK_IDS}"$'\n'
+          AUX+=$'TIME_UTC='"${NOW_UTC}"
+          MESSAGE+="<blockquote><code>$(html_escape "${AUX}")</code></blockquote>"
 
           payload="$(
             jq -n \
               --arg chat_id "${TG_CHAT_ID}" \
               --arg text "${MESSAGE}" \
-              '{chat_id: $chat_id, text: $text, disable_web_page_preview: true}'
+              '{chat_id: $chat_id, text: $text, parse_mode: "HTML", disable_web_page_preview: true}'
           )"
 
           curl -fsS \

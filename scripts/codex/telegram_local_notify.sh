@@ -74,7 +74,7 @@ payload="$(
   jq -n \
     --arg chat_id "$chat_id" \
     --arg text "$message_text" \
-    '{chat_id: $chat_id, text: $text, disable_web_page_preview: true}'
+    '{chat_id: $chat_id, text: $text, parse_mode: "HTML", disable_web_page_preview: true}'
 )"
 
 curl -fsS --max-time 12 \

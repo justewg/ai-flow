@@ -430,6 +430,63 @@ detect_flow_degradation() {
   fi
 }
 
+html_escape() {
+  local value="${1:-}"
+  jq -rn --arg v "$value" '$v|@html'
+}
+
+detail_value() {
+  local detail="$1"
+  local key="$2"
+  local match
+  match="$(
+    printf '%s' "$detail" \
+      | tr ';|' '\n\n' \
+      | sed 's/^[[:space:]]*//' \
+      | grep -m1 "^${key}=" || true
+  )"
+  if [[ -z "$match" ]]; then
+    return 1
+  fi
+  printf '%s' "${match#*=}"
+}
+
+service_status_icon() {
+  local status="$1"
+  case "$status" in
+    OK) echo "🟢" ;;
+    SKIPPED) echo "⚪" ;;
+    DNS_OFFLINE|UNREACHABLE) echo "🔴" ;;
+    UNSTABLE) echo "🟡" ;;
+    *) echo "⚪" ;;
+  esac
+}
+
+is_reaction_required() {
+  local reason="$1"
+  local state="$2"
+  local detail="$3"
+
+  if [[ "$reason" == "RECOVERED" || "$reason" == "DIRTY_WORKTREE_RESOLVED" ]]; then
+    echo "0"
+    return 0
+  fi
+
+  if [[ "$detail" == *"DEGRADED="* || "$detail" == *"AUTH_DEGRADED=1"* ]]; then
+    echo "1"
+    return 0
+  fi
+
+  case "$state" in
+    WAIT_USER_REPLY|WAIT_REVIEW_FEEDBACK|WAIT_DIRTY_WORKTREE|WAIT_GITHUB_RATE_LIMIT|WAIT_GITHUB_OFFLINE|WAIT_BRANCH_SYNC|BLOCKED_*|ERROR_LOCAL_FLOW)
+      echo "1"
+      ;;
+    *)
+      echo "0"
+      ;;
+  esac
+}
+
 build_notify_message() {
   local reason="$1"
   local state="$2"
@@ -437,27 +494,59 @@ build_notify_message() {
   local now_utc
   now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
-  local msg
+  local title
   if [[ "$reason" == WAIT_DIRTY_WORKTREE_* ]]; then
-    msg=$'PLANKA: daemon paused (dirty worktree)\n'
-    msg+="Reason: ${reason}"$'\n'
-    msg+="State: ${state}"$'\n'
-    msg+="Detail: ${detail}"$'\n'
-    msg+=$'Action: daemon waits for decision по измененным tracked-файлам (commit/stash/revert).\n'
-    msg+="Time: ${now_utc}"
+    title="<b>🧹 DAEMON: dirty worktree</b>"
   elif [[ "$reason" == "DIRTY_WORKTREE_RESOLVED" ]]; then
-    msg=$'PLANKA: dirty worktree resolved\n'
-    msg+="Reason: ${reason}"$'\n'
-    msg+="State: ${state}"$'\n'
-    msg+="Detail: ${detail}"$'\n'
-    msg+="Time: ${now_utc}"
+    title="<b>✅ DAEMON: dirty worktree resolved</b>"
   else
-    msg=$'PLANKA: daemon degradation signal\n'
-    msg+="Reason: ${reason}"$'\n'
-    msg+="State: ${state}"$'\n'
-    msg+="Detail: ${detail}"$'\n'
-    msg+="Time: ${now_utc}"
+    title="<b>⚠️ DAEMON: degradation signal</b>"
   fi
+
+  local gh_status tg_status gh_icon tg_icon
+  gh_status="$(detail_value "$detail" "GITHUB_STATUS" || true)"
+  tg_status="$(detail_value "$detail" "TELEGRAM_STATUS" || true)"
+  [[ -z "$gh_status" ]] && gh_status="UNKNOWN"
+  [[ -z "$tg_status" ]] && tg_status="UNKNOWN"
+  gh_icon="$(service_status_icon "$gh_status")"
+  tg_icon="$(service_status_icon "$tg_status")"
+
+  local degraded_labels
+  degraded_labels="$(
+    printf '%s' "$detail" \
+      | tr ';' '\n' \
+      | sed 's/^[[:space:]]*//' \
+      | grep '^DEGRADED=' \
+      | sed 's/^DEGRADED=//' \
+      | xargs || true
+  )"
+
+  local reaction_required check_badge
+  reaction_required="$(is_reaction_required "$reason" "$state" "$detail")"
+  if [[ "$reaction_required" == "1" ]]; then
+    check_badge="🚨 НУЖНА РЕАКЦИЯ"
+  else
+    check_badge="💤 IDLE"
+  fi
+
+  local main_state_line
+  main_state_line="<b>📌 State:</b> <code>$(html_escape "$state")</code>"
+  if [[ -n "$degraded_labels" ]]; then
+    main_state_line+=" · <b>📉 Degraded:</b> <code>$(html_escape "$degraded_labels")</code>"
+  fi
+
+  local aux_text aux_escaped msg
+  aux_text=$'REASON='"${reason}"$'\n'
+  aux_text+=$'STATE='"${state}"$'\n'
+  aux_text+=$'DETAIL='"${detail}"$'\n'
+  aux_text+=$'TIME_UTC='"${now_utc}"
+  aux_escaped="$(html_escape "$aux_text")"
+
+  msg="${title}"$'\n'
+  msg+="<b>🧭 CHECK NOW:</b> ${check_badge}"$'\n'
+  msg+="${main_state_line}"$'\n'
+  msg+="<b>🌐 GitHub:</b> ${gh_icon} <code>$(html_escape "$gh_status")</code> · <b>Telegram:</b> ${tg_icon} <code>$(html_escape "$tg_status")</code>"$'\n'
+  msg+="<blockquote><code>${aux_escaped}</code></blockquote>"
   printf '%s' "$msg"
 }
 

@@ -31,40 +31,54 @@ jobs:
       - name: Extract linked PRs
         id: extract
         run: |
-          PR_NUMBERS="$(jq -r '.workflow_run.pull_requests[]?.number' "$GITHUB_EVENT_PATH" | xargs || true)"
-          if [[ -z "${PR_NUMBERS}" ]]; then
-            PR_NUMBERS="none"
-          fi
-          echo "pr_numbers=${PR_NUMBERS}" >> "${GITHUB_OUTPUT}"
+          PR_NUMBER="$(jq -r '.workflow_run.pull_requests[0]?.number // ""' "$GITHUB_EVENT_PATH")"
+          PR_URL="$(jq -r '.workflow_run.pull_requests[0]?.html_url // ""' "$GITHUB_EVENT_PATH")"
+          echo "pr_number=${PR_NUMBER}" >> "${GITHUB_OUTPUT}"
+          echo "pr_url=${PR_URL}" >> "${GITHUB_OUTPUT}"
           echo "short_sha=${WF_SHA:0:8}" >> "${GITHUB_OUTPUT}"
 
       - name: Send Telegram push
         env:
-          PR_NUMBERS: ${{ steps.extract.outputs.pr_numbers }}
+          PR_NUMBER: ${{ steps.extract.outputs.pr_number }}
+          PR_URL: ${{ steps.extract.outputs.pr_url }}
           SHORT_SHA: ${{ steps.extract.outputs.short_sha }}
-          REPO: ${{ github.repository }}
         run: |
-          STATUS_LINE="SUCCESS"
+          html_escape() {
+            jq -rn --arg v "${1:-}" '$v|@html'
+          }
+
+          STATUS_LINE="🟢 SUCCESS"
+          CHECK_BADGE="💤 IDLE"
+          HEADER="<b>✅ Post-merge workflow</b>"
           if [[ "${WF_CONCLUSION}" != "success" ]]; then
-            STATUS_LINE="FAIL: ${WF_CONCLUSION}"
+            STATUS_LINE="🔴 FAIL: ${WF_CONCLUSION}"
+            CHECK_BADGE="🚨 НУЖНА РЕАКЦИЯ"
+            HEADER="<b>❌ Post-merge workflow</b>"
           fi
 
-          MESSAGE=$'PLANKA: post-merge workflow\n'
-          MESSAGE+="Workflow: ${WF_NAME}"$'\n'
-          MESSAGE+="Status: ${STATUS_LINE}"$'\n'
-          MESSAGE+="Repo: ${REPO}"$'\n'
-          MESSAGE+="Branch: ${WF_BRANCH}"$'\n'
-          MESSAGE+="SHA: ${SHORT_SHA}"$'\n'
-          MESSAGE+="Linked PRs: ${PR_NUMBERS}"$'\n'
-          MESSAGE+="Event: ${WF_EVENT}"$'\n'
-          MESSAGE+="Actor: @${WF_ACTOR}"$'\n'
-          MESSAGE+="Run: ${WF_URL}"
+          NOW_UTC="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          MESSAGE="${HEADER}"$'\n'
+          MESSAGE+="<b>🧭 CHECK NOW:</b> ${CHECK_BADGE}"$'\n'
+          MESSAGE+="<b>⚙️ Workflow:</b> $(html_escape "${WF_NAME}")"$'\n'
+          MESSAGE+="<b>📊 Status:</b> $(html_escape "${STATUS_LINE}")"$'\n'
+          if [[ -n "${PR_NUMBER}" && -n "${PR_URL}" ]]; then
+            MESSAGE+="🔗 <a href=\"$(html_escape "${PR_URL}")\">𝐏𝐑#${PR_NUMBER}</a>"$'\n'
+          fi
+          MESSAGE+="🧾 <a href=\"$(html_escape "${WF_URL}")\">Run log</a>"$'\n'
+
+          AUX=$'CONCLUSION='"${WF_CONCLUSION}"$'\n'
+          AUX+=$'BRANCH='"${WF_BRANCH}"$'\n'
+          AUX+=$'SHA='"${SHORT_SHA}"$'\n'
+          AUX+=$'EVENT='"${WF_EVENT}"$'\n'
+          AUX+=$'ACTOR='"${WF_ACTOR}"$'\n'
+          AUX+=$'TIME_UTC='"${NOW_UTC}"
+          MESSAGE+="<blockquote><code>$(html_escape "${AUX}")</code></blockquote>"
 
           payload="$(
             jq -n \
               --arg chat_id "${TG_CHAT_ID}" \
               --arg text "${MESSAGE}" \
-              '{chat_id: $chat_id, text: $text, disable_web_page_preview: true}'
+              '{chat_id: $chat_id, text: $text, parse_mode: "HTML", disable_web_page_preview: true}'
           )"
 
           curl -fsS \

@@ -73,15 +73,20 @@
   /* Remove animations and parallax */
   .reveal, .reveal.slide { opacity: 1 !important; transform: none !important; }
   .parallax { transform: none !important; position: static !important; height: auto !important; }
-  .hero-photo .ph { opacity: 1 !important; height: 120mm; }
-  .hero-photo .media-image { opacity: 1 !important; height: 120mm; object-fit: cover; }
-  #intro .hero-scrim { display: none !important; }
-  #intro::after { display: none !important; }
-  #intro .intro-layout { min-height: auto !important; grid-template-columns: 1fr !important; }
-  #intro .intro-copy { max-width: none !important; }
+  #intro {
+    opacity: 1 !important;
+    transition: none !important;
+    min-height: 120mm !important;
+    background-size: cover !important;
+    background-position: right center !important;
+  }
+  #intro .planka-hero__content {
+    min-height: auto !important;
+    max-width: none !important;
+  }
 
   /* Layout tweaks per section */
-  #intro .display { font-size: 28pt !important; line-height: 1.12 !important; max-width: 20ch; }
+  #intro .planka-hero__title { font-size: 28pt !important; line-height: 1.12 !important; max-width: 20ch; }
 
   #evolution { break-inside: auto; page-break-inside: auto; }
   #evolution .evolution-stage {

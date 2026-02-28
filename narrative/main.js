@@ -23,23 +23,20 @@
     revealEls.forEach(el => el.classList.add('in-view'));
   }
 
-  // Intro hero: enter-state + subtle pointer parallax on desktop
+  // Intro hero: enter-state + subtle background parallax on desktop
   const intro = document.getElementById('intro');
-  const heroImage = intro?.querySelector('.hero-image');
   if (intro) {
     requestAnimationFrame(() => intro.classList.add('is-ready'));
   }
 
   const desktopMq = window.matchMedia('(min-width: 769px)');
-  if (intro && heroImage && desktopMq.matches && !prefersReduced) {
+  if (intro && desktopMq.matches && !prefersReduced) {
     let rafId = 0;
-    let nextX = 0;
-    let nextY = 0;
+    let tx = 0;
+    let ty = 0;
 
-    const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
     const applyParallax = () => {
-      heroImage.style.setProperty('--hero-translate-x', `${nextX.toFixed(2)}px`);
-      heroImage.style.setProperty('--hero-translate-y', `${nextY.toFixed(2)}px`);
+      intro.style.backgroundPosition = `calc(100% + ${tx.toFixed(2)}px) calc(50% + ${ty.toFixed(2)}px)`;
       rafId = 0;
     };
 
@@ -50,8 +47,8 @@
 
       const dx = ((event.clientX - rect.left) / rect.width - 0.5) * 2;
       const dy = ((event.clientY - rect.top) / rect.height - 0.5) * 2;
-      nextX = clamp(dx * 7, -7, 7);
-      nextY = clamp(dy * 7, -7, 7);
+      tx = dx * 10;
+      ty = dy * 10;
 
       if (!rafId) {
         rafId = requestAnimationFrame(applyParallax);
@@ -59,11 +56,13 @@
     };
 
     const onPointerLeave = () => {
-      nextX = 0;
-      nextY = 0;
-      if (!rafId) {
-        rafId = requestAnimationFrame(applyParallax);
+      tx = 0;
+      ty = 0;
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = 0;
       }
+      intro.style.backgroundPosition = 'right center';
     };
 
     intro.addEventListener('pointermove', onPointerMove, { passive: true });

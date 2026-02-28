@@ -172,6 +172,8 @@
     - `WAIT_DIRTY_WORKTREE_TRACKED_COUNT=<n>`
     - `WAIT_DIRTY_WORKTREE_TRACKED_FILES=<csv preview>`
   - для dirty-gate reply (`COMMIT`/`STASH`/`REVERT`/`IGNORE`) пишет `WAIT_DIRTY_WORKTREE_GATE_ACTION=...`
+  - при первичном создании dirty-gate issue использует один подробный текст (в теле issue) и не дублирует его отдельным кратким blocker-комментарием
+  - при создании/линковке dirty-gate issue сразу переводит ее карточку в `Status/Flow=In Progress`
   - при рабочем ответе (`REWORK`) переводит карточку dirty-gate issue в `Status/Flow=In Progress`
   - `COMMIT` запускает полный dirty-gate flow: auto-commit tracked-файлов (`dev_commit_push.sh`) -> PR `development -> main` -> merge PR -> закрытие dirty-gate issue
   - по успешному завершению пишет `WAIT_DIRTY_WORKTREE_COMMIT_FLOW_DONE=1` и снимает dirty-gate state

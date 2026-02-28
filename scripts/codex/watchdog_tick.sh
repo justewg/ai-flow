@@ -133,7 +133,7 @@ notify_action() {
   aux_escaped="$(html_escape "$aux_text")"
   cat > "$msg_file" <<EOF
 ${title}
-<b>⚙️ Action:</b> <code>$(html_escape "$action")</code> · <b>Reason:</b> <code>$(html_escape "$reason")</code>
+<b>⚙️ Reason:</b> <code>$(html_escape "$reason")</code>
 <blockquote><code>${aux_escaped}</code></blockquote>
 EOF
   local out rc

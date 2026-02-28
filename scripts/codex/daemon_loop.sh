@@ -487,6 +487,27 @@ is_reaction_required() {
   esac
 }
 
+dirty_worktree_action_text() {
+  local reason="$1"
+  case "$reason" in
+    WAIT_DIRTY_WORKTREE_ENTER)
+      echo "daemon waits for decision по измененным tracked-файлам (COMMIT/STASH/REVERT/IGNORE)."
+      ;;
+    WAIT_DIRTY_WORKTREE_CHANGED)
+      echo "daemon waits for updated decision: набор tracked-файлов изменился с прошлого сигнала."
+      ;;
+    WAIT_DIRTY_WORKTREE_REMINDER)
+      echo "daemon все еще ждет решение по tracked-файлам (COMMIT/STASH/REVERT/IGNORE)."
+      ;;
+    DIRTY_WORKTREE_RESOLVED)
+      echo "dirty worktree блокировка снята; daemon вернулся к обычному циклу."
+      ;;
+    *)
+      echo "daemon обновил состояние dirty worktree."
+      ;;
+  esac
+}
+
 build_notify_message() {
   local reason="$1"
   local state="$2"
@@ -496,9 +517,9 @@ build_notify_message() {
 
   local title
   if [[ "$reason" == WAIT_DIRTY_WORKTREE_* ]]; then
-    title="<b>🚨 🧹 DAEMON: dirty worktree</b>"
+    title="<b>🚨 🧹 PLANKA: daemon paused (dirty worktree)</b>"
   elif [[ "$reason" == "DIRTY_WORKTREE_RESOLVED" ]]; then
-    title="<b>💤 ✅ DAEMON: dirty worktree resolved</b>"
+    title="<b>💤 ✅ PLANKA: dirty worktree resolved</b>"
   else
     title="<b>⚠️ DAEMON: degradation signal</b>"
   fi
@@ -543,10 +564,55 @@ build_notify_message() {
   aux_escaped="$(html_escape "$aux_text")"
 
   if [[ "$reason" == WAIT_DIRTY_WORKTREE_* || "$reason" == "DIRTY_WORKTREE_RESOLVED" ]]; then
+    local dirty_tracked_count dirty_tracked_files
+    local dirty_blocked_ref dirty_blocked_issue dirty_blocked_title
+    local dirty_gate_issue dirty_gate_item dirty_action
+    local dirty_blocked_line dirty_gate_line
+    dirty_tracked_count="$(detail_value "$detail" "WAIT_DIRTY_WORKTREE_TRACKED_COUNT" || true)"
+    dirty_tracked_files="$(detail_value "$detail" "WAIT_DIRTY_WORKTREE_TRACKED_FILES" || true)"
+    dirty_blocked_ref="$(detail_value "$detail" "WAIT_DIRTY_WORKTREE_BLOCKED_REF" || true)"
+    dirty_blocked_issue="$(detail_value "$detail" "WAIT_DIRTY_WORKTREE_BLOCKED_ISSUE_NUMBER" || true)"
+    dirty_blocked_title="$(detail_value "$detail" "WAIT_DIRTY_WORKTREE_BLOCKED_ISSUE_TITLE" || true)"
+    dirty_gate_issue="$(detail_value "$detail" "WAIT_DIRTY_WORKTREE_GATE_ISSUE_NUMBER" || true)"
+    dirty_gate_item="$(detail_value "$detail" "WAIT_DIRTY_WORKTREE_GATE_PROJECT_ITEM_ID" || true)"
+    dirty_action="$(dirty_worktree_action_text "$reason")"
+
+    dirty_blocked_line=""
+    if [[ -n "$dirty_blocked_issue" ]]; then
+      dirty_blocked_line="Issue #${dirty_blocked_issue}"
+    elif [[ -n "$dirty_blocked_ref" ]]; then
+      dirty_blocked_line="$dirty_blocked_ref"
+    fi
+    if [[ -n "$dirty_blocked_title" ]]; then
+      if [[ -n "$dirty_blocked_line" ]]; then
+        dirty_blocked_line="${dirty_blocked_line}: ${dirty_blocked_title}"
+      else
+        dirty_blocked_line="$dirty_blocked_title"
+      fi
+    fi
+
+    dirty_gate_line=""
+    if [[ -n "$dirty_gate_issue" ]]; then
+      dirty_gate_line="Issue #${dirty_gate_issue}"
+    fi
+    if [[ -n "$dirty_gate_item" ]]; then
+      if [[ -n "$dirty_gate_line" ]]; then
+        dirty_gate_line="${dirty_gate_line}; item=${dirty_gate_item}"
+      else
+        dirty_gate_line="item=${dirty_gate_item}"
+      fi
+    fi
+
     msg="${title}"$'\n'
     msg+="<b>⚙️ Reason:</b> <code>$(html_escape "$reason")</code>"$'\n'
     msg+="<b>📌 State:</b> <code>$(html_escape "$state")</code>"$'\n'
-    msg+="<b>🌐 GitHub:</b> ${gh_icon} <code>$(html_escape "$gh_status")</code> · <b>Telegram:</b> ${tg_icon} <code>$(html_escape "$tg_status")</code>"
+    [[ -n "$dirty_blocked_line" ]] && msg+="<b>🧱 Blocked:</b> <code>$(html_escape "$dirty_blocked_line")</code>"$'\n'
+    [[ -n "$dirty_tracked_count" ]] && msg+="<b>🧪 Tracked count:</b> <code>$(html_escape "$dirty_tracked_count")</code>"$'\n'
+    [[ -n "$dirty_tracked_files" ]] && msg+="<b>📂 Tracked files:</b> <code>$(html_escape "$dirty_tracked_files")</code>"$'\n'
+    [[ -n "$dirty_gate_line" ]] && msg+="<b>🧷 Dirty-gate:</b> <code>$(html_escape "$dirty_gate_line")</code>"$'\n'
+    msg+="<b>➡️ Action:</b> $(html_escape "$dirty_action")"$'\n'
+    msg+="<b>🌐 GitHub:</b> ${gh_icon} <code>$(html_escape "$gh_status")</code> · <b>Telegram:</b> ${tg_icon} <code>$(html_escape "$tg_status")</code>"$'\n'
+    msg+="<b>🕒 Time:</b> <code>$(html_escape "$now_utc")</code>"
     msg+=$'\n'"<blockquote><code>${aux_escaped}</code></blockquote>"
     printf '%s' "$msg"
     return 0

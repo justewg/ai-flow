@@ -572,6 +572,49 @@ figcaption {
 }
 
 @media (max-width: 900px) {
-  #intro .intro-layout { grid-template-columns: 1fr; }
-  #intro .intro-copy { max-width: 100%; padding-right: var(--space-3); }
+  #intro .hero-photo .media-image { object-position: right center; }
+  #intro .intro-layout {
+    grid-template-columns: 1fr;
+    min-height: 100dvh;
+  }
+  #intro .intro-copy {
+    max-width: 100%;
+    padding-right: var(--space-3);
+  }
+}
+
+@media (max-width: 900px) and (orientation: portrait) {
+  #intro::after {
+    background:
+      linear-gradient(180deg, rgba(244, 249, 255, 0.08) 0%, rgba(244, 249, 255, 0.2) 48%, rgba(248, 251, 255, 0.9) 100%),
+      linear-gradient(90deg, rgba(251, 253, 255, 0.9) 0%, rgba(248, 251, 255, 0.62) 36%, rgba(242, 248, 255, 0.2) 62%, rgba(242, 248, 255, 0) 100%);
+  }
+  #intro .intro-layout { align-items: end; }
+  #intro .intro-copy {
+    align-self: end;
+    max-width: min(74vw, 420px);
+    padding-right: 0;
+    padding-bottom: clamp(var(--space-3), 6vh, var(--space-6));
+  }
+  #intro .intro-copy .display {
+    font-size: clamp(30px, 10vw, 46px);
+    text-wrap: balance;
+  }
+  #intro .intro-copy .subtitle {
+    max-width: 16ch;
+    font-size: clamp(16px, 4.6vw, 22px);
+  }
+}
+
+@media (max-width: 1024px) and (orientation: landscape) and (max-height: 640px) {
+  #intro::after {
+    background: linear-gradient(90deg, rgba(251, 253, 255, 0.94) 0%, rgba(248, 251, 255, 0.88) 52%, rgba(244, 249, 255, 0.34) 72%, rgba(242, 248, 255, 0) 100%);
+  }
+  #intro .intro-layout { align-items: center; }
+  #intro .intro-copy {
+    width: min(50vw, 540px);
+    max-width: none;
+    padding-right: var(--space-2);
+  }
+  #intro .intro-copy .display { font-size: clamp(30px, 5vw, 52px); }
 }

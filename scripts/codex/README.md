@@ -217,6 +217,7 @@
     - изменение набора файлов (`WAIT_DIRTY_WORKTREE_CHANGED`)
     - reminder (`WAIT_DIRTY_WORKTREE_REMINDER`)
     - снятие блокировки (`DIRTY_WORKTREE_RESOLVED`)
+  - dirty-worktree алерты отправляются только если реально блокируется карточка из `Todo` (`WAIT_DIRTY_WORKTREE_BLOCKING_TODO=1`); в `idle` без `Todo` уведомления не шлются
   - различает сетевую деградацию и веточный блокер синхронизации (`WAIT_BRANCH_SYNC`)
   - отправляет локальные Telegram-алерты по деградации без спама:
     - вход в деградацию (`ENTER_DEGRADED`)

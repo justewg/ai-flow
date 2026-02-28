@@ -34,6 +34,7 @@ gql_window_start_utc_file="${CODEX_DIR}/graphql_rate_window_start_utc.txt"
 gql_window_requests_file="${CODEX_DIR}/graphql_rate_window_requests.txt"
 gql_last_success_utc_file="${CODEX_DIR}/graphql_rate_last_success_utc.txt"
 gql_last_limit_utc_file="${CODEX_DIR}/graphql_rate_last_limit_utc.txt"
+DIRTY_SKIP_NEW_CLAIM="0"
 
 emit_lines() {
   local text="$1"
@@ -1634,6 +1635,10 @@ if ! git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- ||
   tracked_count=""
   tracked_preview=""
   dirty_signature=""
+  dirty_allow_context_continue="0"
+  if [[ -s "${CODEX_DIR}/daemon_active_task.txt" || -s "${CODEX_DIR}/daemon_waiting_kind.txt" || -s "${CODEX_DIR}/daemon_review_task_id.txt" ]]; then
+    dirty_allow_context_continue="1"
+  fi
   tracked_lines="$(
     git -C "${ROOT_DIR}" status --short --untracked-files=no 2>/dev/null || true
   )"
@@ -1684,13 +1689,17 @@ if ! git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- ||
       fi
       # Explicit override from dirty-gate issue: continue regular daemon flow on current signature.
     else
+      DIRTY_SKIP_NEW_CLAIM="1"
       echo "WAIT_DIRTY_WORKTREE_TRACKED=1"
       echo "WAIT_DIRTY_WORKTREE_TRACKED_COUNT=${tracked_count}"
       if [[ -n "$tracked_preview" ]]; then
         echo "WAIT_DIRTY_WORKTREE_TRACKED_FILES=${tracked_preview}"
       fi
       maybe_handle_dirty_worktree_gate "$tracked_count" "$tracked_preview" || true
-      exit 0
+      if [[ "$dirty_allow_context_continue" != "1" ]]; then
+        exit 0
+      fi
+      echo "WAIT_DIRTY_WORKTREE_CONTEXT_CONTINUE=1"
     fi
   fi
 else
@@ -1821,6 +1830,11 @@ if [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]]; then
   else
     echo "BLOCKED_ACTIVE_TASK_WITHOUT_ISSUE=1"
   fi
+  exit 0
+fi
+
+if [[ "$DIRTY_SKIP_NEW_CLAIM" == "1" ]]; then
+  echo "WAIT_DIRTY_WORKTREE_SKIP_NEW_CLAIM=1"
   exit 0
 fi
 

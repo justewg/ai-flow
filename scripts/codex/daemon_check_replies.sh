@@ -283,6 +283,76 @@ if [[ "$issue_state" == "CLOSED" ]]; then
   exit 0
 fi
 
+# Fallback against post-merge auto-close failures:
+# for REVIEW_FEEDBACK we should not block daemon indefinitely once linked PR
+# is already merged/closed.
+if is_review_feedback_kind "$kind_label"; then
+  review_pr_number=""
+  review_issue_number=""
+  [[ -s "$review_pr_file" ]] && review_pr_number="$(<"$review_pr_file")"
+  [[ -s "$review_issue_file" ]] && review_issue_number="$(<"$review_issue_file")"
+
+  if [[ -n "$review_issue_number" && "$review_issue_number" != "$issue_number" ]]; then
+    emit_wait_state "$task_id" "$issue_number" "$question_comment_id" "$kind_label"
+    echo "WAITING_FOR_REVIEW_CONTEXT_MATCH=1"
+    echo "WAITING_CONTEXT_ISSUE_NUMBER=$issue_number"
+    echo "WAITING_REVIEW_ISSUE_NUMBER=$review_issue_number"
+    exit 0
+  fi
+
+  if [[ "$review_pr_number" =~ ^[0-9]+$ ]]; then
+    review_pr_json=""
+    if ! review_pr_json="$(
+      "${ROOT_DIR}/scripts/codex/gh_retry.sh" \
+        gh pr view "$review_pr_number" \
+          --repo "$REPO" \
+          --json state,mergedAt,closedAt \
+          --jq '.'
+    )"; then
+      rc=$?
+      if [[ "$rc" -eq 75 ]]; then
+        emit_wait_state "$task_id" "$issue_number" "$question_comment_id" "$kind_label"
+        echo "WAIT_GITHUB_API_UNSTABLE=1"
+        echo "WAITING_FOR_REVIEW_PR_STATE=1"
+        echo "WAITING_REVIEW_PR_NUMBER=$review_pr_number"
+        exit 0
+      fi
+      # Non-retryable PR lookup failure should not deadlock queue.
+      clear_waiting_state
+      clear_review_context
+      echo "STALE_WAITING_CONTEXT_CLEARED=REVIEW_PR_LOOKUP_FAILED"
+      echo "STALE_WAITING_ISSUE_NUMBER=$issue_number"
+      echo "STALE_WAITING_PR_NUMBER=$review_pr_number"
+      echo "NO_WAITING_USER_REPLY=1"
+      exit 0
+    fi
+
+    review_pr_state="$(printf '%s' "$review_pr_json" | jq -r '.state // ""')"
+    review_pr_merged_at="$(printf '%s' "$review_pr_json" | jq -r '.mergedAt // ""')"
+    review_pr_closed_at="$(printf '%s' "$review_pr_json" | jq -r '.closedAt // ""')"
+
+    if [[ "$review_pr_state" == "MERGED" || -n "$review_pr_merged_at" ]]; then
+      clear_waiting_state
+      clear_review_context
+      echo "STALE_WAITING_CONTEXT_CLEARED=REVIEW_PR_MERGED"
+      echo "STALE_WAITING_ISSUE_NUMBER=$issue_number"
+      echo "STALE_WAITING_PR_NUMBER=$review_pr_number"
+      echo "NO_WAITING_USER_REPLY=1"
+      exit 0
+    fi
+
+    if [[ "$review_pr_state" == "CLOSED" || -n "$review_pr_closed_at" ]]; then
+      clear_waiting_state
+      clear_review_context
+      echo "STALE_WAITING_CONTEXT_CLEARED=REVIEW_PR_CLOSED"
+      echo "STALE_WAITING_ISSUE_NUMBER=$issue_number"
+      echo "STALE_WAITING_PR_NUMBER=$review_pr_number"
+      echo "NO_WAITING_USER_REPLY=1"
+      exit 0
+    fi
+  fi
+fi
+
 if [[ "$pending_post" == "1" ]]; then
   outbox_count="0"
   if outbox_out="$("${ROOT_DIR}/scripts/codex/github_outbox.sh" count 2>/dev/null)"; then

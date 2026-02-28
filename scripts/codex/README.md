@@ -23,7 +23,7 @@
 - `scripts/codex/run.sh project_add_task`
 - `scripts/codex/run.sh project_set_status`
 - `scripts/codex/run.sh project_status_runtime <enqueue|apply|list|clear> ...` — runtime-очередь отложенных обновлений `Project Status/Flow`.
-- `scripts/codex/run.sh log_summary [--hours N|--from ISO|--to ISO]` — агрегированный отчет по логам daemon/watchdog/runtime/graphql за период.
+- `scripts/codex/run.sh log_summary [--hours N|--from ISO|--to ISO]` — агрегированный отчет по логам daemon/watchdog/runtime/graphql за период (без аргументов берёт весь доступный диапазон логов).
 - `scripts/codex/run.sh next_task` — показать следующую задачу со статусом `Planned` (приоритет P0→P1→P2, затем по номеру `PL-xxx`).
 - `scripts/codex/run.sh app_deps_mermaid [output-file]` — построить Mermaid DAG зависимостей APP-issues из `Flow Meta` (`Depends-On/Blocks`) и записать markdown-файл (по умолчанию `docs/app-issues-dependency-diagram.md`).
 - `scripts/codex/run.sh backlog_seed_apply` — применить runtime-план создания backlog-задач из `.tmp/codex/backlog_seed_plan.json` (по умолчанию 1 задача за запуск).
@@ -167,10 +167,13 @@
 - `log_summary.sh [--hours N|--from ISO|--to ISO]`
   - строит сводный отчет за период по:
     - heartbeat/state daemon
+    - не-GitHub ожиданиям daemon (`WAIT_DIRTY_WORKTREE`, `WAIT_USER_REPLY`, `WAIT_REVIEW_FEEDBACK`, `WAIT_DEPENDENCIES`) с оценкой длительности
     - runtime-очереди (`enqueued/applied/wait/pending`)
-    - GitHub деградации (state-based и TG runtime transitions)
+    - GitHub деградации (state-based, `GITHUB_STATUS`-based и TG runtime transitions)
     - GraphQL rate-limit окнам (`graphql_rate_stats.log`)
     - watchdog heartbeat/recovery markers
+  - читает snapshot логов на старте, чтобы отчет не зависал на “живом” `daemon.log`
+  - в блоке `Current State` показывает оценку текущей длительности состояния (`daemon_state_age`)
 - `project_add_task.sh <task-id> <title-file> <scope> <priority> [status] [flow]`
   - создание карточки задачи в проекте с заполнением `Task ID`, `Scope`, `Priority`, `Status`, `Flow`
   - после создания делает verify `Status/Flow`; при сетевой деградации возвращает ошибку, чтобы не считать задачу корректно инициализированной
@@ -194,6 +197,7 @@
   - при первичном создании dirty-gate issue использует один подробный текст (в теле issue) и не дублирует его отдельным кратким blocker-комментарием
   - при создании/линковке dirty-gate issue сразу переводит ее карточку в `Status/Flow=In Progress`
   - при рабочем ответе (`REWORK`) переводит карточку dirty-gate issue в `Status/Flow=In Progress`
+  - при dirty-worktree больше не “глушит” обслуживание активного контекста: если есть `daemon_active_task`/waiting/review, тик продолжает `daemon_check_replies` и `executor_tick`; при этом новые claim остаются заблокированы (`WAIT_DIRTY_WORKTREE_SKIP_NEW_CLAIM=1`)
   - `COMMIT` запускает полный dirty-gate flow: auto-commit tracked-файлов (`dev_commit_push.sh`) -> PR `development -> main` -> merge PR -> закрытие dirty-gate issue
   - по успешному завершению пишет `WAIT_DIRTY_WORKTREE_COMMIT_FLOW_DONE=1` и снимает dirty-gate state
   - auto-`COMMIT` выполняется только из ветки `development` (иначе пишет `WAIT_DIRTY_WORKTREE_COMMIT_BLOCKED_BRANCH=...`)

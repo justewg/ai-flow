@@ -3,10 +3,37 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CODEX_DIR="${ROOT_DIR}/.tmp/codex"
-DAEMON_LOG="${CODEX_DIR}/daemon.log"
-WATCHDOG_LOG="${CODEX_DIR}/watchdog.log"
-GQL_STATS_LOG="${CODEX_DIR}/graphql_rate_stats.log"
-RUNTIME_QUEUE_FILE="${CODEX_DIR}/project_status_runtime_queue.json"
+DAEMON_LOG_SRC="${CODEX_DIR}/daemon.log"
+WATCHDOG_LOG_SRC="${CODEX_DIR}/watchdog.log"
+GQL_STATS_LOG_SRC="${CODEX_DIR}/graphql_rate_stats.log"
+RUNTIME_QUEUE_FILE_SRC="${CODEX_DIR}/project_status_runtime_queue.json"
+
+TMP_BASE="${TMPDIR:-/tmp}"
+SNAPSHOT_DIR="$(mktemp -d "${TMP_BASE}/codex-log-summary.XXXXXX")"
+cleanup() {
+  rm -rf "${SNAPSHOT_DIR}"
+}
+trap cleanup EXIT
+
+snapshot_or_touch() {
+  local src="$1"
+  local dst="$2"
+  if [[ -f "$src" ]]; then
+    cp "$src" "$dst"
+  else
+    : > "$dst"
+  fi
+}
+
+DAEMON_LOG="${SNAPSHOT_DIR}/daemon.log"
+WATCHDOG_LOG="${SNAPSHOT_DIR}/watchdog.log"
+GQL_STATS_LOG="${SNAPSHOT_DIR}/graphql_rate_stats.log"
+RUNTIME_QUEUE_FILE="${SNAPSHOT_DIR}/project_status_runtime_queue.json"
+
+snapshot_or_touch "$DAEMON_LOG_SRC" "$DAEMON_LOG"
+snapshot_or_touch "$WATCHDOG_LOG_SRC" "$WATCHDOG_LOG"
+snapshot_or_touch "$GQL_STATS_LOG_SRC" "$GQL_STATS_LOG"
+snapshot_or_touch "$RUNTIME_QUEUE_FILE_SRC" "$RUNTIME_QUEUE_FILE"
 
 iso_now_utc() {
   date -u '+%Y-%m-%dT%H:%M:%SZ'
@@ -92,12 +119,33 @@ EOF
 hours="24"
 from_ts=""
 to_ts=""
+hours_explicit="0"
+
+detect_earliest_ts() {
+  local candidate="" line ts
+  local files=("$DAEMON_LOG" "$WATCHDOG_LOG" "$GQL_STATS_LOG")
+  local f
+  for f in "${files[@]}"; do
+    [[ -f "$f" ]] || continue
+    line="$(awk 'NF{print; exit}' "$f" 2>/dev/null || true)"
+    [[ -n "$line" ]] || continue
+    ts="${line:0:20}"
+    if ! is_valid_iso_utc "$ts"; then
+      continue
+    fi
+    if [[ -z "$candidate" || "$ts" < "$candidate" ]]; then
+      candidate="$ts"
+    fi
+  done
+  printf '%s' "$candidate"
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --hours)
       [[ $# -ge 2 ]] || { echo "Missing value for --hours"; exit 1; }
       hours="$2"
+      hours_explicit="1"
       shift 2
       ;;
     --from)
@@ -127,11 +175,18 @@ if [[ -z "$to_ts" ]]; then
 fi
 
 if [[ -z "$from_ts" ]]; then
-  if ! [[ "$hours" =~ ^[0-9]+$ ]] || (( hours < 1 )); then
-    echo "--hours must be integer >= 1"
-    exit 1
+  if [[ "$hours_explicit" == "1" ]]; then
+    if ! [[ "$hours" =~ ^[0-9]+$ ]] || (( hours < 1 )); then
+      echo "--hours must be integer >= 1"
+      exit 1
+    fi
+    from_ts="$(iso_hours_ago_utc "$hours")"
+  else
+    from_ts="$(detect_earliest_ts)"
+    if [[ -z "$from_ts" ]]; then
+      from_ts="$(iso_hours_ago_utc 24)"
+    fi
   fi
-  from_ts="$(iso_hours_ago_utc "$hours")"
 fi
 
 if ! is_valid_iso_utc "$from_ts"; then
@@ -155,11 +210,29 @@ daemon_state_changes=0
 daemon_wait_github_offline_entries=0
 daemon_wait_github_rate_entries=0
 daemon_wait_github_unavail_seconds=0
+daemon_wait_dirty_entries=0
+daemon_wait_dirty_blocking_entries=0
+daemon_wait_dirty_nonblocking_entries=0
+daemon_wait_user_reply_entries=0
+daemon_wait_review_feedback_entries=0
+daemon_wait_dependencies_entries=0
+daemon_github_status_unreachable_entries=0
+daemon_github_status_dns_entries=0
+daemon_github_status_unstable_entries=0
+daemon_github_status_unavail_seconds=0
 daemon_prev_state=""
 daemon_prev_state_epoch=0
+daemon_prev_github_bad=0
+daemon_prev_github_state_epoch=0
 daemon_wait_api_unstable_markers=0
 daemon_wait_rate_limit_markers=0
 daemon_net_errors=0
+daemon_wait_dirty_seconds=0
+daemon_wait_user_reply_seconds=0
+daemon_wait_review_feedback_seconds=0
+daemon_wait_dependencies_seconds=0
+daemon_idle_no_tasks_seconds=0
+daemon_current_state_age_seconds=0
 
 runtime_enqueued=0
 runtime_applied=0
@@ -212,6 +285,19 @@ if [[ -f "$DAEMON_LOG" ]]; then
         daemon_wait_github_offline_entries=$((daemon_wait_github_offline_entries + 1))
       elif [[ "$state" == "WAIT_GITHUB_RATE_LIMIT" ]]; then
         daemon_wait_github_rate_entries=$((daemon_wait_github_rate_entries + 1))
+      elif [[ "$state" == "WAIT_DIRTY_WORKTREE" ]]; then
+        daemon_wait_dirty_entries=$((daemon_wait_dirty_entries + 1))
+        if [[ "$msg" == *"WAIT_DIRTY_WORKTREE_BLOCKING_TODO=1"* ]]; then
+          daemon_wait_dirty_blocking_entries=$((daemon_wait_dirty_blocking_entries + 1))
+        else
+          daemon_wait_dirty_nonblocking_entries=$((daemon_wait_dirty_nonblocking_entries + 1))
+        fi
+      elif [[ "$state" == "WAIT_USER_REPLY" ]]; then
+        daemon_wait_user_reply_entries=$((daemon_wait_user_reply_entries + 1))
+      elif [[ "$state" == "WAIT_REVIEW_FEEDBACK" ]]; then
+        daemon_wait_review_feedback_entries=$((daemon_wait_review_feedback_entries + 1))
+      elif [[ "$state" == "WAIT_DEPENDENCIES" ]]; then
+        daemon_wait_dependencies_entries=$((daemon_wait_dependencies_entries + 1))
       fi
 
       if [[ -n "$daemon_prev_state" && "$daemon_prev_state_epoch" =~ ^[0-9]+$ && "$state_epoch" =~ ^[0-9]+$ ]]; then
@@ -220,10 +306,56 @@ if [[ -f "$DAEMON_LOG" ]]; then
           if [[ "$daemon_prev_state" == "WAIT_GITHUB_OFFLINE" || "$daemon_prev_state" == "WAIT_GITHUB_RATE_LIMIT" ]]; then
             daemon_wait_github_unavail_seconds=$((daemon_wait_github_unavail_seconds + delta))
           fi
+          case "$daemon_prev_state" in
+            WAIT_DIRTY_WORKTREE)
+              daemon_wait_dirty_seconds=$((daemon_wait_dirty_seconds + delta))
+              ;;
+            WAIT_USER_REPLY)
+              daemon_wait_user_reply_seconds=$((daemon_wait_user_reply_seconds + delta))
+              ;;
+            WAIT_REVIEW_FEEDBACK)
+              daemon_wait_review_feedback_seconds=$((daemon_wait_review_feedback_seconds + delta))
+              ;;
+            WAIT_DEPENDENCIES)
+              daemon_wait_dependencies_seconds=$((daemon_wait_dependencies_seconds + delta))
+              ;;
+            IDLE_NO_TASKS)
+              daemon_idle_no_tasks_seconds=$((daemon_idle_no_tasks_seconds + delta))
+              ;;
+          esac
         fi
       fi
       daemon_prev_state="$state"
       daemon_prev_state_epoch="$state_epoch"
+
+      github_status=""
+      if [[ "$msg" =~ GITHUB_STATUS=([^;\|[:space:]]+) ]]; then
+        github_status="${BASH_REMATCH[1]}"
+      fi
+      github_bad=0
+      case "$github_status" in
+        DNS_OFFLINE)
+          daemon_github_status_dns_entries=$((daemon_github_status_dns_entries + 1))
+          github_bad=1
+          ;;
+        UNREACHABLE)
+          daemon_github_status_unreachable_entries=$((daemon_github_status_unreachable_entries + 1))
+          github_bad=1
+          ;;
+        UNSTABLE)
+          daemon_github_status_unstable_entries=$((daemon_github_status_unstable_entries + 1))
+          github_bad=1
+          ;;
+      esac
+
+      if (( daemon_prev_github_state_epoch > 0 && state_epoch >= daemon_prev_github_state_epoch )); then
+        delta_bad=$((state_epoch - daemon_prev_github_state_epoch))
+        if (( daemon_prev_github_bad == 1 )); then
+          daemon_github_status_unavail_seconds=$((daemon_github_status_unavail_seconds + delta_bad))
+        fi
+      fi
+      daemon_prev_github_bad="$github_bad"
+      daemon_prev_github_state_epoch="$state_epoch"
     fi
   done < "$DAEMON_LOG"
 fi
@@ -238,6 +370,32 @@ fi
 if [[ "$daemon_prev_state" == "WAIT_GITHUB_OFFLINE" || "$daemon_prev_state" == "WAIT_GITHUB_RATE_LIMIT" ]]; then
   if (( to_epoch >= daemon_prev_state_epoch )); then
     daemon_wait_github_unavail_seconds=$((daemon_wait_github_unavail_seconds + to_epoch - daemon_prev_state_epoch))
+  fi
+fi
+if [[ -n "$daemon_prev_state" && "$daemon_prev_state_epoch" =~ ^[0-9]+$ ]] && (( to_epoch >= daemon_prev_state_epoch )); then
+  tail_delta=$((to_epoch - daemon_prev_state_epoch))
+  daemon_current_state_age_seconds="$tail_delta"
+  case "$daemon_prev_state" in
+    WAIT_DIRTY_WORKTREE)
+      daemon_wait_dirty_seconds=$((daemon_wait_dirty_seconds + tail_delta))
+      ;;
+    WAIT_USER_REPLY)
+      daemon_wait_user_reply_seconds=$((daemon_wait_user_reply_seconds + tail_delta))
+      ;;
+    WAIT_REVIEW_FEEDBACK)
+      daemon_wait_review_feedback_seconds=$((daemon_wait_review_feedback_seconds + tail_delta))
+      ;;
+    WAIT_DEPENDENCIES)
+      daemon_wait_dependencies_seconds=$((daemon_wait_dependencies_seconds + tail_delta))
+      ;;
+    IDLE_NO_TASKS)
+      daemon_idle_no_tasks_seconds=$((daemon_idle_no_tasks_seconds + tail_delta))
+      ;;
+  esac
+fi
+if (( daemon_prev_github_state_epoch > 0 && to_epoch >= daemon_prev_github_state_epoch )); then
+  if (( daemon_prev_github_bad == 1 )); then
+    daemon_github_status_unavail_seconds=$((daemon_github_status_unavail_seconds + to_epoch - daemon_prev_github_state_epoch))
   fi
 fi
 
@@ -264,12 +422,23 @@ gql_min_duration=-1
 if [[ -f "$GQL_STATS_LOG" ]]; then
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
-    ts="$(printf '%s' "$line" | cut -f1)"
+    ts="${line%%$'\t'*}"
     in_range_ts "$ts" "$from_ts" "$to_ts" || continue
     [[ "$line" == *$'\tEVENT=RATE_LIMIT\t'* ]] || continue
 
-    req="$(printf '%s' "$line" | tr '\t' '\n' | sed -n 's/^requests=//p' | head -n1)"
-    dur="$(printf '%s' "$line" | tr '\t' '\n' | sed -n 's/^duration_sec=//p' | head -n1)"
+    req=0
+    dur=0
+    IFS=$'\t' read -r -a gql_fields <<< "$line"
+    for f in "${gql_fields[@]}"; do
+      case "$f" in
+        requests=*)
+          req="${f#requests=}"
+          ;;
+        duration_sec=*)
+          dur="${f#duration_sec=}"
+          ;;
+      esac
+    done
     [[ "$req" =~ ^[0-9]+$ ]] || req=0
     [[ "$dur" =~ ^[0-9]+$ ]] || dur=0
 
@@ -307,9 +476,22 @@ echo "- State changes: ${daemon_state_changes}"
 echo "- WAIT_GITHUB_OFFLINE entries: ${daemon_wait_github_offline_entries}"
 echo "- WAIT_GITHUB_RATE_LIMIT entries: ${daemon_wait_github_rate_entries}"
 echo "- Estimated GitHub-unavailable time (state-based): $(fmt_duration "${daemon_wait_github_unavail_seconds}")"
+echo "- GITHUB_STATUS DNS_OFFLINE entries: ${daemon_github_status_dns_entries}"
+echo "- GITHUB_STATUS UNREACHABLE entries: ${daemon_github_status_unreachable_entries}"
+echo "- GITHUB_STATUS UNSTABLE entries: ${daemon_github_status_unstable_entries}"
+echo "- Estimated GitHub-unavailable time (detail-based): $(fmt_duration "${daemon_github_status_unavail_seconds}")"
 echo "- WAIT_GITHUB_API_UNSTABLE markers: ${daemon_wait_api_unstable_markers}"
 echo "- WAIT_GITHUB_RATE_LIMIT markers: ${daemon_wait_rate_limit_markers}"
 echo "- Network error lines (api.github.com): ${daemon_net_errors}"
+echo "- WAIT_DIRTY_WORKTREE entries: ${daemon_wait_dirty_entries} (blocking_todo=${daemon_wait_dirty_blocking_entries}, nonblocking=${daemon_wait_dirty_nonblocking_entries})"
+echo "- Estimated WAIT_DIRTY_WORKTREE time: $(fmt_duration "${daemon_wait_dirty_seconds}")"
+echo "- WAIT_USER_REPLY entries: ${daemon_wait_user_reply_entries}"
+echo "- Estimated WAIT_USER_REPLY time: $(fmt_duration "${daemon_wait_user_reply_seconds}")"
+echo "- WAIT_REVIEW_FEEDBACK entries: ${daemon_wait_review_feedback_entries}"
+echo "- Estimated WAIT_REVIEW_FEEDBACK time: $(fmt_duration "${daemon_wait_review_feedback_seconds}")"
+echo "- WAIT_DEPENDENCIES entries: ${daemon_wait_dependencies_entries}"
+echo "- Estimated WAIT_DEPENDENCIES time: $(fmt_duration "${daemon_wait_dependencies_seconds}")"
+echo "- Estimated IDLE_NO_TASKS time: $(fmt_duration "${daemon_idle_no_tasks_seconds}")"
 echo
 echo "Runtime Queue"
 echo "- Enqueued actions: ${runtime_enqueued}"
@@ -339,5 +521,6 @@ echo "- Recovery action markers: ${watchdog_recovery_actions}"
 echo
 echo "Current State"
 echo "- daemon_state: ${daemon_state_now}"
+echo "- daemon_state_age: $(fmt_duration "${daemon_current_state_age_seconds}")"
 echo "- daemon_state_detail: ${daemon_detail_now}"
 echo "- watchdog_state: ${watchdog_state_now}"

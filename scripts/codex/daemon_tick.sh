@@ -1310,6 +1310,7 @@ maybe_process_dirty_gate_reply() {
   local waiting_issue_file="${CODEX_DIR}/daemon_waiting_issue_number.txt"
   local waiting_kind_file="${CODEX_DIR}/daemon_waiting_kind.txt"
   local gate_issue_number waiting_issue waiting_kind reply_probe_out reply_body reply_mode dirty_action rc
+  local blocked_json
   local reply_comment_id reply_url task_id
   local commit_ok="0" set_override="0"
   local commit_flow_resolved="0"
@@ -1322,6 +1323,18 @@ maybe_process_dirty_gate_reply() {
   [[ -s "$waiting_issue_file" ]] && waiting_issue="$(<"$waiting_issue_file")"
   waiting_kind=""
   [[ -s "$waiting_kind_file" ]] && waiting_kind="$(<"$waiting_kind_file")"
+
+  # In idle (no Todo candidates), do not keep or restore DIRTY-GATE waiting context.
+  if ! blocked_json="$(find_first_todo_issue_json)"; then
+    rc=$?
+    [[ "$rc" -eq 75 ]] && return 0
+    return 0
+  fi
+  if [[ -z "$blocked_json" ]]; then
+    clear_dirty_gate_waiting_state_if_any
+    return 0
+  fi
+
   if [[ "$waiting_issue" != "$gate_issue_number" || "$(printf '%s' "$waiting_kind" | tr '[:lower:]' '[:upper:]')" != "BLOCKER" ]]; then
     if ! restore_dirty_gate_waiting_state "$gate_issue_number"; then
       rc=$?

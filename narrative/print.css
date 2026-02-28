@@ -41,6 +41,33 @@
     min-height: auto !important;
     padding: 0 0 4mm !important;
     background: transparent !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    break-after: avoid-page;
+    page-break-after: avoid;
+  }
+
+  /* Keep headings tied to the next block in print flow */
+  h1, h2, h3, h4,
+  .display, .title, .stage-print-header, .stage-name,
+  #gesture .stage-title {
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+    break-after: avoid-page;
+    page-break-after: avoid;
+    orphans: 3;
+    widows: 3;
+  }
+  h1 + *, h2 + *, h3 + *, h4 + *,
+  .display + *, .title + *, .stage-print-header + *, .stage-name + *,
+  #gesture .stage-title + * {
+    break-before: avoid-page;
+    page-break-before: avoid;
+  }
+  .section-sticky + *,
+  .req-sticky + * {
+    break-before: avoid-page;
+    page-break-before: avoid;
   }
 
   /* Remove animations and parallax */
@@ -90,10 +117,14 @@
     margin: 0;
     padding: 0;
     border: none;
-    break-after: page;
-    page-break-after: always;
-    break-inside: avoid;
+    break-before: page;
+    page-break-before: always;
+    break-inside: avoid-page;
     page-break-inside: avoid;
+  }
+  #requirements .stage:first-child {
+    break-before: auto;
+    page-break-before: auto;
   }
   #requirements .stage:last-child {
     break-after: auto;
@@ -107,20 +138,32 @@
     text-transform: uppercase;
     letter-spacing: 0.03em;
   }
-  #requirements .stage-grid { grid-template-columns: 1fr; gap: 4mm; }
+  #requirements .stage-grid {
+    grid-template-columns: 1fr;
+    gap: 3mm;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  #requirements .stage-copy,
+  #requirements .stage-media {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
   #requirements .stage-media .media-image,
   #requirements .stage-media-placeholder {
-    min-height: 56mm;
-    height: 56mm;
+    min-height: 48mm;
+    height: 48mm;
     object-fit: cover;
   }
   #requirements .stage-name { font-size: 10pt; }
+  #requirements .stage-copy { gap: 2.5mm; }
   #requirements .stage-strong,
   #requirements .stage-but,
   #requirements .stage-need {
     max-width: none;
-    font-size: 11pt;
-    line-height: 1.35;
+    font-size: 10.5pt;
+    line-height: 1.32;
+    margin: 0;
   }
 
   #designing .grid-12 { grid-template-columns: repeat(2, 1fr); gap: 6mm; }

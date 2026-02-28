@@ -20,6 +20,7 @@ review_pr_file="${CODEX_DIR}/daemon_review_pr_number.txt"
 title_file="${CODEX_DIR}/pr_title.txt"
 body_file="${CODEX_DIR}/pr_body.txt"
 pr_number_file="${CODEX_DIR}/pr_number.txt"
+executor_prompt_file="${CODEX_DIR}/executor_prompt.txt"
 
 read_if_present() {
   local file_path="$1"
@@ -266,6 +267,170 @@ emit_nonempty_lines() {
   done <<< "$text"
 }
 
+normalize_repo_path() {
+  local path="$1"
+  while [[ "$path" == ./* ]]; do
+    path="${path#./}"
+  done
+  printf '%s' "$path"
+}
+
+is_path_within_narrative() {
+  local path
+  path="$(normalize_repo_path "$1")"
+  [[ "$path" == "narrative" || "$path" == "narrative/" || "$path" == narrative/* ]]
+}
+
+collect_tracked_diff_paths() {
+  {
+    git -C "${ROOT_DIR}" diff --name-only --ignore-submodules -- || true
+    git -C "${ROOT_DIR}" diff --cached --name-only --ignore-submodules -- || true
+  } | awk 'NF' | sort -u
+}
+
+extract_issue_number_from_task_id() {
+  local task_id="$1"
+  if [[ "$task_id" =~ ^ISSUE-([0-9]+)$ ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  return 1
+}
+
+extract_pres_narr_index_from_text() {
+  local text="$1"
+  local marker index_raw
+
+  marker="$(printf '%s\n' "$text" | grep -Eo 'PRES[-_]NARR[-_][0-9]{2}' | head -n1 || true)"
+  [[ -n "$marker" ]] || return 1
+
+  index_raw="$(printf '%s' "$marker" | sed -E 's/.*[-_]([0-9]{2})$/\1/')"
+  [[ "$index_raw" =~ ^[0-9]{2}$ ]] || return 1
+  printf '%d' "$((10#$index_raw))"
+  return 0
+}
+
+resolve_pres_narr_index() {
+  local task_id="$1"
+  local commit_message="$2"
+  local pr_title="$3"
+  local issue_title="$4"
+  local prompt_content="$5"
+  local index=""
+
+  index="$(extract_pres_narr_index_from_text "$task_id" || true)"
+  [[ -n "$index" ]] && {
+    printf '%s' "$index"
+    return 0
+  }
+
+  index="$(extract_pres_narr_index_from_text "$pr_title" || true)"
+  [[ -n "$index" ]] && {
+    printf '%s' "$index"
+    return 0
+  }
+
+  index="$(extract_pres_narr_index_from_text "$commit_message" || true)"
+  [[ -n "$index" ]] && {
+    printf '%s' "$index"
+    return 0
+  }
+
+  index="$(extract_pres_narr_index_from_text "$issue_title" || true)"
+  [[ -n "$index" ]] && {
+    printf '%s' "$index"
+    return 0
+  }
+
+  index="$(extract_pres_narr_index_from_text "$prompt_content" || true)"
+  [[ -n "$index" ]] && {
+    printf '%s' "$index"
+    return 0
+  }
+
+  return 1
+}
+
+enforce_narrative_scope_lock_if_needed() {
+  local task_id="$1"
+  local commit_message="$2"
+  local pr_title="$3"
+  local active_issue_number="$4"
+  shift 4
+  local -a staged_paths=("$@")
+  local issue_number issue_title prompt_content pres_narr_index
+  local stage_outside diff_outside normalized
+
+  issue_number="$active_issue_number"
+  if [[ -z "$issue_number" ]]; then
+    issue_number="$(extract_issue_number_from_task_id "$task_id" || true)"
+  fi
+
+  issue_title=""
+  if [[ -n "$issue_number" ]]; then
+    issue_title="$(gh issue view "$issue_number" --repo "$REPO" --json title --jq '.title' 2>/dev/null || true)"
+  fi
+
+  prompt_content="$(read_if_present "$executor_prompt_file" || true)"
+  pres_narr_index="$(resolve_pres_narr_index "$task_id" "$commit_message" "$pr_title" "$issue_title" "$prompt_content" || true)"
+
+  if [[ -z "$pres_narr_index" ]]; then
+    echo "NARRATIVE_SCOPE_LOCK_ENFORCED=0"
+    echo "NARRATIVE_SCOPE_LOCK_REASON=NOT_A_PRES_NARR_TASK"
+    return 0
+  fi
+
+  echo "NARRATIVE_SCOPE_LOCK_TASK_INDEX=$pres_narr_index"
+  if (( pres_narr_index == 0 )); then
+    echo "NARRATIVE_SCOPE_LOCK_ENFORCED=0"
+    echo "NARRATIVE_SCOPE_LOCK_REASON=PRES_NARR_00_SETUP_TASK"
+    return 0
+  fi
+
+  stage_outside="$(
+    for path in "${staged_paths[@]}"; do
+      normalized="$(normalize_repo_path "$path")"
+      [[ -z "$normalized" ]] && continue
+      if ! is_path_within_narrative "$normalized"; then
+        printf '%s\n' "$normalized"
+      fi
+    done | awk 'NF' | sort -u
+  )"
+
+  diff_outside="$(
+    while IFS= read -r path; do
+      normalized="$(normalize_repo_path "$path")"
+      [[ -z "$normalized" ]] && continue
+      if ! is_path_within_narrative "$normalized"; then
+        printf '%s\n' "$normalized"
+      fi
+    done < <(collect_tracked_diff_paths)
+  )"
+  diff_outside="$(printf '%s\n' "$diff_outside" | awk 'NF' | sort -u)"
+
+  if [[ -n "$stage_outside" || -n "$diff_outside" ]]; then
+    echo "NARRATIVE_SCOPE_LOCK_ENFORCED=1"
+    echo "NARRATIVE_SCOPE_LOCK_FAILED=1"
+    if [[ -n "$stage_outside" ]]; then
+      while IFS= read -r path; do
+        [[ -z "$path" ]] && continue
+        echo "NARRATIVE_SCOPE_LOCK_STAGE_PATH_OUTSIDE=$path"
+      done <<< "$stage_outside"
+    fi
+    if [[ -n "$diff_outside" ]]; then
+      while IFS= read -r path; do
+        [[ -z "$path" ]] && continue
+        echo "NARRATIVE_SCOPE_LOCK_DIFF_PATH_OUTSIDE=$path"
+      done <<< "$diff_outside"
+    fi
+    echo "NARRATIVE_SCOPE_LOCK_HINT=Разрешены только изменения внутри narrative/."
+    exit 1
+  fi
+
+  echo "NARRATIVE_SCOPE_LOCK_ENFORCED=1"
+  echo "NARRATIVE_SCOPE_LOCK_FAILED=0"
+}
+
 mkdir -p "$CODEX_DIR"
 
 commit_message="$(require_nonempty_file "$commit_file")"
@@ -286,6 +451,7 @@ fi
 
 task_id="$(read_if_present "$task_file" || true)"
 active_item_id="$(read_if_present "$active_item_file" || true)"
+active_issue_number="$(read_if_present "$active_issue_file" || true)"
 if [[ -z "$task_id" ]]; then
   task_id="$(read_if_present "$active_task_file" || true)"
 fi
@@ -301,6 +467,13 @@ pr_title="$(read_if_present "$title_file" || true)"
 if [[ -z "$pr_title" ]]; then
   pr_title="$(build_default_pr_title "$task_id" "$commit_message")"
 fi
+
+enforce_narrative_scope_lock_if_needed \
+  "$task_id" \
+  "$commit_message" \
+  "$pr_title" \
+  "$active_issue_number" \
+  "${stage_paths[@]}"
 
 pr_body="$(read_if_present "$body_file" || true)"
 if [[ -z "$pr_body" ]]; then

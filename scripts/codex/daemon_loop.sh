@@ -10,6 +10,7 @@ STATE_DETAIL_FILE="${CODEX_DIR}/daemon_state_detail.txt"
 NOTIFY_MODE_FILE="${CODEX_DIR}/daemon_notify_mode.txt"
 NOTIFY_EPOCH_FILE="${CODEX_DIR}/daemon_notify_last_epoch.txt"
 NOTIFY_SIGNATURE_FILE="${CODEX_DIR}/daemon_notify_last_signature.txt"
+GITHUB_RUNTIME_NOTIFY_MODE_FILE="${CODEX_DIR}/daemon_github_runtime_notify_mode.txt"
 
 interval="${1:-${DAEMON_INTERVAL_SEC:-45}}"
 if ! [[ "$interval" =~ ^[0-9]+$ ]] || (( interval < 5 )); then
@@ -430,6 +431,18 @@ detect_flow_degradation() {
   fi
 }
 
+runtime_queue_count() {
+  local queue_file="${CODEX_DIR}/project_status_runtime_queue.json"
+  local count="0"
+  if [[ -f "$queue_file" ]]; then
+    count="$(jq -r '(.items // []) | length' "$queue_file" 2>/dev/null || echo 0)"
+  fi
+  if ! [[ "$count" =~ ^[0-9]+$ ]]; then
+    count="0"
+  fi
+  printf '%s' "$count"
+}
+
 html_escape() {
   local value="${1:-}"
   jq -rn --arg v "$value" '$v|@html'
@@ -460,6 +473,150 @@ service_status_icon() {
     UNSTABLE) echo "🟡" ;;
     *) echo "⚪" ;;
   esac
+}
+
+has_only_github_degradation() {
+  local detail="$1"
+  local line value
+  local has_github="0"
+  local has_other="0"
+
+  while IFS= read -r line; do
+    line="$(printf '%s' "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    [[ -z "$line" ]] && continue
+
+    if [[ "$line" == AUTH_DEGRADED=1* ]]; then
+      has_other="1"
+      continue
+    fi
+
+    if [[ "$line" == DEGRADED=* ]]; then
+      value="${line#DEGRADED=}"
+      case "$value" in
+        GITHUB_*|GITHUB_GRAPHQL_RATE_LIMIT|PENDING_OUTBOX:*)
+          has_github="1"
+          ;;
+        *)
+          has_other="1"
+          ;;
+      esac
+    fi
+  done < <(printf '%s' "$detail" | tr ';|' '\n')
+
+  [[ "$has_github" == "1" && "$has_other" == "0" ]]
+}
+
+notify_github_runtime_if_needed() {
+  local state="$1"
+  local detail="$2"
+  local output="$3"
+
+  local mode
+  mode="$(read_file_or_default "$GITHUB_RUNTIME_NOTIFY_MODE_FILE" "ONLINE")"
+  if [[ "$mode" != "WAITING" && "$mode" != "ONLINE" ]]; then
+    mode="ONLINE"
+  fi
+
+  local queue_count
+  queue_count="$(runtime_queue_count)"
+
+  local applied_count
+  applied_count="$(
+    printf '%s\n' "$output" | awk '/^RUNTIME_PROJECT_STATUS_APPLIED=1/{c++} END {print c+0}'
+  )"
+  if ! [[ "$applied_count" =~ ^[0-9]+$ ]]; then
+    applied_count=0
+  fi
+
+  local github_wait="0"
+  if printf '%s\n' "$output" | grep -Eq '^(RUNTIME_PROJECT_STATUS_WAIT_GITHUB=1|WAIT_GITHUB_API_UNSTABLE=1|WAIT_GITHUB_RATE_LIMIT=1)'; then
+    github_wait="1"
+  elif [[ "$state" == "WAIT_GITHUB_OFFLINE" || "$state" == "WAIT_GITHUB_RATE_LIMIT" ]]; then
+    github_wait="1"
+  elif [[ "$detail" == *"DEGRADED=GITHUB_"* || "$detail" == *"DEGRADED=GITHUB_GRAPHQL_RATE_LIMIT"* ]]; then
+    if [[ "$queue_count" =~ ^[0-9]+$ ]] && (( queue_count > 0 )); then
+      github_wait="1"
+    fi
+  fi
+
+  local now_utc
+  now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+  if (( applied_count > 0 )); then
+    local targets stage_line msg msg_file notify_out rc
+    targets="$(
+      printf '%s\n' "$output" \
+        | sed -n 's/^RUNTIME_PROJECT_STATUS_TARGET=//p' \
+        | awk 'NF' \
+        | awk '!seen[$0]++' \
+        | paste -sd ',' -
+    )"
+    stage_line="$(printf '%s\n' "$output" | grep -m1 -E '^(WAIT_GITHUB_STAGE=|RUNTIME_PROJECT_STATUS_WAIT_ERROR=|WAIT_GITHUB_RATE_LIMIT_STAGE=)' || true)"
+    msg="<b>✅ PLANKA: GitHub ответил, runtime-задачи применены</b>"$'\n'
+    msg+="<b>📌 State:</b> <code>$(html_escape "$state")</code>"$'\n'
+    msg+="<b>📦 Applied:</b> <code>${applied_count}</code>"
+    [[ -n "$targets" ]] && msg+=" · <b>Targets:</b> <code>$(html_escape "$targets")</code>"
+    msg+=$'\n'
+    [[ -n "$stage_line" ]] && msg+="<b>🧭 Last wait:</b> <code>$(html_escape "$stage_line")</code>"$'\n'
+    msg+="<b>🗂️ Queue left:</b> <code>${queue_count}</code>"$'\n'
+    msg+="<b>🕒 Time:</b> <code>$(html_escape "$now_utc")</code>"
+
+    msg_file="$(mktemp "${CODEX_DIR}/daemon_runtime_notify.XXXXXX")"
+    printf '%s' "$msg" > "$msg_file"
+    if notify_out="$("${ROOT_DIR}/scripts/codex/telegram_local_notify.sh" "$msg_file" 2>&1)"; then
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        log "TG_NOTIFY_RUNTIME: $line"
+      done <<<"$notify_out"
+      log "TG_NOTIFY_RUNTIME_REASON=GITHUB_RUNTIME_RECOVERED"
+    else
+      rc=$?
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        log "TG_NOTIFY_RUNTIME_ERROR(rc=$rc): $line"
+      done <<<"$notify_out"
+      log "TG_NOTIFY_RUNTIME_REASON=GITHUB_RUNTIME_RECOVERED"
+    fi
+    rm -f "$msg_file"
+    printf '%s\n' "ONLINE" > "$GITHUB_RUNTIME_NOTIFY_MODE_FILE"
+    return 0
+  fi
+
+  if [[ "$github_wait" == "1" ]]; then
+    if [[ "$mode" != "WAITING" ]]; then
+      local wait_line msg msg_file notify_out rc
+      wait_line="$(printf '%s\n' "$output" | grep -m1 -E '^(WAIT_GITHUB_STAGE=|RUNTIME_PROJECT_STATUS_WAIT_ERROR=|WAIT_GITHUB_RATE_LIMIT_STAGE=|WAIT_GITHUB_RATE_LIMIT_MSG=)' || true)"
+      [[ -z "$wait_line" ]] && wait_line="$(printf '%s' "$detail" | tr '|' '\n' | sed 's/^[[:space:]]*//' | grep -m1 -E '^(DEGRADED=GITHUB_|GITHUB_STATUS=)' || true)"
+      msg="<b>⛔ PLANKA: GitHub недоступен, ждём восстановление</b>"$'\n'
+      msg+="<b>📌 State:</b> <code>$(html_escape "$state")</code>"$'\n'
+      [[ -n "$wait_line" ]] && msg+="<b>🧭 Reason:</b> <code>$(html_escape "$wait_line")</code>"$'\n'
+      msg+="<b>🗂️ Runtime queue:</b> <code>${queue_count}</code>"$'\n'
+      msg+="<b>➡️ Action:</b> <code>авто-ретраи включены, выполняем при восстановлении GitHub</code>"$'\n'
+      msg+="<b>🕒 Time:</b> <code>$(html_escape "$now_utc")</code>"
+
+      msg_file="$(mktemp "${CODEX_DIR}/daemon_runtime_notify.XXXXXX")"
+      printf '%s' "$msg" > "$msg_file"
+      if notify_out="$("${ROOT_DIR}/scripts/codex/telegram_local_notify.sh" "$msg_file" 2>&1)"; then
+        while IFS= read -r line; do
+          [[ -z "$line" ]] && continue
+          log "TG_NOTIFY_RUNTIME: $line"
+        done <<<"$notify_out"
+        log "TG_NOTIFY_RUNTIME_REASON=GITHUB_RUNTIME_WAIT"
+      else
+        rc=$?
+        while IFS= read -r line; do
+          [[ -z "$line" ]] && continue
+          log "TG_NOTIFY_RUNTIME_ERROR(rc=$rc): $line"
+        done <<<"$notify_out"
+        log "TG_NOTIFY_RUNTIME_REASON=GITHUB_RUNTIME_WAIT"
+      fi
+      rm -f "$msg_file"
+    fi
+    printf '%s\n' "WAITING" > "$GITHUB_RUNTIME_NOTIFY_MODE_FILE"
+    return 0
+  fi
+
+  printf '%s\n' "ONLINE" > "$GITHUB_RUNTIME_NOTIFY_MODE_FILE"
 }
 
 is_reaction_required() {
@@ -641,6 +798,12 @@ notify_if_needed() {
     mode="degraded"
   fi
 
+  # GitHub-specific деградацию отправляем отдельным "runtime" каналом
+  # (WAIT/RECOVERED), чтобы избежать дублирующих общих alert-сообщений.
+  if [[ "$mode" == "degraded" ]] && has_only_github_degradation "$detail"; then
+    mode="healthy"
+  fi
+
   local now_epoch
   now_epoch="$(date +%s)"
   local reminder_sec="${DAEMON_TG_REMINDER_SEC:-1800}"
@@ -769,6 +932,14 @@ while true; do
     continue
   fi
 
+  runtime_apply_out="$("${ROOT_DIR}/scripts/codex/project_status_runtime.sh" apply 5 2>&1 || true)"
+  if [[ -n "$runtime_apply_out" ]]; then
+    while IFS= read -r line; do
+      [[ -z "$line" || "$line" == "RUNTIME_PROJECT_STATUS_QUEUE_ABSENT=1" ]] && continue
+      log "$line"
+    done <<<"$runtime_apply_out"
+  fi
+
   if output="$("${ROOT_DIR}/scripts/codex/daemon_tick.sh" 2>&1)"; then
     while IFS= read -r line; do
       [[ -z "$line" ]] && continue
@@ -789,6 +960,8 @@ while true; do
       detail="${detail} | ${degradation}"
     fi
     set_state "$state" "$detail"
+    combined_output="${runtime_apply_out}"$'\n'"${output}"
+    notify_github_runtime_if_needed "$state" "$detail" "$combined_output"
     notify_if_needed "$state" "$detail"
   else
     rc=$?
@@ -807,6 +980,8 @@ while true; do
       detail="${detail} | ${degradation}"
     fi
     set_state "$state" "$detail"
+    combined_output="${runtime_apply_out}"$'\n'"${output}"
+    notify_github_runtime_if_needed "$state" "$detail" "$combined_output"
     notify_if_needed "$state" "$detail"
   fi
   sleep "$interval"

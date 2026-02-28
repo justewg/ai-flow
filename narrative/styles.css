@@ -147,7 +147,7 @@ figcaption {
   width: 100%;
   overflow: hidden;
   background-color: #ffffff;
-  background-image: url("./assets/img/planka_hero_desktop_rightfade.png");
+  background-image: url("./assets/img/planka_hero_desktop_final.png");
   background-size: cover;
   background-repeat: no-repeat;
   background-position: right center;
@@ -586,7 +586,7 @@ figcaption {
 
 @media (max-width: 768px) {
   .planka-hero {
-    background-image: url("./assets/img/planka_hero_mobile_bottomscrim_v3.png");
+    background-image: url("./assets/img/planka_hero_mobile_final.png");
     background-position: center top;
   }
   .planka-hero__content {

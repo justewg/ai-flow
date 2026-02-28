@@ -140,6 +140,8 @@
   #object .ph, #object .media-image { min-height: 60mm; height: 60mm; object-fit: cover; }
 
   #layers .screens { grid-template-columns: 1fr 1fr; gap: 8mm; }
+  #layers .layers-note { font-size: 10.5pt; line-height: 1.35; color: #5f6f81; margin: 2mm 0 0; }
+  #layers .layers-thesis { font-size: 12pt; font-weight: 600; margin: 4mm 0 0; color: #1f2b37; }
 
   #growth .word-field { display: grid; grid-auto-rows: min-content; min-height: auto; }
   #growth .word { position: static; margin: 2mm 0; animation: none !important; transform: none !important; }

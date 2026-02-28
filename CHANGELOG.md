@@ -56,3 +56,4 @@
 - `[APP-07]` Устранено дублирование dirty-gate сообщений при создании issue: остается один подробный блокер-текст (в теле issue), без дополнительного краткого комментария в тот же тик.
 - `[APP-07]` При создании/линковке dirty-gate issue ее карточка в Project сразу переводится в `Status/Flow=In Progress` (вместо зависания в `Todo`).
 - `[APP-07]` Добавлен runtime backlog-seed apply (`scripts/codex/backlog_seed_apply.sh`): daemon по тикам пытается создавать задачи из `.tmp/codex/backlog_seed_plan.json`, при частичном успехе автоматически удаляет созданные из плана и удаляет план при полном завершении.
+- `[APP-07]` Исправлен dependency-gate: `Depends-On` теперь считается выполненным не только при `Issue=CLOSED`, но и при `Project Status=Done/Closed` у зависимой карточки.

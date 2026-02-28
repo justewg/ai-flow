@@ -50,3 +50,4 @@
 - `[APP-07]` Устранен `ERROR_LOCAL_FLOW` при dirty-override: daemon пропускает `sync_branches` (`checkout main`) в режиме `WAIT_DIRTY_WORKTREE_OVERRIDE_ACTIVE=1`.
 - `[APP-07]` Доработан `COMMIT` в dirty-gate до полного цикла: commit/push -> PR `development -> main` -> merge PR -> перевод dirty-gate в Done и закрытие issue, после чего daemon возвращается к штатному подхвату Todo.
 - `[APP-07]` Добавлен auto-release stale active-state: если карточку активной задачи вручную уводят из `In Progress` (например, обратно в `Todo`), daemon сбрасывает локальный `daemon_active_*` и снова клеймит очередь.
+- `[APP-07]` Убрано влияние служебных `DIRTY-GATE` issue на обычный claim: daemon исключает их из основной/fallback очереди `Todo`, чтобы они не блокировали подхват рабочих задач.

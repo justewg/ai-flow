@@ -447,6 +447,7 @@ query($projectId: ID!, $itemsFirst: Int!) {
     [
       .data.node.items.nodes[]
       | select(((.content.__typename // "") == "Issue") or ((.content.__typename // "") == "DraftIssue"))
+      | select((((.content.title // "") | test("^DIRTY-GATE:")) | not))
       | select((.status.name // "" | norm) == ($trigger | norm))
       | {
           item_id: (.id // ""),
@@ -468,6 +469,32 @@ query($projectId: ID!, $itemsFirst: Int!) {
     | sort_by(.pri_w, .num)
     | .[0] // empty
   '
+}
+
+clear_dirty_gate_local_state() {
+  : > "$dirty_gate_issue_file"
+  : > "$dirty_gate_issue_url_file"
+  : > "$dirty_gate_signature_file"
+  : > "$dirty_gate_comment_signature_file"
+  : > "$dirty_gate_blocked_issue_file"
+  : > "$dirty_gate_blocked_title_file"
+  : > "$dirty_gate_override_signature_file"
+  : > "$dirty_gate_last_reply_id_file"
+}
+
+clear_dirty_gate_waiting_state_if_any() {
+  local waiting_task=""
+  [[ -s "${CODEX_DIR}/daemon_waiting_task_id.txt" ]] && waiting_task="$(<"${CODEX_DIR}/daemon_waiting_task_id.txt")"
+  if [[ "$waiting_task" == DIRTY-GATE-ISSUE-* ]]; then
+    : > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
+    : > "${CODEX_DIR}/daemon_waiting_task_id.txt"
+    : > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
+    : > "${CODEX_DIR}/daemon_waiting_kind.txt"
+    : > "${CODEX_DIR}/daemon_waiting_pending_post.txt"
+    : > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
+    : > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
+    echo "WAIT_DIRTY_WORKTREE_STALE_WAITING_CLEARED=1"
+  fi
 }
 
 find_project_issue_item_id() {
@@ -1472,16 +1499,33 @@ if ! git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- ||
   )"
   tracked_preview="$(printf '%s' "$tracked_preview" | tr -s ' ')"
   dirty_signature="$(printf '%s|%s' "$tracked_count" "$tracked_preview" | shasum -a 1 | awk '{print $1}')"
-  if dirty_worktree_override_active "$dirty_signature"; then
-    echo "WAIT_DIRTY_WORKTREE_OVERRIDE_ACTIVE=1"
-    echo "WAIT_DIRTY_WORKTREE_OVERRIDE_SIGNATURE=${dirty_signature}"
-    echo "WAIT_DIRTY_WORKTREE_TRACKED_COUNT=${tracked_count}"
-    if [[ -n "$tracked_preview" ]]; then
-      echo "WAIT_DIRTY_WORKTREE_TRACKED_FILES=${tracked_preview}"
-    fi
-    # Explicit override from dirty-gate issue: continue regular daemon flow on current signature.
-  else
+  if ! dirty_worktree_override_active "$dirty_signature"; then
     maybe_process_dirty_gate_reply "$dirty_signature" || true
+  fi
+
+  # Dirty-gate reply may have committed/merged in the same tick.
+  # Re-read tracked state to avoid creating a new gate from stale snapshot.
+  if git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- &&
+    git -C "${ROOT_DIR}" diff --cached --quiet --ignore-submodules --; then
+    echo "WAIT_DIRTY_WORKTREE_RESOLVED_POST_ACTION=1"
+    clear_dirty_gate_waiting_state_if_any
+    clear_dirty_gate_local_state
+  else
+    tracked_lines="$(
+      git -C "${ROOT_DIR}" status --short --untracked-files=no 2>/dev/null || true
+    )"
+    tracked_count="$(
+      printf '%s\n' "$tracked_lines" | awk 'NF {count++} END {print count+0}'
+    )"
+    tracked_preview="$(
+      printf '%s\n' "$tracked_lines" |
+        awk 'NF {sub(/^[[:space:]]*[MADRCU?!][MADRCU?!]?[[:space:]]*/, "", $0); print}' |
+        head -n 8 |
+        paste -sd ',' -
+    )"
+    tracked_preview="$(printf '%s' "$tracked_preview" | tr -s ' ')"
+    dirty_signature="$(printf '%s|%s' "$tracked_count" "$tracked_preview" | shasum -a 1 | awk '{print $1}')"
+
     if dirty_worktree_override_active "$dirty_signature"; then
       echo "WAIT_DIRTY_WORKTREE_OVERRIDE_ACTIVE=1"
       echo "WAIT_DIRTY_WORKTREE_OVERRIDE_SIGNATURE=${dirty_signature}"
@@ -1500,6 +1544,8 @@ if ! git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- ||
       exit 0
     fi
   fi
+else
+  clear_dirty_gate_waiting_state_if_any
 fi
 
 # Сначала пытаемся доставить отложенные действия в GitHub (outbox).
@@ -1781,6 +1827,7 @@ matched_json="$(
           else (.status_option_id == $trigger_option_id)
           end
         )
+      | select((((.title // "") | test("^DIRTY-GATE:")) | not))
       | .pri_w = (
           if .priority == "P0" then 0
           elif .priority == "P1" then 1
@@ -1869,7 +1916,7 @@ if (( queue_count == 0 )); then
         | .num = ((try (.issue_number | tonumber) catch 999999))
       ]
       | sort_by(.pri_w, .num)
-      | [.[] | select(.content_type == "Issue")]
+      | [.[] | select(.content_type == "Issue" and (((.title // "") | test("^DIRTY-GATE:")) | not))]
     '
   )"
 

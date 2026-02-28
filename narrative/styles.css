@@ -53,11 +53,6 @@ body {
   background: var(--section-bg);
 }
 .section + .section { border-top: 1px solid var(--line); }
-.section.is-dark {
-  --section-bg: linear-gradient(180deg, #f2f7fd 0%, var(--bg-2) 100%);
-  background: var(--section-bg);
-}
-
 .container {
   width: min(100%, var(--base-width));
   margin-inline: auto;

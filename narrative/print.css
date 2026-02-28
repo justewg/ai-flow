@@ -32,7 +32,6 @@
     break-after: auto;
     page-break-after: auto;
   }
-  .section.is-dark { background: #f4f8fd !important; }
   .container { padding: 0; }
   .section-sticky {
     position: static !important;

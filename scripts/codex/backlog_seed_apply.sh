@@ -182,7 +182,7 @@ build_refs_from_codes() {
     local idx
     for idx in "${!refs[@]}"; do
       if [[ "$idx" -gt 0 ]]; then
-        joined+", "
+        joined+=", "
       fi
       joined+="${refs[$idx]}"
     done

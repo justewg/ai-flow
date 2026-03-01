@@ -70,6 +70,32 @@ body {
 .lead { font-size: clamp(18px, 2.2vw, 24px); color: var(--fg); margin: var(--space-3) 0; }
 .center { text-align: center; }
 
+/* =======================================
+   AUTHOR RHYTHM BLOCK
+   ======================================= */
+
+.slide-point {
+  margin-top: clamp(36px, 6vw, 72px);
+  padding: 20px 24px;
+  border-left: 2px solid rgba(30, 40, 48, .6);
+  background: rgba(30, 40, 48, .035);
+}
+
+.slide-point__label {
+  display: block;
+  font-size: 12px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  opacity: .55;
+  margin-bottom: 8px;
+}
+
+.slide-point__text {
+  font-size: clamp(18px, 2vw, 22px);
+  line-height: 1.4;
+  font-weight: 600;
+}
+
 /* Grid 12 */
 .grid-12 {
   display: grid;
@@ -755,6 +781,14 @@ figcaption {
 }
 
 @media (max-width: 768px) {
+  .slide-point {
+    padding: 16px;
+  }
+
+  .slide-point__text {
+    font-size: clamp(16px, 4.8vw, 20px);
+  }
+
   #object .object-layout {
     gap: clamp(34px, 8vw, 56px);
   }

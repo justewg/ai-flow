@@ -905,3 +905,64 @@ figcaption {
     font-size: 14px !important;
   }
 }
+
+/* ===========================================
+   iPhone landscape / low height — NO side gaps
+   + push image further right
+   + stronger left fade to white
+   =========================================== */
+@media (max-height: 520px) and (orientation: landscape){
+
+  /* 1) Disable full-bleed 100vw hack here (iOS Safari landscape bug) */
+  #intro.planka-hero{
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  /* 2) Keep hero full height, but safe for Safari */
+  #intro.planka-hero{
+    min-height: 100vh !important;
+  }
+
+  /* 3) Background: keep desktop asset, push subject to the right */
+  #intro.planka-hero .planka-hero__bg{
+    background-image: url("./assets/img/planka_hero_desktop_final.png") !important;
+    background-size: cover !important;
+    background-repeat: no-repeat !important;
+    background-position: 92% 50% !important; /* more right than 'right center' */
+  }
+
+  /* 4) Landscape: left fade ON, bottom scrim OFF */
+  #intro.planka-hero .planka-hero__bg::after{
+    opacity: 0 !important;
+  }
+
+  #intro.planka-hero .planka-hero__bg::before{
+    opacity: 1 !important;
+    background: linear-gradient(
+      90deg,
+      rgba(255,255,255,1) 0%,
+      rgba(255,255,255,1) 40%,
+      rgba(255,255,255,0.85) 52%,
+      rgba(255,255,255,0.0) 72%
+    ) !important;
+  }
+
+  /* 5) Text sizing/padding for low height */
+  #intro.planka-hero .planka-hero__content{
+    padding: clamp(10px, 3vw, 28px) !important;
+    max-width: min(52ch, 52vw) !important;
+    justify-content: center !important;
+  }
+
+  #intro.planka-hero .planka-hero__title{
+    font-size: clamp(28px, 4.2vw, 44px) !important;
+    line-height: .98 !important;
+  }
+
+  #intro.planka-hero .planka-hero__subtitle{
+    margin-top: 8px !important;
+    font-size: 14px !important;
+  }
+}

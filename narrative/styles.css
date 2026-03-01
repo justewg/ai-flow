@@ -356,10 +356,12 @@ figcaption {
 }
 .stage-name {
   margin: 0;
-  font-size: 0.9rem;
-  letter-spacing: 0.1em;
+  font-size: clamp(1.1rem, 1.6vw, 1.34rem);
+  font-weight: 620;
+  line-height: 1.28;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: #31485d;
 }
 .stage-summary,
 .stage-strong,

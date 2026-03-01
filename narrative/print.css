@@ -218,6 +218,14 @@
 
   #final-a .container, #final-b .container { min-height: auto !important; }
   #final-a .final-message { font-size: 28pt; text-align: left; max-width: none; line-height: 1.12; }
+  #final-a .final-accent {
+    width: 58mm;
+    height: 0.5mm;
+    margin: 2.4mm 0 2.8mm;
+    background: #c7d0da;
+    opacity: 1;
+  }
+  #final-a .final-accent::after { content: none !important; }
   #final-a .final-support { font-size: 12pt; text-align: left; margin: 4mm 0 0; color: #5f6f81; max-width: none; }
 
   #final-b .final-b-layout { display: block !important; min-height: auto !important; }

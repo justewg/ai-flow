@@ -819,6 +819,17 @@ figcaption {
    PORTRAIT (iPhone)
    ========================================================== */
 @media (max-width: 768px) and (orientation: portrait){
+  #intro.planka-hero{
+    min-height: 100svh !important;
+    /* можно ещё добавить dvh как более современное:
+       min-height: 100dvh !important; */
+  }
+
+  #intro.planka-hero .planka-hero__content{
+    padding-bottom: calc(var(--hero-pad) + env(safe-area-inset-bottom)) !important;
+    /* без +14px */
+  }
+
   #intro.planka-hero .planka-hero__bg{
     background-image: url("./assets/img/planka_hero_mobile_final.png") !important;
 

@@ -712,7 +712,6 @@ figcaption {
 /* 0) hero always full height */
 #intro.planka-hero{
   min-height: 100svh !important;
-  min-height: 100vh !important;
   background: var(--hero-bg) !important;
   overflow: hidden !important;
 }
@@ -829,7 +828,7 @@ figcaption {
     padding-bottom: calc(var(--hero-pad) + env(safe-area-inset-bottom)) !important;
     /* без +14px */
   }
-
+}
   #intro.planka-hero .planka-hero__bg{
     background-image: url("./assets/img/planka_hero_mobile_final.png") !important;
 

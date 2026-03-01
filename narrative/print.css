@@ -184,8 +184,43 @@
   #principles .principles { grid-template-columns: repeat(3, 1fr); gap: 6mm; }
   #principles .pill { padding: 6mm; text-align: center; }
 
-  #object .screens { grid-template-columns: 1fr 1fr; gap: 8mm; }
-  #object .ph, #object .media-image { min-height: 60mm; height: 60mm; object-fit: cover; }
+  #object .object-subtitle {
+    max-width: none;
+    margin: 0;
+    font-size: 11pt;
+    line-height: 1.35;
+  }
+  #object .object-layout {
+    display: grid;
+    gap: 8mm;
+  }
+  #object .object-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: center;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  #object .object-pair.is-reverse .object-media { order: 2; }
+  #object .object-pair.is-reverse .object-copy { order: 1; }
+  #object .object-media .media-image {
+    min-height: 60mm;
+    height: 60mm;
+    object-fit: contain;
+  }
+  #object .object-title {
+    margin: 0;
+    font-size: 11.4pt;
+    line-height: 1.34;
+    color: #2f4559;
+  }
+  #object .object-text {
+    margin: 2.2mm 0 0;
+    font-size: 10.8pt;
+    line-height: 1.42;
+    color: #42586d;
+  }
 
   #layers .screens { grid-template-columns: 1fr 1fr; gap: 10mm; }
   #layers figcaption {

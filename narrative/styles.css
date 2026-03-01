@@ -733,7 +733,6 @@ figcaption {
   z-index: 1 !important;
 
   min-height: 100svh !important;
-  min-height: 100vh !important;
 
   padding: var(--hero-pad) !important;
   padding-bottom: calc(var(--hero-pad) + env(safe-area-inset-bottom)) !important;

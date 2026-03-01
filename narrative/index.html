@@ -180,69 +180,81 @@
             <h2 class="title">Жест</h2>
           </div>
 
-          <!-- Кадр 1 — Письмо -->
           <article class="stage">
-            <!-- scenario: text is ВИННИПУ; finger hovers over Х -->
-            <header class="stage-title">Письмо</header>
+            <header class="stage-title">ПИСЬМО</header>
             <div class="media-row">
-              <img class="media-image reveal" data-animate="fade" src="./assets/img/gesture_1.png" alt="Палец набирает текст в среде PLANKA" loading="lazy" />
-              <p class="note">Текст «ВИННИПУ», палец завис над «Х».</p>
+              <div class="gesture-visual reveal" data-animate="fade">
+                <img class="media-image" src="./assets/img/gesture_1.png" alt="Формирование мысли в личном пространстве" loading="lazy" />
+              </div>
+              <div class="gesture-copy">
+                <p>Мысль формируется.</p>
+                <p>Экран направлен к себе. Текст остаётся в личном пространстве.</p>
+                <p>Жест в этом режиме не управляет интерфейсом — он поддерживает концентрацию.</p>
+              </div>
             </div>
             <div class="only-print alt">
-              <img class="media-image" src="./assets/img/gesture_1.png" alt="Статичный кадр набора текста" loading="lazy" />
+              <img class="media-image" src="./assets/img/gesture_1.png" alt="Формирование мысли в личном пространстве" loading="lazy" />
             </div>
           </article>
 
-          <!-- Кадр 2 — Намерение -->
           <article class="stage">
-            <!-- scenario: side/edge view, tablet tilts away, screen unreadable -->
-            <header class="stage-title">Намерение</header>
+            <header class="stage-title">НАМЕРЕНИЕ</header>
             <div class="media-row">
-              <img class="media-image reveal" data-animate="fade" src="./assets/img/gesture_2.png" alt="Наклон инструмента от себя, вид сбоку/торец, экран не читаем" loading="lazy" />
-              <p class="note">Наклон от себя: вид сбоку/торец, экран не читаем.</p>
+              <div class="gesture-visual reveal" data-animate="fade">
+                <img class="media-image" src="./assets/img/gesture_2.png" alt="Переход от личного режима к предъявлению мысли" loading="lazy" />
+              </div>
+              <div class="gesture-copy">
+                <p>Мысль готова к предъявлению.</p>
+                <p>Устройство меняет положение. Появляется намерение показать.</p>
+                <p>Это переход из внутреннего режима в режим коммуникации.</p>
+              </div>
             </div>
             <div class="only-print alt">
-              <img class="media-image" src="./assets/img/gesture_2.png" alt="Промежуточный кадр наклона инструмента от себя" loading="lazy" />
+              <img class="media-image" src="./assets/img/gesture_2.png" alt="Переход от личного режима к предъявлению мысли" loading="lazy" />
             </div>
           </article>
 
-          <!-- Кадр 3 — Показ -->
           <article class="stage">
-            <!-- scenario: text is oriented to interlocutor; adult says phrase -->
-            <header class="stage-title">Показ</header>
+            <header class="stage-title">ПОКАЗ</header>
             <div class="media-row">
-              <img class="media-image reveal" data-animate="fade" src="./assets/img/gesture_3.png" alt="Текст обращен к собеседнику" loading="lazy" />
-              <p class="note">Текст обращен к собеседнику. Взрослый: «Хорошо, посмотри.»</p>
+              <div class="gesture-visual gesture-visual--stack reveal" data-animate="fade" data-scroll-fade>
+                <img class="media-image gesture-frame gesture-frame--base" src="./assets/img/gesture_3.png" alt="Мысль предъявлена собеседнику" loading="lazy" />
+                <img class="media-image gesture-frame gesture-frame--alt" src="./assets/img/TODO_GESTURE_SHOW.png" alt="Разворот устройства в руках, мысль остаётся читаемой" loading="lazy" />
+              </div>
+              <div class="gesture-copy">
+                <p>Мысль предъявлена.</p>
+                <p>Экран обращён к собеседнику.</p>
+                <p>Способ показа может отличаться — но смысл остаётся читаемым.</p>
+              </div>
             </div>
             <div class="only-print alt">
-              <img class="media-image" src="./assets/img/gesture_3.png" alt="Статичный кадр показа текста собеседнику" loading="lazy" />
+              <img class="media-image" src="./assets/img/gesture_3.png" alt="Мысль предъявлена собеседнику" loading="lazy" />
+              <img class="media-image gesture-print-secondary" src="./assets/img/TODO_GESTURE_SHOW.png" alt="Разворот устройства в руках, мысль остаётся читаемой" loading="lazy" />
             </div>
           </article>
 
-          <!-- Кадр 4 — Продолжил -->
           <article class="stage">
-            <!-- scenario: return to personal input mode -->
-            <header class="stage-title">Продолжил</header>
+            <header class="stage-title">ПРОДОЛЖИЛ</header>
             <div class="media-row">
-              <img class="media-image reveal" data-animate="fade" src="./assets/img/pad_single.png" alt="Возврат в персональный режим ввода" loading="lazy" />
-              <p class="note">Возврат к персональному режиму ввода.</p>
+              <div class="gesture-visual reveal" data-animate="fade">
+                <img class="media-image" src="./assets/img/pad_single.png" alt="Продолжение коммуникации после реакции собеседника" loading="lazy" />
+              </div>
+              <div class="gesture-copy">
+                <p>Коммуникация продолжается.</p>
+                <p>Написал → показал → получил реакцию → продолжил.</p>
+                <p>Жест формирует устойчивый цикл взаимодействия.</p>
+              </div>
             </div>
             <div class="only-print alt">
-              <img class="media-image" src="./assets/img/pad_single.png" alt="Статичный кадр возврата в персональный режим" loading="lazy" />
+              <img class="media-image" src="./assets/img/pad_single.png" alt="Продолжение коммуникации после реакции собеседника" loading="lazy" />
             </div>
           </article>
 
-          <p class="lead center">Написал -&gt; Показал -&gt; Получил реакцию -&gt; Продолжил.</p>
-          <div class="gesture-explainer">
-            <p class="subtitle center">Жест в ПЛАНКЕ — это не визуальный эффект и не анимация интерфейса. Это устойчивый протокол действия: сначала формулирую, затем предъявляю, затем снова возвращаюсь к письму.</p>
-            <p class="subtitle center">Наклон разделяет два режима одной и той же мысли. Пока экран направлен к себе, мысль остаётся приватной; когда разворот идёт к собеседнику, она становится предъявленной.</p>
-            <p class="subtitle center">Ключевое решение остаётся у субъекта: он сам выбирает момент показа, длительность предъявления и момент возврата. Именно этот контроль делает коммуникацию осмысленной, а не автоматической.</p>
-          </div>
-          <p class="subtitle center">Жест — это граница между личной мыслью и предъявленной мыслью. Устройство не говорит за него. Он сам выбирает момент предъявления.</p>
           <div class="slide-point">
             <span class="slide-point__label">Иными словами:</span>
             <div class="slide-point__text">
-              Движение должно быть естественным, но не отвлекать от формулирования мысли.
+              Жест — это граница между личной мыслью и предъявленной мыслью.
+              Он завершает мысль действием.
             </div>
           </div>
         </div>

@@ -23,6 +23,40 @@
     revealEls.forEach(el => el.classList.add('in-view'));
   }
 
+  // Gesture "show" stage: crossfade between two images while scrolling through the stage
+  const scrollFadeStacks = Array.from(document.querySelectorAll('[data-scroll-fade]'));
+  if (scrollFadeStacks.length && !prefersReduced) {
+    let rafId = 0;
+    const clamp = (value) => Math.min(1, Math.max(0, value));
+
+    const updateScrollFade = () => {
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 1;
+
+      for (const stack of scrollFadeStacks) {
+        const stage = stack.closest('.stage') || stack;
+        const rect = stage.getBoundingClientRect();
+        const totalDistance = Math.max(rect.height + viewportHeight, 1);
+        const passedDistance = viewportHeight - rect.top;
+        const progress = clamp(passedDistance / totalDistance);
+        stack.style.setProperty('--gesture-show-alt-opacity', progress.toFixed(3));
+      }
+
+      rafId = 0;
+    };
+
+    const requestScrollFadeUpdate = () => {
+      if (!rafId) {
+        rafId = requestAnimationFrame(updateScrollFade);
+      }
+    };
+
+    window.addEventListener('scroll', requestScrollFadeUpdate, { passive: true });
+    window.addEventListener('resize', requestScrollFadeUpdate);
+    requestScrollFadeUpdate();
+  } else {
+    scrollFadeStacks.forEach(stack => stack.style.setProperty('--gesture-show-alt-opacity', '0'));
+  }
+
   // Intro hero: enter-state + subtle background parallax on desktop
   const intro = document.getElementById('intro');
   const introBg = intro?.querySelector('.planka-hero__bg');

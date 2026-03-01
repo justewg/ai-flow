@@ -461,7 +461,11 @@ figcaption {
 .stage-step-4 { transition-delay: 480ms; }
 
 /* Gesture stage */
-#gesture .stage { border-top: 1px solid var(--line); padding-top: var(--space-4); margin-top: var(--space-4); }
+#gesture .stage {
+  border-top: 1px solid var(--line);
+  padding-top: clamp(36px, 5.8vh, 68px);
+  margin-top: clamp(36px, 5.8vh, 68px);
+}
 #gesture .stage-title {
   font-weight: 650;
   font-size: 1.15rem;
@@ -471,9 +475,48 @@ figcaption {
   text-transform: uppercase;
   letter-spacing: .06em;
 }
-#gesture .media-row { display: grid; grid-template-columns: 1fr minmax(0, 340px); gap: var(--space-3); align-items: center; }
-#gesture .note { color: var(--muted); font-size: 0.95rem; margin: 0; }
+#gesture .media-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 360px);
+  gap: clamp(18px, 2.8vw, 40px);
+  align-items: center;
+}
+#gesture .gesture-visual {
+  margin: 0;
+}
+#gesture .gesture-visual .media-image {
+  max-height: min(58vh, 560px);
+  object-fit: contain;
+}
+#gesture .gesture-visual--stack {
+  --gesture-show-alt-opacity: 0;
+  display: grid;
+}
+#gesture .gesture-frame {
+  grid-area: 1 / 1;
+  transition: opacity 220ms linear;
+}
+#gesture .gesture-frame--base {
+  opacity: calc(1 - var(--gesture-show-alt-opacity));
+}
+#gesture .gesture-frame--alt {
+  opacity: var(--gesture-show-alt-opacity);
+}
+#gesture .gesture-copy {
+  display: grid;
+  gap: clamp(10px, 1.6vw, 14px);
+  align-content: center;
+  max-width: 34ch;
+}
+#gesture .gesture-copy p {
+  margin: 0;
+  color: #31485d;
+  font-size: clamp(1.02rem, 1.26vw, 1.16rem);
+  line-height: 1.52;
+  text-wrap: pretty;
+}
 #gesture .alt { margin-top: var(--space-2); }
+#gesture .gesture-print-secondary { margin-top: var(--space-2); }
 
 /* Principles */
 .principles { gap: var(--space-3); list-style: none; padding: 0; margin: var(--space-2) 0 0; }
@@ -789,6 +832,21 @@ figcaption {
     font-size: clamp(16px, 4.8vw, 20px);
   }
 
+  #gesture .stage {
+    padding-top: clamp(30px, 8vw, 44px);
+    margin-top: clamp(30px, 8vw, 44px);
+  }
+  #gesture .media-row {
+    gap: clamp(12px, 4.2vw, 20px);
+  }
+  #gesture .gesture-copy {
+    max-width: none;
+  }
+  #gesture .gesture-copy p {
+    font-size: clamp(1rem, 4.2vw, 1.1rem);
+    line-height: 1.5;
+  }
+
   #object .object-layout {
     gap: clamp(34px, 8vw, 56px);
   }
@@ -811,6 +869,9 @@ figcaption {
 
 @media (max-width: 640px) {
   #gesture .media-row { grid-template-columns: 1fr; }
+  #gesture .gesture-visual .media-image {
+    max-height: clamp(220px, 48vh, 360px);
+  }
   .word-field {
     min-height: 520px;
     padding-inline: clamp(10px, 4vw, 18px);

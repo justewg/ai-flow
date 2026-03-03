@@ -23,38 +23,93 @@
     revealEls.forEach(el => el.classList.add('in-view'));
   }
 
-  // Gesture "show" stage: crossfade between two images while scrolling through the stage
-  const scrollFadeStacks = Array.from(document.querySelectorAll('[data-scroll-fade]'));
-  if (scrollFadeStacks.length && !prefersReduced) {
-    let rafId = 0;
-    const clamp = (value) => Math.min(1, Math.max(0, value));
-
-    const updateScrollFade = () => {
-      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 1;
-
-      for (const stack of scrollFadeStacks) {
-        const stage = stack.closest('.stage') || stack;
-        const rect = stage.getBoundingClientRect();
-        const totalDistance = Math.max(rect.height + viewportHeight, 1);
-        const passedDistance = viewportHeight - rect.top;
-        const progress = clamp(passedDistance / totalDistance);
-        stack.style.setProperty('--gesture-show-alt-opacity', progress.toFixed(3));
-      }
-
-      rafId = 0;
+  // Gesture before/after slider (mouse + touch via pointer events)
+  const beforeAfterSliders = Array.from(document.querySelectorAll('[data-before-after]'));
+  if (beforeAfterSliders.length) {
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+    const readInitialPosition = (slider) => {
+      const raw = Number.parseFloat(slider.dataset.initial || '');
+      return Number.isFinite(raw) ? clamp(raw, 5, 95) : 16;
+    };
+    const setSliderPosition = (slider, percent) => {
+      const safePercent = clamp(percent, 0, 100);
+      slider.style.setProperty('--before-after-pos', `${safePercent.toFixed(2)}%`);
+      slider.dataset.position = safePercent.toFixed(2);
+    };
+    const getPositionFromClientX = (slider, clientX) => {
+      const rect = slider.getBoundingClientRect();
+      if (!rect.width) return readInitialPosition(slider);
+      return ((clientX - rect.left) / rect.width) * 100;
     };
 
-    const requestScrollFadeUpdate = () => {
-      if (!rafId) {
-        rafId = requestAnimationFrame(updateScrollFade);
-      }
-    };
+    for (const slider of beforeAfterSliders) {
+      let activePointerId = null;
+      const divider = slider.querySelector('.before-after__divider');
 
-    window.addEventListener('scroll', requestScrollFadeUpdate, { passive: true });
-    window.addEventListener('resize', requestScrollFadeUpdate);
-    requestScrollFadeUpdate();
-  } else {
-    scrollFadeStacks.forEach(stack => stack.style.setProperty('--gesture-show-alt-opacity', '0'));
+      setSliderPosition(slider, readInitialPosition(slider));
+
+      const stopDragging = () => {
+        activePointerId = null;
+        slider.classList.remove('is-dragging');
+      };
+
+      const onPointerDown = (event) => {
+        if (event.button !== undefined && event.button !== 0) return;
+        activePointerId = event.pointerId;
+        slider.classList.add('is-dragging');
+        slider.classList.remove('is-hinting');
+        slider.dataset.interacted = '1';
+        setSliderPosition(slider, getPositionFromClientX(slider, event.clientX));
+        slider.setPointerCapture?.(event.pointerId);
+        event.preventDefault();
+      };
+
+      const onPointerMove = (event) => {
+        if (activePointerId === null || event.pointerId !== activePointerId) return;
+        setSliderPosition(slider, getPositionFromClientX(slider, event.clientX));
+      };
+
+      const onPointerUp = (event) => {
+        if (activePointerId === null || event.pointerId !== activePointerId) return;
+        stopDragging();
+      };
+
+      slider.addEventListener('pointerdown', onPointerDown);
+      slider.addEventListener('pointermove', onPointerMove);
+      slider.addEventListener('pointerup', onPointerUp);
+      slider.addEventListener('pointercancel', onPointerUp);
+      slider.addEventListener('lostpointercapture', stopDragging);
+      window.addEventListener('pointerup', onPointerUp, { passive: true });
+      window.addEventListener('pointercancel', onPointerUp, { passive: true });
+
+      divider?.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        const current = Number.parseFloat(slider.dataset.position || `${readInitialPosition(slider)}`);
+        const next = event.key === 'ArrowLeft' ? current - 4 : current + 4;
+        setSliderPosition(slider, next);
+        slider.dataset.interacted = '1';
+        slider.classList.remove('is-hinting');
+        event.preventDefault();
+      });
+    }
+
+    if ('IntersectionObserver' in window && !prefersReduced) {
+      const hintObserver = new IntersectionObserver((entries, observer) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const slider = entry.target;
+          if (slider.dataset.interacted === '1') {
+            observer.unobserve(slider);
+            continue;
+          }
+          slider.classList.add('is-hinting');
+          window.setTimeout(() => slider.classList.remove('is-hinting'), 950);
+          observer.unobserve(slider);
+        }
+      }, { rootMargin: '0px 0px -12% 0px', threshold: 0.25 });
+
+      beforeAfterSliders.forEach(slider => hintObserver.observe(slider));
+    }
   }
 
   // Intro hero: enter-state + subtle background parallax on desktop

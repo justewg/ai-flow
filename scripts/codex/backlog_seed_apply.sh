@@ -98,6 +98,38 @@ run_gh_retry_capture_project() {
   fi
 }
 
+sanitize_for_log() {
+  local value="$1"
+  printf '%s' "$value" | tr '\n' ' ' | tr '\t' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//'
+}
+
+is_github_rate_limit_error() {
+  local text="$1"
+  printf '%s' "$text" | grep -Eiq \
+    'api rate limit already exceeded|graphql_rate_limit|rate limit exceeded|secondary rate limit|you have exceeded a secondary rate limit'
+}
+
+emit_wait_github_unstable() {
+  local stage="$1"
+  echo "BACKLOG_SEED_WAIT_GITHUB=1"
+  echo "BACKLOG_SEED_WAIT_STAGE=${stage}"
+  echo "WAIT_GITHUB_API_UNSTABLE=1"
+  echo "WAIT_GITHUB_STAGE=BACKLOG_SEED_${stage}"
+}
+
+emit_wait_github_rate_limit() {
+  local stage="$1"
+  local raw_message="$2"
+  local message
+  message="$(sanitize_for_log "$raw_message")"
+  [[ -z "$message" ]] && message="GitHub API rate limit exceeded during backlog seed"
+  echo "BACKLOG_SEED_WAIT_GITHUB=1"
+  echo "BACKLOG_SEED_WAIT_STAGE=${stage}"
+  echo "WAIT_GITHUB_RATE_LIMIT=1"
+  echo "WAIT_GITHUB_RATE_LIMIT_STAGE=BACKLOG_SEED_${stage}"
+  echo "WAIT_GITHUB_RATE_LIMIT_MSG=${message}"
+}
+
 render_plan_md() {
   if [[ ! -f "$PLAN_FILE" ]]; then
     rm -f "$PLAN_MD_FILE"
@@ -231,8 +263,11 @@ apply_task_to_project_backlog() {
   else
     rc=$?
     if [[ "$rc" -eq 75 ]]; then
-      echo "BACKLOG_SEED_WAIT_GITHUB=1"
-      echo "BACKLOG_SEED_WAIT_STAGE=PROJECT_ITEM_ADD"
+      emit_wait_github_unstable "PROJECT_ITEM_ADD"
+      return 75
+    fi
+    if is_github_rate_limit_error "$add_out"; then
+      emit_wait_github_rate_limit "PROJECT_ITEM_ADD" "$add_out"
       return 75
     fi
     if ! printf '%s' "$add_out" | grep -Eiq 'already exists|already in project|item already'; then
@@ -249,6 +284,10 @@ apply_task_to_project_backlog() {
       return 0
     fi
     rc=$?
+    if is_github_rate_limit_error "$set_out"; then
+      emit_wait_github_rate_limit "PROJECT_STATUS" "$set_out"
+      return 75
+    fi
     if [[ "$rc" -eq 75 ]]; then
       echo "BACKLOG_SEED_PROJECT_STATUS_DEFERRED=1"
       runtime_out="$("${ROOT_DIR}/scripts/codex/project_status_runtime.sh" enqueue "ISSUE-${issue_number}" "Backlog" "Backlog" "backlog-seed:${issue_number}" 2>&1 || true)"
@@ -270,6 +309,10 @@ apply_task_to_project_backlog() {
     sleep 2
   done
 
+  if is_github_rate_limit_error "$set_out"; then
+    emit_wait_github_rate_limit "PROJECT_STATUS" "$set_out"
+    return 75
+  fi
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
     echo "BACKLOG_SEED_PROJECT_STATUS_WARN: $line"
@@ -339,8 +382,7 @@ while (( processed < MAX_PER_TICK )); do
   else
     rc=$?
     if [[ "$rc" -eq 75 ]]; then
-      echo "BACKLOG_SEED_WAIT_GITHUB=1"
-      echo "BACKLOG_SEED_WAIT_STAGE=ISSUE_LOOKUP"
+      emit_wait_github_unstable "ISSUE_LOOKUP"
       break
     fi
     echo "BACKLOG_SEED_ISSUE_LOOKUP_WARN=${code}"
@@ -356,8 +398,7 @@ while (( processed < MAX_PER_TICK )); do
     else
       rc=$?
       if [[ "$rc" -eq 75 ]]; then
-        echo "BACKLOG_SEED_WAIT_GITHUB=1"
-        echo "BACKLOG_SEED_WAIT_STAGE=DEPENDS_RESOLVE"
+        emit_wait_github_unstable "DEPENDS_RESOLVE"
         break
       fi
       depends_refs="none"
@@ -368,8 +409,7 @@ while (( processed < MAX_PER_TICK )); do
     else
       rc=$?
       if [[ "$rc" -eq 75 ]]; then
-        echo "BACKLOG_SEED_WAIT_GITHUB=1"
-        echo "BACKLOG_SEED_WAIT_STAGE=BLOCKS_RESOLVE"
+        emit_wait_github_unstable "BLOCKS_RESOLVE"
         break
       fi
       blocks_refs="none"
@@ -390,8 +430,11 @@ while (( processed < MAX_PER_TICK )); do
       rc=$?
       rm -f "$body_file"
       if [[ "$rc" -eq 75 ]]; then
-        echo "BACKLOG_SEED_WAIT_GITHUB=1"
-        echo "BACKLOG_SEED_WAIT_STAGE=ISSUE_CREATE"
+        emit_wait_github_unstable "ISSUE_CREATE"
+        break
+      fi
+      if is_github_rate_limit_error "$create_out"; then
+        emit_wait_github_rate_limit "ISSUE_CREATE" "$create_out"
         break
       fi
       while IFS= read -r line; do

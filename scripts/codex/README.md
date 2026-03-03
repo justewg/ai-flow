@@ -187,6 +187,7 @@
   - в начале каждого тика пытается применить runtime backlog-seed план (`.tmp/codex/backlog_seed_plan.json`) через `backlog_seed_apply.sh`
   - в стандартной конфигурации создает/линкует не более 1 backlog-задачи за тик (`BACKLOG_SEED_MAX_PER_TICK=1`)
   - если GitHub API недоступен, оставляет план нетронутым и повторит попытку на следующем тике
+  - при rate-limit во время backlog-seed теперь поднимает явные wait-маркеры (`WAIT_GITHUB_RATE_LIMIT` + `..._STAGE/..._MSG`), чтобы daemon переходил в деградированный режим и отправлял корректные сигналы
   - по мере успешного создания задач автоматически сокращает план; при пустом плане удаляет `.tmp/codex/backlog_seed_plan.json` и `.tmp/codex/backlog_seed_plan.md`
   - минимальный формат плана: JSON c корневым `tasks[]`, где каждая задача содержит `code`, `title`, `description`, опционально `plan_key`, `depends_on_codes[]`, `blocks_codes[]`
   - останавливается только при изменениях tracked-файлов (staged/unstaged)

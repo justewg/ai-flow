@@ -106,6 +106,8 @@
   - `Issue/PR` продолжают работать на App token из auth-сервиса.
 - `DAEMON_GH_AUTH_TIMEOUT_SEC` — timeout запроса daemon/watchdog к локальному auth endpoint (по умолчанию `8` сек).
 - `DAEMON_GH_AUTH_TOKEN_URL` — опциональный явный URL `GET /token` (по умолчанию `http://${GH_APP_BIND:-127.0.0.1}:${GH_APP_PORT:-8787}/token`).
+- `DAEMON_RATE_LIMIT_BACKOFF_BASE_SEC` — базовый sleep daemon-loop при `WAIT_GITHUB_RATE_LIMIT` (по умолчанию равен `daemon_loop interval`).
+- `DAEMON_RATE_LIMIT_MAX_SLEEP_SEC` — верхняя граница sleep daemon-loop при `WAIT_GITHUB_RATE_LIMIT` (по умолчанию `360` сек).
 - `DAEMON_GH_PROJECT_TOKEN` (или `CODEX_GH_PROJECT_TOKEN`) — отдельный PAT для Project v2 операций.
   - Где получить: `GitHub -> Settings -> Developer settings -> Personal access tokens`.
   - Рекомендуемый тип: `Tokens (classic)` для user-owned Project API.
@@ -246,6 +248,7 @@
   - сохраняет текущий `Task ID` в `.tmp/codex/project_task_id.txt` для последующего `task_finalize`
 - `daemon_loop.sh [interval-sec]`
   - крутит `daemon_tick.sh` в цикле с lock-файлом и heartbeat-логом
+  - при последовательных `WAIT_GITHUB_RATE_LIMIT` применяет экспоненциальный backoff сна (`base -> x2 -> x4`, по умолчанию `90 -> 180 -> 360`) и сбрасывает backoff после успешного non-rate-limit тика
   - перед каждым тиком получает свежий `GH_TOKEN` из локального auth endpoint (`/token`)
   - при ошибке auth-сервиса:
     - если включен `DAEMON_GH_TOKEN_FALLBACK_ENABLED` и доступен PAT (`DAEMON_GH_TOKEN`/`CODEX_GH_TOKEN`) — продолжает работу через fallback

@@ -18,6 +18,19 @@ if ! [[ "$interval" =~ ^[0-9]+$ ]] || (( interval < 5 )); then
   exit 1
 fi
 
+rate_limit_backoff_base_sec="${DAEMON_RATE_LIMIT_BACKOFF_BASE_SEC:-$interval}"
+if ! [[ "$rate_limit_backoff_base_sec" =~ ^[0-9]+$ ]] || (( rate_limit_backoff_base_sec < 5 )); then
+  rate_limit_backoff_base_sec="$interval"
+fi
+if (( rate_limit_backoff_base_sec < interval )); then
+  rate_limit_backoff_base_sec="$interval"
+fi
+
+rate_limit_backoff_max_sec="${DAEMON_RATE_LIMIT_MAX_SLEEP_SEC:-360}"
+if ! [[ "$rate_limit_backoff_max_sec" =~ ^[0-9]+$ ]] || (( rate_limit_backoff_max_sec < rate_limit_backoff_base_sec )); then
+  rate_limit_backoff_max_sec="$rate_limit_backoff_base_sec"
+fi
+
 mkdir -p "$CODEX_DIR"
 
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -189,6 +202,40 @@ read_file_or_default() {
   fi
 }
 
+rate_limit_backoff_hits=0
+rate_limit_backoff_next_sec="$rate_limit_backoff_base_sec"
+loop_sleep_sec="$interval"
+
+compute_loop_sleep_sec() {
+  local state="$1"
+  loop_sleep_sec="$interval"
+
+  if [[ "$state" == "WAIT_GITHUB_RATE_LIMIT" ]]; then
+    loop_sleep_sec="$rate_limit_backoff_next_sec"
+    if (( loop_sleep_sec < rate_limit_backoff_base_sec )); then
+      loop_sleep_sec="$rate_limit_backoff_base_sec"
+    fi
+    if (( loop_sleep_sec > rate_limit_backoff_max_sec )); then
+      loop_sleep_sec="$rate_limit_backoff_max_sec"
+    fi
+    rate_limit_backoff_hits=$(( rate_limit_backoff_hits + 1 ))
+
+    local next_sec
+    next_sec=$(( loop_sleep_sec * 2 ))
+    if (( next_sec > rate_limit_backoff_max_sec )); then
+      next_sec="$rate_limit_backoff_max_sec"
+    fi
+    rate_limit_backoff_next_sec="$next_sec"
+    return 0
+  fi
+
+  if (( rate_limit_backoff_hits > 0 )); then
+    log "RATE_LIMIT_BACKOFF_RESET_AFTER_STATE=${state}"
+  fi
+  rate_limit_backoff_hits=0
+  rate_limit_backoff_next_sec="$rate_limit_backoff_base_sec"
+}
+
 set_state() {
   local state="$1"
   local detail="${2:-}"
@@ -204,6 +251,8 @@ set_state() {
 classify_success_state() {
   local output="$1"
   if printf '%s' "$output" | grep -q '^WAIT_GITHUB_RATE_LIMIT=1'; then
+    echo "WAIT_GITHUB_RATE_LIMIT"
+  elif printf '%s' "$output" | grep -Eiq 'graphql:.*rate limit|api rate limit already exceeded|graphql_rate_limit|rate limit exceeded'; then
     echo "WAIT_GITHUB_RATE_LIMIT"
   elif printf '%s' "$output" | grep -q '^WAIT_GITHUB_API_UNSTABLE=1'; then
     echo "WAIT_GITHUB_OFFLINE"
@@ -293,13 +342,18 @@ build_success_detail() {
       line="$(printf '%s\n' "$output" | grep -m1 -E '^(WAIT_GITHUB_STAGE=|WAIT_GITHUB_API_UNSTABLE=1)' || true)"
       ;;
     WAIT_GITHUB_RATE_LIMIT)
-      local stage_line msg_line req_line dur_line
+      local stage_line msg_line req_line dur_line raw_rate_line
       local parts=()
       stage_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_RATE_LIMIT_STAGE=' || true)"
       msg_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_RATE_LIMIT_MSG=' || true)"
       req_line="$(printf '%s\n' "$output" | grep -m1 '^GQL_STATS_WINDOW_REQUESTS=' || true)"
       dur_line="$(printf '%s\n' "$output" | grep -m1 '^GQL_STATS_WINDOW_DURATION_SEC=' || true)"
+      raw_rate_line="$(printf '%s\n' "$output" | grep -m1 -Ei 'graphql:.*rate limit|api rate limit already exceeded|graphql_rate_limit|rate limit exceeded' || true)"
       parts+=("DEGRADED=GITHUB_GRAPHQL_RATE_LIMIT")
+      [[ -z "$stage_line" ]] && stage_line="WAIT_GITHUB_RATE_LIMIT_STAGE=PROJECT_QUERY_OR_FALLBACK"
+      if [[ -z "$msg_line" && -n "$raw_rate_line" ]]; then
+        msg_line="WAIT_GITHUB_RATE_LIMIT_MSG=$raw_rate_line"
+      fi
       [[ -n "$stage_line" ]] && parts+=("$stage_line")
       [[ -n "$msg_line" ]] && parts+=("$msg_line")
       [[ -n "$req_line" ]] && parts+=("$req_line")
@@ -909,7 +963,7 @@ notify_if_needed() {
   fi
 }
 
-log "daemon_loop start interval=${interval}s"
+log "daemon_loop start interval=${interval}s rate_limit_backoff_base=${rate_limit_backoff_base_sec}s rate_limit_backoff_max=${rate_limit_backoff_max_sec}s"
 set_state "BOOTING" "daemon_loop started"
 
 while true; do
@@ -984,5 +1038,11 @@ while true; do
     notify_github_runtime_if_needed "$state" "$detail" "$combined_output"
     notify_if_needed "$state" "$detail"
   fi
-  sleep "$interval"
+
+  compute_loop_sleep_sec "$state"
+  if [[ "$state" == "WAIT_GITHUB_RATE_LIMIT" ]]; then
+    log "RATE_LIMIT_BACKOFF_ACTIVE=1 STEP=${rate_limit_backoff_hits} SLEEP_SEC=${loop_sleep_sec} NEXT_SLEEP_SEC=${rate_limit_backoff_next_sec} BASE_SEC=${rate_limit_backoff_base_sec} MAX_SEC=${rate_limit_backoff_max_sec}"
+  fi
+
+  sleep "$loop_sleep_sec"
 done

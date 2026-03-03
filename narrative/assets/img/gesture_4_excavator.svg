@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000">
+  <rect width="1600" height="1000" fill="#e4ebf3" />
+  <rect x="186" y="132" width="1228" height="736" rx="52" fill="#eef4fa" stroke="#b8c6d5" stroke-width="10" />
+  <rect x="262" y="216" width="1076" height="324" rx="28" fill="#f8fbff" stroke="#cad7e5" stroke-width="6" />
+  <rect x="316" y="260" width="458" height="76" rx="16" fill="#dde9f5" />
+  <text x="348" y="312" fill="#335067" font-size="42" font-family="Arial, sans-serif" font-weight="700">КАРТОШКА  ✓</text>
+  <rect x="316" y="366" width="970" height="110" rx="18" fill="#edf3f9" />
+  <text x="354" y="438" fill="#2b4258" font-size="62" font-family="Arial, sans-serif" font-weight="700">ЭКСКАВАТОР</text>
+  <rect x="262" y="578" width="1076" height="224" rx="24" fill="#e8f0f8" stroke="#c2cfde" stroke-width="4" />
+  <g fill="#d2ddeb">
+    <rect x="306" y="624" width="132" height="58" rx="12" />
+    <rect x="458" y="624" width="132" height="58" rx="12" />
+    <rect x="610" y="624" width="132" height="58" rx="12" />
+    <rect x="762" y="624" width="132" height="58" rx="12" />
+    <rect x="914" y="624" width="132" height="58" rx="12" />
+    <rect x="1066" y="624" width="228" height="58" rx="12" />
+    <rect x="332" y="702" width="238" height="58" rx="12" />
+    <rect x="596" y="702" width="238" height="58" rx="12" />
+    <rect x="860" y="702" width="272" height="58" rx="12" />
+  </g>
+  <g>
+    <ellipse cx="1104" cy="540" rx="134" ry="52" fill="#d8e3ef" />
+    <ellipse cx="1140" cy="566" rx="42" ry="24" fill="#d8e3ef" />
+  </g>
+</svg>

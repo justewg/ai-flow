@@ -260,6 +260,10 @@ figcaption {
   font-size: clamp(40px, 5.4vw, 82px);
 }
 
+.planka-hero__title-nowrap{
+  white-space: nowrap;
+}
+
 .planka-hero__subtitle{
   margin: 14px 0 0 0;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
@@ -954,6 +958,10 @@ figcaption {
   line-height: .96 !important;
   color: var(--hero-fg) !important;
   font-size: clamp(40px, 5.4vw, 82px) !important;
+}
+
+#intro.planka-hero .planka-hero__title-nowrap{
+  white-space: nowrap !important;
 }
 
 #intro.planka-hero .planka-hero__subtitle{

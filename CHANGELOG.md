@@ -38,6 +38,9 @@
 - `[APP-07]` Созданы smoke-артефакты проверки авторства через App token: `Issue #142` и `PR #143`.
 - `[APP-07]` Зафиксирован hybrid-режим для user-owned Project v2: App token для `Issue/PR`, отдельный `DAEMON_GH_PROJECT_TOKEN` для Project операций.
 - `[APP-07]` В `docs/gh-app-daemon-integration-plan.md` добавлена инструкция, где выпускать PAT для `DAEMON_GH_PROJECT_TOKEN` и как проверять доступы.
+- `[APP-07]` Добавлен единый snapshot состояния автоматики: `scripts/codex/status_snapshot.sh` + команда `scripts/codex/run.sh status_snapshot` (daemon/watchdog/executor/queues/blockers/rate-limit/backlog-seed).
+- `[APP-07]` Добавлен ops-сервис `scripts/codex/ops_bot_service.js`: web dashboard (`/ops/status`), JSON status (`/ops/status.json`) и Telegram webhook-команды (`/status`, `/summary`, `/help`, `/status_page`).
+- `[APP-07]` Добавлена PM2-обвязка ops-сервиса (`ops_bot_pm2_*`) и runbook интеграции с nginx/webhook: `docs/ops-bot-dashboard.md`.
 
 ### Fixed
 - `[APP-07]` Усилен `backlog_seed_apply`: при `GitHub API rate limit` теперь явно эмитятся `WAIT_GITHUB_RATE_LIMIT`/`..._STAGE`/`..._MSG` (а при сетевой деградации — `WAIT_GITHUB_API_UNSTABLE`), чтобы daemon переходил в корректное wait-состояние вместо тихого `...WARN` в `IDLE`.

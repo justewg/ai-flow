@@ -26,6 +26,7 @@ Commands:
   project_set_status
   project_status_runtime
   log_summary
+  status_snapshot
   next_task
   app_deps_mermaid
   backlog_seed_apply
@@ -58,6 +59,13 @@ Commands:
   gh_app_auth_pm2_status
   gh_app_auth_pm2_health
   gh_app_auth_pm2_crash_test
+  ops_bot_start
+  ops_bot_health
+  ops_bot_pm2_start
+  ops_bot_pm2_stop
+  ops_bot_pm2_restart
+  ops_bot_pm2_status
+  ops_bot_pm2_health
 
 Fixed input files in .tmp/codex:
   pr_number.txt
@@ -252,6 +260,10 @@ case "$cmd" in
     "${ROOT_DIR}/scripts/codex/log_summary.sh" "$@"
     ;;
 
+  status_snapshot)
+    "${ROOT_DIR}/scripts/codex/status_snapshot.sh"
+    ;;
+
   next_task)
     "${ROOT_DIR}/scripts/codex/next_task.sh"
     ;;
@@ -444,6 +456,34 @@ case "$cmd" in
 
   gh_app_auth_pm2_crash_test)
     "${ROOT_DIR}/scripts/codex/gh_app_auth_pm2_crash_test.sh"
+    ;;
+
+  ops_bot_start)
+    "${ROOT_DIR}/scripts/codex/ops_bot_start.sh"
+    ;;
+
+  ops_bot_health)
+    "${ROOT_DIR}/scripts/codex/ops_bot_health.sh"
+    ;;
+
+  ops_bot_pm2_start)
+    "${ROOT_DIR}/scripts/codex/ops_bot_pm2_start.sh"
+    ;;
+
+  ops_bot_pm2_stop)
+    "${ROOT_DIR}/scripts/codex/ops_bot_pm2_stop.sh"
+    ;;
+
+  ops_bot_pm2_restart)
+    "${ROOT_DIR}/scripts/codex/ops_bot_pm2_restart.sh"
+    ;;
+
+  ops_bot_pm2_status)
+    "${ROOT_DIR}/scripts/codex/ops_bot_pm2_status.sh"
+    ;;
+
+  ops_bot_pm2_health)
+    "${ROOT_DIR}/scripts/codex/ops_bot_pm2_health.sh"
     ;;
 
   *)

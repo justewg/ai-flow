@@ -8,6 +8,7 @@
 - `CHANGELOG.md` — журнал выполненных изменений.
 - `AGENT.md` — рабочие договоренности и flow.
 - `docs/gh-app-daemon-integration-plan.md` — план и runbook по включению GitHub App auth-сервиса (permissions, installation, smoke, onboarding).
+- `docs/ops-bot-dashboard.md` — запуск ops-дашборда и Telegram webhook-бота (`/ops/status`, `/ops/status.json`, `/telegram/webhook/...`).
 
 ## Текущий прототип
 - `prototype/web/` — MVP UI-прототип экрана 50/50 (задача `PL-003`).

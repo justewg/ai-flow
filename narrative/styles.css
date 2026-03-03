@@ -492,19 +492,112 @@ figcaption {
   max-height: min(58vh, 560px);
   object-fit: contain;
 }
-#gesture .gesture-visual--stack {
-  --gesture-show-alt-opacity: 0;
-  display: grid;
+#gesture .before-after {
+  --before-after-pos: 16%;
+  position: relative;
+  width: 100%;
+  max-height: min(58vh, 560px);
+  aspect-ratio: 3 / 2;
+  border-radius: var(--radius-2);
+  border: 1px solid #cfd9e6;
+  background: #f7fbff;
+  box-shadow: 0 10px 28px rgba(31, 43, 55, 0.08);
+  overflow: hidden;
+  cursor: ew-resize;
+  user-select: none;
+  touch-action: pan-y;
+  isolation: isolate;
 }
-#gesture .gesture-frame {
-  grid-area: 1 / 1;
-  transition: opacity 220ms linear;
+#gesture .before-after__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: #f7fbff;
 }
-#gesture .gesture-frame--base {
-  opacity: calc(1 - var(--gesture-show-alt-opacity));
+#gesture .before-after__overlay {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  clip-path: inset(0 calc(100% - var(--before-after-pos)) 0 0);
+  -webkit-clip-path: inset(0 calc(100% - var(--before-after-pos)) 0 0);
+  pointer-events: none;
+  z-index: 1;
 }
-#gesture .gesture-frame--alt {
-  opacity: var(--gesture-show-alt-opacity);
+#gesture .before-after__divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--before-after-pos);
+  width: 48px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  transform: translateX(-50%);
+  cursor: ew-resize;
+  z-index: 3;
+}
+#gesture .before-after__divider::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, rgba(22, 33, 45, 0.2), rgba(22, 33, 45, 0.58), rgba(22, 33, 45, 0.2));
+}
+#gesture .before-after__knob {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  background: rgba(246, 250, 255, 0.95);
+  border: 1px solid rgba(33, 49, 66, 0.24);
+  box-shadow: 0 5px 14px rgba(23, 36, 50, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+#gesture .before-after__arrow {
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+}
+#gesture .before-after__arrow--left {
+  border-right: 6px solid rgba(31, 47, 64, 0.85);
+}
+#gesture .before-after__arrow--right {
+  border-left: 6px solid rgba(31, 47, 64, 0.85);
+}
+#gesture .before-after__divider:focus-visible {
+  outline: none;
+}
+#gesture .before-after__divider:focus-visible .before-after__knob {
+  box-shadow: 0 0 0 3px rgba(66, 136, 214, 0.28), 0 5px 14px rgba(23, 36, 50, 0.18);
+}
+#gesture .before-after.is-hinting .before-after__divider {
+  animation: gestureBeforeAfterHint 860ms var(--ease) 1;
+}
+@keyframes gestureBeforeAfterHint {
+  0%, 100% {
+    transform: translateX(-50%);
+  }
+  35% {
+    transform: translateX(calc(-50% + 11px));
+  }
+  70% {
+    transform: translateX(calc(-50% - 6px));
+  }
 }
 #gesture .gesture-copy {
   display: grid;
@@ -876,6 +969,16 @@ figcaption {
   #gesture .gesture-visual .media-image {
     max-height: clamp(220px, 48vh, 360px);
   }
+  #gesture .before-after {
+    max-height: clamp(220px, 48vh, 360px);
+  }
+  #gesture .before-after__divider {
+    width: 54px;
+  }
+  #gesture .before-after__knob {
+    width: 38px;
+    height: 38px;
+  }
   .word-field {
     min-height: 520px;
     padding-inline: clamp(10px, 4vw, 18px);
@@ -901,6 +1004,7 @@ figcaption {
 
 @media (prefers-reduced-motion: reduce) {
   .final-accent::after { animation: none; opacity: 0; }
+  #gesture .before-after.is-hinting .before-after__divider { animation: none; }
 }
 
 /* ==========================================================

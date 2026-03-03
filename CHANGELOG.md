@@ -43,6 +43,7 @@
 - `[APP-07]` Добавлена PM2-обвязка ops-сервиса (`ops_bot_pm2_*`) и runbook интеграции с nginx/webhook: `docs/ops-bot-dashboard.md`.
 
 ### Fixed
+- `[APP-07]` Dependency-gate в `daemon_tick` больше не блокирует задачу на битых зависимостях: несуществующие `Depends-On` issue теперь игнорируются (`DEPENDENCY_MISSING_IGNORED`), а неразбираемые dependency-токены логируются как `DEPENDENCY_TOKEN_IGNORED_UNRESOLVED` и не останавливают claim.
 - `[APP-07]` Усилен `backlog_seed_apply`: при `GitHub API rate limit` теперь явно эмитятся `WAIT_GITHUB_RATE_LIMIT`/`..._STAGE`/`..._MSG` (а при сетевой деградации — `WAIT_GITHUB_API_UNSTABLE`), чтобы daemon переходил в корректное wait-состояние вместо тихого `...WARN` в `IDLE`.
 - `[ISSUE-233]` Переформатированы dirty-worktree Telegram-оповещения в `scripts/codex/daemon_loop.sh`: заголовки приведены к `PLANKA: ...`, добавлены структурированные строки `Reason/State/Blocked/Tracked/Action/Time`, чтобы алерты оставались читаемыми и при plain-показе.
 - `[APP-05]` Исправлено логирование auth-ошибок в `daemon_loop.sh` и `watchdog_loop.sh`: корректный `AUTH_RC` сохраняется в `WAIT_AUTH_SERVICE` (раньше в части кейсов логировался `rc=0`).

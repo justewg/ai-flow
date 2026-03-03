@@ -232,6 +232,8 @@
   - берет задачу только из `Status=Todo`
   - перед подхватом читает `Flow Meta` у Issue и проверяет `Depends-On`
   - зависимость из `Depends-On` считается выполненной, если `Issue` закрыт (`state=CLOSED`) или карточка зависимости в Project имеет `Status=Done/Closed`
+  - если в `Depends-On` указан несуществующий Issue (битая ссылка), зависимость игнорируется и не блокирует claim (`DEPENDENCY_MISSING_IGNORED`)
+  - если токен в `Depends-On` не удается распарсить как Issue-ссылку, он игнорируется (`DEPENDENCY_TOKEN_IGNORED_UNRESOLVED`)
   - при незакрытых зависимостях не берет задачу, пишет `WAIT_DEPENDENCIES...` в вывод и отправляет одноразовый сигнал `CODEX_SIGNAL: AGENT_DEPENDENCY_BLOCKED` (через outbox при офлайне GitHub)
   - для автоподхвата учитывает только `Issue`; `DraftIssue` игнорируется
   - issue с заголовком `DIRTY-GATE:` исключаются из штатной claim-очереди (они служебные и обрабатываются только dirty-gate веткой)

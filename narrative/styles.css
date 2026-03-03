@@ -458,6 +458,19 @@ figcaption {
   padding-top: var(--space-4);
 }
 
+#designing .designing-rationale {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 74ch;
+}
+
+#designing .designing-rationale p {
+  margin: 0;
+  color: #445a70;
+  font-size: clamp(1rem, 1.24vw, 1.16rem);
+  line-height: 1.45;
+}
+
 /* Reveal rhythm inside stage */
 .stage-step-1 { transition-delay: 40ms; }
 .stage-step-2 { transition-delay: 200ms; }

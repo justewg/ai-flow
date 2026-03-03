@@ -38,8 +38,13 @@
 - `[APP-07]` Созданы smoke-артефакты проверки авторства через App token: `Issue #142` и `PR #143`.
 - `[APP-07]` Зафиксирован hybrid-режим для user-owned Project v2: App token для `Issue/PR`, отдельный `DAEMON_GH_PROJECT_TOKEN` для Project операций.
 - `[APP-07]` В `docs/gh-app-daemon-integration-plan.md` добавлена инструкция, где выпускать PAT для `DAEMON_GH_PROJECT_TOKEN` и как проверять доступы.
+- `[APP-07]` Добавлен единый snapshot состояния автоматики: `scripts/codex/status_snapshot.sh` + команда `scripts/codex/run.sh status_snapshot` (daemon/watchdog/executor/queues/blockers/rate-limit/backlog-seed).
+- `[APP-07]` Добавлен ops-сервис `scripts/codex/ops_bot_service.js`: web dashboard (`/ops/status`), JSON status (`/ops/status.json`) и Telegram webhook-команды (`/status`, `/summary`, `/help`, `/status_page`).
+- `[APP-07]` Добавлена PM2-обвязка ops-сервиса (`ops_bot_pm2_*`) и runbook интеграции с nginx/webhook: `docs/ops-bot-dashboard.md`.
 
 ### Fixed
+- `[APP-07]` В `daemon_loop.sh` добавлен экспоненциальный backoff при `WAIT_GITHUB_RATE_LIMIT`: интервал следующего тика растет `90 -> 180 -> 360` сек (с насыщением на `360`), после успешного тика backoff сбрасывается к базовому интервалу.
+- `[APP-07]` Dependency-gate в `daemon_tick` больше не блокирует задачу на битых зависимостях: несуществующие `Depends-On` issue теперь игнорируются (`DEPENDENCY_MISSING_IGNORED`), а неразбираемые dependency-токены логируются как `DEPENDENCY_TOKEN_IGNORED_UNRESOLVED` и не останавливают claim.
 - `[APP-07]` Усилен `backlog_seed_apply`: при `GitHub API rate limit` теперь явно эмитятся `WAIT_GITHUB_RATE_LIMIT`/`..._STAGE`/`..._MSG` (а при сетевой деградации — `WAIT_GITHUB_API_UNSTABLE`), чтобы daemon переходил в корректное wait-состояние вместо тихого `...WARN` в `IDLE`.
 - `[ISSUE-233]` Переформатированы dirty-worktree Telegram-оповещения в `scripts/codex/daemon_loop.sh`: заголовки приведены к `PLANKA: ...`, добавлены структурированные строки `Reason/State/Blocked/Tracked/Action/Time`, чтобы алерты оставались читаемыми и при plain-показе.
 - `[APP-05]` Исправлено логирование auth-ошибок в `daemon_loop.sh` и `watchdog_loop.sh`: корректный `AUTH_RC` сохраняется в `WAIT_AUTH_SERVICE` (раньше в части кейсов логировался `rc=0`).

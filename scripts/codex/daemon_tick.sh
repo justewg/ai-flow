@@ -50,6 +50,12 @@ is_github_network_error() {
     'error connecting to api\.github\.com|could not resolve host: api\.github\.com|could not resolve host: github\.com|could not resolve hostname github\.com|temporary failure in name resolution|connection timed out|operation timed out|tls handshake timeout|failed to connect'
 }
 
+is_github_issue_not_found_error() {
+  local text="$1"
+  printf '%s' "$text" | grep -Eiq \
+    'could not resolve to an issue|http 404|not found'
+}
+
 enqueue_project_status_runtime() {
   local target="$1"
   local status_name="$2"
@@ -606,22 +612,27 @@ is_resolved_project_status() {
 
 dependency_issue_resolved() {
   local dep_issue_number="$1"
-  local dep_state dep_item_id dep_status rc
+  local dep_state dep_item_id dep_status rc dep_state_out
 
-  if dep_state="$(
+  if dep_state_out="$(
     run_gh_retry_capture \
       gh issue view "$dep_issue_number" \
       --repo "$repo" \
       --json state \
-      --jq '.state'
+      --jq '.state' 2>&1
   )"; then
     :
   else
     rc=$?
     [[ "$rc" -eq 75 ]] && return 75
+    if is_github_issue_not_found_error "$dep_state_out"; then
+      echo "DEPENDENCY_MISSING_IGNORED=#${dep_issue_number}"
+      return 0
+    fi
     return "$rc"
   fi
 
+  dep_state="$(printf '%s\n' "$dep_state_out" | awk 'NF {print; exit}')"
   if [[ "$dep_state" == "CLOSED" ]]; then
     return 0
   fi
@@ -2203,7 +2214,7 @@ if [[ "$depends_line" != "none" ]]; then
     fi
 
     if (( ${#dep_issue_numbers[@]} == 0 )); then
-      blocked_dependencies+=("$dep_token")
+      echo "DEPENDENCY_TOKEN_IGNORED_UNRESOLVED=${dep_token}"
       continue
     fi
 

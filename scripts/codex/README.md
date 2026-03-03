@@ -24,6 +24,7 @@
 - `scripts/codex/run.sh project_set_status`
 - `scripts/codex/run.sh project_status_runtime <enqueue|apply|list|clear> ...` — runtime-очередь отложенных обновлений `Project Status/Flow`.
 - `scripts/codex/run.sh log_summary [--hours N|--from ISO|--to ISO]` — агрегированный отчет по логам daemon/watchdog/runtime/graphql за период (без аргументов берёт весь доступный диапазон логов).
+- `scripts/codex/run.sh status_snapshot` — нормализованный JSON snapshot состояния автоматики (daemon/watchdog/executor/очереди/blockers).
 - `scripts/codex/run.sh next_task` — показать следующую задачу со статусом `Planned` (приоритет P0→P1→P2, затем по номеру `PL-xxx`).
 - `scripts/codex/run.sh app_deps_mermaid [output-file]` — построить Mermaid DAG зависимостей APP-issues из `Flow Meta` (`Depends-On/Blocks`) и записать markdown-файл (по умолчанию `docs/app-issues-dependency-diagram.md`).
 - `scripts/codex/run.sh backlog_seed_apply` — применить runtime-план создания backlog-задач из `.tmp/codex/backlog_seed_plan.json` (по умолчанию 1 задача за запуск).
@@ -56,6 +57,13 @@
 - `scripts/codex/run.sh gh_app_auth_pm2_status` — показать статус auth-сервиса в PM2.
 - `scripts/codex/run.sh gh_app_auth_pm2_health` — проверить PM2 status=`online` + endpoint `/health`.
 - `scripts/codex/run.sh gh_app_auth_pm2_crash_test` — kill процесса auth-сервиса и подтвердить авто-restart PM2.
+- `scripts/codex/run.sh ops_bot_start` — запустить локальный ops-бот сервис (`/health`, `/ops/status`, `/ops/status.json`, Telegram webhook).
+- `scripts/codex/run.sh ops_bot_health` — проверить endpoint `/health` ops-бота.
+- `scripts/codex/run.sh ops_bot_pm2_start` — зарегистрировать/перезапустить ops-бот сервис в PM2.
+- `scripts/codex/run.sh ops_bot_pm2_stop` — остановить и удалить ops-бот сервис из PM2.
+- `scripts/codex/run.sh ops_bot_pm2_restart` — перезапустить ops-бот сервис в PM2.
+- `scripts/codex/run.sh ops_bot_pm2_status` — показать статус ops-бот сервиса в PM2.
+- `scripts/codex/run.sh ops_bot_pm2_health` — проверить PM2 status=`online` + endpoint `/health` ops-бота.
 
 `run.sh` читает фиксированные файлы из `.tmp/codex/`:
 - `pr_number.txt`
@@ -89,7 +97,7 @@
 - Затем отдельно вызывать `scripts/codex/run.sh <action>`.
 
 ## Важные env-переменные
-- `node` (Node.js runtime, рекомендуется LTS >= 18) — обязателен для `gh_app_auth_*` скриптов и сервиса `gh_app_auth_service.js`.
+- `node` (Node.js runtime, рекомендуется LTS >= 18) — обязателен для `gh_app_auth_*`, `ops_bot_*` и сервисов `gh_app_auth_service.js`, `ops_bot_service.js`.
 - `GH_APP_INTERNAL_SECRET` — обязателен не только для auth-сервиса, но и для daemon/watchdog-клиента токена (`GET /token`).
 - Для корректной работы `daemon_tick` с Project v2 у GitHub App должен быть доступ `Projects: Read and write` на уровне `Account permissions` (user-owned project) или `Organization permissions` (org-owned project).
   - Если в daemon-логе есть `Resource not accessible by integration`, сначала проверить permissions App и обновить installation (`Configure`), затем повторить smoke.
@@ -98,6 +106,8 @@
   - `Issue/PR` продолжают работать на App token из auth-сервиса.
 - `DAEMON_GH_AUTH_TIMEOUT_SEC` — timeout запроса daemon/watchdog к локальному auth endpoint (по умолчанию `8` сек).
 - `DAEMON_GH_AUTH_TOKEN_URL` — опциональный явный URL `GET /token` (по умолчанию `http://${GH_APP_BIND:-127.0.0.1}:${GH_APP_PORT:-8787}/token`).
+- `DAEMON_RATE_LIMIT_BACKOFF_BASE_SEC` — базовый sleep daemon-loop при `WAIT_GITHUB_RATE_LIMIT` (по умолчанию равен `daemon_loop interval`).
+- `DAEMON_RATE_LIMIT_MAX_SLEEP_SEC` — верхняя граница sleep daemon-loop при `WAIT_GITHUB_RATE_LIMIT` (по умолчанию `360` сек).
 - `DAEMON_GH_PROJECT_TOKEN` (или `CODEX_GH_PROJECT_TOKEN`) — отдельный PAT для Project v2 операций.
   - Где получить: `GitHub -> Settings -> Developer settings -> Personal access tokens`.
   - Рекомендуемый тип: `Tokens (classic)` для user-owned Project API.
@@ -224,6 +234,8 @@
   - берет задачу только из `Status=Todo`
   - перед подхватом читает `Flow Meta` у Issue и проверяет `Depends-On`
   - зависимость из `Depends-On` считается выполненной, если `Issue` закрыт (`state=CLOSED`) или карточка зависимости в Project имеет `Status=Done/Closed`
+  - если в `Depends-On` указан несуществующий Issue (битая ссылка), зависимость игнорируется и не блокирует claim (`DEPENDENCY_MISSING_IGNORED`)
+  - если токен в `Depends-On` не удается распарсить как Issue-ссылку, он игнорируется (`DEPENDENCY_TOKEN_IGNORED_UNRESOLVED`)
   - при незакрытых зависимостях не берет задачу, пишет `WAIT_DEPENDENCIES...` в вывод и отправляет одноразовый сигнал `CODEX_SIGNAL: AGENT_DEPENDENCY_BLOCKED` (через outbox при офлайне GitHub)
   - для автоподхвата учитывает только `Issue`; `DraftIssue` игнорируется
   - issue с заголовком `DIRTY-GATE:` исключаются из штатной claim-очереди (они служебные и обрабатываются только dirty-gate веткой)
@@ -236,6 +248,7 @@
   - сохраняет текущий `Task ID` в `.tmp/codex/project_task_id.txt` для последующего `task_finalize`
 - `daemon_loop.sh [interval-sec]`
   - крутит `daemon_tick.sh` в цикле с lock-файлом и heartbeat-логом
+  - при последовательных `WAIT_GITHUB_RATE_LIMIT` применяет экспоненциальный backoff сна (`base -> x2 -> x4`, по умолчанию `90 -> 180 -> 360`) и сбрасывает backoff после успешного non-rate-limit тика
   - перед каждым тиком получает свежий `GH_TOKEN` из локального auth endpoint (`/token`)
   - при ошибке auth-сервиса:
     - если включен `DAEMON_GH_TOKEN_FALLBACK_ENABLED` и доступен PAT (`DAEMON_GH_TOKEN`/`CODEX_GH_TOKEN`) — продолжает работу через fallback
@@ -373,6 +386,29 @@
   - проверяет, что PM2-процесс `online`, и валидирует `GET /health`
 - `gh_app_auth_pm2_crash_test.sh`
   - имитирует падение процесса (`kill -9`) и подтверждает авто-restart PM2
+- `status_snapshot.sh`
+  - собирает единый JSON snapshot по локальным state-файлам (`daemon/watchdog/executor/queues/rate-limit/backlog-seed`)
+  - нормализует `overall_status` и `action_required` (например, `WAIT_DIRTY_WORKTREE + BLOCKING_TODO=0` трактуется как non-blocking warning)
+- `ops_bot_service.js`
+  - HTTP сервис с endpoint-ами: `GET /health`, `GET /ops/status`, `GET /ops/status.json`
+  - Telegram webhook handler: `POST /telegram/webhook[/<secret>]`
+  - команды в чате: `/status`, `/summary [hours]`, `/help`, `/status_page`
+- `ops_bot_start.sh`
+  - запускает ops-бот сервис, предварительно загружая `.env` и `.env.deploy`
+- `ops_bot_health.sh`
+  - проверяет локальный `GET /health` ops-бота
+- `ops_bot_pm2_ecosystem.config.cjs`
+  - PM2 ecosystem-конфиг ops-бот сервиса (`autorestart`, отдельные log-файлы)
+- `ops_bot_pm2_start.sh`
+  - стартует ops-бот сервис под PM2 (или делает restart существующего процесса)
+- `ops_bot_pm2_stop.sh`
+  - останавливает и удаляет ops-бот сервис из PM2
+- `ops_bot_pm2_restart.sh`
+  - перезапускает ops-бот сервис в PM2
+- `ops_bot_pm2_status.sh`
+  - показывает состояние ops-бот сервиса в PM2 (`status`, `pid`, `restarts`, `uptime`)
+- `ops_bot_pm2_health.sh`
+  - проверяет, что PM2-процесс `online`, и валидирует `GET /health`
 
 Логи демона:
 - `.tmp/codex/daemon.log` — heartbeat и результат `daemon_tick`
@@ -411,6 +447,8 @@
 - `.tmp/codex/outbox/` — pending GitHub-действия (очередь)
 - `.tmp/codex/outbox_payloads/` — payload-файлы для pending действий
 - `.tmp/codex/outbox_failed/` — non-retryable ошибки outbox
+- `.tmp/codex/pm2/ops_bot.out.log` — stdout ops-бот сервиса (PM2)
+- `.tmp/codex/pm2/ops_bot.err.log` — stderr ops-бот сервиса (PM2)
 
 Быстрый анализ частоты GraphQL rate limit:
 - последние события: `tail -n 20 .tmp/codex/graphql_rate_stats.log`
@@ -446,3 +484,14 @@ chmod +x scripts/codex/*.sh
 - `WATCHDOG_COOLDOWN_SEC` (минимальная пауза между recovery-действиями; по умолчанию 120)
 - `WATCHDOG_EXECUTOR_STALE_SEC` (порог stale heartbeat executor; по умолчанию 180)
 - `WATCHDOG_DAEMON_LOG_STALE_SEC` (порог stale daemon log/lock; по умолчанию 180)
+- `OPS_BOT_BIND` (bind ops-бот сервиса; по умолчанию `127.0.0.1`)
+- `OPS_BOT_PORT` (порт ops-бот сервиса; по умолчанию `8790`)
+- `OPS_BOT_WEBHOOK_PATH` (базовый path webhook; по умолчанию `/telegram/webhook`)
+- `OPS_BOT_WEBHOOK_SECRET` (добавляется в path webhook для защиты URL)
+- `OPS_BOT_TG_SECRET_TOKEN` (опциональная проверка заголовка `X-Telegram-Bot-Api-Secret-Token`)
+- `OPS_BOT_ALLOWED_CHAT_IDS` (CSV списка разрешенных chat_id; если задано — остальные игнорируются)
+- `OPS_BOT_PUBLIC_BASE_URL` (публичный base URL для команды `/status_page`, например `https://planka.ewg40.ru`)
+- `OPS_BOT_REFRESH_SEC` (интервал автообновления `/ops/status` в секундах; по умолчанию `5`)
+- `OPS_BOT_CMD_TIMEOUT_MS` (таймаут внутренних команд snapshot/summary; по умолчанию `10000`)
+- `OPS_BOT_TG_BOT_TOKEN` (опциональный токен бота; fallback chain: `OPS_BOT_TG_BOT_TOKEN -> DAEMON_TG_BOT_TOKEN -> TG_BOT_TOKEN`)
+- `OPS_BOT_PM2_APP_NAME` (имя PM2 процесса ops-бота; по умолчанию `planka-ops-bot`)

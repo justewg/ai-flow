@@ -840,18 +840,22 @@ figcaption {
 
 /* Final */
 .section-9a .v-center { min-height: 100vh; }
-.section-9a .stack { justify-items: center; }
+.section-9a .stack {
+  --final-track-width: min(20ch, 100%);
+  justify-items: center;
+}
 .final-message {
   margin: 0;
   font-size: clamp(34px, 5.8vw, 74px);
   line-height: 1.06;
   letter-spacing: 0.02em;
-  max-width: 20ch;
+  width: var(--final-track-width);
+  max-width: var(--final-track-width);
   text-wrap: balance;
 }
 .final-accent {
   position: relative;
-  width: min(44vw, 360px);
+  width: var(--final-track-width);
   height: 1px;
   margin: clamp(8px, 1.6vh, 16px) auto clamp(2px, 0.7vh, 8px);
   background: linear-gradient(90deg, transparent 0%, #c6d0dc 18%, #c6d0dc 82%, transparent 100%);
@@ -867,14 +871,24 @@ figcaption {
   animation: finalAccentSweep 5.6s ease-in-out infinite;
 }
 .final-reflection {
-  width: min(44vw, 350px);
+  width: var(--final-track-width);
+  aspect-ratio: 1151 / 233;
   margin: 0 auto clamp(8px, 1.6vh, 16px);
+  pointer-events: none;
+  position: relative;
+  overflow: hidden;
+}
+.final-reflection::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0) 100%);
   pointer-events: none;
 }
 .final-reflection-image {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
   transform: scaleY(-1);
   transform-origin: center;
   opacity: 0.07;
@@ -1062,9 +1076,8 @@ figcaption {
   .periphery-2 { top: 90%; left: 25%; }
   .periphery-3 { top: 12%; left: 78%; }
   .periphery-4 { top: 90%; left: 75%; }
+  .section-9a .stack { --final-track-width: min(20ch, 68vw); }
   .final-message { font-size: clamp(28px, 9vw, 44px); }
-  .final-accent { width: min(68vw, 280px); }
-  .final-reflection { width: min(66vw, 272px); }
   .final-support { font-size: clamp(14px, 4.4vw, 18px); }
   .final-anchor { width: min(100%, 420px); }
   .final-logo { width: clamp(96px, 34vw, 140px); }

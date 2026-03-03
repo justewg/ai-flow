@@ -1179,7 +1179,7 @@ figcaption {
     letter-spacing: 0.05em;
     opacity: 0.7;
   }
-  #growth .center-1 { top: 52%; left: 50%; font-size: clamp(22px, 6.4vw, 30px); font-weight: 730; opacity: 1; }
+  #growth .center-1 { top: 52%; left: 50%; font-size: clamp(22px, 6.4vw, 30px); font-weight: 700; opacity: 1; }
   #growth .center-6 { top: 15%; left: 50%; }
   #growth .center-2 { top: 30%; left: 34%; }
   #growth .center-3 { top: 31%; left: 67%; }

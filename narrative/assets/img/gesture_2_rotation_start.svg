@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000">
+  <rect width="1600" height="1000" fill="#e3ebf4" />
+  <g opacity="0.36">
+    <polygon points="256,824 1294,792 1366,232 326,262" fill="#d6e1ec" stroke="#aebed0" stroke-width="8" />
+  </g>
+  <polygon points="304,816 1228,772 1304,254 378,296" fill="#edf3fa" stroke="#b6c5d5" stroke-width="8" />
+  <polygon points="372,748 1188,716 1240,332 422,364" fill="#f9fcff" stroke="#c7d4e1" stroke-width="5" />
+  <polygon points="396,716 840,698 862,514 418,532" fill="#eef4fb" />
+  <polygon points="874,696 1164,684 1188,500 898,512" fill="#eef4fb" />
+  <text x="468" y="472" fill="#2f455a" font-size="52" font-family="Arial, sans-serif" font-weight="700">Я ХОЧУ ПОЕСТЬ КАРТ</text>
+  <g fill="#d1deeb">
+    <polygon points="414,786 556,778 562,728 420,736" />
+    <polygon points="578,778 720,772 726,722 584,728" />
+    <polygon points="742,770 884,764 890,714 748,720" />
+    <polygon points="906,762 1048,756 1054,706 912,712" />
+    <polygon points="1070,754 1212,748 1218,698 1076,704" />
+  </g>
+  <g>
+    <ellipse cx="1008" cy="624" rx="130" ry="56" fill="#d8e3ef" />
+    <ellipse cx="1048" cy="650" rx="42" ry="26" fill="#d8e3ef" />
+  </g>
+</svg>

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000">
+  <rect width="1600" height="1000" fill="#e4ebf3" />
+  <rect x="180" y="130" width="1240" height="740" rx="54" fill="#eef4fa" stroke="#b9c7d6" stroke-width="10" />
+  <rect x="260" y="210" width="1080" height="370" rx="30" fill="#f8fbff" stroke="#cad7e5" stroke-width="6" />
+  <rect x="300" y="260" width="1000" height="84" rx="18" fill="#edf3f9" />
+  <rect x="300" y="362" width="760" height="72" rx="16" fill="#edf3f9" />
+  <text x="340" y="318" fill="#2b4257" font-size="58" font-family="Arial, sans-serif" font-weight="700">Я ХОЧУ ПОЕСТЬ КАРТ</text>
+  <rect x="260" y="612" width="1080" height="190" rx="24" fill="#e8f0f8" stroke="#c1cfde" stroke-width="4" />
+  <g fill="#d2ddea">
+    <rect x="310" y="648" width="140" height="50" rx="12" />
+    <rect x="472" y="648" width="140" height="50" rx="12" />
+    <rect x="634" y="648" width="140" height="50" rx="12" />
+    <rect x="796" y="648" width="140" height="50" rx="12" />
+    <rect x="958" y="648" width="140" height="50" rx="12" />
+    <rect x="1120" y="648" width="170" height="50" rx="12" />
+    <rect x="340" y="718" width="200" height="50" rx="12" />
+    <rect x="566" y="718" width="200" height="50" rx="12" />
+    <rect x="792" y="718" width="200" height="50" rx="12" />
+    <rect x="1018" y="718" width="240" height="50" rx="12" />
+  </g>
+  <rect x="796" y="648" width="140" height="50" rx="12" fill="#c3d2e2" />
+  <text x="859" y="683" fill="#355066" font-size="30" font-family="Arial, sans-serif" text-anchor="middle">О</text>
+  <g>
+    <ellipse cx="870" cy="576" rx="136" ry="56" fill="#d7e2ee" />
+    <ellipse cx="914" cy="598" rx="42" ry="28" fill="#d7e2ee" />
+    <ellipse cx="942" cy="628" rx="38" ry="22" fill="#d7e2ee" />
+  </g>
+</svg>

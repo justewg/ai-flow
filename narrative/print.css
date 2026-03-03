@@ -180,6 +180,22 @@
   #gesture .media-row { grid-template-columns: 2fr 1fr; }
   #gesture .only-print { display: block !important; }
   #gesture .only-screen { display: none !important; }
+  #gesture .gesture-reaction {
+    display: inline-block;
+    margin-top: 2.4mm;
+    padding: 2.4mm 3mm;
+    border: 0.3mm solid #bfcddd;
+    border-radius: 2.4mm;
+    background: #fbfdff;
+    color: #344a60;
+    font-size: 10pt;
+    line-height: 1.3;
+    box-shadow: none;
+    max-width: 90mm;
+  }
+  #gesture .gesture-reaction--overlay {
+    display: none !important;
+  }
 
   #principles .principles { grid-template-columns: repeat(3, 1fr); gap: 6mm; }
   #principles .pill { padding: 6mm; text-align: center; }

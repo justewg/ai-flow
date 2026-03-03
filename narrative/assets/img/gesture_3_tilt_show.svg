@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000">
+  <rect width="1600" height="1000" fill="#e4ebf3" />
+  <polygon points="220,768 1320,728 1424,220 326,260" fill="#eaf1f8" stroke="#b8c6d6" stroke-width="10" />
+  <polygon points="304,712 1254,680 1324,306 376,338" fill="#f8fbff" stroke="#c8d4e2" stroke-width="6" />
+  <rect x="388" y="392" width="848" height="190" rx="20" transform="rotate(-2 812 488)" fill="#edf3f9" />
+  <g transform="translate(1190 506) scale(-1 1) rotate(1)">
+    <text x="0" y="0" fill="#2f465b" font-size="58" font-family="Arial, sans-serif" font-weight="700">Я ХОЧУ ПОЕСТЬ КАРТОШКА</text>
+  </g>
+  <g fill="#d3deeb">
+    <polygon points="414,758 570,752 576,710 420,716" />
+    <polygon points="592,752 748,746 754,704 598,710" />
+    <polygon points="770,746 926,740 932,698 776,704" />
+    <polygon points="948,740 1104,734 1110,692 954,698" />
+    <polygon points="1126,734 1244,730 1250,688 1132,692" />
+  </g>
+  <circle cx="1372" cy="684" r="84" fill="#d7e2ee" />
+</svg>

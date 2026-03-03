@@ -487,6 +487,7 @@ figcaption {
 }
 #gesture .gesture-visual {
   margin: 0;
+  position: relative;
 }
 #gesture .gesture-visual .media-image {
   max-height: min(58vh, 560px);
@@ -611,6 +612,49 @@ figcaption {
   font-size: clamp(1.02rem, 1.26vw, 1.16rem);
   line-height: 1.52;
   text-wrap: pretty;
+}
+#gesture .gesture-reaction {
+  display: inline-block;
+  max-width: min(72%, 320px);
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid #c8d4e1;
+  background: #fbfdff;
+  color: #334a60;
+  font-size: clamp(0.88rem, 1.02vw, 0.98rem);
+  line-height: 1.35;
+  box-shadow: 0 8px 18px rgba(25, 40, 56, 0.12);
+}
+#gesture .gesture-reaction--overlay {
+  position: absolute;
+  right: clamp(12px, 1.4vw, 20px);
+  bottom: clamp(12px, 1.4vw, 20px);
+  z-index: 4;
+}
+#gesture .gesture-reaction--overlay::before {
+  content: "";
+  position: absolute;
+  right: 16px;
+  top: 100%;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 10px 8px 0 8px;
+  border-color: #c8d4e1 transparent transparent transparent;
+}
+#gesture .gesture-reaction--overlay::after {
+  content: "";
+  position: absolute;
+  right: 17px;
+  top: calc(100% - 1px);
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 9px 7px 0 7px;
+  border-color: #fbfdff transparent transparent transparent;
+}
+#gesture .gesture-reaction--print {
+  margin-top: var(--space-2);
 }
 #gesture .alt { margin-top: var(--space-2); }
 #gesture .gesture-print-secondary { margin-top: var(--space-2); }
@@ -978,6 +1022,15 @@ figcaption {
   #gesture .before-after__knob {
     width: 38px;
     height: 38px;
+  }
+  #gesture .gesture-reaction {
+    max-width: min(78%, 284px);
+    padding: 8px 10px;
+    font-size: clamp(0.84rem, 3.5vw, 0.96rem);
+  }
+  #gesture .gesture-reaction--overlay {
+    right: 10px;
+    bottom: 10px;
   }
   .word-field {
     min-height: 520px;

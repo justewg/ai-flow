@@ -853,7 +853,7 @@ figcaption {
   position: relative;
   width: min(44vw, 360px);
   height: 1px;
-  margin: clamp(8px, 1.6vh, 16px) auto clamp(6px, 1.2vh, 12px);
+  margin: clamp(8px, 1.6vh, 16px) auto clamp(2px, 0.7vh, 8px);
   background: linear-gradient(90deg, transparent 0%, #c6d0dc 18%, #c6d0dc 82%, transparent 100%);
   opacity: 0.76;
   overflow: hidden;
@@ -865,6 +865,20 @@ figcaption {
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.58) 50%, transparent);
   transform: translateX(-130%);
   animation: finalAccentSweep 5.6s ease-in-out infinite;
+}
+.final-reflection {
+  width: min(44vw, 350px);
+  margin: 0 auto clamp(8px, 1.6vh, 16px);
+  pointer-events: none;
+}
+.final-reflection-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  transform: scaleY(-1);
+  transform-origin: center;
+  opacity: 0.07;
+  filter: blur(0.6px);
 }
 .final-support {
   margin: 0 auto;
@@ -1050,6 +1064,7 @@ figcaption {
   .periphery-4 { top: 90%; left: 75%; }
   .final-message { font-size: clamp(28px, 9vw, 44px); }
   .final-accent { width: min(68vw, 280px); }
+  .final-reflection { width: min(66vw, 272px); }
   .final-support { font-size: clamp(14px, 4.4vw, 18px); }
   .final-anchor { width: min(100%, 420px); }
   .final-logo { width: clamp(96px, 34vw, 140px); }

@@ -62,7 +62,7 @@ body {
 .v-center { display: grid; place-content: center; text-align: left; }
 .row { margin-top: var(--space-4); }
 
-.title, .display, .kicker, .pill, .word { text-transform: uppercase; letter-spacing: 0.04em; }
+.title, .display, .kicker, .word { text-transform: uppercase; letter-spacing: 0.04em; }
 .kicker { color: var(--muted); font-size: 0.9rem; margin: 0 0 var(--space-2); }
 .title { font-size: clamp(24px, 3vw, 40px); margin: 0 0 var(--space-3); }
 .display { font-size: clamp(28px, 5vw, 64px); margin: 0; line-height: 1.1; }
@@ -660,8 +660,40 @@ figcaption {
 #gesture .gesture-print-secondary { margin-top: var(--space-2); }
 
 /* Principles */
-.principles { gap: var(--space-3); list-style: none; padding: 0; margin: var(--space-2) 0 0; }
-.pill { display: inline-block; background: #ffffff; border: 1px solid var(--line); border-radius: 999px; padding: 10px 14px; text-align: center; box-shadow: 0 8px 18px rgba(31, 43, 55, 0.06); }
+.principles { gap: var(--space-2); list-style: none; padding: 0; margin: var(--space-2) 0 0; }
+#principles .pill {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+  padding: 10px 16px 10px 36px;
+  background: #fcfeff;
+  border: 1px solid #c8d4e2;
+  border-radius: 999px 0 0 999px;
+  color: #263a4f;
+  text-align: left;
+  font-size: clamp(0.95rem, 1.06vw, 1.02rem);
+  font-weight: 500;
+  line-height: 1.38;
+  letter-spacing: 0;
+  text-transform: none;
+  box-shadow: none;
+}
+#principles .pill::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid #879aaf;
+  border-radius: 50%;
+  background: transparent;
+}
+#principles .pill--caps .pill__caps {
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 650;
+}
 
 /* Object */
 .screens .screen { }
@@ -1006,6 +1038,11 @@ figcaption {
 
   .slide-point__text {
     font-size: clamp(16px, 4.8vw, 20px);
+  }
+
+  #principles .pill {
+    min-height: auto;
+    padding: 10px 14px 10px 34px;
   }
 
   #gesture .stage {

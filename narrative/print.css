@@ -51,6 +51,19 @@
     padding: 0;
   }
 
+  .only-print {
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    overflow: visible !important;
+    clip: auto !important;
+    clip-path: none !important;
+    white-space: normal !important;
+  }
+
   /* Keep headings attached to first content row. */
   h1, h2, h3, h4,
   .display, .title, .stage-print-header, .stage-name, .layer-name, .slide-point__label,
@@ -159,7 +172,7 @@
     overflow: hidden !important;
     opacity: 1 !important;
     transition: none !important;
-    background: #fff url("./assets/img/planka_hero_desktop_rightfade.jpg") right center / cover no-repeat !important;
+    background: #fff !important;
   }
 
   #intro .planka-hero__bg {
@@ -187,23 +200,12 @@
   }
 
   #intro::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    background: linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0.96) 0%,
-      rgba(255, 255, 255, 0.8) 35%,
-      rgba(255, 255, 255, 0.22) 58%,
-      rgba(255, 255, 255, 0) 72%
-    );
-    pointer-events: none;
+    content: none !important;
   }
 
   #intro .planka-hero__content {
     position: relative !important;
-    z-index: 2 !important;
+    z-index: 1 !important;
     min-height: var(--print-page-content-height) !important;
     max-width: 58% !important;
     padding: 10mm 0 !important;
@@ -261,7 +263,7 @@
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
-    min-height: 122mm !important;
+    min-height: 124mm !important;
     margin: 0;
     padding: 0;
     border: 0;
@@ -281,27 +283,18 @@
 
   #requirements .stage:nth-child(even) {
     border-top: 0.26mm solid #d5dfeb;
-    padding-top: 2.2mm;
-    margin-top: 2.2mm;
+    padding-top: 2.4mm;
+    margin-top: 2.4mm;
   }
 
   #requirements .stage-print-header {
-    display: block !important;
-    width: 100%;
-    margin: 0 0 2.8mm;
-    font-size: 0;
-    line-height: 0;
-    text-transform: none !important;
-    letter-spacing: 0 !important;
-  }
-
-  #requirements .stage:nth-child(even) .stage-print-header {
     display: none !important;
   }
 
-  #requirements .stage-print-header::before {
+  #requirements .stage:nth-child(odd)::before {
     content: "Эволюция средств коммуникации";
     display: block;
+    width: 100%;
     margin: 0 0 3mm;
     padding: 0 0 2mm;
     border-bottom: 0.35mm solid #9fb2c5;
@@ -331,8 +324,8 @@
 
   #requirements .stage-media .media-image,
   #requirements .stage-media-placeholder {
-    min-height: 68mm;
-    height: 68mm;
+    min-height: 74mm;
+    height: 74mm;
     object-fit: cover;
   }
 
@@ -386,7 +379,7 @@
   #gesture .stage {
     display: flex;
     flex-direction: column;
-    min-height: calc(var(--print-page-content-height) - 12mm);
+    min-height: auto;
     margin: 0;
     padding: 0;
     border: 0;
@@ -402,6 +395,7 @@
   #gesture .stage + .stage::before {
     content: "Жест";
     display: block;
+    width: 100%;
     margin: 0 0 3mm;
     padding: 0 0 2mm;
     border-bottom: 0.35mm solid #9fb2c5;
@@ -469,29 +463,33 @@
   }
 
   #gesture .only-print.alt {
-    margin-top: 2mm;
+    margin-top: 1.4mm;
     display: block !important;
   }
 
   #gesture .only-print.alt .media-image + .media-image {
-    margin-top: 2mm;
+    margin-top: 1.4mm;
   }
 
   #gesture .only-print .media-image {
-    min-height: 74mm;
-    height: 74mm;
+    min-height: 68mm;
+    height: 68mm;
     object-fit: contain;
   }
 
   #gesture .stage:nth-of-type(2) .only-print .media-image,
   #gesture .stage:nth-of-type(3) .only-print .media-image {
-    min-height: 43mm;
-    height: 43mm;
+    min-height: 36mm;
+    height: 36mm;
   }
 
   #gesture .stage:nth-of-type(4) .only-print .media-image {
-    min-height: 64mm;
-    height: 64mm;
+    min-height: 62mm;
+    height: 62mm;
+  }
+
+  #gesture .stage:nth-of-type(4) {
+    min-height: calc(var(--print-page-content-height) - 20mm);
   }
 
   #gesture .gesture-reaction--overlay,
@@ -507,9 +505,10 @@
   #principles .principles {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 1.6mm;
+    gap: 1.4mm;
     margin-top: 0;
-    min-height: 198mm;
+    min-height: 0;
+    flex: 1 1 auto;
   }
 
   #principles .pill {
@@ -545,7 +544,8 @@
     margin-top: 2.4mm;
     display: grid;
     gap: 2.8mm;
-    min-height: 198mm;
+    min-height: 0;
+    flex: 1 1 auto;
   }
 
   #object .object-pair {
@@ -566,8 +566,8 @@
   }
 
   #object .object-media .media-image {
-    min-height: 68mm;
-    height: 68mm;
+    min-height: 62mm;
+    height: 62mm;
     object-fit: contain;
   }
 
@@ -580,8 +580,8 @@
 
   #object .object-text {
     margin: 1.1mm 0 0;
-    font-size: 9.1pt;
-    line-height: 1.25;
+    font-size: 8.9pt;
+    line-height: 1.22;
     color: #42586d;
   }
 
@@ -600,7 +600,7 @@
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
-    min-height: calc(var(--print-page-content-height) - 10mm);
+    min-height: auto;
     margin: 0;
     padding: 0;
     border: 0;
@@ -616,6 +616,7 @@
   #layers .layer-stage + .layer-stage::before {
     content: "Разделение сред";
     display: block;
+    width: 100%;
     margin: 0 0 3mm;
     padding: 0 0 2mm;
     border-bottom: 0.35mm solid #9fb2c5;
@@ -641,8 +642,8 @@
   }
 
   #layers .layer-media .media-image {
-    min-height: 76mm;
-    height: 76mm;
+    min-height: 68mm;
+    height: 68mm;
     object-fit: contain;
   }
 
@@ -661,13 +662,17 @@
 
   #layers .layer-note {
     margin: 0;
-    font-size: 9.4pt;
-    line-height: 1.28;
+    font-size: 9.1pt;
+    line-height: 1.24;
     color: #3d5267;
   }
 
   #layers .layer-stage .slide-point {
     margin-top: auto;
+  }
+
+  #layers .layer-stage:last-child {
+    min-height: calc(var(--print-page-content-height) - 18mm);
   }
 
   /* GROWTH: printable cloud via explicit absolute positioning. */

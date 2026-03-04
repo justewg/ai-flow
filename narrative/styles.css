@@ -201,6 +201,21 @@ figcaption {
   will-change: background-position;
 }
 
+.planka-hero__bg-print {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  border: 0;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* 2) ЛЕВЫЙ FADE (desktop/landscape) — в ноль */
 .planka-hero__bg::before{
   content:"";
@@ -1087,7 +1102,18 @@ figcaption {
 .reveal.in-view { opacity: 1; transform: translate(0, 0); }
 
 /* Utilities */
-.only-print { display: none !important; }
+.only-print {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+}
 .only-screen { display: block; }
 .stack { display: grid; gap: var(--space-3); }
 

@@ -877,14 +877,6 @@ figcaption {
 .periphery-3 { top: 12%; left: 84%; }
 .periphery-4 { top: 88%; left: 80%; }
 
-.growth-legend {
-  margin: var(--space-2) auto 0;
-  max-width: 62ch;
-  color: #4a5f74;
-  font-size: clamp(14px, 1.3vw, 18px);
-  line-height: 1.42;
-}
-
 .word.center:nth-of-type(2) { animation-delay: 0.2s; }
 .word.center:nth-of-type(3) { animation-delay: 0.4s; }
 .word.center:nth-of-type(4) { animation-delay: 0.6s; }
@@ -1163,34 +1155,39 @@ figcaption {
     bottom: 10px;
   }
   #growth .word-field {
-    min-height: clamp(430px, 74svh, 560px);
-    padding: clamp(8px, 2.8vw, 12px) clamp(8px, 3.2vw, 14px);
+    min-height: clamp(420px, 70svh, 540px);
+    padding: clamp(6px, 2.2vw, 10px) clamp(6px, 2.6vw, 12px);
   }
   #growth .word-field::before {
-    inset: 5% 6% 6%;
-    border-radius: 46% / 56%;
+    inset: 4% 5% 5%;
+    border-radius: 44% / 58%;
+  }
+  #growth .word {
+    max-width: clamp(110px, 34vw, 170px);
+    text-align: center;
+    line-height: 1.15;
   }
   #growth .word.center {
-    font-size: clamp(11px, 3.9vw, 16px);
-    letter-spacing: 0.035em;
+    font-size: clamp(10px, 3.5vw, 15px);
+    letter-spacing: 0.028em;
   }
   #growth .word.periphery {
-    font-size: clamp(9px, 3vw, 12px);
-    letter-spacing: 0.05em;
-    opacity: 0.7;
+    font-size: clamp(8px, 2.7vw, 11px);
+    letter-spacing: 0.045em;
+    opacity: 0.68;
   }
-  #growth .center-1 { top: 52%; left: 50%; font-size: clamp(22px, 6.4vw, 30px); font-weight: 700; opacity: 1; }
-  #growth .center-6 { top: 15%; left: 50%; }
-  #growth .center-2 { top: 30%; left: 34%; }
-  #growth .center-3 { top: 31%; left: 67%; }
-  #growth .center-7 { top: 40%; left: 27%; }
-  #growth .center-8 { top: 41%; left: 73%; }
-  #growth .center-4 { top: 63%; left: 33%; }
+  #growth .center-1 { top: 50%; left: 50%; font-size: clamp(25px, 7.2vw, 34px); font-weight: 780; opacity: 1; z-index: 3; }
+  #growth .center-6 { top: 11%; left: 50%; }
+  #growth .center-2 { top: 25%; left: 38%; }
+  #growth .center-3 { top: 26%; left: 67%; }
+  #growth .center-7 { top: 39%; left: 27%; }
+  #growth .center-8 { top: 40%; left: 73%; }
+  #growth .center-4 { top: 63%; left: 34%; }
   #growth .center-5 { top: 64%; left: 68%; }
-  #growth .periphery-1 { top: 22%; left: 24%; }
-  #growth .periphery-3 { top: 74%; left: 79%; }
-  #growth .periphery-2 { top: 84%; left: 26%; }
-  #growth .periphery-4 { top: 86%; left: 73%; }
+  #growth .periphery-1 { top: 19%; left: 23%; }
+  #growth .periphery-3 { top: 76%; left: 78%; }
+  #growth .periphery-2 { top: 88%; left: 30%; }
+  #growth .periphery-4 { top: 89%; left: 72%; }
   #growth .slide-point {
     margin-top: clamp(18px, 6vw, 32px);
   }

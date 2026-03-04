@@ -108,6 +108,7 @@
 - `DAEMON_GH_AUTH_TOKEN_URL` — опциональный явный URL `GET /token` (по умолчанию `http://${GH_APP_BIND:-127.0.0.1}:${GH_APP_PORT:-8787}/token`).
 - `DAEMON_RATE_LIMIT_BACKOFF_BASE_SEC` — базовый sleep daemon-loop при `WAIT_GITHUB_RATE_LIMIT` (по умолчанию равен `daemon_loop interval`).
 - `DAEMON_RATE_LIMIT_MAX_SLEEP_SEC` — верхняя граница sleep daemon-loop при `WAIT_GITHUB_RATE_LIMIT` (по умолчанию `360` сек).
+- `AUTO_IGNORE_LABELS` — CSV-список labels, которые исключают issue из auto-claim daemon (по умолчанию `auto:ignore`).
 - `DAEMON_GH_PROJECT_TOKEN` (или `CODEX_GH_PROJECT_TOKEN`) — отдельный PAT для Project v2 операций.
   - Где получить: `GitHub -> Settings -> Developer settings -> Personal access tokens`.
   - Рекомендуемый тип: `Tokens (classic)` для user-owned Project API.
@@ -233,6 +234,8 @@
   - при исчерпании GraphQL rate limit пишет `WAIT_GITHUB_RATE_LIMIT=1` + детали (`..._STAGE`, `..._MSG`) и не берет новую задачу
   - ведет статистику окон между rate-limit событиями в `.tmp/codex/graphql_rate_stats.log` (`requests`, `duration_sec`, `start_utc`, `end_utc`)
   - берет задачу только из `Status=Todo`
+  - issue с label из `AUTO_IGNORE_LABELS` (по умолчанию `auto:ignore`) исключаются из auto-claim очереди
+  - если активная задача получает ignore-label, daemon освобождает active-context, останавливает executor и возвращается в idle-цикл
   - перед подхватом читает `Flow Meta` у Issue и проверяет `Depends-On`
   - зависимость из `Depends-On` считается выполненной, если `Issue` закрыт (`state=CLOSED`) или карточка зависимости в Project имеет `Status=Done/Closed`
   - если в `Depends-On` указан несуществующий Issue (битая ссылка), зависимость игнорируется и не блокирует claim (`DEPENDENCY_MISSING_IGNORED`)

@@ -44,6 +44,7 @@
 
 ### Fixed
 - `[APP-07]` В `daemon_loop.sh` добавлен экспоненциальный backoff при `WAIT_GITHUB_RATE_LIMIT`: интервал следующего тика растет `90 -> 180 -> 360` сек (с насыщением на `360`), после успешного тика backoff сбрасывается к базовому интервалу.
+- `[APP-07]` Добавлен ignore-label фильтр auto-claim в `daemon_tick` (`AUTO_IGNORE_LABELS`, по умолчанию `auto:ignore`): задачи с этим label не берутся из `Todo`, а если label поставлен на уже активную задачу — daemon освобождает active-context и останавливает executor.
 - `[APP-07]` Усилен auto-release активной задачи в `daemon_tick`: статус активной карточки теперь читается по прямому `ProjectV2Item id` (без лимита первых 100 items), а при ручном переводе задачи из `In Progress` (например, в `Backlog`) daemon сбрасывает `daemon_active_*`, останавливает executor и очищает waiting/review-контекст этой же задачи, чтобы не блокировать подхват следующей.
 - `[APP-07]` Dependency-gate в `daemon_tick` больше не блокирует задачу на битых зависимостях: несуществующие `Depends-On` issue теперь игнорируются (`DEPENDENCY_MISSING_IGNORED`), а неразбираемые dependency-токены логируются как `DEPENDENCY_TOKEN_IGNORED_UNRESOLVED` и не останавливают claim.
 - `[APP-07]` Усилен `backlog_seed_apply`: при `GitHub API rate limit` теперь явно эмитятся `WAIT_GITHUB_RATE_LIMIT`/`..._STAGE`/`..._MSG` (а при сетевой деградации — `WAIT_GITHUB_API_UNSTABLE`), чтобы daemon переходил в корректное wait-состояние вместо тихого `...WARN` в `IDLE`.

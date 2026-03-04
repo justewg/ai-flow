@@ -35,6 +35,7 @@ gql_window_requests_file="${CODEX_DIR}/graphql_rate_window_requests.txt"
 gql_last_success_utc_file="${CODEX_DIR}/graphql_rate_last_success_utc.txt"
 gql_last_limit_utc_file="${CODEX_DIR}/graphql_rate_last_limit_utc.txt"
 DIRTY_SKIP_NEW_CLAIM="0"
+auto_ignore_labels_raw="${AUTO_IGNORE_LABELS:-auto:ignore}"
 
 emit_lines() {
   local text="$1"
@@ -284,6 +285,96 @@ trim() {
   local value="$1"
   value="$(printf '%s' "$value" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
   printf '%s' "$value"
+}
+
+normalize_label_name() {
+  local value="$1"
+  printf '%s' "$value" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'
+}
+
+declare -a AUTO_IGNORE_LABELS=()
+init_auto_ignore_labels() {
+  local token normalized
+  IFS=',' read -r -a _tokens <<< "$auto_ignore_labels_raw"
+  for token in "${_tokens[@]}"; do
+    normalized="$(normalize_label_name "$token")"
+    [[ -n "$normalized" ]] && AUTO_IGNORE_LABELS+=("$normalized")
+  done
+}
+auto_ignore_labels_raw="$(resolve_config_value "AUTO_IGNORE_LABELS" "$auto_ignore_labels_raw")"
+init_auto_ignore_labels
+
+is_auto_ignore_label() {
+  local candidate="$1"
+  local normalized entry
+  normalized="$(normalize_label_name "$candidate")"
+  for entry in "${AUTO_IGNORE_LABELS[@]}"; do
+    [[ "$normalized" == "$entry" ]] && return 0
+  done
+  return 1
+}
+
+issue_has_auto_ignore_label() {
+  local issue_number="$1"
+  local labels_out rc label normalized
+
+  if labels_out="$(
+    run_gh_retry_capture \
+      gh issue view "$issue_number" \
+      --repo "$repo" \
+      --json labels \
+      --jq '.labels[].name'
+  )"; then
+    :
+  else
+    rc=$?
+    [[ "$rc" -eq 75 ]] && return 75
+    return 1
+  fi
+
+  while IFS= read -r label; do
+    [[ -z "$label" ]] && continue
+    normalized="$(normalize_label_name "$label")"
+    if is_auto_ignore_label "$normalized"; then
+      return 0
+    fi
+  done <<< "$labels_out"
+
+  return 1
+}
+
+filter_auto_ignore_from_queue_json() {
+  local queue_json="$1"
+  local queue_count idx entry issue_number task_id rc
+  local filtered_queue_json='[]'
+
+  queue_count="$(printf '%s' "$queue_json" | jq 'length')"
+  if ! [[ "$queue_count" =~ ^[0-9]+$ ]]; then
+    queue_count=0
+  fi
+
+  for (( idx = 0; idx < queue_count; idx++ )); do
+    entry="$(printf '%s' "$queue_json" | jq -c ".[$idx]")"
+    issue_number="$(printf '%s' "$entry" | jq -r '.issue_number // ""')"
+    task_id="$(printf '%s' "$entry" | jq -r '.task_id // ""')"
+
+    if [[ "$issue_number" =~ ^[0-9]+$ ]]; then
+      if issue_has_auto_ignore_label "$issue_number"; then
+        echo "QUEUE_TASK_SKIPPED_AUTO_IGNORE=1"
+        echo "QUEUE_TASK_SKIPPED_ISSUE_NUMBER=$issue_number"
+        [[ -n "$task_id" ]] && echo "QUEUE_TASK_SKIPPED_TASK_ID=$task_id"
+        continue
+      fi
+      rc=$?
+      if [[ "$rc" -eq 75 ]]; then
+        return 75
+      fi
+    fi
+
+    filtered_queue_json="$(jq -cn --argjson acc "$filtered_queue_json" --argjson item "$entry" '$acc + [$item]')"
+  done
+
+  printf '%s' "$filtered_queue_json"
 }
 
 parse_flow_meta_line() {
@@ -669,6 +760,50 @@ maybe_release_active_task_on_status_mismatch() {
 
   active_issue_number=""
   [[ -s "$active_issue_file" ]] && active_issue_number="$(<"$active_issue_file")"
+
+  # Если задачу явно пометили лейблом игнора автоматики, освобождаем active-context.
+  if [[ "$active_issue_number" =~ ^[0-9]+$ ]]; then
+    if issue_has_auto_ignore_label "$active_issue_number"; then
+      echo "ACTIVE_TASK_RELEASED_AUTO_IGNORE_LABEL=1"
+      echo "ACTIVE_TASK_RELEASED_TASK_ID=${active_task}"
+      echo "ACTIVE_TASK_RELEASED_ISSUE_NUMBER=${active_issue_number}"
+      "${ROOT_DIR}/scripts/codex/executor_reset.sh" >/dev/null || true
+      : > "$active_task_file"
+      : > "$active_item_file"
+      : > "$active_issue_file"
+      : > "${CODEX_DIR}/project_task_id.txt"
+      waiting_task=""
+      [[ -s "${CODEX_DIR}/daemon_waiting_task_id.txt" ]] && waiting_task="$(<"${CODEX_DIR}/daemon_waiting_task_id.txt")"
+      if [[ "$waiting_task" == "$active_task" ]]; then
+        : > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
+        : > "${CODEX_DIR}/daemon_waiting_task_id.txt"
+        : > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
+        : > "${CODEX_DIR}/daemon_waiting_kind.txt"
+        : > "${CODEX_DIR}/daemon_waiting_pending_post.txt"
+        : > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
+        : > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
+        echo "ACTIVE_TASK_RELEASED_WAITING_CONTEXT_CLEARED=1"
+      fi
+      review_task=""
+      review_issue=""
+      [[ -s "$review_task_file" ]] && review_task="$(<"$review_task_file")"
+      [[ -s "$review_issue_file" ]] && review_issue="$(<"$review_issue_file")"
+      if [[ "$review_task" == "$active_task" || "$review_issue" == "$active_issue_number" ]]; then
+        : > "$review_task_file"
+        : > "$review_item_file"
+        : > "$review_issue_file"
+        : > "$review_pr_file"
+        echo "ACTIVE_TASK_RELEASED_REVIEW_CONTEXT_CLEARED=1"
+      fi
+      return 0
+    fi
+    rc=$?
+    if [[ "$rc" -eq 75 ]]; then
+      echo "WAIT_GITHUB_API_UNSTABLE=1"
+      echo "WAIT_GITHUB_STAGE=ACTIVE_TASK_LABEL_CHECK"
+      return 75
+    fi
+  fi
 
   # Старые/деградированные контексты могли оставить пустой active_item_id.
   # Пытаемся восстановить его по номеру issue, чтобы корректно отследить
@@ -2173,11 +2308,30 @@ if (( queue_count == 0 )); then
 fi
 
 valid_queue_json="$(printf '%s' "$queue_json" | jq -c '[.[] | select(.task_id != "")]')"
+valid_queue_before_filter_count="$(printf '%s' "$valid_queue_json" | jq 'length')"
+if (( valid_queue_before_filter_count == 0 )); then
+  echo "BLOCKED_TRIGGER_TASKS_WITHOUT_TASK_ID=$queue_count"
+  printf '%s' "$queue_json" | jq -r '.[] | "QUEUE_ITEM_MISSING_TASK_ID=\(.priority)\t\(.title)"'
+  exit 0
+fi
+
+if filtered_queue_json="$(filter_auto_ignore_from_queue_json "$valid_queue_json")"; then
+  valid_queue_json="$filtered_queue_json"
+else
+  rc=$?
+  if [[ "$rc" -eq 75 ]]; then
+    echo "WAIT_GITHUB_API_UNSTABLE=1"
+    echo "WAIT_GITHUB_STAGE=CLAIM_LABEL_FILTER"
+    exit 0
+  fi
+fi
+
 valid_queue_count="$(printf '%s' "$valid_queue_json" | jq 'length')"
 
 if (( valid_queue_count == 0 )); then
-  echo "BLOCKED_TRIGGER_TASKS_WITHOUT_TASK_ID=$queue_count"
-  printf '%s' "$queue_json" | jq -r '.[] | "QUEUE_ITEM_MISSING_TASK_ID=\(.priority)\t\(.title)"'
+  if (( valid_queue_before_filter_count > 0 )); then
+    echo "NO_CLAIMABLE_TASKS_AFTER_FILTER=1"
+  fi
   exit 0
 fi
 

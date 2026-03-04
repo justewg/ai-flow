@@ -1,6 +1,37 @@
 // Minimal JS: reveal-on-scroll + intro hero motion
 (() => {
   const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const warmUpPrintImages = () => {
+    const images = Array.from(document.querySelectorAll('img'));
+    for (const image of images) {
+      image.loading = 'eager';
+      image.decoding = 'sync';
+      if (!image.complete && image.getAttribute('src')) {
+        // Reassign src to force fetch in engines that delay lazy assets before print.
+        image.src = image.getAttribute('src');
+      }
+      image.decode?.().catch(() => {});
+    }
+  };
+
+  const schedulePrintWarmup = () => {
+    warmUpPrintImages();
+    window.setTimeout(warmUpPrintImages, 160);
+  };
+
+  window.addEventListener('beforeprint', schedulePrintWarmup);
+  const printMq = window.matchMedia?.('print');
+  if (printMq) {
+    const onPrintModeChange = (event) => {
+      if (event.matches) schedulePrintWarmup();
+    };
+    if (typeof printMq.addEventListener === 'function') {
+      printMq.addEventListener('change', onPrintModeChange);
+    } else if (typeof printMq.addListener === 'function') {
+      printMq.addListener(onPrintModeChange);
+    }
+  }
+  window.addEventListener('load', () => window.setTimeout(warmUpPrintImages, 0), { once: true });
 
   // Reveal on scroll using IntersectionObserver
   const revealEls = Array.from(document.querySelectorAll('.reveal'));

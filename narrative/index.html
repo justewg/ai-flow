@@ -15,6 +15,16 @@
       <!-- SECTION 0 — Intro -->
       <section id="intro" class="planka-hero" aria-label="PLANKA hero">
         <div class="planka-hero__bg" aria-hidden="true"></div>
+        <img
+          class="planka-hero__bg-print"
+          src="./assets/img/planka_hero_desktop_rightfade.png"
+          alt=""
+          aria-hidden="true"
+          loading="eager"
+          decoding="sync"
+          fetchpriority="high"
+          style="display:none"
+        />
 
         <div class="planka-hero__content">
           <h1 class="planka-hero__title">
@@ -178,7 +188,7 @@
               </div>
             </div>
             <div class="only-print alt">
-              <img class="media-image" src="./assets/img/gesture_1_2.png" alt="Формирование мысли в личном пространстве: на экране набрано «Я ХОЧУ ПОЕСТЬ КАРТ»" loading="lazy" />
+              <img class="media-image" src="./assets/img/gesture_1_2.png" alt="Формирование мысли в личном пространстве: на экране набрано «Я ХОЧУ ПОЕСТЬ КАРТ»" loading="eager" decoding="sync" />
             </div>
           </article>
 
@@ -207,8 +217,8 @@
               </div>
             </div>
             <div class="only-print alt">
-              <img class="media-image" src="./assets/img/gesture_2.png" alt="Намерение показать: наклон устройства от себя" loading="lazy" />
-              <img class="media-image gesture-print-secondary" src="./assets/img/gesture_2_5.png" alt="Намерение показать: начало разворота вокруг вертикальной оси" loading="lazy" />
+              <img class="media-image" src="./assets/img/gesture_2.png" alt="Намерение показать: наклон устройства от себя" loading="eager" decoding="sync" />
+              <img class="media-image gesture-print-secondary" src="./assets/img/gesture_2_5.png" alt="Намерение показать: начало разворота вокруг вертикальной оси" loading="eager" decoding="sync" />
             </div>
           </article>
 
@@ -237,9 +247,8 @@
               </div>
             </div>
             <div class="only-print alt">
-              <img class="media-image" src="./assets/img/gesture_3_3.png" alt="Показ с наклоном: текст развёрнут к собеседнику" loading="lazy" />
-              <img class="media-image gesture-print-secondary" src="./assets/img/gesture_3.png" alt="Показ с разворотом: текст читается в стандартной ориентации" loading="lazy" />
-              <div class="gesture-reaction gesture-reaction--print">Да, хорошо, приходи на кухню</div>
+              <img class="media-image" src="./assets/img/gesture_3_3.png" alt="Показ с наклоном: текст развёрнут к собеседнику" loading="eager" decoding="sync" />
+              <img class="media-image gesture-print-secondary" src="./assets/img/gesture_3.png" alt="Показ с разворотом: текст читается в стандартной ориентации" loading="eager" decoding="sync" />
             </div>
           </article>
 
@@ -256,7 +265,7 @@
               </div>
             </div>
             <div class="only-print alt">
-              <img class="media-image" src="./assets/img/gesture_4_2.png" alt="Продолжение коммуникации: после сообщения «картошка» вводится новое слово «ЭКСКАВАТОР»" loading="lazy" />
+              <img class="media-image" src="./assets/img/gesture_4_2.png" alt="Продолжение коммуникации: после сообщения «картошка» вводится новое слово «ЭКСКАВАТОР»" loading="eager" decoding="sync" />
             </div>
           </article>
 
@@ -420,8 +429,9 @@
                 class="final-reflection-image"
                 src="./assets/img/pad_screen_wired.png"
                 alt=""
-                loading="lazy"
-                decoding="async"
+                loading="eager"
+                decoding="sync"
+                fetchpriority="high"
               />
             </div>
             <p class="subtitle center final-support">Предъявленная мысль становится устойчивой и возвращаемой.</p>

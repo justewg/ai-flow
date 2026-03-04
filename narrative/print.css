@@ -159,33 +159,42 @@
     overflow: hidden !important;
     opacity: 1 !important;
     transition: none !important;
-    background:
-      linear-gradient(
-        90deg,
-        rgba(255, 255, 255, 0.96) 0%,
-        rgba(255, 255, 255, 0.8) 35%,
-        rgba(255, 255, 255, 0.22) 58%,
-        rgba(255, 255, 255, 0) 72%
-      ),
-      url("./assets/img/planka_hero_desktop_final.png") right center / cover no-repeat !important;
+    background: none !important;
   }
 
   #intro .planka-hero__bg {
+    display: none !important;
+  }
+
+  #intro .planka-hero__bg-print {
     position: absolute !important;
     inset: 0 !important;
     display: block !important;
-    background-image: url("./assets/img/planka_hero_desktop_final.png") !important;
-    background-position: right center !important;
-    background-repeat: no-repeat !important;
-    background-size: cover !important;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    object-position: right center !important;
+    z-index: 0 !important;
   }
 
-  #intro .planka-hero__bg::before,
-  #intro .planka-hero__bg::after {
-    content: none !important;
+  #intro::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.96) 0%,
+      rgba(255, 255, 255, 0.8) 35%,
+      rgba(255, 255, 255, 0.22) 58%,
+      rgba(255, 255, 255, 0) 72%
+    );
+    pointer-events: none;
   }
 
   #intro .planka-hero__content {
+    position: relative !important;
+    z-index: 2 !important;
     min-height: var(--print-page-content-height) !important;
     max-width: 58% !important;
     padding: 10mm 0 !important;
@@ -234,12 +243,12 @@
   }
 
   #requirements .req-stages {
-    display: grid;
-    gap: 3.2mm;
+    display: block;
+    flex: 1 1 auto;
   }
 
   #requirements .stage {
-    min-height: auto !important;
+    min-height: 108mm !important;
     margin: 0;
     padding: 0;
     border: 0;
@@ -260,6 +269,7 @@
   #requirements .stage:nth-child(even) {
     border-top: 0.26mm solid #d5dfeb;
     padding-top: 3.2mm;
+    margin-top: 2.2mm;
   }
 
   #requirements .stage-print-header {
@@ -290,8 +300,10 @@
   }
 
   #requirements .stage-grid {
-    grid-template-columns: 42mm minmax(0, 1fr);
-    gap: 2.4mm 3.6mm;
+    display: grid !important;
+    grid-template-columns: 56mm minmax(0, 1fr);
+    gap: 2.8mm 4mm;
+    min-height: 100%;
     align-items: start;
     break-inside: avoid-page;
     page-break-inside: avoid;
@@ -305,18 +317,18 @@
 
   #requirements .stage-media .media-image,
   #requirements .stage-media-placeholder {
-    min-height: 34mm;
-    height: 34mm;
+    min-height: 52mm;
+    height: 52mm;
     object-fit: cover;
   }
 
   #requirements .stage-copy {
-    gap: 1.8mm;
+    gap: 1.6mm;
     align-content: start;
   }
 
   #requirements .stage-name {
-    font-size: 9.7pt;
+    font-size: 10pt;
     line-height: 1.24;
     text-transform: none;
     letter-spacing: 0.015em;
@@ -327,7 +339,7 @@
   #requirements .stage-need {
     margin: 0;
     max-width: none;
-    font-size: 9.4pt;
+    font-size: 9.3pt;
     line-height: 1.28;
   }
 
@@ -376,12 +388,12 @@
     margin: 0 0 3mm;
     padding: 0 0 2mm;
     border-bottom: 0.35mm solid #9fb2c5;
-    font-size: 14pt;
-    line-height: 1.18;
-    font-weight: 700;
-    letter-spacing: 0;
-    text-transform: none;
-    color: #1f2b37;
+    font-size: 14pt !important;
+    line-height: 1.18 !important;
+    font-weight: 700 !important;
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+    color: #1f2b37 !important;
   }
 
   #gesture .stage-title {
@@ -441,20 +453,23 @@
 
   #gesture .only-print.alt {
     margin-top: 2mm;
-    display: grid !important;
-    gap: 2mm;
+    display: block !important;
+  }
+
+  #gesture .only-print.alt .media-image + .media-image {
+    margin-top: 2mm;
   }
 
   #gesture .only-print .media-image {
-    min-height: 46mm;
-    height: 46mm;
+    min-height: 56mm;
+    height: 56mm;
     object-fit: contain;
   }
 
   #gesture .stage:nth-of-type(2) .only-print .media-image,
   #gesture .stage:nth-of-type(3) .only-print .media-image {
-    min-height: 39mm;
-    height: 39mm;
+    min-height: 33mm;
+    height: 33mm;
   }
 
   #gesture .gesture-reaction--overlay,
@@ -470,17 +485,17 @@
   #principles .principles {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 2.4mm;
+    gap: 1.8mm;
     margin-top: 0;
   }
 
   #principles .pill {
     width: 100%;
     min-height: auto;
-    padding: 2.2mm 3.2mm 2.2mm 8.6mm;
+    padding: 1.6mm 3mm 1.6mm 8.2mm;
     border-radius: 7mm 0 0 7mm;
-    font-size: 10.3pt;
-    line-height: 1.28;
+    font-size: 9.8pt;
+    line-height: 1.24;
     text-align: left;
   }
 
@@ -504,14 +519,14 @@
   }
 
   #object .object-layout {
-    margin-top: 2.8mm;
+    margin-top: 2.4mm;
     display: grid;
-    gap: 4.2mm;
+    gap: 3.2mm;
   }
 
   #object .object-pair {
     display: grid;
-    grid-template-columns: 40mm minmax(0, 1fr);
+    grid-template-columns: 56mm minmax(0, 1fr);
     gap: 3.6mm;
     align-items: start;
     break-inside: avoid-page;
@@ -527,8 +542,8 @@
   }
 
   #object .object-media .media-image {
-    min-height: 34mm;
-    height: 34mm;
+    min-height: 54mm;
+    height: 54mm;
     object-fit: contain;
   }
 
@@ -541,8 +556,8 @@
 
   #object .object-text {
     margin: 1.3mm 0 0;
-    font-size: 9.7pt;
-    line-height: 1.32;
+    font-size: 9.4pt;
+    line-height: 1.29;
     color: #42586d;
   }
 
@@ -553,8 +568,7 @@
   /* LAYERS: force second block onto a new page with section title at top. */
   #layers .layers-stages {
     margin-top: 0;
-    display: grid;
-    gap: 4mm;
+    display: block;
   }
 
   #layers .layer-stage {
@@ -577,16 +591,17 @@
     margin: 0 0 3mm;
     padding: 0 0 2mm;
     border-bottom: 0.35mm solid #9fb2c5;
-    font-size: 14pt;
-    line-height: 1.18;
-    font-weight: 700;
-    letter-spacing: 0;
-    text-transform: none;
-    color: #1f2b37;
+    font-size: 14pt !important;
+    line-height: 1.18 !important;
+    font-weight: 700 !important;
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+    color: #1f2b37 !important;
   }
 
   #layers .layer-stage-grid {
     width: 100%;
+    display: grid !important;
     grid-template-columns: 1fr;
     gap: 2.6mm;
     align-items: start;
@@ -598,8 +613,8 @@
   }
 
   #layers .layer-media .media-image {
-    min-height: 58mm;
-    height: 58mm;
+    min-height: 68mm;
+    height: 68mm;
     object-fit: contain;
   }
 
@@ -637,15 +652,8 @@
   }
 
   #growth .word-field::before {
-    content: "";
-    position: absolute;
-    inset: 10% 7% 10%;
-    border-radius: 46% / 54%;
-    background:
-      radial-gradient(circle at 50% 52%, rgba(196, 208, 223, 0.26) 0%, rgba(196, 208, 223, 0.12) 44%, transparent 74%),
-      radial-gradient(circle at 50% 52%, rgba(220, 228, 238, 0.16) 0%, transparent 78%);
-    z-index: 0;
-    pointer-events: none;
+    content: none !important;
+    display: none !important;
   }
 
   #growth .word {
@@ -745,6 +753,7 @@
   #final-a .final-reflection {
     width: var(--final-track-width);
     height: auto;
+    min-height: 16mm;
     margin: 0 auto 1.6mm;
     display: block !important;
     position: relative;
@@ -767,7 +776,10 @@
 
   #final-a .final-reflection-image {
     width: 100%;
+    min-height: 16mm;
     display: block;
+    object-fit: contain;
+    object-position: center;
     transform: scaleY(-1);
     transform-origin: center;
     opacity: 0.26;

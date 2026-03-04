@@ -440,7 +440,7 @@ figcaption {
   position: sticky;
   top: 0;
   z-index: 6;
-  min-height: 112px;
+  min-height: 96px;
   display: grid;
   align-content: end;
   gap: var(--space-1);
@@ -469,6 +469,13 @@ figcaption {
 .requirements .stage {
   border-top: 1px solid #d4deea;
   padding-top: var(--space-4);
+}
+#requirements .requirements-intro {
+  margin: clamp(20px, 3vh, 32px) 0 0;
+  max-width: 68ch;
+  color: #445a70;
+  font-size: clamp(1rem, 1.2vw, 1.14rem);
+  line-height: 1.5;
 }
 
 #designing .designing-rationale {
@@ -724,10 +731,10 @@ figcaption {
 /* Object */
 .screens .screen { }
 #object .section-sticky {
-  padding-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
 }
 #object .object-subtitle {
-  margin: 0;
+  margin: var(--space-2) 0 0;
   max-width: 44ch;
   font-size: clamp(1rem, 1.38vw, 1.2rem);
   line-height: 1.46;
@@ -810,7 +817,7 @@ figcaption {
 
 /* Layers */
 #layers .section-sticky {
-  padding-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
 }
 #layers .layers-stages {
   margin-top: var(--space-2);
@@ -1124,6 +1131,22 @@ figcaption {
 }
 
 @media (max-width: 768px) {
+  .section-sticky,
+  .req-sticky {
+    min-height: 72px;
+    margin-inline: -12px;
+    padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
+    border-radius: 0 0 12px 12px;
+  }
+  .section-sticky .title,
+  .req-sticky .title {
+    margin-bottom: 0;
+    font-size: clamp(20px, 6vw, 28px);
+  }
+  #requirements .requirements-intro {
+    margin-top: 14px;
+  }
+
   .slide-point {
     padding: 16px;
   }

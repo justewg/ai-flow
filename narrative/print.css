@@ -6,6 +6,7 @@
     --dur-1: 0ms;
     --dur-2: 0ms;
     --print-page-content-height: 269mm;
+    --print-hero-image: url("./assets/img/planka_hero_desktop_rightfade.png");
   }
 
   html {
@@ -172,7 +173,7 @@
     overflow: hidden !important;
     opacity: 1 !important;
     transition: none !important;
-    background: #fff !important;
+    background: #fff var(--print-hero-image) right center / cover no-repeat !important;
   }
 
   #intro .planka-hero__bg {
@@ -197,6 +198,7 @@
     object-fit: cover !important;
     object-position: right center !important;
     z-index: 0 !important;
+    opacity: 1 !important;
   }
 
   #intro::before {
@@ -263,7 +265,7 @@
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
-    min-height: 124mm !important;
+    min-height: 110mm !important;
     margin: 0;
     padding: 0;
     border: 0;
@@ -309,9 +311,10 @@
   #requirements .stage-grid {
     display: grid !important;
     width: 100%;
-    grid-template-columns: 70mm minmax(0, 1fr);
-    gap: 2.8mm 3.4mm;
+    grid-template-columns: 68mm minmax(0, 1fr);
+    gap: 2.2mm 2.9mm;
     align-items: start;
+    flex: 1 1 auto;
     break-inside: avoid-page;
     page-break-inside: avoid;
   }
@@ -324,8 +327,8 @@
 
   #requirements .stage-media .media-image,
   #requirements .stage-media-placeholder {
-    min-height: 74mm;
-    height: 74mm;
+    min-height: 68mm;
+    height: 68mm;
     object-fit: cover;
   }
 
@@ -361,6 +364,10 @@
 
   #requirements .stage .slide-point {
     margin-top: auto;
+  }
+
+  #requirements .stage[data-stage="erudit"] {
+    min-height: 148mm !important;
   }
 
   #designing .grid-12 {
@@ -489,7 +496,12 @@
   }
 
   #gesture .stage:nth-of-type(4) {
-    min-height: calc(var(--print-page-content-height) - 20mm);
+    min-height: calc(var(--print-page-content-height) - 16mm);
+  }
+
+  #gesture .stage:nth-of-type(4) .media-row,
+  #gesture .stage:nth-of-type(4) .only-print.alt {
+    flex: 1 1 auto;
   }
 
   #gesture .gesture-reaction--overlay,
@@ -604,8 +616,8 @@
     margin: 0;
     padding: 0;
     border: 0;
-    break-inside: avoid-page;
-    page-break-inside: avoid;
+    break-inside: auto;
+    page-break-inside: auto;
   }
 
   #layers .layer-stage + .layer-stage {
@@ -672,7 +684,11 @@
   }
 
   #layers .layer-stage:last-child {
-    min-height: calc(var(--print-page-content-height) - 18mm);
+    min-height: calc(var(--print-page-content-height) - 12mm);
+  }
+
+  #layers .layer-stage:last-child .layer-stage-grid {
+    flex: 1 1 auto;
   }
 
   /* GROWTH: printable cloud via explicit absolute positioning. */
@@ -742,6 +758,15 @@
     margin-top: auto;
   }
 
+  #requirements .stage .slide-point,
+  #gesture .stage .slide-point,
+  #layers .layer-stage .slide-point,
+  #principles .container > .slide-point,
+  #object .container > .slide-point,
+  #growth .container > .slide-point {
+    margin-top: auto !important;
+  }
+
   /* FINAL PAGE: centered message + reflection, white gradient tail. */
   #final-a {
     break-before: page !important;
@@ -797,6 +822,17 @@
     pointer-events: none;
   }
 
+  #final-a .final-reflection::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: url("./assets/img/pad_screen_wired.png") center / contain no-repeat;
+    transform: scaleY(-1);
+    transform-origin: center;
+    opacity: 0.26;
+    pointer-events: none;
+  }
+
   #final-a .final-reflection::after {
     content: "";
     position: absolute;
@@ -819,6 +855,8 @@
     transform: scaleY(-1);
     transform-origin: center;
     opacity: 0.26;
+    position: relative;
+    z-index: 1;
   }
 
   #final-a .final-support {
@@ -831,6 +869,39 @@
   }
 
   #final-b {
+    break-before: page !important;
+    page-break-before: always !important;
+    break-after: auto !important;
+    page-break-after: auto !important;
+    display: block !important;
+    background: #fff !important;
+    color: #1f2b37 !important;
+  }
+
+  #final-b .container {
+    min-height: var(--print-page-content-height);
+    display: grid !important;
+    place-content: center;
+    text-align: center;
+    padding: 0;
+  }
+
+  #final-b .final-anchor {
+    width: min(95mm, 100%);
+    justify-items: center;
+    gap: 3mm;
+  }
+
+  #final-b .final-logo {
     display: none !important;
+  }
+
+  #final-b .footnote {
+    margin: 0;
+    max-width: 60ch;
+    text-align: center;
+    color: #5f6f81;
+    font-size: 11.2pt;
+    line-height: 1.34;
   }
 }

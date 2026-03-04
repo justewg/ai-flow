@@ -112,14 +112,39 @@ html_escape() {
   jq -rn --arg v "$value" '$v|@html'
 }
 
+watchdog_reason_human_text() {
+  local reason="$1"
+  case "$reason" in
+    DAEMON_LOG_STALE_WITH_LOCK)
+      echo "daemon завис: lock удерживается, но лог не обновляется"
+      ;;
+    EXECUTOR_PID_DEAD)
+      echo "executor помечен как RUNNING, но процесс не найден"
+      ;;
+    EXECUTOR_HEARTBEAT_STALE)
+      echo "executor завис: heartbeat не обновлялся слишком долго"
+      ;;
+    DAEMON_IDLE_WITH_ACTIVE_TASK)
+      echo "daemon ушёл в IDLE при наличии активной задачи"
+      ;;
+    ACTIVE_TASK_WITHOUT_EXECUTOR_STATE)
+      echo "активная задача есть, но состояние executor отсутствует"
+      ;;
+    *)
+      echo "внутренняя причина watchdog: ${reason}"
+      ;;
+  esac
+}
+
 notify_action() {
   local action="$1"
   local reason="$2"
   local detail="$3"
   local msg_file
   msg_file="$(mktemp "${CODEX_DIR}/watchdog_notify.XXXXXX")"
-  local now_utc check_icon title aux_text aux_escaped
+  local now_utc check_icon title aux_text aux_escaped reason_human
   now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  reason_human="$(watchdog_reason_human_text "$reason")"
   if [[ "$action" == "NONE" ]]; then
     check_icon="💤"
   else
@@ -133,7 +158,7 @@ notify_action() {
   aux_escaped="$(html_escape "$aux_text")"
   cat > "$msg_file" <<EOF
 ${title}
-<b>⚙️ Reason:</b> <code>$(html_escape "$reason")</code>
+<b>⚙️ Reason:</b> <code>$(html_escape "$reason_human")</code>
 <blockquote><code>${aux_escaped}</code></blockquote>
 EOF
   local out rc

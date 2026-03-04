@@ -563,39 +563,30 @@ query($projectId: ID!, $itemsFirst: Int!) {
 
 find_project_item_status_by_id() {
   local item_id="$1"
-  local project_json
+  local item_json
 
-  if ! project_json="$(
+  if ! item_json="$(
     run_gh_retry_capture_project \
       gh api graphql \
       -f query='
-query($projectId: ID!, $itemsFirst: Int!) {
-  node(id: $projectId) {
-    ... on ProjectV2 {
-      items(first: $itemsFirst) {
-        nodes {
-          id
-          status: fieldValueByName(name: "Status") {
-            __typename
-            ... on ProjectV2ItemFieldSingleSelectValue { name }
-          }
-        }
+query($itemId: ID!) {
+  node(id: $itemId) {
+    ... on ProjectV2Item {
+      id
+      status: fieldValueByName(name: "Status") {
+        __typename
+        ... on ProjectV2ItemFieldSingleSelectValue { name }
       }
     }
   }
 }
 ' \
-      -f projectId="$project_id" \
-      -F itemsFirst=100
+      -f itemId="$item_id"
   )"; then
     return "$?"
   fi
 
-  printf '%s' "$project_json" | jq -r --arg id "$item_id" '
-    .data.node.items.nodes[]
-    | select((.id // "") == $id)
-    | (.status.name // "")
-  ' | head -n1
+  printf '%s' "$item_json" | jq -r '.data.node.status.name // ""' | head -n1
 }
 
 normalize_status_name() {
@@ -666,7 +657,8 @@ maybe_release_active_task_on_status_mismatch() {
   local active_task_file="${CODEX_DIR}/daemon_active_task.txt"
   local active_item_file="${CODEX_DIR}/daemon_active_item_id.txt"
   local active_issue_file="${CODEX_DIR}/daemon_active_issue_number.txt"
-  local active_task active_item status_name status_norm target_norm rc
+  local active_task active_item active_issue_number status_name status_norm target_norm rc
+  local waiting_task review_task review_issue
 
   [[ -s "$active_task_file" ]] || return 0
   active_task="$(<"$active_task_file")"
@@ -674,6 +666,31 @@ maybe_release_active_task_on_status_mismatch() {
 
   active_item=""
   [[ -s "$active_item_file" ]] && active_item="$(<"$active_item_file")"
+
+  active_issue_number=""
+  [[ -s "$active_issue_file" ]] && active_issue_number="$(<"$active_issue_file")"
+
+  # Старые/деградированные контексты могли оставить пустой active_item_id.
+  # Пытаемся восстановить его по номеру issue, чтобы корректно отследить
+  # ручной перевод карточки из In Progress (например, обратно в Backlog/Todo).
+  if [[ -z "$active_item" && "$active_issue_number" =~ ^[0-9]+$ ]]; then
+    if active_item="$(find_project_issue_item_id "$active_issue_number")"; then
+      :
+    else
+      rc=$?
+      if [[ "$rc" -eq 75 ]]; then
+        echo "WAIT_GITHUB_API_UNSTABLE=1"
+        echo "WAIT_GITHUB_STAGE=ACTIVE_TASK_ITEM_RECOVER"
+        return 75
+      fi
+      active_item=""
+    fi
+    if [[ -n "$active_item" ]]; then
+      printf '%s\n' "$active_item" > "$active_item_file"
+      echo "ACTIVE_TASK_ITEM_ID_RECOVERED=1"
+      echo "ACTIVE_TASK_ITEM_ID=${active_item}"
+    fi
+  fi
   [[ -n "$active_item" ]] || return 0
 
   if ! status_name="$(find_project_item_status_by_id "$active_item")"; then
@@ -685,7 +702,18 @@ maybe_release_active_task_on_status_mismatch() {
     fi
     return 0
   fi
-  [[ -n "$status_name" ]] || return 0
+  if [[ -z "$status_name" ]]; then
+    echo "ACTIVE_TASK_RELEASED_STATUS_MISMATCH=1"
+    echo "ACTIVE_TASK_RELEASED_REASON=STATUS_EMPTY_OR_ITEM_MISSING"
+    echo "ACTIVE_TASK_RELEASED_TASK_ID=${active_task}"
+    echo "ACTIVE_TASK_EXPECTED_STATUS=${target_status}"
+    "${ROOT_DIR}/scripts/codex/executor_reset.sh" >/dev/null || true
+    : > "$active_task_file"
+    : > "$active_item_file"
+    : > "$active_issue_file"
+    : > "${CODEX_DIR}/project_task_id.txt"
+    return 0
+  fi
 
   status_norm="$(normalize_status_name "$status_name")"
   target_norm="$(normalize_status_name "$target_status")"
@@ -694,6 +722,7 @@ maybe_release_active_task_on_status_mismatch() {
   fi
 
   echo "ACTIVE_TASK_RELEASED_STATUS_MISMATCH=1"
+  echo "ACTIVE_TASK_RELEASED_REASON=STATUS_NOT_TARGET"
   echo "ACTIVE_TASK_RELEASED_TASK_ID=${active_task}"
   echo "ACTIVE_TASK_RELEASED_STATUS=${status_name}"
   echo "ACTIVE_TASK_EXPECTED_STATUS=${target_status}"
@@ -702,6 +731,34 @@ maybe_release_active_task_on_status_mismatch() {
   : > "$active_item_file"
   : > "$active_issue_file"
   : > "${CODEX_DIR}/project_task_id.txt"
+
+  # Если уже был выставлен waiting/review по этой же задаче, очищаем контекст,
+  # чтобы daemon ушел в idle и мог взять следующую карточку.
+  waiting_task=""
+  [[ -s "${CODEX_DIR}/daemon_waiting_task_id.txt" ]] && waiting_task="$(<"${CODEX_DIR}/daemon_waiting_task_id.txt")"
+  if [[ "$waiting_task" == "$active_task" ]]; then
+    : > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
+    : > "${CODEX_DIR}/daemon_waiting_task_id.txt"
+    : > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
+    : > "${CODEX_DIR}/daemon_waiting_kind.txt"
+    : > "${CODEX_DIR}/daemon_waiting_pending_post.txt"
+    : > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
+    : > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
+    echo "ACTIVE_TASK_RELEASED_WAITING_CONTEXT_CLEARED=1"
+  fi
+
+  review_task=""
+  review_issue=""
+  [[ -s "$review_task_file" ]] && review_task="$(<"$review_task_file")"
+  [[ -s "$review_issue_file" ]] && review_issue="$(<"$review_issue_file")"
+  if [[ "$review_task" == "$active_task" || ( -n "$active_issue_number" && "$review_issue" == "$active_issue_number" ) ]]; then
+    : > "$review_task_file"
+    : > "$review_item_file"
+    : > "$review_issue_file"
+    : > "$review_pr_file"
+    echo "ACTIVE_TASK_RELEASED_REVIEW_CONTEXT_CLEARED=1"
+  fi
+
   return 0
 }
 

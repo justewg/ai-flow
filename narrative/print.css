@@ -159,11 +159,20 @@
     overflow: hidden !important;
     opacity: 1 !important;
     transition: none !important;
-    background: none !important;
+    background: #fff url("./assets/img/planka_hero_desktop_rightfade.png") right center / cover no-repeat !important;
   }
 
   #intro .planka-hero__bg {
     display: none !important;
+  }
+
+  #intro .planka-hero__bg,
+  #intro .planka-hero__bg::before,
+  #intro .planka-hero__bg::after {
+    display: none !important;
+    content: none !important;
+    opacity: 0 !important;
+    background: none !important;
   }
 
   #intro .planka-hero__bg-print {
@@ -221,8 +230,7 @@
   #layers .container,
   #growth .container {
     min-height: var(--print-page-content-height);
-    display: flex;
-    flex-direction: column;
+    display: block;
   }
 
   /* REQUIREMENTS: two cards per page + repeated section heading. */
@@ -236,19 +244,17 @@
   }
 
   #requirements .requirements-intro {
-    margin: 0 0 3.2mm;
-    font-size: 10pt;
-    line-height: 1.33;
-    color: #40566c;
+    display: none !important;
   }
 
   #requirements .req-stages {
     display: block;
-    flex: 1 1 auto;
   }
 
   #requirements .stage {
-    min-height: 108mm !important;
+    display: flex;
+    flex-direction: column;
+    min-height: 122mm !important;
     margin: 0;
     padding: 0;
     border: 0;
@@ -268,7 +274,7 @@
 
   #requirements .stage:nth-child(even) {
     border-top: 0.26mm solid #d5dfeb;
-    padding-top: 3.2mm;
+    padding-top: 2.2mm;
     margin-top: 2.2mm;
   }
 
@@ -301,9 +307,8 @@
 
   #requirements .stage-grid {
     display: grid !important;
-    grid-template-columns: 56mm minmax(0, 1fr);
-    gap: 2.8mm 4mm;
-    min-height: 100%;
+    grid-template-columns: 70mm minmax(0, 1fr);
+    gap: 2.8mm 3.4mm;
     align-items: start;
     break-inside: avoid-page;
     page-break-inside: avoid;
@@ -317,18 +322,18 @@
 
   #requirements .stage-media .media-image,
   #requirements .stage-media-placeholder {
-    min-height: 52mm;
-    height: 52mm;
+    min-height: 68mm;
+    height: 68mm;
     object-fit: cover;
   }
 
   #requirements .stage-copy {
-    gap: 1.6mm;
+    gap: 1.2mm;
     align-content: start;
   }
 
   #requirements .stage-name {
-    font-size: 10pt;
+    font-size: 10.1pt;
     line-height: 1.24;
     text-transform: none;
     letter-spacing: 0.015em;
@@ -339,20 +344,20 @@
   #requirements .stage-need {
     margin: 0;
     max-width: none;
-    font-size: 9.3pt;
-    line-height: 1.28;
+    font-size: 8.9pt;
+    line-height: 1.24;
   }
 
   #requirements .stage-strong span,
   #requirements .stage-but span,
   #requirements .stage-need span {
-    margin-bottom: 0.6mm;
-    font-size: 7.7pt;
+    margin-bottom: 0.45mm;
+    font-size: 7.2pt;
     letter-spacing: 0.02em;
     text-transform: none;
   }
 
-  #requirements .slide-point {
+  #requirements .stage .slide-point {
     margin-top: auto;
   }
 
@@ -370,6 +375,9 @@
 
   /* GESTURE: page split by subheading + stacked print alternatives. */
   #gesture .stage {
+    display: flex;
+    flex-direction: column;
+    min-height: var(--print-page-content-height);
     margin: 0;
     padding: 0;
     border: 0;
@@ -461,15 +469,15 @@
   }
 
   #gesture .only-print .media-image {
-    min-height: 56mm;
-    height: 56mm;
+    min-height: 74mm;
+    height: 74mm;
     object-fit: contain;
   }
 
   #gesture .stage:nth-of-type(2) .only-print .media-image,
   #gesture .stage:nth-of-type(3) .only-print .media-image {
-    min-height: 33mm;
-    height: 33mm;
+    min-height: 43mm;
+    height: 43mm;
   }
 
   #gesture .gesture-reaction--overlay,
@@ -477,7 +485,7 @@
     display: none !important;
   }
 
-  #gesture .slide-point {
+  #gesture .stage .slide-point {
     margin-top: auto;
   }
 
@@ -485,17 +493,18 @@
   #principles .principles {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 1.8mm;
+    gap: 1.6mm;
     margin-top: 0;
+    min-height: 198mm;
   }
 
   #principles .pill {
     width: 100%;
     min-height: auto;
-    padding: 1.6mm 3mm 1.6mm 8.2mm;
+    padding: 1.4mm 3mm 1.4mm 8.2mm;
     border-radius: 7mm 0 0 7mm;
-    font-size: 9.8pt;
-    line-height: 1.24;
+    font-size: 9.4pt;
+    line-height: 1.22;
     text-align: left;
   }
 
@@ -507,7 +516,7 @@
   }
 
   #principles .slide-point {
-    margin-top: auto;
+    margin-top: 2.4mm;
   }
 
   /* OBJECT: compact pair rows and bottom summary block. */
@@ -521,13 +530,14 @@
   #object .object-layout {
     margin-top: 2.4mm;
     display: grid;
-    gap: 3.2mm;
+    gap: 2.8mm;
+    min-height: 198mm;
   }
 
   #object .object-pair {
     display: grid;
-    grid-template-columns: 56mm minmax(0, 1fr);
-    gap: 3.6mm;
+    grid-template-columns: 68mm minmax(0, 1fr);
+    gap: 3.2mm;
     align-items: start;
     break-inside: avoid-page;
     page-break-inside: avoid;
@@ -542,27 +552,27 @@
   }
 
   #object .object-media .media-image {
-    min-height: 54mm;
-    height: 54mm;
+    min-height: 68mm;
+    height: 68mm;
     object-fit: contain;
   }
 
   #object .object-title {
     margin: 0;
-    font-size: 10.6pt;
-    line-height: 1.3;
+    font-size: 10.4pt;
+    line-height: 1.28;
     color: #2f4559;
   }
 
   #object .object-text {
-    margin: 1.3mm 0 0;
-    font-size: 9.4pt;
-    line-height: 1.29;
+    margin: 1.1mm 0 0;
+    font-size: 9.1pt;
+    line-height: 1.25;
     color: #42586d;
   }
 
   #object .slide-point {
-    margin-top: auto;
+    margin-top: 2.4mm;
   }
 
   /* LAYERS: force second block onto a new page with section title at top. */
@@ -572,7 +582,9 @@
   }
 
   #layers .layer-stage {
-    min-height: auto;
+    display: flex;
+    flex-direction: column;
+    min-height: var(--print-page-content-height);
     margin: 0;
     padding: 0;
     border: 0;
@@ -603,7 +615,7 @@
     width: 100%;
     display: grid !important;
     grid-template-columns: 1fr;
-    gap: 2.6mm;
+    gap: 2.2mm;
     align-items: start;
   }
 
@@ -613,42 +625,42 @@
   }
 
   #layers .layer-media .media-image {
-    min-height: 68mm;
-    height: 68mm;
+    min-height: 76mm;
+    height: 76mm;
     object-fit: contain;
   }
 
   #layers .layer-copy {
     max-width: none;
-    gap: 1.6mm;
+    gap: 1.3mm;
   }
 
   #layers .layer-name {
     margin: 0;
-    font-size: 10.7pt;
-    line-height: 1.26;
+    font-size: 10.5pt;
+    line-height: 1.24;
     letter-spacing: 0.01em;
     text-transform: none;
   }
 
   #layers .layer-note {
     margin: 0;
-    font-size: 9.8pt;
-    line-height: 1.32;
+    font-size: 9.4pt;
+    line-height: 1.28;
     color: #3d5267;
   }
 
-  #layers .slide-point {
+  #layers .layer-stage .slide-point {
     margin-top: auto;
   }
 
   /* GROWTH: printable cloud via explicit absolute positioning. */
   #growth .word-field {
     position: relative;
-    min-height: 152mm;
-    flex: 1 1 auto;
+    min-height: 144mm;
     display: block;
     padding: 0;
+    overflow: hidden;
   }
 
   #growth .word-field::before {
@@ -700,16 +712,18 @@
   #growth .center-7 { top: 50%; left: 21%; }
   #growth .center-8 { top: 50%; left: 79%; }
   #growth .periphery-1 { top: 12%; left: 17%; }
-  #growth .periphery-2 { top: 88%; left: 22%; }
+  #growth .periphery-2 { top: 84%; left: 22%; }
   #growth .periphery-3 { top: 13%; left: 84%; }
-  #growth .periphery-4 { top: 88%; left: 81%; }
+  #growth .periphery-4 { top: 84%; left: 81%; }
 
   #growth .slide-point {
-    margin-top: auto;
+    margin-top: 2.8mm;
   }
 
   /* FINAL PAGE: centered message + reflection, white gradient tail. */
   #final-a {
+    break-before: page !important;
+    page-break-before: always !important;
     break-after: auto;
     page-break-after: auto;
   }

@@ -1,22 +1,31 @@
 // Minimal JS: reveal-on-scroll + intro hero motion
 (() => {
   const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const preloadedSources = new Set();
+  const preloadImageSource = (src) => {
+    if (!src || preloadedSources.has(src)) return;
+    preloadedSources.add(src);
+    const probe = new Image();
+    probe.decoding = 'sync';
+    probe.loading = 'eager';
+    probe.src = src;
+  };
+
   const warmUpPrintImages = () => {
     const images = Array.from(document.querySelectorAll('img'));
     for (const image of images) {
       image.loading = 'eager';
       image.decoding = 'sync';
-      if (!image.complete && image.getAttribute('src')) {
-        // Reassign src to force fetch in engines that delay lazy assets before print.
-        image.src = image.getAttribute('src');
-      }
-      image.decode?.().catch(() => {});
+      image.fetchPriority = 'high';
+      preloadImageSource(image.currentSrc || image.getAttribute('src'));
+      if (!image.complete) image.decode?.().catch(() => {});
     }
   };
 
   const schedulePrintWarmup = () => {
-    warmUpPrintImages();
-    window.setTimeout(warmUpPrintImages, 160);
+    [0, 120, 420, 1200].forEach((delay) => {
+      window.setTimeout(warmUpPrintImages, delay);
+    });
   };
 
   window.addEventListener('beforeprint', schedulePrintWarmup);
@@ -31,7 +40,7 @@
       printMq.addListener(onPrintModeChange);
     }
   }
-  window.addEventListener('load', () => window.setTimeout(warmUpPrintImages, 0), { once: true });
+  window.addEventListener('load', schedulePrintWarmup, { once: true });
 
   // Reveal on scroll using IntersectionObserver
   const revealEls = Array.from(document.querySelectorAll('.reveal'));

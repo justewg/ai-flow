@@ -159,7 +159,7 @@
     overflow: hidden !important;
     opacity: 1 !important;
     transition: none !important;
-    background: #fff url("./assets/img/planka_hero_desktop_rightfade.png") right center / cover no-repeat !important;
+    background: #fff url("./assets/img/planka_hero_desktop_rightfade.jpg") right center / cover no-repeat !important;
   }
 
   #intro .planka-hero__bg {
@@ -225,12 +225,17 @@
 
   #requirements .container,
   #gesture .container,
-  #principles .container,
-  #object .container,
-  #layers .container,
-  #growth .container {
+  #layers .container {
     min-height: var(--print-page-content-height);
     display: block;
+  }
+
+  #principles .container,
+  #object .container,
+  #growth .container {
+    min-height: var(--print-page-content-height);
+    display: flex;
+    flex-direction: column;
   }
 
   /* REQUIREMENTS: two cards per page + repeated section heading. */
@@ -254,6 +259,8 @@
   #requirements .stage {
     display: flex;
     flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
     min-height: 122mm !important;
     margin: 0;
     padding: 0;
@@ -280,6 +287,7 @@
 
   #requirements .stage-print-header {
     display: block !important;
+    width: 100%;
     margin: 0 0 2.8mm;
     font-size: 0;
     line-height: 0;
@@ -307,6 +315,7 @@
 
   #requirements .stage-grid {
     display: grid !important;
+    width: 100%;
     grid-template-columns: 70mm minmax(0, 1fr);
     gap: 2.8mm 3.4mm;
     align-items: start;
@@ -377,7 +386,7 @@
   #gesture .stage {
     display: flex;
     flex-direction: column;
-    min-height: var(--print-page-content-height);
+    min-height: calc(var(--print-page-content-height) - 12mm);
     margin: 0;
     padding: 0;
     border: 0;
@@ -480,6 +489,11 @@
     height: 43mm;
   }
 
+  #gesture .stage:nth-of-type(4) .only-print .media-image {
+    min-height: 64mm;
+    height: 64mm;
+  }
+
   #gesture .gesture-reaction--overlay,
   #gesture .gesture-reaction--print {
     display: none !important;
@@ -516,7 +530,7 @@
   }
 
   #principles .slide-point {
-    margin-top: 2.4mm;
+    margin-top: auto;
   }
 
   /* OBJECT: compact pair rows and bottom summary block. */
@@ -572,7 +586,7 @@
   }
 
   #object .slide-point {
-    margin-top: 2.4mm;
+    margin-top: auto;
   }
 
   /* LAYERS: force second block onto a new page with section title at top. */
@@ -584,7 +598,9 @@
   #layers .layer-stage {
     display: flex;
     flex-direction: column;
-    min-height: var(--print-page-content-height);
+    align-items: stretch;
+    justify-content: flex-start;
+    min-height: calc(var(--print-page-content-height) - 10mm);
     margin: 0;
     padding: 0;
     border: 0;
@@ -658,6 +674,7 @@
   #growth .word-field {
     position: relative;
     min-height: 144mm;
+    flex: 1 1 auto;
     display: block;
     padding: 0;
     overflow: hidden;
@@ -717,7 +734,7 @@
   #growth .periphery-4 { top: 84%; left: 81%; }
 
   #growth .slide-point {
-    margin-top: 2.8mm;
+    margin-top: auto;
   }
 
   /* FINAL PAGE: centered message + reflection, white gradient tail. */

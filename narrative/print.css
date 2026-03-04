@@ -1,52 +1,57 @@
 /* Print styles for PDF export
-   Goal: static, grid-based pages, light theme preserved. */
+   Goal: static, readable pages with predictable section rhythm. */
 
 @media print {
   :root {
-    /* reduce motion and enforce solid colors in print */
-    --dur-1: 0ms; --dur-2: 0ms;
+    --dur-1: 0ms;
+    --dur-2: 0ms;
+    --print-page-content-height: 269mm;
   }
 
-  html { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body { background: #fff; color: #1f2b37; }
+  html {
+    background: #fff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 
-  /* Page setup */
-  @page { size: A4; margin: 14mm; }
+  body {
+    margin: 0;
+    background: #fff;
+    color: #1f2b37;
+  }
+
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
 
   .section {
     min-height: auto !important;
     height: auto !important;
+    background: #fff !important;
     break-before: page;
     page-break-before: always;
     break-after: page;
     page-break-after: always;
-    break-inside: avoid-page;
-    page-break-inside: avoid;
-    background: #ffffff !important;
+    break-inside: auto;
+    page-break-inside: auto;
   }
+
   .section:first-of-type {
     break-before: auto;
     page-break-before: auto;
   }
+
   .section:last-of-type {
     break-after: auto;
     page-break-after: auto;
   }
-  .container { padding: 0; }
-  .section-sticky {
-    position: static !important;
-    top: auto !important;
-    z-index: auto !important;
-    min-height: auto !important;
-    padding: 0 0 4mm !important;
-    background: transparent !important;
-    break-inside: avoid;
-    page-break-inside: avoid;
-    break-after: avoid-page;
-    page-break-after: avoid;
+
+  .container {
+    padding: 0;
   }
 
-  /* Keep headings tied to the next block in print flow */
+  /* Keep headings attached to first content row. */
   h1, h2, h3, h4,
   .display, .title, .stage-print-header, .stage-name, .layer-name, .slide-point__label,
   #gesture .stage-title {
@@ -57,257 +62,727 @@
     orphans: 3;
     widows: 3;
   }
+
   h1 + *, h2 + *, h3 + *, h4 + *,
   .display + *, .title + *, .stage-print-header + *, .stage-name + *, .layer-name + *, .slide-point__label + *,
   #gesture .stage-title + * {
     break-before: avoid-page;
     page-break-before: avoid;
   }
-  .section-sticky + *,
-  .req-sticky + * {
-    break-before: avoid-page;
-    page-break-before: avoid;
-  }
 
-  /* Remove animations and parallax */
-  .reveal, .reveal.slide { opacity: 1 !important; transform: none !important; }
-  .parallax { transform: none !important; position: static !important; height: auto !important; }
-  #intro {
+  .reveal,
+  .reveal.slide {
     opacity: 1 !important;
-    transition: none !important;
-    min-height: 120mm !important;
-    background-size: cover !important;
-    background-position: right center !important;
-  }
-  #intro .planka-hero__content {
-    min-height: auto !important;
-    max-width: none !important;
+    transform: none !important;
   }
 
-  /* Layout tweaks per section */
-  #intro .planka-hero__title { font-size: 28pt !important; line-height: 1.12 !important; max-width: 20ch; }
+  .parallax {
+    transform: none !important;
+    position: static !important;
+    height: auto !important;
+  }
 
-  #evolution { break-inside: auto; page-break-inside: auto; }
-  #evolution .evolution-stage {
+  .section-sticky {
+    position: static !important;
+    top: auto !important;
+    z-index: auto !important;
     min-height: auto !important;
-    padding: 0;
-    break-after: page;
-    page-break-after: always;
-    break-inside: avoid;
+    margin: 0 0 4mm !important;
+    padding: 0 0 2.2mm !important;
+    border: 0 !important;
+    border-bottom: 0.35mm solid #9fb2c5 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    break-inside: avoid-page;
     page-break-inside: avoid;
   }
-  #evolution .evolution-stage:last-child {
-    break-after: auto;
-    page-break-after: auto;
-  }
-  #evolution .stage-grid { grid-template-columns: 1fr; gap: 5mm; }
-  #evolution .stage-media .media-image,
-  #evolution .stage-media-placeholder {
-    min-height: 60mm;
-    height: 60mm;
-    object-fit: cover;
-  }
-  #evolution figcaption { font-size: 11pt; }
 
+  .section-sticky .title {
+    margin: 0 !important;
+    font-size: 14pt !important;
+    line-height: 1.2 !important;
+    font-weight: 700 !important;
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+    color: #1f2b37 !important;
+  }
+
+  #object .section-sticky .title {
+    font-size: 0 !important;
+    line-height: 0 !important;
+  }
+
+  #object .section-sticky .title::before {
+    content: "Предмет";
+    display: block;
+    font-size: 14pt;
+    line-height: 1.2;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: none;
+    color: #1f2b37;
+  }
+
+  .slide-point {
+    margin-top: 5mm;
+    padding: 3mm 3.5mm;
+    border-left: 0.35mm solid #97abbe;
+    background: rgba(31, 43, 55, 0.035);
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  .slide-point__label {
+    margin-bottom: 1.2mm;
+    font-size: 9pt;
+    line-height: 1.2;
+    letter-spacing: 0.03em;
+    text-transform: none;
+    opacity: 0.75;
+  }
+
+  .slide-point__text {
+    font-size: 10.2pt;
+    line-height: 1.34;
+    font-weight: 600;
+  }
+
+  /* HERO: remove print full-bleed artifacts and force image fallback. */
+  #intro {
+    width: auto !important;
+    margin: 0 !important;
+    min-height: var(--print-page-content-height) !important;
+    position: relative !important;
+    overflow: hidden !important;
+    opacity: 1 !important;
+    transition: none !important;
+    background:
+      linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.96) 0%,
+        rgba(255, 255, 255, 0.8) 35%,
+        rgba(255, 255, 255, 0.22) 58%,
+        rgba(255, 255, 255, 0) 72%
+      ),
+      url("./assets/img/planka_hero_desktop_final.png") right center / cover no-repeat !important;
+  }
+
+  #intro .planka-hero__bg {
+    position: absolute !important;
+    inset: 0 !important;
+    display: block !important;
+    background-image: url("./assets/img/planka_hero_desktop_final.png") !important;
+    background-position: right center !important;
+    background-repeat: no-repeat !important;
+    background-size: cover !important;
+  }
+
+  #intro .planka-hero__bg::before,
+  #intro .planka-hero__bg::after {
+    content: none !important;
+  }
+
+  #intro .planka-hero__content {
+    min-height: var(--print-page-content-height) !important;
+    max-width: 58% !important;
+    padding: 10mm 0 !important;
+    justify-content: flex-end !important;
+    background: transparent !important;
+  }
+
+  #intro .planka-hero__title {
+    max-width: 18ch;
+    font-size: 30pt !important;
+    line-height: 1.08 !important;
+  }
+
+  #intro .planka-hero__subtitle {
+    max-width: 34ch;
+    font-size: 12pt;
+    line-height: 1.3;
+  }
+
+  #requirements .container,
+  #gesture .container,
+  #principles .container,
+  #object .container,
+  #layers .container,
+  #growth .container {
+    min-height: var(--print-page-content-height);
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* REQUIREMENTS: two cards per page + repeated section heading. */
   #requirements {
     break-inside: auto;
     page-break-inside: auto;
   }
+
   #requirements .req-sticky {
     display: none !important;
   }
-  #requirements .req-stages { display: block; }
+
+  #requirements .requirements-intro {
+    margin: 0 0 3.2mm;
+    font-size: 10pt;
+    line-height: 1.33;
+    color: #40566c;
+  }
+
+  #requirements .req-stages {
+    display: grid;
+    gap: 3.2mm;
+  }
+
   #requirements .stage {
     min-height: auto !important;
     margin: 0;
     padding: 0;
-    border: none;
-    break-before: page;
-    page-break-before: always;
+    border: 0;
     break-inside: avoid-page;
     page-break-inside: avoid;
   }
+
+  #requirements .stage:nth-child(odd) {
+    break-before: page;
+    page-break-before: always;
+  }
+
   #requirements .stage:first-child {
     break-before: auto;
     page-break-before: auto;
   }
-  #requirements .stage:last-child {
-    break-after: auto;
-    page-break-after: auto;
+
+  #requirements .stage:nth-child(even) {
+    border-top: 0.26mm solid #d5dfeb;
+    padding-top: 3.2mm;
   }
+
   #requirements .stage-print-header {
     display: block !important;
-    margin: 0 0 4mm;
-    font-size: 13pt;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-  }
-  #requirements .stage-grid {
-    grid-template-columns: 1fr;
-    gap: 3mm;
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-  #requirements .stage-copy,
-  #requirements .stage-media {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-  #requirements .stage-media .media-image,
-  #requirements .stage-media-placeholder {
-    min-height: 48mm;
-    height: 48mm;
-    object-fit: cover;
-  }
-  #requirements .stage-name { font-size: 10pt; }
-  #requirements .stage-copy { gap: 2.5mm; }
-  #requirements .stage-strong,
-  #requirements .stage-but,
-  #requirements .stage-need {
-    max-width: none;
-    font-size: 10.5pt;
-    line-height: 1.32;
-    margin: 0;
+    margin: 0 0 2.8mm;
+    font-size: 0;
+    line-height: 0;
+    text-transform: none !important;
+    letter-spacing: 0 !important;
   }
 
-  #designing .grid-12 { grid-template-columns: repeat(2, 1fr); gap: 6mm; }
-  #designing .ph, #designing .media-image { min-height: 50mm; height: 50mm; object-fit: cover; }
-
-  #gesture .stage {
-    break-inside: avoid-page;
-    page-break-inside: avoid;
-  }
-  #gesture .stage-title { font-size: 11pt; line-height: 1.25; }
-  #gesture .note { font-size: 10.5pt; line-height: 1.35; }
-  #gesture .media-row {
-    grid-template-columns: 1fr;
-    gap: 3mm;
-    break-inside: avoid-page;
-    page-break-inside: avoid;
-  }
-  #gesture .media-row .gesture-visual { display: none !important; }
-  #gesture .only-print { display: block !important; }
-  #gesture .only-screen { display: none !important; }
-  #gesture .gesture-reaction {
-    display: inline-block;
-    margin-top: 2.4mm;
-    padding: 2.4mm 3mm;
-    border: 0.3mm solid #bfcddd;
-    border-radius: 2.4mm;
-    background: #fbfdff;
-    color: #344a60;
-    font-size: 10pt;
-    line-height: 1.3;
-    box-shadow: none;
-    max-width: 90mm;
-  }
-  #gesture .gesture-reaction--overlay {
+  #requirements .stage:nth-child(even) .stage-print-header {
     display: none !important;
   }
 
-  #principles .principles { grid-template-columns: repeat(3, 1fr); gap: 6mm; }
-  #principles .pill { padding: 6mm; text-align: center; }
+  #requirements .stage-print-header::before {
+    content: "Эволюция средств коммуникации";
+    display: block;
+    margin: 0 0 3mm;
+    padding: 0 0 2mm;
+    border-bottom: 0.35mm solid #9fb2c5;
+    font-size: 14pt;
+    line-height: 1.18;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: none;
+    color: #1f2b37;
+  }
 
+  #requirements .stage-grid {
+    grid-template-columns: 42mm minmax(0, 1fr);
+    gap: 2.4mm 3.6mm;
+    align-items: start;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  #requirements .stage-media,
+  #requirements .stage-copy {
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  #requirements .stage-media .media-image,
+  #requirements .stage-media-placeholder {
+    min-height: 34mm;
+    height: 34mm;
+    object-fit: cover;
+  }
+
+  #requirements .stage-copy {
+    gap: 1.8mm;
+    align-content: start;
+  }
+
+  #requirements .stage-name {
+    font-size: 9.7pt;
+    line-height: 1.24;
+    text-transform: none;
+    letter-spacing: 0.015em;
+  }
+
+  #requirements .stage-strong,
+  #requirements .stage-but,
+  #requirements .stage-need {
+    margin: 0;
+    max-width: none;
+    font-size: 9.4pt;
+    line-height: 1.28;
+  }
+
+  #requirements .stage-strong span,
+  #requirements .stage-but span,
+  #requirements .stage-need span {
+    margin-bottom: 0.6mm;
+    font-size: 7.7pt;
+    letter-spacing: 0.02em;
+    text-transform: none;
+  }
+
+  #requirements .slide-point {
+    margin-top: auto;
+  }
+
+  #designing .grid-12 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6mm;
+  }
+
+  #designing .ph,
+  #designing .media-image {
+    min-height: 50mm;
+    height: 50mm;
+    object-fit: cover;
+  }
+
+  /* GESTURE: page split by subheading + stacked print alternatives. */
+  #gesture .stage {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  #gesture .stage + .stage {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  #gesture .stage + .stage::before {
+    content: "Жест";
+    display: block;
+    margin: 0 0 3mm;
+    padding: 0 0 2mm;
+    border-bottom: 0.35mm solid #9fb2c5;
+    font-size: 14pt;
+    line-height: 1.18;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: none;
+    color: #1f2b37;
+  }
+
+  #gesture .stage-title {
+    margin: 0 0 2.2mm;
+    font-size: 0;
+    line-height: 0;
+    color: transparent;
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+  }
+
+  #gesture .stage-title::before {
+    display: block;
+    font-size: 11.2pt;
+    line-height: 1.24;
+    font-weight: 650;
+    color: #31485d;
+    letter-spacing: 0.01em;
+    text-transform: none;
+  }
+
+  #gesture .stage:nth-of-type(1) .stage-title::before { content: "Письмо"; }
+  #gesture .stage:nth-of-type(2) .stage-title::before { content: "Намерение"; }
+  #gesture .stage:nth-of-type(3) .stage-title::before { content: "Показ"; }
+  #gesture .stage:nth-of-type(4) .stage-title::before { content: "Продолжил"; }
+
+  #gesture .media-row {
+    grid-template-columns: 1fr;
+    gap: 2mm;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  #gesture .media-row .gesture-visual {
+    display: none !important;
+  }
+
+  #gesture .only-print {
+    display: block !important;
+  }
+
+  #gesture .only-screen {
+    display: none !important;
+  }
+
+  #gesture .gesture-copy {
+    max-width: none;
+    gap: 1.6mm;
+  }
+
+  #gesture .gesture-copy p {
+    margin: 0;
+    font-size: 10pt;
+    line-height: 1.34;
+    color: #31485d;
+  }
+
+  #gesture .only-print.alt {
+    margin-top: 2mm;
+    display: grid !important;
+    gap: 2mm;
+  }
+
+  #gesture .only-print .media-image {
+    min-height: 46mm;
+    height: 46mm;
+    object-fit: contain;
+  }
+
+  #gesture .stage:nth-of-type(2) .only-print .media-image,
+  #gesture .stage:nth-of-type(3) .only-print .media-image {
+    min-height: 39mm;
+    height: 39mm;
+  }
+
+  #gesture .gesture-reaction--overlay,
+  #gesture .gesture-reaction--print {
+    display: none !important;
+  }
+
+  #gesture .slide-point {
+    margin-top: auto;
+  }
+
+  /* PRINCIPLES: full-width tags, reduced vertical padding. */
+  #principles .principles {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2.4mm;
+    margin-top: 0;
+  }
+
+  #principles .pill {
+    width: 100%;
+    min-height: auto;
+    padding: 2.2mm 3.2mm 2.2mm 8.6mm;
+    border-radius: 7mm 0 0 7mm;
+    font-size: 10.3pt;
+    line-height: 1.28;
+    text-align: left;
+  }
+
+  #principles .pill::before {
+    left: 3.3mm;
+    width: 2.1mm;
+    height: 2.1mm;
+    border-width: 0.3mm;
+  }
+
+  #principles .slide-point {
+    margin-top: auto;
+  }
+
+  /* OBJECT: compact pair rows and bottom summary block. */
   #object .object-subtitle {
     max-width: none;
     margin: 0;
-    font-size: 11pt;
-    line-height: 1.35;
+    font-size: 10.5pt;
+    line-height: 1.33;
   }
+
   #object .object-layout {
+    margin-top: 2.8mm;
     display: grid;
-    gap: 8mm;
+    gap: 4.2mm;
   }
+
   #object .object-pair {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8mm;
-    align-items: center;
-    break-inside: avoid;
+    grid-template-columns: 40mm minmax(0, 1fr);
+    gap: 3.6mm;
+    align-items: start;
+    break-inside: avoid-page;
     page-break-inside: avoid;
   }
-  #object .object-pair.is-reverse .object-media { order: 2; }
-  #object .object-pair.is-reverse .object-copy { order: 1; }
+
+  #object .object-pair.is-reverse .object-media {
+    order: 1;
+  }
+
+  #object .object-pair.is-reverse .object-copy {
+    order: 2;
+  }
+
   #object .object-media .media-image {
-    min-height: 60mm;
-    height: 60mm;
+    min-height: 34mm;
+    height: 34mm;
     object-fit: contain;
   }
+
   #object .object-title {
     margin: 0;
-    font-size: 11.4pt;
-    line-height: 1.34;
+    font-size: 10.6pt;
+    line-height: 1.3;
     color: #2f4559;
   }
+
   #object .object-text {
-    margin: 2.2mm 0 0;
-    font-size: 10.8pt;
-    line-height: 1.42;
+    margin: 1.3mm 0 0;
+    font-size: 9.7pt;
+    line-height: 1.32;
     color: #42586d;
   }
 
-  #layers .screens { grid-template-columns: 1fr 1fr; gap: 10mm; }
-  #layers figcaption {
-    font-size: 11.3pt;
-    line-height: 1.4;
-    font-weight: 650;
-    color: #31485d;
-    margin: 2.8mm 0 0;
-  }
-  #layers .layers-note {
-    font-size: 11pt;
-    line-height: 1.42;
-    font-weight: 500;
-    color: #43586c;
-    margin: 2.3mm 0 0;
-  }
-  #layers .layers-thesis {
-    font-size: 12.6pt;
-    font-weight: 650;
-    line-height: 1.4;
-    margin: 5.5mm 0 0;
-    color: #1e3144;
+  #object .slide-point {
+    margin-top: auto;
   }
 
-  #growth .word-field { display: grid; grid-auto-rows: min-content; min-height: auto; }
-  #growth .word-field::before { content: none !important; }
+  /* LAYERS: force second block onto a new page with section title at top. */
+  #layers .layers-stages {
+    margin-top: 0;
+    display: grid;
+    gap: 4mm;
+  }
+
+  #layers .layer-stage {
+    min-height: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  #layers .layer-stage + .layer-stage {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  #layers .layer-stage + .layer-stage::before {
+    content: "Разделение сред";
+    display: block;
+    margin: 0 0 3mm;
+    padding: 0 0 2mm;
+    border-bottom: 0.35mm solid #9fb2c5;
+    font-size: 14pt;
+    line-height: 1.18;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: none;
+    color: #1f2b37;
+  }
+
+  #layers .layer-stage-grid {
+    width: 100%;
+    grid-template-columns: 1fr;
+    gap: 2.6mm;
+    align-items: start;
+  }
+
+  #layers .layer-stage.is-reverse .layer-media,
+  #layers .layer-stage.is-reverse .layer-copy {
+    order: initial;
+  }
+
+  #layers .layer-media .media-image {
+    min-height: 58mm;
+    height: 58mm;
+    object-fit: contain;
+  }
+
+  #layers .layer-copy {
+    max-width: none;
+    gap: 1.6mm;
+  }
+
+  #layers .layer-name {
+    margin: 0;
+    font-size: 10.7pt;
+    line-height: 1.26;
+    letter-spacing: 0.01em;
+    text-transform: none;
+  }
+
+  #layers .layer-note {
+    margin: 0;
+    font-size: 9.8pt;
+    line-height: 1.32;
+    color: #3d5267;
+  }
+
+  #layers .slide-point {
+    margin-top: auto;
+  }
+
+  /* GROWTH: printable cloud via explicit absolute positioning. */
+  #growth .word-field {
+    position: relative;
+    min-height: 152mm;
+    flex: 1 1 auto;
+    display: block;
+    padding: 0;
+  }
+
+  #growth .word-field::before {
+    content: "";
+    position: absolute;
+    inset: 10% 7% 10%;
+    border-radius: 46% / 54%;
+    background:
+      radial-gradient(circle at 50% 52%, rgba(196, 208, 223, 0.26) 0%, rgba(196, 208, 223, 0.12) 44%, transparent 74%),
+      radial-gradient(circle at 50% 52%, rgba(220, 228, 238, 0.16) 0%, transparent 78%);
+    z-index: 0;
+    pointer-events: none;
+  }
+
   #growth .word {
-    position: static;
-    margin: 2mm 0;
+    position: absolute;
+    margin: 0;
+    transform: translate(-50%, -50%);
     animation: none !important;
-    transform: none !important;
     text-shadow: none !important;
+    line-height: 1.16;
+    white-space: nowrap;
+    z-index: 1;
   }
-  #growth .word.center { opacity: 0.9; font-weight: 700; }
-  #growth .word.periphery { opacity: 0.55; font-weight: 500; }
-  #growth .growth-legend { font-size: 11pt; line-height: 1.35; color: #3f556b; margin: 4mm 0 0; }
 
-  #final-a .container, #final-b .container { min-height: auto !important; }
-  #final-a .final-message { font-size: 28pt; text-align: left; max-width: none; line-height: 1.12; }
-  #final-a .final-accent {
-    width: 58mm;
-    height: 0.5mm;
-    margin: 2.4mm 0 2.8mm;
-    background: #c7d0da;
-    opacity: 1;
+  #growth .word.center {
+    opacity: 0.95;
+    font-size: 11.2pt;
+    font-weight: 680;
+    color: #1f3347;
+    letter-spacing: 0.015em;
   }
-  #final-a .final-accent::after { content: none !important; }
-  #final-a .final-reflection { display: none !important; }
-  #final-a .final-support { font-size: 12pt; text-align: left; margin: 4mm 0 0; color: #5f6f81; max-width: none; }
+
+  #growth .word.periphery {
+    opacity: 0.66;
+    font-size: 8.8pt;
+    font-weight: 520;
+    color: #3c5268;
+    letter-spacing: 0.03em;
+  }
+
+  #growth .center-1 {
+    top: 52%;
+    left: 50%;
+    font-size: 17.2pt;
+    font-weight: 790;
+    opacity: 1;
+    z-index: 2;
+  }
+
+  #growth .center-2 { top: 34%; left: 35%; }
+  #growth .center-3 { top: 35%; left: 66%; }
+  #growth .center-4 { top: 66%; left: 32%; }
+  #growth .center-5 { top: 69%; left: 69%; }
+  #growth .center-6 { top: 20%; left: 52%; }
+  #growth .center-7 { top: 50%; left: 21%; }
+  #growth .center-8 { top: 50%; left: 79%; }
+  #growth .periphery-1 { top: 12%; left: 17%; }
+  #growth .periphery-2 { top: 88%; left: 22%; }
+  #growth .periphery-3 { top: 13%; left: 84%; }
+  #growth .periphery-4 { top: 88%; left: 81%; }
+
+  #growth .slide-point {
+    margin-top: auto;
+  }
+
+  /* FINAL PAGE: centered message + reflection, white gradient tail. */
+  #final-a {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  #final-a .container {
+    min-height: var(--print-page-content-height);
+    display: grid !important;
+    place-content: center;
+    text-align: center;
+  }
+
+  #final-a .stack {
+    --final-track-width: min(15ch, 100%);
+    gap: 3mm;
+    justify-items: center;
+  }
+
+  #final-a .final-message {
+    margin: 0;
+    width: var(--final-track-width);
+    max-width: var(--final-track-width);
+    font-size: 31pt;
+    line-height: 1.08;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  #final-a .final-accent {
+    display: block !important;
+    width: var(--final-track-width);
+    height: 0.45mm;
+    margin: 1.8mm 0 2.2mm;
+    opacity: 1;
+    background: linear-gradient(90deg, transparent 0%, #cad3de 18%, #cad3de 82%, transparent 100%);
+  }
+
+  #final-a .final-accent::after {
+    content: none !important;
+  }
+
+  #final-a .final-reflection {
+    width: var(--final-track-width);
+    height: auto;
+    margin: 0 auto 1.6mm;
+    display: block !important;
+    position: relative;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  #final-a .final-reflection::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      to top,
+      rgba(255, 255, 255, 1) 0%,
+      rgba(255, 255, 255, 0.94) 28%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    pointer-events: none;
+  }
+
+  #final-a .final-reflection-image {
+    width: 100%;
+    display: block;
+    transform: scaleY(-1);
+    transform-origin: center;
+    opacity: 0.26;
+  }
+
+  #final-a .final-support {
+    margin: 1.6mm 0 0;
+    max-width: 58ch;
+    font-size: 11.6pt;
+    line-height: 1.33;
+    text-align: center;
+    color: #5f6f81;
+  }
 
   #final-b {
-    background: #fff !important;
-    color: #1f2b37 !important;
+    display: none !important;
   }
-  #final-b .final-b-layout { display: block !important; min-height: auto !important; }
-  #final-b .final-anchor { width: auto !important; max-width: none !important; }
-  #final-b .final-logo {
-    width: 28mm;
-    filter: brightness(0) saturate(100%);
-  }
-  #final-b .final-line { width: 72mm; margin-top: 2mm; }
-  #final-b .plank { width: 72mm; max-width: none; height: 0.7mm; }
-  #final-b .keys-rhythm { width: 72mm; max-width: none; height: 2mm; animation: none !important; }
-  #final-b .footnote { font-size: 10pt; line-height: 1.35; color: #5f6f81; margin-top: 3mm; max-width: 82mm; }
 }

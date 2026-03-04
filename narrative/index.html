@@ -9,12 +9,41 @@
     <!-- System font stack to stay minimal and robust -->
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./print.css" media="print" />
+    <link rel="preload" as="image" href="./assets/img/planka_hero_desktop_rightfade.jpg" />
+    <link rel="preload" as="image" href="./assets/img/pecs.png" />
+    <link rel="preload" as="image" href="./assets/img/magnet.png" />
+    <link rel="preload" as="image" href="./assets/img/stickers.png" />
+    <link rel="preload" as="image" href="./assets/img/plastic.png" />
+    <link rel="preload" as="image" href="./assets/img/tv_search.png" />
+    <link rel="preload" as="image" href="./assets/img/erudit.png" />
+    <link rel="preload" as="image" href="./assets/img/pad_wire_light.png" />
+    <link rel="preload" as="image" href="./assets/img/pad_single_light_1.png" />
+    <link rel="preload" as="image" href="./assets/img/gesture_1_2.png" />
+    <link rel="preload" as="image" href="./assets/img/gesture_2.png" />
+    <link rel="preload" as="image" href="./assets/img/gesture_2_5.png" />
+    <link rel="preload" as="image" href="./assets/img/gesture_3_3.png" />
+    <link rel="preload" as="image" href="./assets/img/gesture_3.png" />
+    <link rel="preload" as="image" href="./assets/img/gesture_4_2.png" />
+    <link rel="preload" as="image" href="./assets/img/pad_single.png" />
+    <link rel="preload" as="image" href="./assets/img/pad_back.png" />
+    <link rel="preload" as="image" href="./assets/img/pad_in_hands_with_fullscreen_clean.png" />
+    <link rel="preload" as="image" href="./assets/img/dashboard.png" />
+    <link rel="preload" as="image" href="./assets/img/pad_screen_wired.png" />
   </head>
   <body>
     <main id="narrative" class="narrative">
       <!-- SECTION 0 — Intro -->
       <section id="intro" class="planka-hero" aria-label="PLANKA hero">
         <div class="planka-hero__bg" aria-hidden="true"></div>
+        <img
+          class="planka-hero__bg-print"
+          src="./assets/img/planka_hero_desktop_rightfade.jpg"
+          alt=""
+          aria-hidden="true"
+          loading="eager"
+          decoding="sync"
+          fetchpriority="high"
+        />
 
         <div class="planka-hero__content">
           <h1 class="planka-hero__title">
@@ -39,7 +68,7 @@
               <p class="stage-print-header only-print">Требования к следующей среде</p>
               <div class="stage-grid">
                 <figure class="stage-media reveal stage-step-1" data-animate="fade">
-                  <img class="media-image" src="./assets/img/pecs.png" alt="Карточки PECS как визуальная опора" loading="lazy" />
+                  <img class="media-image" src="./assets/img/pecs.png" alt="Карточки PECS как визуальная опора" loading="eager" />
                 </figure>
                 <article class="stage-copy">
                   <p class="stage-name reveal stage-step-1" data-animate="fade">PECS</p>
@@ -54,7 +83,7 @@
               <p class="stage-print-header only-print">Требования к следующей среде</p>
               <div class="stage-grid">
                 <figure class="stage-media reveal stage-step-1" data-animate="fade">
-                  <img class="media-image" src="./assets/img/magnet.png" alt="Магнитные буквы для сборки слов" loading="lazy" />
+                  <img class="media-image" src="./assets/img/magnet.png" alt="Магнитные буквы для сборки слов" loading="eager" />
                 </figure>
                 <article class="stage-copy">
                   <p class="stage-name reveal stage-step-1" data-animate="fade">Магнитные буквы</p>
@@ -69,7 +98,7 @@
               <p class="stage-print-header only-print">Требования к следующей среде</p>
               <div class="stage-grid">
                 <figure class="stage-media reveal stage-step-1" data-animate="fade">
-                  <img class="media-image" src="./assets/img/stickers.png" alt="Бумага как простая физическая форма сборки фраз" loading="lazy" />
+                  <img class="media-image" src="./assets/img/stickers.png" alt="Бумага как простая физическая форма сборки фраз" loading="eager" />
                 </figure>
                 <article class="stage-copy">
                   <p class="stage-name reveal stage-step-1" data-animate="fade">Бумага</p>
@@ -84,7 +113,7 @@
               <p class="stage-print-header only-print">Требования к следующей среде</p>
               <div class="stage-grid">
                 <figure class="stage-media reveal stage-step-1" data-animate="fade">
-                  <img class="media-image" src="./assets/img/plastic.png" alt="Пластилин как моторная вовлеченность в коммуникацию" loading="lazy" />
+                  <img class="media-image" src="./assets/img/plastic.png" alt="Пластилин как моторная вовлеченность в коммуникацию" loading="eager" />
                 </figure>
                 <article class="stage-copy">
                   <p class="stage-name reveal stage-step-1" data-animate="fade">Пластилин</p>
@@ -99,7 +128,7 @@
               <p class="stage-print-header only-print">Требования к следующей среде</p>
               <div class="stage-grid">
                 <figure class="stage-media reveal stage-step-1" data-animate="fade">
-                  <img class="media-image" src="./assets/img/tv_search.png" alt="Телевизор и поисковая выдача как внешний интерфейс коммуникации" loading="lazy" />
+                  <img class="media-image" src="./assets/img/tv_search.png" alt="Телевизор и поисковая выдача как внешний интерфейс коммуникации" loading="eager" />
                 </figure>
                 <article class="stage-copy">
                   <p class="stage-name reveal stage-step-1" data-animate="fade">Телевизор / поиск</p>
@@ -114,7 +143,7 @@
               <p class="stage-print-header only-print">Требования к следующей среде</p>
               <div class="stage-grid">
                 <figure class="stage-media reveal stage-step-1" data-animate="fade">
-                  <img class="media-image" src="./assets/img/erudit.png" alt="Эрудит" loading="lazy" />
+                  <img class="media-image" src="./assets/img/erudit.png" alt="Эрудит" loading="eager" />
                 </figure>
                 <article class="stage-copy">
                   <p class="stage-name reveal stage-step-1" data-animate="fade">Эрудит</p>
@@ -123,14 +152,14 @@
                   <p class="stage-need reveal stage-step-4" data-animate="fade"><span>Требование:</span> <strong>Среда должна сохранять предсказуемость формы и масштабироваться по длине мысли.</strong></p>
                 </article>
               </div>
+              <div class="slide-point">
+                <span class="slide-point__label">Иными словами:</span>
+                <div class="slide-point__text">
+                  Среда должна быть предсказуемой, масштабируемой, личной
+                  и не вмешиваться в формулировку мысли.
+                </div>
+              </div>
             </section>
-          </div>
-          <div class="slide-point">
-            <span class="slide-point__label">Иными словами:</span>
-            <div class="slide-point__text">
-              Среда должна быть предсказуемой, масштабируемой, личной
-              и не вмешиваться в формулировку мысли.
-            </div>
           </div>
         </div>
       </section>
@@ -145,12 +174,12 @@
             <p>Проектирование началось с изучения. Не с выбора инструмента и не с выбора цвета. С вопроса о среде, созданной только для письма.</p>
             <p>С чертежа.</p>
             <figure class="reveal" data-animate="fade">
-              <img class="media-image" src="./assets/img/pad_wire_light.png" alt="Wireframe light среды PLANKA" loading="lazy" />
+              <img class="media-image" src="./assets/img/pad_wire_light.png" alt="Wireframe light среды PLANKA" loading="eager" />
             </figure>
             <p>Две строки стали базовой единицей экрана: мысль видна целиком и сразу проверяется взглядом, без разрыва на фрагменты.</p>
             <p>Скролл исключён сознательно. Когда полотно движется, внимание уходит с формулировки на навигацию, а нам важна непрерывность письма и показа.</p>
             <figure class="reveal" data-animate="fade">
-              <img class="media-image" src="./assets/img/pad_single_light_1.png" alt="Прототип интерфейса среды без рук" loading="lazy" />
+              <img class="media-image" src="./assets/img/pad_single_light_1.png" alt="Прототип интерфейса среды без рук" loading="eager" />
             </figure>
             <p>Ландшафт и крупная предсказуемая раскладка дают устойчивый жест: моторика повторяется от сообщения к сообщению, а текст читается одинаково уверенно и для автора, и при предъявлении собеседнику.</p>
           </div>
@@ -169,7 +198,7 @@
             <header class="stage-title">ПИСЬМО</header>
             <div class="media-row">
               <div class="gesture-visual reveal" data-animate="fade">
-                <img class="media-image" src="./assets/img/gesture_1_2.png" alt="Формирование мысли в личном пространстве: на экране набрано «Я ХОЧУ ПОЕСТЬ КАРТ»" loading="lazy" />
+                <img class="media-image" src="./assets/img/gesture_1_2.png" alt="Формирование мысли в личном пространстве: на экране набрано «Я ХОЧУ ПОЕСТЬ КАРТ»" loading="eager" />
               </div>
               <div class="gesture-copy">
                 <p>Мысль формируется.</p>
@@ -178,7 +207,7 @@
               </div>
             </div>
             <div class="only-print alt">
-              <img class="media-image" src="./assets/img/gesture_1_2.png" alt="Формирование мысли в личном пространстве: на экране набрано «Я ХОЧУ ПОЕСТЬ КАРТ»" loading="lazy" />
+              <img class="media-image" src="./assets/img/gesture_1_2.png" alt="Формирование мысли в личном пространстве: на экране набрано «Я ХОЧУ ПОЕСТЬ КАРТ»" loading="eager" decoding="sync" />
             </div>
           </article>
 
@@ -187,9 +216,9 @@
             <div class="media-row">
               <div class="gesture-visual only-screen reveal" data-animate="fade">
                 <figure class="before-after" data-before-after data-initial="16" aria-label="Сравнение вариантов намерения: наклон и начало разворота">
-                  <img class="before-after__image before-after__image--base" src="./assets/img/gesture_2.png" alt="Намерение показать: наклон устройства от себя" loading="lazy" />
+                  <img class="before-after__image before-after__image--base" src="./assets/img/gesture_2.png" alt="Намерение показать: наклон устройства от себя" loading="eager" />
                   <div class="before-after__overlay" aria-hidden="true">
-                    <img class="before-after__image before-after__image--after" src="./assets/img/gesture_2_5.png" alt="" loading="lazy" />
+                    <img class="before-after__image before-after__image--after" src="./assets/img/gesture_2_5.png" alt="" loading="eager" />
                   </div>
                   <button class="before-after__divider" type="button" aria-label="Сдвинуть границу сравнения вариантов">
                     <span class="before-after__knob" aria-hidden="true">
@@ -207,8 +236,8 @@
               </div>
             </div>
             <div class="only-print alt">
-              <img class="media-image" src="./assets/img/gesture_2.png" alt="Намерение показать: наклон устройства от себя" loading="lazy" />
-              <img class="media-image gesture-print-secondary" src="./assets/img/gesture_2_5.png" alt="Намерение показать: начало разворота вокруг вертикальной оси" loading="lazy" />
+              <img class="media-image" src="./assets/img/gesture_2.png" alt="Намерение показать: наклон устройства от себя" loading="eager" decoding="sync" />
+              <img class="media-image gesture-print-secondary" src="./assets/img/gesture_2_5.png" alt="Намерение показать: начало разворота вокруг вертикальной оси" loading="eager" decoding="sync" />
             </div>
           </article>
 
@@ -217,9 +246,9 @@
             <div class="media-row">
               <div class="gesture-visual only-screen reveal" data-animate="fade">
                 <figure class="before-after" data-before-after data-initial="82" aria-label="Сравнение вариантов показа: наклон и разворот">
-                  <img class="before-after__image before-after__image--base" src="./assets/img/gesture_3_3.png" alt="Показ с наклоном: текст развёрнут к собеседнику" loading="lazy" />
+                  <img class="before-after__image before-after__image--base" src="./assets/img/gesture_3_3.png" alt="Показ с наклоном: текст развёрнут к собеседнику" loading="eager" />
                   <div class="before-after__overlay" aria-hidden="true">
-                    <img class="before-after__image before-after__image--after" src="./assets/img/gesture_3.png" alt="" loading="lazy" />
+                    <img class="before-after__image before-after__image--after" src="./assets/img/gesture_3.png" alt="" loading="eager" />
                   </div>
                   <button class="before-after__divider" type="button" aria-label="Сдвинуть границу сравнения вариантов">
                     <span class="before-after__knob" aria-hidden="true">
@@ -237,9 +266,8 @@
               </div>
             </div>
             <div class="only-print alt">
-              <img class="media-image" src="./assets/img/gesture_3_3.png" alt="Показ с наклоном: текст развёрнут к собеседнику" loading="lazy" />
-              <img class="media-image gesture-print-secondary" src="./assets/img/gesture_3.png" alt="Показ с разворотом: текст читается в стандартной ориентации" loading="lazy" />
-              <div class="gesture-reaction gesture-reaction--print">Да, хорошо, приходи на кухню</div>
+              <img class="media-image" src="./assets/img/gesture_3_3.png" alt="Показ с наклоном: текст развёрнут к собеседнику" loading="eager" decoding="sync" />
+              <img class="media-image gesture-print-secondary" src="./assets/img/gesture_3.png" alt="Показ с разворотом: текст читается в стандартной ориентации" loading="eager" decoding="sync" />
             </div>
           </article>
 
@@ -247,7 +275,7 @@
             <header class="stage-title">ПРОДОЛЖИЛ</header>
             <div class="media-row">
               <div class="gesture-visual reveal" data-animate="fade">
-                <img class="media-image" src="./assets/img/gesture_4_2.png" alt="Продолжение коммуникации: после сообщения «картошка» вводится новое слово «ЭКСКАВАТОР»" loading="lazy" />
+                <img class="media-image" src="./assets/img/gesture_4_2.png" alt="Продолжение коммуникации: после сообщения «картошка» вводится новое слово «ЭКСКАВАТОР»" loading="eager" />
               </div>
               <div class="gesture-copy">
                 <p>Коммуникация продолжается.</p>
@@ -256,17 +284,16 @@
               </div>
             </div>
             <div class="only-print alt">
-              <img class="media-image" src="./assets/img/gesture_4_2.png" alt="Продолжение коммуникации: после сообщения «картошка» вводится новое слово «ЭКСКАВАТОР»" loading="lazy" />
+              <img class="media-image" src="./assets/img/gesture_4_2.png" alt="Продолжение коммуникации: после сообщения «картошка» вводится новое слово «ЭКСКАВАТОР»" loading="eager" decoding="sync" />
+            </div>
+            <div class="slide-point">
+              <span class="slide-point__label">Иными словами:</span>
+              <div class="slide-point__text">
+                Жест — это граница между личной мыслью и предъявленной мыслью.
+                Он завершает мысль действием.
+              </div>
             </div>
           </article>
-
-          <div class="slide-point">
-            <span class="slide-point__label">Иными словами:</span>
-            <div class="slide-point__text">
-              Жест — это граница между личной мыслью и предъявленной мыслью.
-              Он завершает мысль действием.
-            </div>
-          </div>
         </div>
       </section>
 
@@ -305,7 +332,7 @@
           <div class="object-layout">
             <article class="object-pair">
               <figure class="object-media reveal" data-animate="fade">
-                <img class="media-image" src="./assets/img/pad_single.png" alt="Фронтальный вид устройства ПЛАНКА" loading="lazy" />
+                <img class="media-image" src="./assets/img/pad_single.png" alt="Фронтальный вид устройства ПЛАНКА" loading="eager" />
               </figure>
               <div class="object-copy reveal" data-animate="fade">
                 <h3 class="object-title">Инструмент, который всегда про речь.</h3>
@@ -315,7 +342,7 @@
 
             <article class="object-pair is-reverse">
               <figure class="object-media reveal" data-animate="fade">
-                <img class="media-image" src="./assets/img/pad_back.png" alt="Задник и фактура корпуса устройства ПЛАНКА" loading="lazy" />
+                <img class="media-image" src="./assets/img/pad_back.png" alt="Задник и фактура корпуса устройства ПЛАНКА" loading="eager" />
               </figure>
               <div class="object-copy reveal" data-animate="fade">
                 <h3 class="object-title">Кастомный бампер — якорь идентичности.</h3>
@@ -342,7 +369,7 @@
             <article class="layer-stage">
               <div class="layer-stage-grid">
                 <figure class="layer-media reveal stage-step-1" data-animate="fade">
-                  <img class="media-image" src="./assets/img/pad_in_hands_with_fullscreen_clean.png" alt="Инструмент PLANKA в руках подростка в режиме письма" loading="lazy" />
+                  <img class="media-image" src="./assets/img/pad_in_hands_with_fullscreen_clean.png" alt="Инструмент PLANKA в руках подростка в режиме письма" loading="eager" />
                 </figure>
                 <div class="layer-copy">
                   <p class="layer-name reveal stage-step-1" data-animate="fade">Для него</p>
@@ -357,7 +384,7 @@
             <article class="layer-stage is-reverse">
               <div class="layer-stage-grid">
                 <figure class="layer-media reveal stage-step-1" data-animate="fade">
-                  <img class="media-image" src="./assets/img/dashboard.png" alt="Поверхность взрослого для наблюдения динамики коммуникации" loading="lazy" />
+                  <img class="media-image" src="./assets/img/dashboard.png" alt="Поверхность взрослого для наблюдения динамики коммуникации" loading="eager" />
                 </figure>
                 <div class="layer-copy">
                   <p class="layer-name reveal stage-step-1" data-animate="fade">Для взрослого</p>
@@ -367,13 +394,13 @@
                   <p class="layer-note reveal stage-step-4" data-animate="fade">В будущем здесь можно мягко и опционально учитывать частоту text-to-speech в отдельных ситуациях: если этот режим будет востребован и реализован.</p>
                 </div>
               </div>
+              <div class="slide-point">
+                <span class="slide-point__label">Иными словами:</span>
+                <div class="slide-point__text">
+                  Среды различаются не функцией — а назначением.
+                </div>
+              </div>
             </article>
-          </div>
-          <div class="slide-point">
-            <span class="slide-point__label">Иными словами:</span>
-            <div class="slide-point__text">
-              Среды различаются не функцией — а назначением.
-            </div>
           </div>
         </div>
       </section>
@@ -420,8 +447,9 @@
                 class="final-reflection-image"
                 src="./assets/img/pad_screen_wired.png"
                 alt=""
-                loading="lazy"
-                decoding="async"
+                loading="eager"
+                decoding="sync"
+                fetchpriority="high"
               />
             </div>
             <p class="subtitle center final-support">Предъявленная мысль становится устойчивой и возвращаемой.</p>
@@ -433,7 +461,7 @@
       <section id="final-b" class="section section-9b">
         <div class="container final-b-layout">
           <div class="final-anchor">
-            <img class="final-logo" src="./assets/img/logo_light_transp.png" alt="Логотип PLANKA" loading="lazy" />
+            <img class="final-logo" src="./assets/img/logo_light_transp.png" alt="Логотип PLANKA" loading="eager" />
             <footer class="footnote">
               <em>Постоянная Планка связывает энергию кванта с его частотой. Коммуникация тоже состоит из квантов — предъявленных мыслей.</em>
             </footer>

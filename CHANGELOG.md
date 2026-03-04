@@ -41,6 +41,7 @@
 - `[APP-07]` Добавлен единый snapshot состояния автоматики: `scripts/codex/status_snapshot.sh` + команда `scripts/codex/run.sh status_snapshot` (daemon/watchdog/executor/queues/blockers/rate-limit/backlog-seed).
 - `[APP-07]` Добавлен ops-сервис `scripts/codex/ops_bot_service.js`: web dashboard (`/ops/status`), JSON status (`/ops/status.json`) и Telegram webhook-команды (`/status`, `/summary`, `/help`, `/status_page`).
 - `[APP-07]` Добавлена PM2-обвязка ops-сервиса (`ops_bot_pm2_*`) и runbook интеграции с nginx/webhook: `docs/ops-bot-dashboard.md`.
+- `[PL-017]` Добавлен preview-деплой до merge: GitHub workflow `.github/workflows/deploy-dev-pr.yml` (trigger на `pull_request -> main`) с выкладкой в `DEPLOY_DEV_PATH` через тот же rsync/ssh-пайплайн, что и прод.
 
 ### Fixed
 - `[APP-07]` В `daemon_loop.sh` добавлен экспоненциальный backoff при `WAIT_GITHUB_RATE_LIMIT`: интервал следующего тика растет `90 -> 180 -> 360` сек (с насыщением на `360`), после успешного тика backoff сбрасывается к базовому интервалу.

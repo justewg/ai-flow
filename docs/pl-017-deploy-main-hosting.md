@@ -15,6 +15,7 @@
 
 ## Что добавлено в репо
 - Workflow: `.github/workflows/deploy-main.yml`
+- Workflow preview-деплоя до merge: `.github/workflows/deploy-dev-pr.yml`
 - Ручной fallback-скрипт: `scripts/deploy/push_main_snapshot.sh`
 - Шаблон переменных: `.env.example`
 
@@ -24,6 +25,7 @@
 - `DEPLOY_PORT` - ssh порт (обычно `22`)
 - `DEPLOY_USER` - ssh пользователь
 - `DEPLOY_PATH` - путь деплоя (для этого проекта: `/var/sites/planka`)
+- `DEPLOY_DEV_PATH` - путь preview-деплоя для PR (например, `/var/sites/planka.dev`)
 - `DEPLOY_SSH_KEY` - приватный ключ для доступа по SSH
 
 Опционально:
@@ -44,3 +46,9 @@ scripts/deploy/push_main_snapshot.sh
 1. Смержить PR в `main`.
 2. Проверить `Actions` run `Deploy Main to Hosting`.
 3. Открыть FQDN с мобильного/планшета и убедиться, что версия обновилась.
+
+## Preview до merge (`PR -> main`)
+- Trigger: `pull_request` (`opened`, `reopened`, `synchronize`, `ready_for_review`) в ветку `main`.
+- Workflow: `Deploy PR Preview to Dev Hosting` (`.github/workflows/deploy-dev-pr.yml`).
+- Деплой идет тем же rsync/ssh-механизмом, что и прод, но в `DEPLOY_DEV_PATH`.
+- Источник кода: `pull_request.head.sha` (актуальный коммит PR-ветки, до merge).

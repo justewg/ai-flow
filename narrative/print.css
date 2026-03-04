@@ -389,7 +389,7 @@
   #gesture .stage {
     display: flex;
     flex-direction: column;
-    min-height: auto;
+    min-height: calc(var(--print-page-content-height) - 12mm);
     margin: 0;
     padding: 0;
     border: 0;
@@ -444,6 +444,7 @@
   #gesture .media-row {
     grid-template-columns: 1fr;
     gap: 2mm;
+    margin-top: auto;
     break-inside: avoid-page;
     page-break-inside: avoid;
   }
@@ -475,6 +476,10 @@
   #gesture .only-print.alt {
     margin-top: 1.4mm;
     display: block !important;
+  }
+
+  #gesture .stage:not(:last-of-type) .only-print.alt {
+    margin-bottom: auto;
   }
 
   #gesture .only-print.alt .media-image + .media-image {
@@ -529,10 +534,10 @@
   #principles .pill {
     width: 100%;
     min-height: auto;
-    padding: 1.4mm 3mm 1.4mm 8.2mm;
+    padding: 0.9mm 3mm 0.9mm 8.2mm;
     border-radius: 7mm 0 0 7mm;
     font-size: 9.4pt;
-    line-height: 1.22;
+    line-height: 1.16;
     text-align: left;
   }
 
@@ -615,7 +620,7 @@
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
-    min-height: auto;
+    min-height: calc(var(--print-page-content-height) - 12mm);
     margin: 0;
     padding: 0;
     border: 0;
@@ -649,6 +654,11 @@
     grid-template-columns: 1fr;
     gap: 2.2mm;
     align-items: start;
+    margin-top: auto;
+  }
+
+  #layers .layer-stage:first-of-type .layer-stage-grid {
+    margin-bottom: auto;
   }
 
   #layers .layer-stage.is-reverse .layer-media,

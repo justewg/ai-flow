@@ -6,13 +6,15 @@
     --dur-1: 0ms;
     --dur-2: 0ms;
     --print-page-content-height: 269mm;
-    --print-hero-image: url("./assets/img/planka_hero_desktop_rightfade.png");
+    --print-hero-image: url("./assets/img/planka_hero_desktop_rightfade.jpg");
   }
 
   html {
     background: #fff;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+    -webkit-text-size-adjust: 100% !important;
+    text-size-adjust: 100% !important;
   }
 
   body {
@@ -189,16 +191,21 @@
     background: none !important;
   }
 
-  #intro .planka-hero__bg-print {
+  #intro.planka-hero .planka-hero__bg-print {
     position: absolute !important;
     inset: 0 !important;
     display: block !important;
     width: 100% !important;
     height: 100% !important;
+    min-width: 100% !important;
+    min-height: 100% !important;
     object-fit: cover !important;
     object-position: right center !important;
     z-index: 0 !important;
     opacity: 1 !important;
+    visibility: visible !important;
+    clip: auto !important;
+    clip-path: none !important;
   }
 
   #intro::before {
@@ -265,7 +272,7 @@
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
-    min-height: 110mm !important;
+    min-height: 104mm !important;
     margin: 0;
     padding: 0;
     border: 0;
@@ -364,10 +371,6 @@
 
   #requirements .stage .slide-point {
     margin-top: auto;
-  }
-
-  #requirements .stage[data-stage="erudit"] {
-    min-height: 148mm !important;
   }
 
   #designing .grid-12 {

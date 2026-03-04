@@ -345,7 +345,7 @@ issue_has_auto_ignore_label() {
 
 filter_auto_ignore_from_queue_json() {
   local queue_json="$1"
-  local queue_count idx entry issue_number task_id rc
+  local queue_count idx entry issue_number rc
   local filtered_queue_json='[]'
 
   queue_count="$(printf '%s' "$queue_json" | jq 'length')"
@@ -356,13 +356,9 @@ filter_auto_ignore_from_queue_json() {
   for (( idx = 0; idx < queue_count; idx++ )); do
     entry="$(printf '%s' "$queue_json" | jq -c ".[$idx]")"
     issue_number="$(printf '%s' "$entry" | jq -r '.issue_number // ""')"
-    task_id="$(printf '%s' "$entry" | jq -r '.task_id // ""')"
 
     if [[ "$issue_number" =~ ^[0-9]+$ ]]; then
       if issue_has_auto_ignore_label "$issue_number"; then
-        echo "QUEUE_TASK_SKIPPED_AUTO_IGNORE=1"
-        echo "QUEUE_TASK_SKIPPED_ISSUE_NUMBER=$issue_number"
-        [[ -n "$task_id" ]] && echo "QUEUE_TASK_SKIPPED_TASK_ID=$task_id"
         continue
       fi
       rc=$?
@@ -524,6 +520,8 @@ is_truthy_flag() {
 
 find_first_todo_issue_json() {
   local project_json
+  local ignore_labels_csv
+  ignore_labels_csv="$(IFS=,; echo "${AUTO_IGNORE_LABELS[*]}")"
   if ! project_json="$(
     run_gh_retry_capture_project \
       gh api graphql \
@@ -536,7 +534,13 @@ query($projectId: ID!, $itemsFirst: Int!) {
           id
           content {
             __typename
-            ... on Issue { number title }
+            ... on Issue {
+              number
+              title
+              labels(first: 30) {
+                nodes { name }
+              }
+            }
             ... on DraftIssue { title }
           }
           status: fieldValueByName(name: "Status") {
@@ -559,13 +563,25 @@ query($projectId: ID!, $itemsFirst: Int!) {
     return "$?"
   fi
 
-  printf '%s' "$project_json" | jq -c --arg trigger "$trigger_status" '
+  printf '%s' "$project_json" | jq -c --arg trigger "$trigger_status" --arg ignore_labels_csv "$ignore_labels_csv" '
     def norm: gsub("^\\s+|\\s+$";"") | ascii_downcase;
+    def ignore_labels: ($ignore_labels_csv | split(",") | map(norm) | map(select(length > 0)));
+    def has_auto_ignore($labels):
+      any(($labels // [])[];
+        (. | norm) as $label
+        | (ignore_labels | index($label)) != null
+      );
     [
       .data.node.items.nodes[]
       | select(((.content.__typename // "") == "Issue") or ((.content.__typename // "") == "DraftIssue"))
       | select((((.content.title // "") | test("^DIRTY-GATE:")) | not))
       | select((.status.name // "" | norm) == ($trigger | norm))
+      | select(
+          if (.content.__typename // "") == "Issue"
+          then (has_auto_ignore([.content.labels.nodes[]?.name]) | not)
+          else true
+          end
+        )
       | {
           item_id: (.id // ""),
           content_type: (.content.__typename // ""),
@@ -2327,6 +2343,9 @@ else
 fi
 
 valid_queue_count="$(printf '%s' "$valid_queue_json" | jq 'length')"
+if (( valid_queue_before_filter_count > valid_queue_count )); then
+  echo "QUEUE_TASKS_SKIPPED_AUTO_IGNORE=$(( valid_queue_before_filter_count - valid_queue_count ))"
+fi
 
 if (( valid_queue_count == 0 )); then
   if (( valid_queue_before_filter_count > 0 )); then

@@ -235,6 +235,7 @@
   - ведет статистику окон между rate-limit событиями в `.tmp/codex/graphql_rate_stats.log` (`requests`, `duration_sec`, `start_utc`, `end_utc`)
   - берет задачу только из `Status=Todo`
   - issue с label из `AUTO_IGNORE_LABELS` (по умолчанию `auto:ignore`) исключаются из auto-claim очереди
+  - `AUTO_IGNORE_LABELS` учитывается и в dirty-gate: такие `Todo`-задачи не считаются блокирующими для создания `DIRTY-GATE`
   - если активная задача получает ignore-label, daemon освобождает active-context, останавливает executor и возвращается в idle-цикл
   - перед подхватом читает `Flow Meta` у Issue и проверяет `Depends-On`
   - зависимость из `Depends-On` считается выполненной, если `Issue` закрыт (`state=CLOSED`) или карточка зависимости в Project имеет `Status=Done/Closed`

@@ -294,6 +294,7 @@
     - `executor_state=RUNNING`, но heartbeat устарел
     - `daemon_state=IDLE_NO_TASKS`, но активная задача еще есть
     - stale `daemon.lock` + устаревший `daemon.log`
+  - для `daemon_state=WAIT_GITHUB_RATE_LIMIT` использует отдельный порог stale (чтобы легальный rate-limit backoff daemon не считался зависанием)
   - лестница восстановления:
     - `SOFT_DAEMON_TICK` (`daemon_tick`)
     - `MEDIUM_RESET_EXECUTOR` (`executor_reset` + `daemon_tick`)
@@ -489,6 +490,7 @@ chmod +x scripts/codex/*.sh
 - `WATCHDOG_COOLDOWN_SEC` (минимальная пауза между recovery-действиями; по умолчанию 120)
 - `WATCHDOG_EXECUTOR_STALE_SEC` (порог stale heartbeat executor; по умолчанию 180)
 - `WATCHDOG_DAEMON_LOG_STALE_SEC` (порог stale daemon log/lock; по умолчанию 180)
+- `WATCHDOG_DAEMON_LOG_STALE_RATE_LIMIT_SEC` (порог stale daemon log/lock для `WAIT_GITHUB_RATE_LIMIT`; по умолчанию `DAEMON_RATE_LIMIT_MAX_SLEEP_SEC + WATCHDOG_DAEMON_INTERVAL_SEC + 60`)
 - `OPS_BOT_BIND` (bind ops-бот сервиса; по умолчанию `127.0.0.1`)
 - `OPS_BOT_PORT` (порт ops-бот сервиса; по умолчанию `8790`)
 - `OPS_BOT_WEBHOOK_PATH` (базовый path webhook; по умолчанию `/telegram/webhook`)

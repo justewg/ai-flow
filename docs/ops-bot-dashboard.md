@@ -7,6 +7,7 @@
 - JSON snapshot: `GET /ops/status.json`
 - Telegram webhook: `POST /telegram/webhook[/<secret>]`
 - runtime ingest endpoint: `POST /ops/ingest/status` (опционально, для split-runtime)
+- summary ingest endpoint: `POST /ops/ingest/log-summary` (опционально, для split-runtime `/summary`)
 - команды в чате: `/status`, `/summary [hours]`, `/help`, `/status_page`
 
 Источник данных статуса: `scripts/codex/status_snapshot.sh` (только локальные файлы `.tmp/codex/*`, без обязательного вызова GitHub API).
@@ -47,7 +48,10 @@ OPS_BOT_PUBLIC_BASE_URL=https://planka.ewg40.ru
 OPS_BOT_INGEST_ENABLED=1
 OPS_BOT_INGEST_PATH=/ops/ingest/status
 OPS_BOT_INGEST_SECRET=<shared-secret>
-OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC=180
+OPS_BOT_SUMMARY_INGEST_PATH=/ops/ingest/log-summary
+OPS_BOT_SUMMARY_INGEST_SECRET=<shared-secret>
+OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC=600
+OPS_BOT_REMOTE_SUMMARY_TTL_SEC=1200
 ```
 
 На локальном рантайме (daemon-loop):
@@ -56,14 +60,20 @@ OPS_REMOTE_STATUS_PUSH_ENABLED=1
 OPS_REMOTE_STATUS_PUSH_URL=https://planka-dev.ewg40.ru/ops/ingest/status
 OPS_REMOTE_STATUS_PUSH_SECRET=<shared-secret>
 OPS_REMOTE_STATUS_SOURCE=macbook-local
+OPS_REMOTE_SUMMARY_PUSH_ENABLED=1
+OPS_REMOTE_SUMMARY_PUSH_URL=https://planka-dev.ewg40.ru/ops/ingest/log-summary
+OPS_REMOTE_SUMMARY_PUSH_SECRET=<shared-secret>
+OPS_REMOTE_SUMMARY_PUSH_HOURS=1,6,24
+OPS_REMOTE_SUMMARY_PUSH_MIN_INTERVAL_SEC=300
 ```
 
 Проверка push вручную:
 ```bash
 scripts/codex/run.sh ops_remote_status_push
+scripts/codex/run.sh ops_remote_summary_push
 ```
 
-После этого серверный `/ops/status.json` начнет отдавать удаленный snapshot, если локальные серверные state-файлы пустые (`UNKNOWN`).
+После этого серверный `/ops/status.json` начнет отдавать удаленный snapshot, если локальные серверные state-файлы пустые (`UNKNOWN`), а `/summary` в Telegram будет использовать удаленный summary bundle вместо пустых server-local логов.
 
 ## Nginx интеграция
 Идея: nginx принимает публичный трафик и проксирует в локальный сервис `127.0.0.1:8790`.

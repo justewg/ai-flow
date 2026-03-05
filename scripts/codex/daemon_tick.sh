@@ -26,6 +26,7 @@ dirty_gate_blocked_issue_file="${CODEX_DIR}/dirty_gate_blocked_issue_number.txt"
 dirty_gate_blocked_title_file="${CODEX_DIR}/dirty_gate_blocked_issue_title.txt"
 dirty_gate_override_signature_file="${CODEX_DIR}/dirty_gate_override_signature.txt"
 dirty_gate_last_reply_id_file="${CODEX_DIR}/dirty_gate_last_reply_comment_id.txt"
+dirty_gate_finalize_pending_file="${CODEX_DIR}/dirty_gate_finalize_pending_issue_number.txt"
 DIRTY_GATE_ISSUE_CREATED_THIS_TICK="0"
 gql_stats_log_file="${CODEX_DIR}/graphql_rate_stats.log"
 gql_window_state_file="${CODEX_DIR}/graphql_rate_window_state.txt"
@@ -44,6 +45,50 @@ emit_lines() {
     echo "$line"
   done <<< "$text"
 }
+
+push_remote_status_if_needed() {
+  local push_out rc
+  if push_out="$("${ROOT_DIR}/scripts/codex/ops_remote_status_push.sh" 2>&1)"; then
+    while IFS= read -r line; do
+      [[ -z "$line" || "$line" == "OPS_REMOTE_PUSH_SKIPPED=URL_NOT_CONFIGURED" || "$line" == "OPS_REMOTE_PUSH_SKIPPED=DISABLED" ]] && continue
+      echo "$line"
+    done <<<"$push_out"
+    return 0
+  fi
+  rc=$?
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "OPS_REMOTE_PUSH_ERROR(rc=$rc): $line"
+  done <<<"$push_out"
+  return 0
+}
+
+push_remote_summary_if_needed() {
+  local push_out rc
+  if push_out="$("${ROOT_DIR}/scripts/codex/ops_remote_summary_push.sh" 2>&1)"; then
+    while IFS= read -r line; do
+      [[ -z "$line" || "$line" == "OPS_REMOTE_SUMMARY_PUSH_SKIPPED=URL_NOT_CONFIGURED" || "$line" == "OPS_REMOTE_SUMMARY_PUSH_SKIPPED=DISABLED" || "$line" == "OPS_REMOTE_SUMMARY_PUSH_SKIPPED=THROTTLED" || "$line" == "OPS_REMOTE_SUMMARY_PUSH_SKIPPED=ENDPOINT_NOT_FOUND" || "$line" == "OPS_REMOTE_SUMMARY_PUSH_SKIPPED=ENDPOINT_NOT_FOUND_CACHE" ]] && continue
+      echo "$line"
+    done <<<"$push_out"
+    return 0
+  fi
+  rc=$?
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "OPS_REMOTE_SUMMARY_PUSH_ERROR(rc=$rc): $line"
+  done <<<"$push_out"
+  return 0
+}
+
+on_exit_push_remote_status() {
+  if [[ "${DAEMON_LOOP_PUSH_REMOTE:-0}" == "1" ]]; then
+    return 0
+  fi
+  push_remote_status_if_needed || true
+  push_remote_summary_if_needed || true
+}
+
+trap on_exit_push_remote_status EXIT
 
 is_github_network_error() {
   local text="$1"
@@ -613,6 +658,7 @@ clear_dirty_gate_local_state() {
   : > "$dirty_gate_blocked_title_file"
   : > "$dirty_gate_override_signature_file"
   : > "$dirty_gate_last_reply_id_file"
+  : > "$dirty_gate_finalize_pending_file"
 }
 
 clear_dirty_gate_waiting_state_if_any() {
@@ -1231,7 +1277,9 @@ finalize_dirty_gate_after_commit_merge() {
     :
   else
     rc=$?
-    [[ "$rc" -eq 75 ]] && return 75
+    echo "WAIT_DIRTY_WORKTREE_COMMIT_FINALIZE_PENDING=1"
+    echo "WAIT_DIRTY_WORKTREE_COMMIT_FINALIZE_REASON=PROJECT_STATUS_UPDATE_FAILED"
+    return "$rc"
   fi
 
   if close_out="$(
@@ -1279,6 +1327,37 @@ Dirty worktree resolved by COMMIT flow (commit + PR + merge)."
   fi
 
   echo "WAIT_DIRTY_WORKTREE_GATE_RESOLVED=1"
+  return 0
+}
+
+mark_dirty_gate_finalize_pending() {
+  local gate_issue_number="$1"
+  [[ -n "$gate_issue_number" ]] || return 0
+  printf '%s\n' "$gate_issue_number" > "$dirty_gate_finalize_pending_file"
+  echo "WAIT_DIRTY_WORKTREE_COMMIT_FINALIZE_PENDING=1"
+  echo "WAIT_DIRTY_WORKTREE_COMMIT_FINALIZE_ISSUE=${gate_issue_number}"
+}
+
+maybe_resume_dirty_gate_finalize_pending() {
+  local gate_issue_number rc
+
+  [[ -s "$dirty_gate_finalize_pending_file" ]] || return 0
+  gate_issue_number="$(<"$dirty_gate_finalize_pending_file")"
+  [[ -n "$gate_issue_number" ]] || return 0
+
+  echo "WAIT_DIRTY_WORKTREE_COMMIT_FINALIZE_RETRY=1"
+  echo "WAIT_DIRTY_WORKTREE_COMMIT_FINALIZE_ISSUE=${gate_issue_number}"
+  if finalize_dirty_gate_after_commit_merge "$gate_issue_number"; then
+    : > "$dirty_gate_finalize_pending_file"
+    echo "WAIT_DIRTY_WORKTREE_COMMIT_FINALIZE_RESOLVED=1"
+    return 0
+  fi
+
+  rc=$?
+  if [[ "$rc" -eq 75 ]]; then
+    return 0
+  fi
+  echo "WAIT_DIRTY_WORKTREE_COMMIT_FINALIZE_RETRY_FAILED=1"
   return 0
 }
 
@@ -1653,7 +1732,7 @@ maybe_process_dirty_gate_reply() {
   local gate_issue_number waiting_issue waiting_kind reply_probe_out reply_body reply_mode dirty_action rc
   local blocked_json
   local reply_comment_id reply_url task_id
-  local commit_ok="0" set_override="0"
+  local commit_ok="0" set_override="0" commit_finalize_pending="0"
   local commit_flow_resolved="0"
 
   [[ -s "$dirty_gate_issue_file" ]] || return 0
@@ -1726,8 +1805,11 @@ maybe_process_dirty_gate_reply() {
         commit_flow_resolved="1"
       else
         rc=$?
-        [[ "$rc" -eq 75 ]] && return 0
-        set_dirty_gate_waiting_at_reply "$gate_issue_number" "$reply_comment_id" "$reply_url"
+        if [[ "$rc" -eq 75 ]]; then
+          return 0
+        fi
+        mark_dirty_gate_finalize_pending "$gate_issue_number"
+        commit_finalize_pending="1"
       fi
     else
       commit_ok="0"
@@ -1746,6 +1828,12 @@ maybe_process_dirty_gate_reply() {
     echo "WAIT_DIRTY_WORKTREE_OVERRIDE_SET=0"
     echo "WAIT_DIRTY_WORKTREE_COMMIT_OK=${commit_ok}"
     echo "WAIT_DIRTY_WORKTREE_COMMIT_FLOW_DONE=1"
+  elif [[ "$dirty_action" == "COMMIT" && "$commit_finalize_pending" == "1" ]]; then
+    : > "$dirty_gate_override_signature_file"
+    echo "WAIT_DIRTY_WORKTREE_OVERRIDE_SET=0"
+    echo "WAIT_DIRTY_WORKTREE_COMMIT_OK=${commit_ok}"
+    echo "WAIT_DIRTY_WORKTREE_COMMIT_FLOW_DONE=0"
+    clear_dirty_gate_waiting_state_if_any
   else
     : > "$dirty_gate_override_signature_file"
     echo "WAIT_DIRTY_WORKTREE_OVERRIDE_SET=0"
@@ -1754,7 +1842,7 @@ maybe_process_dirty_gate_reply() {
 
   [[ -n "$reply_comment_id" ]] && printf '%s\n' "$reply_comment_id" > "$dirty_gate_last_reply_id_file"
 
-  if [[ "$commit_flow_resolved" != "1" && "$(printf '%s' "$reply_mode" | tr '[:lower:]' '[:upper:]')" == "REWORK" ]]; then
+  if [[ "$dirty_action" != "COMMIT" && "$commit_flow_resolved" != "1" && "$(printf '%s' "$reply_mode" | tr '[:lower:]' '[:upper:]')" == "REWORK" ]]; then
     if ! set_dirty_gate_project_status "$gate_issue_number" "$target_status" "$target_flow" "DIRTY_GATE_REPLY_STATUS"; then
       rc=$?
       [[ "$rc" -eq 75 ]] && return 0
@@ -1847,6 +1935,10 @@ else
     echo "BACKLOG_SEED_APPLY_ERROR(rc=$rc): $line"
   done <<< "$backlog_seed_out"
 fi
+
+# If dirty-gate COMMIT flow already merged but final status close did not complete,
+# keep retrying finalization on each tick without requiring a new user reply.
+maybe_resume_dirty_gate_finalize_pending
 
 if ! git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- ||
   ! git -C "${ROOT_DIR}" diff --cached --quiet --ignore-submodules --; then

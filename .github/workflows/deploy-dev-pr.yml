@@ -1,6 +1,9 @@
 name: Deploy PR Preview to Dev Hosting
 
 on:
+  push:
+    branches:
+      - development
   pull_request:
     branches:
       - main
@@ -45,6 +48,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref }}
+
+      - name: Checkout push ref
+        if: ${{ github.event_name == 'push' }}
+        uses: actions/checkout@v4
 
       - name: Validate required secrets
         run: |

@@ -7,7 +7,7 @@ const os = require("os");
 const path = require("path");
 const test = require("node:test");
 
-const { createServer, loadConfig } = require("./ops_bot_service");
+const { createServer, loadConfig, loadEffectiveSummary } = require("./ops_bot_service");
 
 function listen(server, host = "127.0.0.1", port = 0) {
   return new Promise((resolve, reject) => {
@@ -132,8 +132,11 @@ JSON
     OPS_BOT_TG_BOT_TOKEN: "",
     OPS_BOT_INGEST_ENABLED: overrides.ingestEnabled ? "1" : "",
     OPS_BOT_INGEST_SECRET: overrides.ingestSecret || "",
+    OPS_BOT_SUMMARY_INGEST_SECRET: overrides.summaryIngestSecret || "",
     OPS_BOT_REMOTE_SNAPSHOT_FILE: overrides.remoteSnapshotFile || "",
     OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC: overrides.remoteSnapshotTtlSec || "",
+    OPS_BOT_REMOTE_SUMMARY_FILE: overrides.remoteSummaryFile || "",
+    OPS_BOT_REMOTE_SUMMARY_TTL_SEC: overrides.remoteSummaryTtlSec || "",
   });
 }
 
@@ -325,4 +328,85 @@ test("ingest endpoint stores remote snapshot and serves it when local runtime is
   assert.equal(statusJson.body.overall_status, "WORKING");
   assert.equal(statusJson.body.snapshot_source, "remote_ingest");
   assert.equal(statusJson.body.remote_source, "macbook-local");
+
+  const staleConfig = createConfig(t, {
+    ingestEnabled: true,
+    ingestSecret: "ingest-secret",
+    remoteSnapshotFile,
+    remoteSnapshotTtlSec: "1",
+    snapshotPayload:
+      '{"generated_at":"2026-03-05T00:00:00Z","overall_status":"WAITING_SYSTEM","headline":"local unknown","daemon":{"state":"UNKNOWN"},"watchdog":{"state":"UNKNOWN"},"executor":{"state":""}}',
+  });
+  const staleService = createServer(staleConfig, { info() {}, warn() {}, error() {} });
+  const stalePort = await listen(staleService);
+  t.after(async () => {
+    await closeServer(staleService);
+  });
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  const staleStatus = await requestJson({
+    method: "GET",
+    url: `http://127.0.0.1:${stalePort}/ops/status.json`,
+  });
+  assert.equal(staleStatus.statusCode, 200);
+  assert.equal(staleStatus.body.snapshot_source, "remote_ingest");
+  assert.equal(staleStatus.body.remote_stale, true);
+  assert.match(String(staleStatus.body.headline || ""), /\[stale /);
+});
+
+test("summary ingest stores remote bundle and effective summary prefers remote source", async (t) => {
+  const remoteSummaryFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "planka-ops-remote-summary-")), "summary.json");
+  t.after(() => {
+    fs.rmSync(path.dirname(remoteSummaryFile), { recursive: true, force: true });
+  });
+
+  const config = createConfig(t, {
+    ingestEnabled: true,
+    summaryIngestSecret: "summary-secret",
+    remoteSummaryFile,
+    remoteSummaryTtlSec: "1200",
+  });
+  const service = createServer(config, { info() {}, warn() {}, error() {} });
+  const port = await listen(service);
+  t.after(async () => {
+    await closeServer(service);
+  });
+
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const unauthorized = await requestJson({
+    method: "POST",
+    url: `${baseUrl}${config.summaryIngestPath}`,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ summaries: { "6": "no-auth summary" } }),
+  });
+  assert.equal(unauthorized.statusCode, 401);
+
+  const ingest = await requestJson({
+    method: "POST",
+    url: `${baseUrl}${config.summaryIngestPath}`,
+    headers: {
+      "Content-Type": "application/json",
+      "X-Ops-Status-Secret": "summary-secret",
+    },
+    body: JSON.stringify({
+      source: "macbook-local",
+      pushed_at: "2026-03-05T11:00:00Z",
+      summaries: {
+        "6": "remote summary 6h",
+        "24": "remote summary 24h",
+      },
+    }),
+  });
+  assert.equal(ingest.statusCode, 200);
+  assert.equal(ingest.body.ok, true);
+
+  const summary6 = await loadEffectiveSummary(config, 6);
+  assert.equal(summary6.source, "remote_ingest");
+  assert.equal(summary6.usedHours, 6);
+  assert.equal(summary6.exactWindow, true);
+  assert.equal(summary6.text, "remote summary 6h");
+
+  const summary4 = await loadEffectiveSummary(config, 4);
+  assert.equal(summary4.source, "remote_ingest");
+  assert.equal(summary4.usedHours, 6);
+  assert.equal(summary4.exactWindow, false);
 });

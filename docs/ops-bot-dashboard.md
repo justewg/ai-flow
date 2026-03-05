@@ -47,7 +47,7 @@ OPS_BOT_PUBLIC_BASE_URL=https://planka.ewg40.ru
 OPS_BOT_INGEST_ENABLED=1
 OPS_BOT_INGEST_PATH=/ops/ingest/status
 OPS_BOT_INGEST_SECRET=<shared-secret>
-OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC=180
+OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC=600
 ```
 
 На локальном рантайме (daemon-loop):

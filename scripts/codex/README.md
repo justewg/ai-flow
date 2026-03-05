@@ -539,7 +539,7 @@ chmod +x scripts/codex/*.sh
 - `OPS_BOT_INGEST_PATH` (path ingest endpoint; по умолчанию `/ops/ingest/status`)
 - `OPS_BOT_INGEST_SECRET` (секрет заголовка `X-Ops-Status-Secret` для ingest POST)
 - `OPS_BOT_REMOTE_SNAPSHOT_FILE` (файл кеша последнего принятого удаленного snapshot)
-- `OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC` (TTL удаленного snapshot в секундах; по умолчанию `180`)
+- `OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC` (TTL удаленного snapshot в секундах; по умолчанию `600`)
 - `OPS_BOT_ALLOWED_CHAT_IDS` (CSV списка разрешенных chat_id; если задано — остальные игнорируются)
 - `OPS_BOT_PUBLIC_BASE_URL` (публичный base URL для команды `/status_page`, например `https://planka.ewg40.ru`)
 - `OPS_BOT_REFRESH_SEC` (интервал автообновления `/ops/status` в секундах; по умолчанию `5`)

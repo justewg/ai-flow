@@ -325,4 +325,27 @@ test("ingest endpoint stores remote snapshot and serves it when local runtime is
   assert.equal(statusJson.body.overall_status, "WORKING");
   assert.equal(statusJson.body.snapshot_source, "remote_ingest");
   assert.equal(statusJson.body.remote_source, "macbook-local");
+
+  const staleConfig = createConfig(t, {
+    ingestEnabled: true,
+    ingestSecret: "ingest-secret",
+    remoteSnapshotFile,
+    remoteSnapshotTtlSec: "1",
+    snapshotPayload:
+      '{"generated_at":"2026-03-05T00:00:00Z","overall_status":"WAITING_SYSTEM","headline":"local unknown","daemon":{"state":"UNKNOWN"},"watchdog":{"state":"UNKNOWN"},"executor":{"state":""}}',
+  });
+  const staleService = createServer(staleConfig, { info() {}, warn() {}, error() {} });
+  const stalePort = await listen(staleService);
+  t.after(async () => {
+    await closeServer(staleService);
+  });
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  const staleStatus = await requestJson({
+    method: "GET",
+    url: `http://127.0.0.1:${stalePort}/ops/status.json`,
+  });
+  assert.equal(staleStatus.statusCode, 200);
+  assert.equal(staleStatus.body.snapshot_source, "remote_ingest");
+  assert.equal(staleStatus.body.remote_stale, true);
+  assert.match(String(staleStatus.body.headline || ""), /\[stale /);
 });

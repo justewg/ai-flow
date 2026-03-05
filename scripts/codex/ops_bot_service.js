@@ -16,7 +16,7 @@ const DEFAULT_INGEST_PATH = "/ops/ingest/status";
 const DEFAULT_REFRESH_SEC = 5;
 const DEFAULT_CMD_TIMEOUT_MS = 10000;
 const DEFAULT_SUMMARY_HOURS = 6;
-const DEFAULT_REMOTE_SNAPSHOT_TTL_SEC = 180;
+const DEFAULT_REMOTE_SNAPSHOT_TTL_SEC = 600;
 
 function parseInteger(value, fallback) {
   const parsed = Number.parseInt(String(value ?? fallback), 10);
@@ -370,12 +370,28 @@ async function loadEffectiveSnapshot(config) {
     : Number.POSITIVE_INFINITY;
   const remoteFresh = ageSec <= config.remoteSnapshotTtlSec;
 
-  if (!localHasSignal && remoteFresh) {
-    const remoteSnapshot = remote.snapshot;
+  if (!localHasSignal) {
+    const remoteSnapshot = { ...remote.snapshot };
     remoteSnapshot.snapshot_source = "remote_ingest";
     remoteSnapshot.remote_source = String(remote.source || "unknown");
     remoteSnapshot.remote_received_at = String(remote.received_at || "");
     remoteSnapshot.remote_age_sec = ageSec;
+    remoteSnapshot.remote_stale = !remoteFresh;
+    if (!remoteFresh) {
+      const staleAgeText = Number.isFinite(ageSec) ? `${ageSec}s` : "unknown";
+      const baseHeadline = String(remoteSnapshot.headline || "Remote snapshot");
+      if (!/\[stale /i.test(baseHeadline)) {
+        remoteSnapshot.headline = `${baseHeadline} [stale ${staleAgeText}]`;
+      }
+      const action = String(remoteSnapshot.action_required || "").trim().toLowerCase();
+      if (!action || action === "none") {
+        remoteSnapshot.action_required = "check_remote_status_push";
+      }
+      const status = String(remoteSnapshot.overall_status || "").trim().toUpperCase();
+      if (!status || status === "HEALTHY") {
+        remoteSnapshot.overall_status = "WAITING_SYSTEM";
+      }
+    }
     return remoteSnapshot;
   }
 

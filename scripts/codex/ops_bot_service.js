@@ -763,8 +763,17 @@ function createServer(config, logger) {
           return;
         }
 
-        await handleTelegramCommand(config, logger, update);
-        sendJson(res, 200, { ok: true });
+        let commandHandled = true;
+        try {
+          await handleTelegramCommand(config, logger, update);
+        } catch (error) {
+          commandHandled = false;
+          logger.warn(
+            `[ops-bot] TELEGRAM_COMMAND_ERROR: ${error && error.message ? error.message : "unknown"}`,
+          );
+        }
+
+        sendJson(res, 200, { ok: true, command_handled: commandHandled });
         return;
       }
 

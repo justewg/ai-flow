@@ -415,6 +415,15 @@
   - показывает состояние ops-бот сервиса в PM2 (`status`, `pid`, `restarts`, `uptime`)
 - `ops_bot_pm2_health.sh`
   - проверяет, что PM2-процесс `online`, и валидирует `GET /health`
+  - успешный сценарий: exit code `0`; при недоступности PM2/HTTP endpoint возвращает non-zero
+
+Минимальный smoke-checklist для владельца окружения (rollout):
+- `node -v`, `pm2 -v`, `jq --version`
+- `scripts/codex/run.sh ops_bot_pm2_start`
+- `scripts/codex/run.sh ops_bot_pm2_status` (ожидается `PM2_STATUS=online`)
+- `scripts/codex/run.sh ops_bot_pm2_health` (ожидается exit code `0`)
+- HTTP-проверки: `GET /health`, `GET /ops/status`, `GET /ops/status.json`
+- Telegram webhook + команды: `/help`, `/status`, `/summary 6`, `/status_page`
 
 Логи демона:
 - `.tmp/codex/daemon.log` — heartbeat и результат `daemon_tick`

@@ -66,6 +66,7 @@
 - `scripts/codex/run.sh ops_bot_pm2_health` — проверить PM2 status=`online` + endpoint `/health` ops-бота.
 - `scripts/codex/run.sh ops_bot_webhook_register [register|refresh|delete|info]` — управление Telegram webhook по env-переменным.
 - `scripts/codex/run.sh ops_bot_webhook_refresh` — shortcut для полного refresh webhook (`deleteWebhook + setWebhook + getWebhookInfo`).
+- `scripts/codex/run.sh ops_remote_status_push` — отправить текущий `status_snapshot` в удаленный ingest endpoint ops-бота (URL/secret берутся из env).
 
 Короткий rollout smoke-checklist для ops-бота:
 1. `scripts/codex/run.sh ops_bot_pm2_start`
@@ -436,6 +437,10 @@
   - выполняет только `getWebhookInfo` (`info`)
 - `ops_bot_webhook_refresh.sh`
   - wrapper без аргументов для `ops_bot_webhook_register.sh refresh`
+- `ops_remote_status_push.sh`
+  - формирует payload из `status_snapshot.sh` и отправляет его в `OPS_REMOTE_STATUS_PUSH_URL`
+  - auth заголовок: `X-Ops-Status-Secret` из `OPS_REMOTE_STATUS_PUSH_SECRET`
+  - используется `daemon_loop` по тикам для split runtime (локальная автоматика + удаленный ops-бот)
 
 Минимальный smoke-checklist для владельца окружения (rollout):
 - `node -v`, `pm2 -v`, `jq --version`
@@ -445,6 +450,7 @@
 - `scripts/codex/run.sh ops_bot_webhook_register register` (ожидается `WEBHOOK_SET_OK=1` и `WEBHOOK_INFO_OK=1`)
 - `scripts/codex/run.sh ops_bot_webhook_refresh` (ожидается `WEBHOOK_DELETE_OK=1`, `WEBHOOK_SET_OK=1`, `WEBHOOK_INFO_OK=1`)
 - `scripts/codex/run.sh ops_bot_webhook_register info` (ожидается `WEBHOOK_INFO_OK=1`)
+- `scripts/codex/run.sh ops_remote_status_push` (ожидается `OPS_REMOTE_PUSH_OK=1` при настроенных `OPS_REMOTE_STATUS_PUSH_*`)
 - HTTP-проверки: `GET /health`, `GET /ops/status`, `GET /ops/status.json`
 - webhook negative-checks: невалидный JSON -> `400`, слишком большой payload -> `413`, update без команды -> `200 command_handled=false`
 - Telegram webhook + команды: `/help`, `/status`, `/summary 6`, `/status_page`
@@ -529,9 +535,19 @@ chmod +x scripts/codex/*.sh
 - `OPS_BOT_WEBHOOK_PATH` (базовый path webhook; по умолчанию `/telegram/webhook`)
 - `OPS_BOT_WEBHOOK_SECRET` (добавляется в path webhook для защиты URL)
 - `OPS_BOT_TG_SECRET_TOKEN` (опциональная проверка заголовка `X-Telegram-Bot-Api-Secret-Token`)
+- `OPS_BOT_INGEST_ENABLED` (включает ingest endpoint для внешнего runtime snapshot)
+- `OPS_BOT_INGEST_PATH` (path ingest endpoint; по умолчанию `/ops/ingest/status`)
+- `OPS_BOT_INGEST_SECRET` (секрет заголовка `X-Ops-Status-Secret` для ingest POST)
+- `OPS_BOT_REMOTE_SNAPSHOT_FILE` (файл кеша последнего принятого удаленного snapshot)
+- `OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC` (TTL удаленного snapshot в секундах; по умолчанию `180`)
 - `OPS_BOT_ALLOWED_CHAT_IDS` (CSV списка разрешенных chat_id; если задано — остальные игнорируются)
 - `OPS_BOT_PUBLIC_BASE_URL` (публичный base URL для команды `/status_page`, например `https://planka.ewg40.ru`)
 - `OPS_BOT_REFRESH_SEC` (интервал автообновления `/ops/status` в секундах; по умолчанию `5`)
 - `OPS_BOT_CMD_TIMEOUT_MS` (таймаут внутренних команд snapshot/summary; по умолчанию `10000`)
 - `OPS_BOT_TG_BOT_TOKEN` (опциональный токен бота; fallback chain: `OPS_BOT_TG_BOT_TOKEN -> DAEMON_TG_BOT_TOKEN -> TG_BOT_TOKEN`)
 - `OPS_BOT_PM2_APP_NAME` (имя PM2 процесса ops-бота; по умолчанию `planka-ops-bot`)
+- `OPS_REMOTE_STATUS_PUSH_ENABLED` (включает push локального snapshot на удаленный ingest endpoint)
+- `OPS_REMOTE_STATUS_PUSH_URL` (полный URL ingest endpoint, например `https://planka-dev.ewg40.ru/ops/ingest/status`)
+- `OPS_REMOTE_STATUS_PUSH_SECRET` (секрет заголовка `X-Ops-Status-Secret` для push)
+- `OPS_REMOTE_STATUS_PUSH_TIMEOUT_SEC` (HTTP timeout push-запроса; по умолчанию `6`)
+- `OPS_REMOTE_STATUS_PUSH_SOURCE` (лейбл источника, например `macbook-local`)

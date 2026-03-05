@@ -104,6 +104,20 @@ echo "summary ok"
 
 function createConfig(t, overrides = {}) {
   const scripts = createTempScripts(t);
+  const snapshotPayload =
+    overrides.snapshotPayload ||
+    '{"generated_at":"2026-03-05T00:00:00Z","overall_status":"HEALTHY","headline":"ok","action_required":"none"}';
+  fs.writeFileSync(
+    scripts.snapshotScript,
+    `#!/usr/bin/env bash
+set -euo pipefail
+cat <<'JSON'
+${snapshotPayload}
+JSON
+`,
+    "utf8",
+  );
+  fs.chmodSync(scripts.snapshotScript, 0o755);
   return loadConfig({
     OPS_BOT_BIND: "127.0.0.1",
     OPS_BOT_PORT: "0",
@@ -116,6 +130,10 @@ function createConfig(t, overrides = {}) {
     OPS_BOT_CMD_TIMEOUT_MS: "5000",
     OPS_BOT_PUBLIC_BASE_URL: "https://planka.ewg40.ru",
     OPS_BOT_TG_BOT_TOKEN: "",
+    OPS_BOT_INGEST_ENABLED: overrides.ingestEnabled ? "1" : "",
+    OPS_BOT_INGEST_SECRET: overrides.ingestSecret || "",
+    OPS_BOT_REMOTE_SNAPSHOT_FILE: overrides.remoteSnapshotFile || "",
+    OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC: overrides.remoteSnapshotTtlSec || "",
   });
 }
 
@@ -245,4 +263,66 @@ test("telegram secret token is enforced when configured", async (t) => {
   assert.equal(withSecret.statusCode, 200);
   assert.equal(withSecret.body.ok, true);
   assert.equal(withSecret.body.command_handled, false);
+});
+
+test("ingest endpoint stores remote snapshot and serves it when local runtime is unknown", async (t) => {
+  const remoteSnapshotFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "planka-ops-remote-")), "snapshot.json");
+  t.after(() => {
+    fs.rmSync(path.dirname(remoteSnapshotFile), { recursive: true, force: true });
+  });
+
+  const config = createConfig(t, {
+    ingestEnabled: true,
+    ingestSecret: "ingest-secret",
+    remoteSnapshotFile,
+    remoteSnapshotTtlSec: "600",
+    snapshotPayload:
+      '{"generated_at":"2026-03-05T00:00:00Z","overall_status":"WAITING_SYSTEM","headline":"local unknown","daemon":{"state":"UNKNOWN"},"watchdog":{"state":"UNKNOWN"},"executor":{"state":""}}',
+  });
+  const service = createServer(config, { info() {}, warn() {}, error() {} });
+  const port = await listen(service);
+  t.after(async () => {
+    await closeServer(service);
+  });
+
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const unauthorized = await requestJson({
+    method: "POST",
+    url: `${baseUrl}${config.ingestPath}`,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ snapshot: { overall_status: "HEALTHY" } }),
+  });
+  assert.equal(unauthorized.statusCode, 401);
+
+  const ingest = await requestJson({
+    method: "POST",
+    url: `${baseUrl}${config.ingestPath}`,
+    headers: {
+      "Content-Type": "application/json",
+      "X-Ops-Status-Secret": "ingest-secret",
+    },
+    body: JSON.stringify({
+      source: "macbook-local",
+      pushed_at: "2026-03-05T10:00:00Z",
+      snapshot: {
+        generated_at: "2026-03-05T10:00:00Z",
+        overall_status: "WORKING",
+        headline: "remote live",
+        daemon: { state: "WAIT_USER_REPLY" },
+      },
+    }),
+  });
+  assert.equal(ingest.statusCode, 200);
+  assert.equal(ingest.body.ok, true);
+  assert.equal(ingest.body.stored, true);
+
+  const statusJson = await requestJson({
+    method: "GET",
+    url: `${baseUrl}/ops/status.json`,
+  });
+  assert.equal(statusJson.statusCode, 200);
+  assert.equal(statusJson.body.overall_status, "WORKING");
+  assert.equal(statusJson.body.snapshot_source, "remote_ingest");
+  assert.equal(statusJson.body.remote_source, "macbook-local");
 });

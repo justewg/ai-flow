@@ -12,9 +12,11 @@ const CODEX_DIR = path.join(ROOT_DIR, ".tmp", "codex");
 const DEFAULT_BIND = "127.0.0.1";
 const DEFAULT_PORT = 8790;
 const DEFAULT_WEBHOOK_PATH = "/telegram/webhook";
+const DEFAULT_INGEST_PATH = "/ops/ingest/status";
 const DEFAULT_REFRESH_SEC = 5;
 const DEFAULT_CMD_TIMEOUT_MS = 10000;
 const DEFAULT_SUMMARY_HOURS = 6;
+const DEFAULT_REMOTE_SNAPSHOT_TTL_SEC = 180;
 
 function parseInteger(value, fallback) {
   const parsed = Number.parseInt(String(value ?? fallback), 10);
@@ -207,8 +209,11 @@ function loadConfig(env = process.env) {
   const bind = String(env.OPS_BOT_BIND || DEFAULT_BIND).trim() || DEFAULT_BIND;
   const port = parsePort(env.OPS_BOT_PORT, DEFAULT_PORT);
   const webhookPathBase = normalizePath(env.OPS_BOT_WEBHOOK_PATH, DEFAULT_WEBHOOK_PATH);
+  const ingestPath = normalizePath(env.OPS_BOT_INGEST_PATH, DEFAULT_INGEST_PATH);
   const webhookSecret = String(env.OPS_BOT_WEBHOOK_SECRET || "").trim();
   const telegramSecretToken = String(env.OPS_BOT_TG_SECRET_TOKEN || "").trim();
+  const ingestSecret = String(env.OPS_BOT_INGEST_SECRET || "").trim();
+  const ingestEnabled = parseBoolean(env.OPS_BOT_INGEST_ENABLED, false);
   const allowedChatIds = new Set(splitCsv(env.OPS_BOT_ALLOWED_CHAT_IDS));
 
   const snapshotScript = path.resolve(
@@ -223,6 +228,13 @@ function loadConfig(env = process.env) {
 
   const tgBotToken = String(env.OPS_BOT_TG_BOT_TOKEN || env.DAEMON_TG_BOT_TOKEN || env.TG_BOT_TOKEN || "").trim();
   const publicBaseUrl = String(env.OPS_BOT_PUBLIC_BASE_URL || "").trim();
+  const remoteSnapshotFile = path.resolve(
+    env.OPS_BOT_REMOTE_SNAPSHOT_FILE || path.join(CODEX_DIR, "ops_remote_snapshot.json"),
+  );
+  const remoteSnapshotTtlSec = Math.max(
+    30,
+    parseInteger(env.OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC, DEFAULT_REMOTE_SNAPSHOT_TTL_SEC),
+  );
 
   const webhookPath = webhookSecret
     ? `${webhookPathBase}/${encodeURIComponent(webhookSecret)}`
@@ -240,8 +252,11 @@ function loadConfig(env = process.env) {
     port,
     webhookPath,
     webhookPathBase,
+    ingestPath,
     webhookSecret,
     telegramSecretToken,
+    ingestSecret,
+    ingestEnabled,
     allowedChatIds,
     snapshotScript,
     logSummaryScript,
@@ -249,6 +264,8 @@ function loadConfig(env = process.env) {
     cmdTimeoutMs,
     tgBotToken,
     publicBaseUrl,
+    remoteSnapshotFile,
+    remoteSnapshotTtlSec,
   };
 }
 
@@ -287,6 +304,82 @@ async function loadSummary(config, hours) {
     hours: safeHours,
     text: `${stdout}${stderr ? `\n${stderr}` : ""}`.trim(),
   };
+}
+
+function loadRemoteSnapshot(config) {
+  try {
+    if (!fs.existsSync(config.remoteSnapshotFile)) {
+      return null;
+    }
+    const raw = fs.readFileSync(config.remoteSnapshotFile, "utf8");
+    if (!raw.trim()) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (!isObjectLike(parsed) || !isObjectLike(parsed.snapshot)) {
+      return null;
+    }
+    return parsed;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function writeRemoteSnapshot(config, payload) {
+  const dirPath = path.dirname(config.remoteSnapshotFile);
+  fs.mkdirSync(dirPath, { recursive: true });
+  const tempPath = `${config.remoteSnapshotFile}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(tempPath, `${JSON.stringify(payload)}\n`, "utf8");
+  fs.renameSync(tempPath, config.remoteSnapshotFile);
+}
+
+function hasLocalRuntimeSignal(snapshot) {
+  const daemonState = String(snapshot && snapshot.daemon && snapshot.daemon.state ? snapshot.daemon.state : "")
+    .trim()
+    .toUpperCase();
+  const watchdogState = String(snapshot && snapshot.watchdog && snapshot.watchdog.state ? snapshot.watchdog.state : "")
+    .trim()
+    .toUpperCase();
+  const executorState = String(snapshot && snapshot.executor && snapshot.executor.state ? snapshot.executor.state : "")
+    .trim()
+    .toUpperCase();
+
+  if (daemonState && daemonState !== "UNKNOWN") {
+    return true;
+  }
+  if (watchdogState && watchdogState !== "UNKNOWN") {
+    return true;
+  }
+  if (executorState && executorState !== "UNKNOWN") {
+    return true;
+  }
+  return false;
+}
+
+async function loadEffectiveSnapshot(config) {
+  const localSnapshot = await loadSnapshot(config);
+  const remote = loadRemoteSnapshot(config);
+  if (!remote) {
+    return localSnapshot;
+  }
+
+  const localHasSignal = hasLocalRuntimeSignal(localSnapshot);
+  const receivedAtMs = Date.parse(String(remote.received_at || ""));
+  const ageSec = Number.isFinite(receivedAtMs)
+    ? Math.max(0, Math.floor((Date.now() - receivedAtMs) / 1000))
+    : Number.POSITIVE_INFINITY;
+  const remoteFresh = ageSec <= config.remoteSnapshotTtlSec;
+
+  if (!localHasSignal && remoteFresh) {
+    const remoteSnapshot = remote.snapshot;
+    remoteSnapshot.snapshot_source = "remote_ingest";
+    remoteSnapshot.remote_source = String(remote.source || "unknown");
+    remoteSnapshot.remote_received_at = String(remote.received_at || "");
+    remoteSnapshot.remote_age_sec = ageSec;
+    return remoteSnapshot;
+  }
+
+  return localSnapshot;
 }
 
 function statusBadgeClass(status) {
@@ -697,7 +790,7 @@ async function handleTelegramCommand(config, logger, update) {
     if (name === "/start" || name === "/help") {
       responseText = formatHelpMessage(config);
     } else if (name === "/status") {
-      const snapshot = await loadSnapshot(config);
+      const snapshot = await loadEffectiveSnapshot(config);
       responseText = formatStatusMessage(snapshot);
     } else if (name === "/summary") {
       const hours = args.length > 0 ? parseInteger(args[0], DEFAULT_SUMMARY_HOURS) : DEFAULT_SUMMARY_HOURS;
@@ -734,13 +827,15 @@ function createServer(config, logger) {
           status: "ok",
           service: "ops-bot",
           webhook_path: config.webhookPath,
+          ingest_path: config.ingestPath,
+          ingest_enabled: config.ingestEnabled,
           telegram_enabled: Boolean(config.tgBotToken),
         });
         return;
       }
 
       if (req.method === "GET" && url.pathname === "/ops/status.json") {
-        const snapshot = await loadSnapshot(config);
+        const snapshot = await loadEffectiveSnapshot(config);
         sendJson(res, 200, snapshot);
         return;
       }
@@ -751,7 +846,55 @@ function createServer(config, logger) {
       }
 
       if (req.method === "GET" && url.pathname === "/") {
-        sendText(res, 200, "PLANKA ops-bot service\nGET /health\nGET /ops/status\nGET /ops/status.json\n");
+        sendText(
+          res,
+          200,
+          "PLANKA ops-bot service\nGET /health\nGET /ops/status\nGET /ops/status.json\nPOST /ops/ingest/status\n",
+        );
+        return;
+      }
+
+      if (req.method === "POST" && config.ingestEnabled && url.pathname === config.ingestPath) {
+        if (config.ingestSecret) {
+          const providedSecret = extractHeader(req, "x-ops-status-secret");
+          if (providedSecret !== config.ingestSecret) {
+            sendJson(res, 401, { error: "UNAUTHORIZED", message: "invalid ingest secret" });
+            return;
+          }
+        }
+
+        let body = "";
+        try {
+          body = await collectRequestBody(req, 2 * 1024 * 1024);
+        } catch (error) {
+          if (error && error.message === "request body too large") {
+            sendJson(res, 413, { error: "PAYLOAD_TOO_LARGE", message: "ingest payload exceeds limit" });
+            return;
+          }
+          throw error;
+        }
+
+        let payload;
+        try {
+          payload = JSON.parse(body || "{}");
+        } catch (_error) {
+          sendJson(res, 400, { error: "BAD_REQUEST", message: "invalid json payload" });
+          return;
+        }
+
+        if (!isObjectLike(payload) || !isObjectLike(payload.snapshot)) {
+          sendJson(res, 400, { error: "BAD_REQUEST", message: "snapshot payload is required" });
+          return;
+        }
+
+        const record = {
+          received_at: new Date().toISOString(),
+          source: String(payload.source || "unknown"),
+          pushed_at: String(payload.pushed_at || ""),
+          snapshot: payload.snapshot,
+        };
+        writeRemoteSnapshot(config, record);
+        sendJson(res, 200, { ok: true, stored: true, source: record.source, received_at: record.received_at });
         return;
       }
 
@@ -830,7 +973,7 @@ function main() {
   });
   server.listen(config.port, config.bind, () => {
     logger.info(
-      `[ops-bot] listening on ${config.bind}:${config.port}; webhook_path=${config.webhookPath}; telegram_enabled=${Boolean(config.tgBotToken)}`,
+      `[ops-bot] listening on ${config.bind}:${config.port}; webhook_path=${config.webhookPath}; ingest_path=${config.ingestPath}; ingest_enabled=${config.ingestEnabled}; telegram_enabled=${Boolean(config.tgBotToken)}`,
     );
   });
 

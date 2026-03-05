@@ -42,6 +42,8 @@ usage() {
   cat <<'EOF'
 Usage:
   scripts/codex/ops_bot_webhook_register.sh register
+  scripts/codex/ops_bot_webhook_register.sh refresh
+  scripts/codex/ops_bot_webhook_register.sh delete
   scripts/codex/ops_bot_webhook_register.sh info
 
 Environment (from .env/.env.deploy or process env):
@@ -49,6 +51,8 @@ Environment (from .env/.env.deploy or process env):
   OPS_BOT_WEBHOOK_PATH (optional, default: /telegram/webhook)
   OPS_BOT_WEBHOOK_SECRET (optional; appended to webhook path)
   OPS_BOT_TG_SECRET_TOKEN (optional; passed as secret_token for Telegram webhook)
+  OPS_BOT_WEBHOOK_IP_ADDRESS (optional; passed as ip_address to Telegram setWebhook)
+  OPS_BOT_WEBHOOK_DROP_PENDING_UPDATES (optional; default 1 for refresh/delete)
   OPS_BOT_TG_BOT_TOKEN (or DAEMON_TG_BOT_TOKEN or TG_BOT_TOKEN)
 EOF
 }
@@ -60,7 +64,7 @@ ensure_cmd curl
 ensure_cmd jq
 
 command_name="${1:-register}"
-if [[ "$command_name" != "register" && "$command_name" != "info" ]]; then
+if [[ "$command_name" != "register" && "$command_name" != "refresh" && "$command_name" != "delete" && "$command_name" != "info" ]]; then
   usage
   exit 1
 fi
@@ -78,7 +82,25 @@ if [[ -n "$webhook_secret" ]]; then
   webhook_path="${webhook_path}/${webhook_secret}"
 fi
 
-if [[ "$command_name" == "register" ]]; then
+run_delete_webhook() {
+  local drop_pending="${OPS_BOT_WEBHOOK_DROP_PENDING_UPDATES:-1}"
+  local delete_response
+  delete_response="$(
+    curl -fsS --max-time 20 -X POST \
+      "https://api.telegram.org/bot${tg_bot_token}/deleteWebhook" \
+      --data-urlencode "drop_pending_updates=${drop_pending}"
+  )"
+  if [[ "$(printf '%s' "$delete_response" | jq -r '.ok // false')" != "true" ]]; then
+    echo "WEBHOOK_DELETE_OK=0"
+    printf '%s\n' "$delete_response" | jq .
+    exit 1
+  fi
+  echo "WEBHOOK_DELETE_OK=1"
+  echo "WEBHOOK_DROP_PENDING_UPDATES=${drop_pending}"
+  printf '%s\n' "$delete_response" | jq .
+}
+
+run_set_webhook() {
   public_base_url="$(normalize_base_url "${OPS_BOT_PUBLIC_BASE_URL:-}")"
   if [[ -z "$public_base_url" ]]; then
     echo "OPS_BOT_PUBLIC_BASE_URL is required for register (example: https://planka.ewg40.ru)." >&2
@@ -91,6 +113,7 @@ if [[ "$command_name" == "register" ]]; then
 
   webhook_url="${public_base_url}${webhook_path}"
   telegram_secret_token="${OPS_BOT_TG_SECRET_TOKEN:-}"
+  webhook_ip_address="${OPS_BOT_WEBHOOK_IP_ADDRESS:-}"
 
   curl_args=(
     -fsS
@@ -101,6 +124,9 @@ if [[ "$command_name" == "register" ]]; then
   )
   if [[ -n "$telegram_secret_token" ]]; then
     curl_args+=(--data-urlencode "secret_token=${telegram_secret_token}")
+  fi
+  if [[ -n "$webhook_ip_address" ]]; then
+    curl_args+=(--data-urlencode "ip_address=${webhook_ip_address}")
   fi
 
   set_response="$(curl "${curl_args[@]}")"
@@ -117,7 +143,23 @@ if [[ "$command_name" == "register" ]]; then
   else
     echo "WEBHOOK_SECRET_TOKEN_CONFIGURED=0"
   fi
+  if [[ -n "$webhook_ip_address" ]]; then
+    echo "WEBHOOK_IP_ADDRESS=${webhook_ip_address}"
+  fi
   printf '%s\n' "$set_response" | jq .
+}
+
+if [[ "$command_name" == "delete" ]]; then
+  run_delete_webhook
+fi
+
+if [[ "$command_name" == "refresh" ]]; then
+  run_delete_webhook
+  run_set_webhook
+fi
+
+if [[ "$command_name" == "register" ]]; then
+  run_set_webhook
 fi
 
 info_response="$(curl -fsS --max-time 20 -X POST "https://api.telegram.org/bot${tg_bot_token}/getWebhookInfo")"

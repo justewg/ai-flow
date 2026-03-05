@@ -66,6 +66,7 @@ Commands:
   ops_bot_pm2_restart
   ops_bot_pm2_status
   ops_bot_pm2_health
+  ops_bot_webhook_register
   issue_285_reframe_apply
 
 Fixed input files in .tmp/codex:
@@ -485,6 +486,14 @@ case "$cmd" in
 
   ops_bot_pm2_health)
     "${ROOT_DIR}/scripts/codex/ops_bot_pm2_health.sh"
+    ;;
+
+  ops_bot_webhook_register)
+    if [[ $# -gt 2 ]]; then
+      echo "Usage: scripts/codex/run.sh ops_bot_webhook_register [register|info]"
+      exit 1
+    fi
+    "${ROOT_DIR}/scripts/codex/ops_bot_webhook_register.sh" "${2:-register}"
     ;;
 
   issue_285_reframe_apply)

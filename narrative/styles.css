@@ -1136,6 +1136,14 @@ figcaption {
     min-height: auto;
     padding-block: var(--space-4);
   }
+  #requirements .stage,
+  #layers .layer-stage {
+    display: block;
+  }
+  #requirements .stage > .slide-point,
+  #layers .layer-stage > .slide-point {
+    width: 100%;
+  }
   .stage-media .media-image,
   .stage-media-placeholder {
     max-height: none;

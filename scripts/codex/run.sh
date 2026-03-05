@@ -61,6 +61,7 @@ Commands:
   gh_app_auth_pm2_crash_test
   ops_bot_start
   ops_bot_health
+  ops_bot_post_smoke_check
   ops_bot_pm2_start
   ops_bot_pm2_stop
   ops_bot_pm2_restart
@@ -469,6 +470,11 @@ case "$cmd" in
 
   ops_bot_health)
     "${ROOT_DIR}/scripts/codex/ops_bot_health.sh"
+    ;;
+
+  ops_bot_post_smoke_check)
+    shift 1
+    "${ROOT_DIR}/scripts/codex/ops_bot_post_smoke_check.sh" "$@"
     ;;
 
   ops_bot_pm2_start)

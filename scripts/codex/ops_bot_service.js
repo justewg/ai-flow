@@ -482,7 +482,11 @@ function renderStatusPage(config) {
       font-family: "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
       font-size: 13px;
       white-space: pre-wrap;
+      overflow-wrap: anywhere;
       line-height: 1.35;
+      height: 132px;
+      overflow-y: auto;
+      overflow-x: hidden;
     }
     .line { margin: 0 0 8px 0; }
     .k { color: var(--muted); margin-right: 8px; }
@@ -586,6 +590,10 @@ function renderStatusPage(config) {
       return value === null || value === undefined ? fallbackValue : value;
     }
 
+    function formatDetail(value) {
+      return String(value || "-").replace(/;\\s*/g, ";\\n");
+    }
+
     function render(snapshot) {
       setText("stamp", "updated " + (snapshot.generated_at || "-"));
       setText("headline", snapshot.headline || "-");
@@ -610,7 +618,7 @@ function renderStatusPage(config) {
         line("state_age_sec", valueOr(daemon.state_age_sec, "-")),
         line("github", daemon.github_status || "-"),
         line("telegram", daemon.telegram_status || "-"),
-        line("detail", daemon.detail || "-")
+        line("detail", formatDetail(daemon.detail))
       ].join("\\n"));
 
       setText("executor", [
@@ -624,7 +632,7 @@ function renderStatusPage(config) {
         line("state", watchdog.state || "-"),
         line("state_age_sec", valueOr(watchdog.state_age_sec, "-")),
         line("last_action", watchdog.last_action || "-"),
-        line("detail", watchdog.detail || "-")
+        line("detail", formatDetail(watchdog.detail))
       ].join("\\n"));
 
       setText("queues", [

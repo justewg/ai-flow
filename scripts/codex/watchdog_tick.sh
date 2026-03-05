@@ -17,6 +17,8 @@ DAEMON_INTERVAL="${WATCHDOG_DAEMON_INTERVAL_SEC:-45}"
 COOLDOWN_SEC="${WATCHDOG_COOLDOWN_SEC:-120}"
 EXECUTOR_STALE_SEC="${WATCHDOG_EXECUTOR_STALE_SEC:-180}"
 DAEMON_LOG_STALE_SEC="${WATCHDOG_DAEMON_LOG_STALE_SEC:-180}"
+DAEMON_RATE_LIMIT_MAX_SLEEP_SEC="${DAEMON_RATE_LIMIT_MAX_SLEEP_SEC:-360}"
+DAEMON_LOG_STALE_RATE_LIMIT_SEC="${WATCHDOG_DAEMON_LOG_STALE_RATE_LIMIT_SEC:-0}"
 
 mkdir -p "$CODEX_DIR"
 
@@ -34,11 +36,22 @@ COOLDOWN_SEC="$(parse_uint_or_default "$COOLDOWN_SEC" "120")"
 EXECUTOR_STALE_SEC="$(parse_uint_or_default "$EXECUTOR_STALE_SEC" "180")"
 DAEMON_LOG_STALE_SEC="$(parse_uint_or_default "$DAEMON_LOG_STALE_SEC" "180")"
 DAEMON_INTERVAL="$(parse_uint_or_default "$DAEMON_INTERVAL" "45")"
+DAEMON_RATE_LIMIT_MAX_SLEEP_SEC="$(parse_uint_or_default "$DAEMON_RATE_LIMIT_MAX_SLEEP_SEC" "360")"
+DAEMON_LOG_STALE_RATE_LIMIT_SEC="$(parse_uint_or_default "$DAEMON_LOG_STALE_RATE_LIMIT_SEC" "0")"
 
 if (( COOLDOWN_SEC < 30 )); then COOLDOWN_SEC=30; fi
 if (( EXECUTOR_STALE_SEC < 60 )); then EXECUTOR_STALE_SEC=60; fi
 if (( DAEMON_LOG_STALE_SEC < 60 )); then DAEMON_LOG_STALE_SEC=60; fi
 if (( DAEMON_INTERVAL < 5 )); then DAEMON_INTERVAL=45; fi
+if (( DAEMON_RATE_LIMIT_MAX_SLEEP_SEC < DAEMON_INTERVAL )); then
+  DAEMON_RATE_LIMIT_MAX_SLEEP_SEC="$DAEMON_INTERVAL"
+fi
+if (( DAEMON_LOG_STALE_RATE_LIMIT_SEC < 1 )); then
+  DAEMON_LOG_STALE_RATE_LIMIT_SEC=$(( DAEMON_RATE_LIMIT_MAX_SLEEP_SEC + DAEMON_INTERVAL + 60 ))
+fi
+if (( DAEMON_LOG_STALE_RATE_LIMIT_SEC < DAEMON_LOG_STALE_SEC )); then
+  DAEMON_LOG_STALE_RATE_LIMIT_SEC="$DAEMON_LOG_STALE_SEC"
+fi
 
 log() {
   local ts
@@ -281,6 +294,11 @@ if (( daemon_log_mtime > 0 )); then
   daemon_log_age=$(( now_epoch - daemon_log_mtime ))
 fi
 
+daemon_log_stale_threshold="$DAEMON_LOG_STALE_SEC"
+if [[ "$daemon_state" == "WAIT_GITHUB_RATE_LIMIT" ]]; then
+  daemon_log_stale_threshold="$DAEMON_LOG_STALE_RATE_LIMIT_SEC"
+fi
+
 last_action_epoch="$(read_file_or_default "$LAST_ACTION_EPOCH_FILE" "0")"
 last_action_epoch="$(parse_uint_or_default "$last_action_epoch" "0")"
 last_action_name="$(read_file_or_default "$LAST_ACTION_FILE" "NONE")"
@@ -293,7 +311,7 @@ fi
 action="NONE"
 reason=""
 
-if [[ -d "$DAEMON_LOCK_DIR" && $daemon_log_age -gt $DAEMON_LOG_STALE_SEC ]]; then
+if [[ -d "$DAEMON_LOCK_DIR" && $daemon_log_age -gt $daemon_log_stale_threshold ]]; then
   action="HARD_RESTART_DAEMON"
   reason="DAEMON_LOG_STALE_WITH_LOCK"
 elif [[ -n "$active_task" ]]; then
@@ -312,7 +330,7 @@ elif [[ -n "$active_task" ]]; then
   fi
 fi
 
-summary="active_task=${active_task:-none};active_issue=${active_issue:-none};daemon_state=${daemon_state};executor_state=${executor_state:-none};executor_pid=${executor_pid:-none};executor_pid_alive=${executor_pid_alive};daemon_log_age=${daemon_log_age}s"
+summary="active_task=${active_task:-none};active_issue=${active_issue:-none};daemon_state=${daemon_state};executor_state=${executor_state:-none};executor_pid=${executor_pid:-none};executor_pid_alive=${executor_pid_alive};daemon_log_age=${daemon_log_age}s;daemon_log_stale_threshold=${daemon_log_stale_threshold}s"
 echo "WATCHDOG_SUMMARY=${summary}"
 log "WATCHDOG_SUMMARY=${summary}"
 

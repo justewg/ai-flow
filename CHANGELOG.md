@@ -44,6 +44,7 @@
 - `[PL-017]` Добавлен preview-деплой до merge: GitHub workflow `.github/workflows/deploy-dev-pr.yml` (trigger на `pull_request -> main`) с выкладкой в `DEPLOY_DEV_PATH` через тот же rsync/ssh-пайплайн, что и прод.
 
 ### Fixed
+- `[APP-07]` Устранены ложные watchdog hard-restart в `WAIT_GITHUB_RATE_LIMIT`: `watchdog_tick` теперь использует увеличенный stale-порог для `daemon.log` в rate-limit режиме (по умолчанию от `DAEMON_RATE_LIMIT_MAX_SLEEP_SEC`), поэтому легальный backoff-сон демона не считается зависанием.
 - `[APP-07]` В `daemon_loop.sh` добавлен экспоненциальный backoff при `WAIT_GITHUB_RATE_LIMIT`: интервал следующего тика растет `90 -> 180 -> 360` сек (с насыщением на `360`), после успешного тика backoff сбрасывается к базовому интервалу.
 - `[APP-07]` Добавлен ignore-label фильтр auto-claim в `daemon_tick` (`AUTO_IGNORE_LABELS`, по умолчанию `auto:ignore`): задачи с этим label не берутся из `Todo`, а если label поставлен на уже активную задачу — daemon освобождает active-context и останавливает executor.
 - `[APP-07]` Исправлен приоритет dirty-gate относительно ignore-label: `find_first_todo_issue_json` теперь учитывает `AUTO_IGNORE_LABELS`, поэтому `Todo`-задачи с `auto:ignore` не инициируют `DIRTY-GATE` при dirty worktree.

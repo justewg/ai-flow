@@ -45,6 +45,7 @@
 - `[APP-07]` Добавлен безопасный refresh webhook без ручной подстановки токена: `scripts/codex/ops_bot_webhook_refresh.sh` и команда `scripts/codex/run.sh ops_bot_webhook_refresh` (делает `deleteWebhook + setWebhook + getWebhookInfo` из env).
 - `[APP-07]` Добавлен split-runtime bridge для статуса автоматики: серверный ingest endpoint `POST /ops/ingest/status` в `ops_bot_service.js` + локальный push-скрипт `scripts/codex/ops_remote_status_push.sh` (daemon-loop отправляет snapshot по тикам на удаленный ops-bot).
 - `[PL-017]` Добавлен preview-деплой до merge: GitHub workflow `.github/workflows/deploy-dev-pr.yml` (trigger на `pull_request -> main`) с выкладкой в `DEPLOY_DEV_PATH` через тот же rsync/ssh-пайплайн, что и прод.
+- `[PL-017]` Расширен dev-деплой workflow `.github/workflows/deploy-dev-pr.yml`: добавлен авто-триггер на `push` в `development`, чтобы `planka-dev` обновлялся сразу после пуша в ветку разработки.
 - `[APP-07]` Добавлен helper-скрипт `scripts/codex/issue_285_reframe_apply.sh` и команда `scripts/codex/run.sh issue_285_reframe_apply` для автоматического рефрейма `Issue #285` в manual-only rollout, split задач на automation/post-smoke и проставления label `auto:ignore` для ручной задачи.
 
 ### Fixed

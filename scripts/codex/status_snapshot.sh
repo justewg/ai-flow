@@ -170,6 +170,36 @@ if [[ "$executor_pid" =~ ^[0-9]+$ ]] && kill -0 "$executor_pid" >/dev/null 2>&1;
   executor_pid_alive="true"
 fi
 
+watchdog_executor_state="$(detail_value "$watchdog_detail" "executor_state")"
+watchdog_executor_pid="$(detail_value "$watchdog_detail" "executor_pid")"
+watchdog_executor_pid_alive="$(detail_value "$watchdog_detail" "executor_pid_alive")"
+
+if [[ -z "$executor_state" ]]; then
+  if [[ -n "$watchdog_executor_state" && "$watchdog_executor_state" != "none" ]]; then
+    executor_state="$watchdog_executor_state"
+  elif [[ "$watchdog_state" == "HEALTHY" ]]; then
+    executor_state="IDLE"
+  else
+    executor_state="UNKNOWN"
+  fi
+fi
+
+if [[ -z "$executor_pid" || "$executor_pid" == "none" ]]; then
+  if [[ -n "$watchdog_executor_pid" && "$watchdog_executor_pid" != "none" ]]; then
+    executor_pid="$watchdog_executor_pid"
+  else
+    executor_pid="none"
+  fi
+fi
+
+if [[ "$executor_pid_alive" != "true" ]]; then
+  case "$watchdog_executor_pid_alive" in
+    1|true|TRUE|yes|YES|on|ON)
+      executor_pid_alive="true"
+      ;;
+  esac
+fi
+
 rate_window_state="$(read_file_or_default "$rate_window_state_file" "")"
 rate_window_requests="$(read_int_file_or_default "$rate_window_requests_file" "0")"
 rate_window_start_utc="$(read_file_or_default "$rate_window_start_utc_file" "")"

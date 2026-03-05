@@ -49,6 +49,7 @@
 - `[APP-07]` Добавлен helper-скрипт `scripts/codex/issue_285_reframe_apply.sh` и команда `scripts/codex/run.sh issue_285_reframe_apply` для автоматического рефрейма `Issue #285` в manual-only rollout, split задач на automation/post-smoke и проставления label `auto:ignore` для ручной задачи.
 
 ### Fixed
+- `[APP-07]` Исправлен пустой блок `Executor` в `/ops/status`: `status_snapshot.sh` теперь подставляет fallback из `watchdog_state_detail` (`executor_state/pid/pid_alive`) и в idle показывает `state=IDLE`, даже когда `executor_*` файлы очищены.
 - `[APP-07]` Исправлен fallback split-runtime статуса: при `local=UNKNOWN` `/ops/status(.json)` теперь использует последний `remote_ingest` snapshot даже если он stale (с полями `remote_stale`/`remote_age_sec`), чтобы статус не обнулялся при rate-limit backoff `daemon_loop`; также увеличен default `OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC` до `600`.
 - `[APP-07]` Улучшен UI `/ops/status`: значения `detail` в блоках `Daemon/Watchdog` теперь разбиваются переносами после `;`, а моно-блоки получили фиксированную высоту с вертикальным скроллом (`overflow-y:auto`) без расширения карточек.
 - `[APP-07]` Устранен разрыв remote-status bridge для старого рантайма daemon: `daemon_tick` теперь выполняет `ops_remote_status_push` на `EXIT` (даже без рестарта `daemon_loop`), а `daemon_loop` передает флаг `DAEMON_LOOP_PUSH_REMOTE=1`, чтобы после рестарта избежать двойной отправки snapshot.

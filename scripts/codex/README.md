@@ -440,7 +440,7 @@
 - `ops_remote_status_push.sh`
   - формирует payload из `status_snapshot.sh` и отправляет его в `OPS_REMOTE_STATUS_PUSH_URL`
   - auth заголовок: `X-Ops-Status-Secret` из `OPS_REMOTE_STATUS_PUSH_SECRET`
-  - используется `daemon_loop` по тикам для split runtime (локальная автоматика + удаленный ops-бот)
+  - используется `daemon_tick` на `EXIT` (fallback для старого запущенного `daemon_loop`) и `daemon_loop` по тикам для split runtime (локальная автоматика + удаленный ops-бот)
 
 Минимальный smoke-checklist для владельца окружения (rollout):
 - `node -v`, `pm2 -v`, `jq --version`

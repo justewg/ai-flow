@@ -1027,7 +1027,7 @@ while true; do
     done <<<"$runtime_apply_out"
   fi
 
-  if output="$("${ROOT_DIR}/scripts/codex/daemon_tick.sh" 2>&1)"; then
+  if output="$(DAEMON_LOOP_PUSH_REMOTE=1 "${ROOT_DIR}/scripts/codex/daemon_tick.sh" 2>&1)"; then
     while IFS= read -r line; do
       [[ -z "$line" ]] && continue
       log "$line"

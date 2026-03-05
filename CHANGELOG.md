@@ -49,6 +49,7 @@
 - `[APP-07]` Добавлен helper-скрипт `scripts/codex/issue_285_reframe_apply.sh` и команда `scripts/codex/run.sh issue_285_reframe_apply` для автоматического рефрейма `Issue #285` в manual-only rollout, split задач на automation/post-smoke и проставления label `auto:ignore` для ручной задачи.
 
 ### Fixed
+- `[APP-07]` Устранен разрыв remote-status bridge для старого рантайма daemon: `daemon_tick` теперь выполняет `ops_remote_status_push` на `EXIT` (даже без рестарта `daemon_loop`), а `daemon_loop` передает флаг `DAEMON_LOOP_PUSH_REMOTE=1`, чтобы после рестарта избежать двойной отправки snapshot.
 - `[APP-07]` Исправлены ложные hourly Telegram-алерты `GITHUB_RUNTIME_WAIT`: `daemon_loop` больше не шлет runtime-сигнал при `WAIT_GITHUB_RATE_LIMIT`, если runtime-очередь пуста; текст wait-алерта разделен на кейсы `GitHub недоступен` и `GitHub GraphQL rate limit`.
 - `[APP-07]` Устранены ложные watchdog hard-restart в `WAIT_GITHUB_RATE_LIMIT`: `watchdog_tick` теперь использует увеличенный stale-порог для `daemon.log` в rate-limit режиме (по умолчанию от `DAEMON_RATE_LIMIT_MAX_SLEEP_SEC`), поэтому легальный backoff-сон демона не считается зависанием.
 - `[APP-07]` В `daemon_loop.sh` добавлен экспоненциальный backoff при `WAIT_GITHUB_RATE_LIMIT`: интервал следующего тика растет `90 -> 180 -> 360` сек (с насыщением на `360`), после успешного тика backoff сбрасывается к базовому интервалу.

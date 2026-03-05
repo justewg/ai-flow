@@ -260,9 +260,9 @@
     - иначе выставляет `WAIT_AUTH_SERVICE`
   - при auth-деградации пишет в detail явную причину (`AUTH_DEGRADED=1`, `AUTH_FALLBACK_*`) и отправляет Telegram-сигнал
   - пишет в `daemon_state_detail` явные health-маркеры: `GITHUB_STATUS=<...>` и `TELEGRAM_STATUS=<...>`
-  - state `WAIT_GITHUB_RATE_LIMIT` трактуется как деградация `DEGRADED=GITHUB_GRAPHQL_RATE_LIMIT` и отправляет Telegram-алерт по тем же anti-spam правилам
+  - state `WAIT_GITHUB_RATE_LIMIT` трактуется как деградация `DEGRADED=GITHUB_GRAPHQL_RATE_LIMIT`
   - для GitHub/runtime-status деградации есть отдельные Telegram-сигналы без дублей:
-    - `GITHUB_RUNTIME_WAIT` — GitHub недоступен, runtime-очередь status-апдейтов в ожидании
+    - `GITHUB_RUNTIME_WAIT` — отправляется только когда реально заблокирована `runtime`-очередь status-апдейтов (а не при пустой очереди)
     - `GITHUB_RUNTIME_RECOVERED` — GitHub снова отвечает, runtime-апдейты применились
   - после `GITHUB_RUNTIME_RECOVERED` при новом лаге снова отправляется `GITHUB_RUNTIME_WAIT` (повторный transition)
   - state `WAIT_DIRTY_WORKTREE` отправляет отдельные Telegram-алерты блокировки:

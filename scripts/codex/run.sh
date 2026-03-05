@@ -68,6 +68,7 @@ Commands:
   ops_bot_pm2_health
   ops_bot_webhook_register
   ops_bot_webhook_refresh
+  ops_remote_status_push
   issue_285_reframe_apply
 
 Fixed input files in .tmp/codex:
@@ -503,6 +504,14 @@ case "$cmd" in
       exit 1
     fi
     "${ROOT_DIR}/scripts/codex/ops_bot_webhook_refresh.sh"
+    ;;
+
+  ops_remote_status_push)
+    if [[ $# -ne 1 ]]; then
+      echo "Usage: scripts/codex/run.sh ops_remote_status_push"
+      exit 1
+    fi
+    "${ROOT_DIR}/scripts/codex/ops_remote_status_push.sh"
     ;;
 
   issue_285_reframe_apply)

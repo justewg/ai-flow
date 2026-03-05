@@ -6,6 +6,7 @@
 - web dashboard: `GET /ops/status`
 - JSON snapshot: `GET /ops/status.json`
 - Telegram webhook: `POST /telegram/webhook[/<secret>]`
+- runtime ingest endpoint: `POST /ops/ingest/status` (опционально, для split-runtime)
 - команды в чате: `/status`, `/summary [hours]`, `/help`, `/status_page`
 
 Источник данных статуса: `scripts/codex/status_snapshot.sh` (только локальные файлы `.tmp/codex/*`, без обязательного вызова GitHub API).
@@ -37,6 +38,32 @@ OPS_BOT_ALLOWED_CHAT_IDS=<your_chat_id>
 OPS_BOT_PUBLIC_BASE_URL=https://planka.ewg40.ru
 # TG_BOT_TOKEN=... (или OPS_BOT_TG_BOT_TOKEN)
 ```
+
+### Split runtime (локальная автоматика + удаленный HTTPS бот)
+Если daemon/watchdog работают на локальном Mac, а ops-bot/webhook на сервере:
+
+На сервере (ops-bot):
+```bash
+OPS_BOT_INGEST_ENABLED=1
+OPS_BOT_INGEST_PATH=/ops/ingest/status
+OPS_BOT_INGEST_SECRET=<shared-secret>
+OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC=180
+```
+
+На локальном рантайме (daemon-loop):
+```bash
+OPS_REMOTE_STATUS_PUSH_ENABLED=1
+OPS_REMOTE_STATUS_PUSH_URL=https://planka-dev.ewg40.ru/ops/ingest/status
+OPS_REMOTE_STATUS_PUSH_SECRET=<shared-secret>
+OPS_REMOTE_STATUS_SOURCE=macbook-local
+```
+
+Проверка push вручную:
+```bash
+scripts/codex/run.sh ops_remote_status_push
+```
+
+После этого серверный `/ops/status.json` начнет отдавать удаленный snapshot, если локальные серверные state-файлы пустые (`UNKNOWN`).
 
 ## Nginx интеграция
 Идея: nginx принимает публичный трафик и проксирует в локальный сервис `127.0.0.1:8790`.

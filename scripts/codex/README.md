@@ -66,6 +66,14 @@
 - `scripts/codex/run.sh ops_bot_pm2_health` — проверить PM2 status=`online` + endpoint `/health` ops-бота.
 - `scripts/codex/run.sh ops_bot_webhook_register [register|info]` — зарегистрировать webhook в Telegram по env-переменным (`register`) и/или получить актуальный `getWebhookInfo` (`info`).
 
+Короткий rollout smoke-checklist для ops-бота:
+1. `scripts/codex/run.sh ops_bot_pm2_start`
+2. `scripts/codex/run.sh ops_bot_pm2_status` (ожидается `PM2_STATUS=online`)
+3. `scripts/codex/run.sh ops_bot_pm2_health` (ожидается exit code `0` и JSON `status=ok`)
+4. `scripts/codex/run.sh status_snapshot | jq .overall_status` и `scripts/codex/run.sh log_summary --hours 1` (без падений даже при частично отсутствующих `.tmp/codex/*`)
+5. `scripts/codex/run.sh ops_bot_webhook_register register` и `scripts/codex/run.sh ops_bot_webhook_register info`
+6. Проверка Telegram-команд: `/status`, `/summary 6`, `/help`, `/status_page`
+
 `run.sh` читает фиксированные файлы из `.tmp/codex/`:
 - `pr_number.txt`
 - `pr_title.txt`

@@ -22,6 +22,8 @@ PM2:
 scripts/codex/run.sh ops_bot_pm2_start
 scripts/codex/run.sh ops_bot_pm2_health
 scripts/codex/run.sh ops_bot_pm2_status
+scripts/codex/run.sh ops_bot_pm2_restart
+scripts/codex/run.sh ops_bot_pm2_stop
 ```
 
 ## Рекомендуемые env
@@ -65,14 +67,12 @@ location /telegram/webhook/ {
 ## Регистрация webhook в Telegram
 После публикации URL:
 ```bash
-curl -sS -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/setWebhook" \
-  -d "url=https://planka.ewg40.ru/telegram/webhook/${OPS_BOT_WEBHOOK_SECRET}" \
-  -d "secret_token=${OPS_BOT_TG_SECRET_TOKEN}"
+scripts/codex/run.sh ops_bot_webhook_register register
 ```
 
 Проверка:
 ```bash
-curl -sS "https://api.telegram.org/bot${TG_BOT_TOKEN}/getWebhookInfo"
+scripts/codex/run.sh ops_bot_webhook_register info
 ```
 
 ## Диагностика
@@ -88,19 +88,24 @@ curl -sS "https://api.telegram.org/bot${TG_BOT_TOKEN}/getWebhookInfo"
 1. Проверить prereq: `node -v`, `pm2 -v`, `jq --version`.
 2. Проверить конфиг env (`OPS_BOT_*`) и секреты webhook (`OPS_BOT_WEBHOOK_SECRET`, `OPS_BOT_TG_SECRET_TOKEN`).
 3. Запустить/обновить сервис в PM2: `scripts/codex/run.sh ops_bot_pm2_start`.
-4. Проверить PM2-статус: `scripts/codex/run.sh ops_bot_pm2_status` (ожидается `PM2_STATUS=online`).
-5. Проверить health: `scripts/codex/run.sh ops_bot_pm2_health` (exit code `0`, JSON `status=ok`).
+4. Проверить PM2-статус: `scripts/codex/run.sh ops_bot_pm2_status` (ожидается `PM2_STATUS=online`, иначе exit code `1`).
+5. Проверить health: `scripts/codex/run.sh ops_bot_pm2_health` (ожидается exit code `0` и JSON `status=ok`; при неготовности процесса/endpoint — exit code `1`).
 6. Проверить endpoint-ы через nginx/public URL:
    - `GET /health`
    - `GET /ops/status`
    - `GET /ops/status.json`
-7. Проверить webhook:
+7. Проверить устойчивость snapshot/log-summary к неполным локальным данным:
+   - `scripts/codex/run.sh status_snapshot | jq .overall_status` (команда не падает при отсутствующих `.tmp/codex/*`, подставляет defaults);
+   - `scripts/codex/run.sh log_summary --hours 1` (команда не падает при отсутствующих логах, использует пустые snapshot-файлы).
+8. Проверить webhook:
+   - зарегистрировать webhook: `scripts/codex/run.sh ops_bot_webhook_register register`;
+   - проверить webhook info: `scripts/codex/run.sh ops_bot_webhook_register info`;
    - `POST /telegram/webhook/<secret>` с валидным `X-Telegram-Bot-Api-Secret-Token`;
    - невалидный JSON в webhook дает `400 BAD_REQUEST`;
    - payload > 1 MiB дает `413 PAYLOAD_TOO_LARGE`;
    - update без Telegram-команды обрабатывается безопасно (`200`, `command_handled=false`);
    - отправить в Telegram команды `/help`, `/status`, `/summary 6`, `/status_page`.
-8. Проверить логи PM2: `.tmp/codex/pm2/ops_bot.out.log`, `.tmp/codex/pm2/ops_bot.err.log` (нет необработанных ошибок).
+9. Проверить логи PM2: `.tmp/codex/pm2/ops_bot.out.log`, `.tmp/codex/pm2/ops_bot.err.log` (нет необработанных ошибок).
 
 ## Безопасность
 - Не открывать сервис наружу напрямую, только через nginx.

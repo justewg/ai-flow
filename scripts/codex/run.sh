@@ -66,6 +66,7 @@ Commands:
   ops_bot_pm2_restart
   ops_bot_pm2_status
   ops_bot_pm2_health
+  issue_285_reframe_apply
 
 Fixed input files in .tmp/codex:
   pr_number.txt
@@ -484,6 +485,14 @@ case "$cmd" in
 
   ops_bot_pm2_health)
     "${ROOT_DIR}/scripts/codex/ops_bot_pm2_health.sh"
+    ;;
+
+  issue_285_reframe_apply)
+    if [[ $# -gt 2 ]]; then
+      echo "Usage: scripts/codex/run.sh issue_285_reframe_apply [manual-issue-number]"
+      exit 1
+    fi
+    "${ROOT_DIR}/scripts/codex/issue_285_reframe_apply.sh" "${2:-285}"
     ;;
 
   *)

@@ -2,6 +2,7 @@
 
 ## Что это
 Локальный сервис `scripts/codex/ops_bot_service.js`, который дает:
+- health endpoint: `GET /health`
 - web dashboard: `GET /ops/status`
 - JSON snapshot: `GET /ops/status.json`
 - Telegram webhook: `POST /telegram/webhook[/<secret>]`
@@ -82,6 +83,24 @@ curl -sS "https://api.telegram.org/bot${TG_BOT_TOKEN}/getWebhookInfo"
   - `scripts/codex/run.sh ops_bot_pm2_health`
 - Snapshot sanity:
   - `scripts/codex/run.sh status_snapshot | jq .`
+
+## Smoke-checklist rollout (manual)
+1. Проверить prereq: `node -v`, `pm2 -v`, `jq --version`.
+2. Проверить конфиг env (`OPS_BOT_*`) и секреты webhook (`OPS_BOT_WEBHOOK_SECRET`, `OPS_BOT_TG_SECRET_TOKEN`).
+3. Запустить/обновить сервис в PM2: `scripts/codex/run.sh ops_bot_pm2_start`.
+4. Проверить PM2-статус: `scripts/codex/run.sh ops_bot_pm2_status` (ожидается `PM2_STATUS=online`).
+5. Проверить health: `scripts/codex/run.sh ops_bot_pm2_health` (exit code `0`, JSON `status=ok`).
+6. Проверить endpoint-ы через nginx/public URL:
+   - `GET /health`
+   - `GET /ops/status`
+   - `GET /ops/status.json`
+7. Проверить webhook:
+   - `POST /telegram/webhook/<secret>` с валидным `X-Telegram-Bot-Api-Secret-Token`;
+   - невалидный JSON в webhook дает `400 BAD_REQUEST`;
+   - payload > 1 MiB дает `413 PAYLOAD_TOO_LARGE`;
+   - update без Telegram-команды обрабатывается безопасно (`200`, `command_handled=false`);
+   - отправить в Telegram команды `/help`, `/status`, `/summary 6`, `/status_page`.
+8. Проверить логи PM2: `.tmp/codex/pm2/ops_bot.out.log`, `.tmp/codex/pm2/ops_bot.err.log` (нет необработанных ошибок).
 
 ## Безопасность
 - Не открывать сервис наружу напрямую, только через nginx.

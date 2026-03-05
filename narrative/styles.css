@@ -366,6 +366,11 @@ figcaption {
   min-height: 100vh;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+}
+#requirements .stage > .slide-point {
+  flex: 0 0 100%;
+  width: 100%;
 }
 .stage-grid {
   display: grid;
@@ -843,6 +848,7 @@ figcaption {
   min-height: 100vh;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   border-top: 1px solid #d4deea;
   padding-top: var(--space-4);
 }
@@ -887,6 +893,10 @@ figcaption {
 #layers .layer-stage.is-reverse .layer-copy { order: 1; }
 #layers .slide-point {
   margin-top: clamp(24px, 4vh, 44px);
+}
+#layers .layer-stage > .slide-point {
+  flex: 0 0 100%;
+  width: 100%;
 }
 
 /* Word field */

@@ -645,7 +645,7 @@ function renderStatusPage(config) {
         line("plan_present", valueOr(seed.plan_present, false)),
         line("remaining", valueOr(seed.remaining, 0)),
         line("next_code", seed.next_code || "-")
-      ].join("\n"));
+      ].join("\\n"));
     }
 
     async function tick() {

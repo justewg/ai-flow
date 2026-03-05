@@ -573,6 +573,10 @@ notify_github_runtime_if_needed() {
 
   local queue_count
   queue_count="$(runtime_queue_count)"
+  local queue_count_num=0
+  if [[ "$queue_count" =~ ^[0-9]+$ ]]; then
+    queue_count_num="$queue_count"
+  fi
 
   local applied_count
   applied_count="$(
@@ -583,12 +587,17 @@ notify_github_runtime_if_needed() {
   fi
 
   local github_wait="0"
-  if printf '%s\n' "$output" | grep -Eq '^(RUNTIME_PROJECT_STATUS_WAIT_GITHUB=1|WAIT_GITHUB_API_UNSTABLE=1|WAIT_GITHUB_RATE_LIMIT=1)'; then
+  local runtime_wait_marker="0"
+  if printf '%s\n' "$output" | grep -q '^RUNTIME_PROJECT_STATUS_WAIT_GITHUB=1'; then
+    runtime_wait_marker="1"
+  fi
+
+  if [[ "$runtime_wait_marker" == "1" ]]; then
     github_wait="1"
-  elif [[ "$state" == "WAIT_GITHUB_OFFLINE" || "$state" == "WAIT_GITHUB_RATE_LIMIT" ]]; then
-    github_wait="1"
-  elif [[ "$detail" == *"DEGRADED=GITHUB_"* || "$detail" == *"DEGRADED=GITHUB_GRAPHQL_RATE_LIMIT"* ]]; then
-    if [[ "$queue_count" =~ ^[0-9]+$ ]] && (( queue_count > 0 )); then
+  elif (( queue_count_num > 0 )); then
+    if [[ "$state" == "WAIT_GITHUB_OFFLINE" || "$state" == "WAIT_GITHUB_RATE_LIMIT" ]]; then
+      github_wait="1"
+    elif [[ "$detail" == *"DEGRADED=GITHUB_"* || "$detail" == *"DEGRADED=GITHUB_GRAPHQL_RATE_LIMIT"* ]]; then
       github_wait="1"
     fi
   fi
@@ -638,14 +647,20 @@ notify_github_runtime_if_needed() {
 
   if [[ "$github_wait" == "1" ]]; then
     if [[ "$mode" != "WAITING" ]]; then
-      local wait_line msg msg_file notify_out rc
+      local wait_line msg msg_file notify_out rc title_line action_line
       wait_line="$(printf '%s\n' "$output" | grep -m1 -E '^(WAIT_GITHUB_STAGE=|RUNTIME_PROJECT_STATUS_WAIT_ERROR=|WAIT_GITHUB_RATE_LIMIT_STAGE=|WAIT_GITHUB_RATE_LIMIT_MSG=)' || true)"
       [[ -z "$wait_line" ]] && wait_line="$(printf '%s' "$detail" | tr '|' '\n' | sed 's/^[[:space:]]*//' | grep -m1 -E '^(DEGRADED=GITHUB_|GITHUB_STATUS=)' || true)"
-      msg="<b>⛔ PLANKA: GitHub недоступен, ждём восстановление</b>"$'\n'
+      title_line="<b>⛔ PLANKA: GitHub недоступен, ждём восстановление</b>"
+      action_line="<b>➡️ Action:</b> <code>авто-ретраи включены, выполняем при восстановлении GitHub</code>"
+      if [[ "$state" == "WAIT_GITHUB_RATE_LIMIT" || "$wait_line" == *"RATE_LIMIT"* || "$detail" == *"GITHUB_GRAPHQL_RATE_LIMIT"* ]]; then
+        title_line="<b>⏳ PLANKA: GitHub GraphQL rate limit, ждём окно</b>"
+        action_line="<b>➡️ Action:</b> <code>авто-ретраи включены, продолжим после сброса лимита</code>"
+      fi
+      msg="${title_line}"$'\n'
       msg+="<b>📌 State:</b> <code>$(html_escape "$state")</code>"$'\n'
       [[ -n "$wait_line" ]] && msg+="<b>🧭 Reason:</b> <code>$(html_escape "$wait_line")</code>"$'\n'
       msg+="<b>🗂️ Runtime queue:</b> <code>${queue_count}</code>"$'\n'
-      msg+="<b>➡️ Action:</b> <code>авто-ретраи включены, выполняем при восстановлении GitHub</code>"$'\n'
+      msg+="${action_line}"$'\n'
       msg+="<b>🕒 Time:</b> <code>$(html_escape "$now_utc")</code>"
 
       msg_file="$(mktemp "${CODEX_DIR}/daemon_runtime_notify.XXXXXX")"

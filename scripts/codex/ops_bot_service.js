@@ -611,35 +611,35 @@ function renderStatusPage(config) {
         line("github", daemon.github_status || "-"),
         line("telegram", daemon.telegram_status || "-"),
         line("detail", daemon.detail || "-")
-      ].join("\n"));
+      ].join("\\n"));
 
       setText("executor", [
         line("state", executor.state || "-"),
         line("pid", executor.pid || "-"),
         line("pid_alive", valueOr(executor.pid_alive, "-")),
         line("heartbeat_age_sec", valueOr(executor.heartbeat_age_sec, "-"))
-      ].join("\n"));
+      ].join("\\n"));
 
       setText("watchdog", [
         line("state", watchdog.state || "-"),
         line("state_age_sec", valueOr(watchdog.state_age_sec, "-")),
         line("last_action", watchdog.last_action || "-"),
         line("detail", watchdog.detail || "-")
-      ].join("\n"));
+      ].join("\\n"));
 
       setText("queues", [
         line("outbox_pending", valueOr(queues.outbox_pending, 0)),
         line("runtime_status_pending", valueOr(queues.runtime_status_pending, 0)),
         line("rate_window", (snapshot.rate_limit || {}).window_state || "-"),
         line("rate_requests", valueOr((snapshot.rate_limit || {}).window_requests, 0))
-      ].join("\n"));
+      ].join("\\n"));
 
       setText("blockers", [
         line("dirty_blocking_todo", valueOr(dirty.blocking_todo, false)),
         line("dirty_tracked_count", valueOr(dirty.tracked_count, 0)),
         line("open_pr_count", valueOr(blockers.open_pr_count, 0)),
         line("dependency_blockers", deps.blockers || "-")
-      ].join("\n"));
+      ].join("\\n"));
 
       setText("backlog", [
         line("plan_present", valueOr(seed.plan_present, false)),

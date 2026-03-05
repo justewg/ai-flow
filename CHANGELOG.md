@@ -41,6 +41,7 @@
 - `[APP-07]` Добавлен единый snapshot состояния автоматики: `scripts/codex/status_snapshot.sh` + команда `scripts/codex/run.sh status_snapshot` (daemon/watchdog/executor/queues/blockers/rate-limit/backlog-seed).
 - `[APP-07]` Добавлен ops-сервис `scripts/codex/ops_bot_service.js`: web dashboard (`/ops/status`), JSON status (`/ops/status.json`) и Telegram webhook-команды (`/status`, `/summary`, `/help`, `/status_page`).
 - `[APP-07]` Добавлена PM2-обвязка ops-сервиса (`ops_bot_pm2_*`) и runbook интеграции с nginx/webhook: `docs/ops-bot-dashboard.md`.
+- `[APP-07]` Добавлен скрипт регистрации Telegram webhook из env: `scripts/codex/ops_bot_webhook_register.sh` + команда `scripts/codex/run.sh ops_bot_webhook_register [register|info]`.
 - `[PL-017]` Добавлен preview-деплой до merge: GitHub workflow `.github/workflows/deploy-dev-pr.yml` (trigger на `pull_request -> main`) с выкладкой в `DEPLOY_DEV_PATH` через тот же rsync/ssh-пайплайн, что и прод.
 - `[APP-07]` Добавлен helper-скрипт `scripts/codex/issue_285_reframe_apply.sh` и команда `scripts/codex/run.sh issue_285_reframe_apply` для автоматического рефрейма `Issue #285` в manual-only rollout, split задач на automation/post-smoke и проставления label `auto:ignore` для ручной задачи.
 

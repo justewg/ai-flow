@@ -64,6 +64,7 @@
 - `scripts/codex/run.sh ops_bot_pm2_restart` — перезапустить ops-бот сервис в PM2.
 - `scripts/codex/run.sh ops_bot_pm2_status` — показать статус ops-бот сервиса в PM2.
 - `scripts/codex/run.sh ops_bot_pm2_health` — проверить PM2 status=`online` + endpoint `/health` ops-бота.
+- `scripts/codex/run.sh ops_bot_webhook_register [register|info]` — зарегистрировать webhook в Telegram по env-переменным (`register`) и/или получить актуальный `getWebhookInfo` (`info`).
 
 `run.sh` читает фиксированные файлы из `.tmp/codex/`:
 - `pr_number.txt`
@@ -418,12 +419,18 @@
 - `ops_bot_pm2_health.sh`
   - проверяет, что PM2-процесс `online`, и валидирует `GET /health`
   - успешный сценарий: exit code `0`; при недоступности PM2/HTTP endpoint возвращает non-zero
+- `ops_bot_webhook_register.sh`
+  - читает env (`OPS_BOT_PUBLIC_BASE_URL`, `OPS_BOT_WEBHOOK_PATH`, `OPS_BOT_WEBHOOK_SECRET`, `OPS_BOT_TG_SECRET_TOKEN`, `OPS_BOT_TG_BOT_TOKEN`)
+  - выполняет `setWebhook` + `getWebhookInfo` в Telegram API (`register`)
+  - или только `getWebhookInfo` (`info`)
 
 Минимальный smoke-checklist для владельца окружения (rollout):
 - `node -v`, `pm2 -v`, `jq --version`
 - `scripts/codex/run.sh ops_bot_pm2_start`
 - `scripts/codex/run.sh ops_bot_pm2_status` (ожидается `PM2_STATUS=online`)
 - `scripts/codex/run.sh ops_bot_pm2_health` (ожидается exit code `0`)
+- `scripts/codex/run.sh ops_bot_webhook_register register` (ожидается `WEBHOOK_SET_OK=1` и `WEBHOOK_INFO_OK=1`)
+- `scripts/codex/run.sh ops_bot_webhook_register info` (ожидается `WEBHOOK_INFO_OK=1`)
 - HTTP-проверки: `GET /health`, `GET /ops/status`, `GET /ops/status.json`
 - webhook negative-checks: невалидный JSON -> `400`, слишком большой payload -> `413`, update без команды -> `200 command_handled=false`
 - Telegram webhook + команды: `/help`, `/status`, `/summary 6`, `/status_page`

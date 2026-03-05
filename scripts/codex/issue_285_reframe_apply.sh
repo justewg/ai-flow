@@ -152,13 +152,32 @@ cat > "$tmp_manual_body" <<'EOF'
    - `scripts/codex/run.sh ops_bot_pm2_health`
    - `scripts/codex/run.sh ops_bot_pm2_status`
 3. Настроить nginx-routing:
-   - `location /ops/` -> `http://127.0.0.1:8790`
-   - `location /telegram/webhook/` -> `http://127.0.0.1:8790`
+   - пример `location /ops/`:
+     ```nginx
+     location /ops/ {
+         proxy_pass http://127.0.0.1:8790/ops/;
+         proxy_http_version 1.1;
+         proxy_set_header Host $host;
+         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+         proxy_set_header X-Forwarded-Proto $scheme;
+     }
+     ```
+   - пример `location /telegram/webhook/`:
+     ```nginx
+     location /telegram/webhook/ {
+         proxy_pass http://127.0.0.1:8790/telegram/webhook/;
+         proxy_http_version 1.1;
+         proxy_set_header Host $host;
+         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+         proxy_set_header X-Forwarded-Proto $scheme;
+     }
+     ```
    - проверить: `nginx -t`
    - применить reload/restart nginx
 4. Зарегистрировать webhook:
-   - `curl -sS -X POST "https://api.telegram.org/bot${OPS_BOT_TG_BOT_TOKEN}/setWebhook" -d "url=https://planka.ewg40.ru/telegram/webhook/${OPS_BOT_WEBHOOK_SECRET}" -d "secret_token=${OPS_BOT_TG_SECRET_TOKEN}"`
-   - `curl -sS "https://api.telegram.org/bot${OPS_BOT_TG_BOT_TOKEN}/getWebhookInfo"`
+   - через wrapper: `scripts/codex/run.sh ops_bot_webhook_register register`
+   - напрямую: `scripts/codex/ops_bot_webhook_register.sh register`
+   - только проверка: `scripts/codex/ops_bot_webhook_register.sh info`
 5. Проверить end-to-end:
    - `curl -sS https://planka.ewg40.ru/ops/status.json | jq .`
    - открыть `https://planka.ewg40.ru/ops/status` в браузере
@@ -295,12 +314,31 @@ cat > "$tmp_reframed_285" <<'EOF'
    - `scripts/codex/run.sh ops_bot_pm2_health`
    - `scripts/codex/run.sh ops_bot_pm2_status`
 3. Включить nginx маршруты:
-   - `/ops/` -> `127.0.0.1:8790`
-   - `/telegram/webhook/` -> `127.0.0.1:8790`
+   - пример `location /ops/`:
+     ```nginx
+     location /ops/ {
+         proxy_pass http://127.0.0.1:8790/ops/;
+         proxy_http_version 1.1;
+         proxy_set_header Host $host;
+         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+         proxy_set_header X-Forwarded-Proto $scheme;
+     }
+     ```
+   - пример `location /telegram/webhook/`:
+     ```nginx
+     location /telegram/webhook/ {
+         proxy_pass http://127.0.0.1:8790/telegram/webhook/;
+         proxy_http_version 1.1;
+         proxy_set_header Host $host;
+         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+         proxy_set_header X-Forwarded-Proto $scheme;
+     }
+     ```
    - `nginx -t` + reload.
 4. Зарегистрировать webhook:
-   - `curl -sS -X POST "https://api.telegram.org/bot\${OPS_BOT_TG_BOT_TOKEN}/setWebhook" -d "url=https://planka.ewg40.ru/telegram/webhook/\${OPS_BOT_WEBHOOK_SECRET}" -d "secret_token=\${OPS_BOT_TG_SECRET_TOKEN}"`
-   - `curl -sS "https://api.telegram.org/bot\${OPS_BOT_TG_BOT_TOKEN}/getWebhookInfo"`
+   - через wrapper: `scripts/codex/run.sh ops_bot_webhook_register register`
+   - напрямую: `scripts/codex/ops_bot_webhook_register.sh register`
+   - только проверка: `scripts/codex/ops_bot_webhook_register.sh info`
 5. Проверить доступность:
    - `curl -sS https://planka.ewg40.ru/ops/status.json | jq .`
    - открыть `https://planka.ewg40.ru/ops/status`

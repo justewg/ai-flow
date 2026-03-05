@@ -514,6 +514,23 @@ push_remote_status_if_needed() {
   return 0
 }
 
+push_remote_summary_if_needed() {
+  local push_out rc
+  if push_out="$("${ROOT_DIR}/scripts/codex/ops_remote_summary_push.sh" 2>&1)"; then
+    while IFS= read -r line; do
+      [[ -z "$line" || "$line" == "OPS_REMOTE_SUMMARY_PUSH_SKIPPED=URL_NOT_CONFIGURED" || "$line" == "OPS_REMOTE_SUMMARY_PUSH_SKIPPED=DISABLED" || "$line" == "OPS_REMOTE_SUMMARY_PUSH_SKIPPED=THROTTLED" || "$line" == "OPS_REMOTE_SUMMARY_PUSH_SKIPPED=ENDPOINT_NOT_FOUND" || "$line" == "OPS_REMOTE_SUMMARY_PUSH_SKIPPED=ENDPOINT_NOT_FOUND_CACHE" ]] && continue
+      log "$line"
+    done <<<"$push_out"
+    return 0
+  fi
+  rc=$?
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    log "OPS_REMOTE_SUMMARY_PUSH_ERROR(rc=$rc): $line"
+  done <<<"$push_out"
+  return 0
+}
+
 html_escape() {
   local value="${1:-}"
   jq -rn --arg v "$value" '$v|@html'
@@ -1014,6 +1031,7 @@ while true; do
     fi
     set_state "WAIT_AUTH_SERVICE" "$detail"
     push_remote_status_if_needed
+    push_remote_summary_if_needed
     notify_if_needed "WAIT_AUTH_SERVICE" "$detail"
     sleep "$interval"
     continue
@@ -1048,6 +1066,7 @@ while true; do
     fi
     set_state "$state" "$detail"
     push_remote_status_if_needed
+    push_remote_summary_if_needed
     combined_output="${runtime_apply_out}"$'\n'"${output}"
     notify_github_runtime_if_needed "$state" "$detail" "$combined_output"
     notify_if_needed "$state" "$detail"
@@ -1069,6 +1088,7 @@ while true; do
     fi
     set_state "$state" "$detail"
     push_remote_status_if_needed
+    push_remote_summary_if_needed
     combined_output="${runtime_apply_out}"$'\n'"${output}"
     notify_github_runtime_if_needed "$state" "$detail" "$combined_output"
     notify_if_needed "$state" "$detail"

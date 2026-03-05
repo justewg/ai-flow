@@ -62,11 +62,29 @@ push_remote_status_if_needed() {
   return 0
 }
 
+push_remote_summary_if_needed() {
+  local push_out rc
+  if push_out="$("${ROOT_DIR}/scripts/codex/ops_remote_summary_push.sh" 2>&1)"; then
+    while IFS= read -r line; do
+      [[ -z "$line" || "$line" == "OPS_REMOTE_SUMMARY_PUSH_SKIPPED=URL_NOT_CONFIGURED" || "$line" == "OPS_REMOTE_SUMMARY_PUSH_SKIPPED=DISABLED" || "$line" == "OPS_REMOTE_SUMMARY_PUSH_SKIPPED=THROTTLED" || "$line" == "OPS_REMOTE_SUMMARY_PUSH_SKIPPED=ENDPOINT_NOT_FOUND" || "$line" == "OPS_REMOTE_SUMMARY_PUSH_SKIPPED=ENDPOINT_NOT_FOUND_CACHE" ]] && continue
+      echo "$line"
+    done <<<"$push_out"
+    return 0
+  fi
+  rc=$?
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "OPS_REMOTE_SUMMARY_PUSH_ERROR(rc=$rc): $line"
+  done <<<"$push_out"
+  return 0
+}
+
 on_exit_push_remote_status() {
   if [[ "${DAEMON_LOOP_PUSH_REMOTE:-0}" == "1" ]]; then
     return 0
   fi
   push_remote_status_if_needed || true
+  push_remote_summary_if_needed || true
 }
 
 trap on_exit_push_remote_status EXIT

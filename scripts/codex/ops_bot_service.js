@@ -13,10 +13,12 @@ const DEFAULT_BIND = "127.0.0.1";
 const DEFAULT_PORT = 8790;
 const DEFAULT_WEBHOOK_PATH = "/telegram/webhook";
 const DEFAULT_INGEST_PATH = "/ops/ingest/status";
+const DEFAULT_SUMMARY_INGEST_PATH = "/ops/ingest/log-summary";
 const DEFAULT_REFRESH_SEC = 5;
 const DEFAULT_CMD_TIMEOUT_MS = 10000;
 const DEFAULT_SUMMARY_HOURS = 6;
 const DEFAULT_REMOTE_SNAPSHOT_TTL_SEC = 600;
+const DEFAULT_REMOTE_SUMMARY_TTL_SEC = 1200;
 
 function parseInteger(value, fallback) {
   const parsed = Number.parseInt(String(value ?? fallback), 10);
@@ -210,9 +212,11 @@ function loadConfig(env = process.env) {
   const port = parsePort(env.OPS_BOT_PORT, DEFAULT_PORT);
   const webhookPathBase = normalizePath(env.OPS_BOT_WEBHOOK_PATH, DEFAULT_WEBHOOK_PATH);
   const ingestPath = normalizePath(env.OPS_BOT_INGEST_PATH, DEFAULT_INGEST_PATH);
+  const summaryIngestPath = normalizePath(env.OPS_BOT_SUMMARY_INGEST_PATH, DEFAULT_SUMMARY_INGEST_PATH);
   const webhookSecret = String(env.OPS_BOT_WEBHOOK_SECRET || "").trim();
   const telegramSecretToken = String(env.OPS_BOT_TG_SECRET_TOKEN || "").trim();
   const ingestSecret = String(env.OPS_BOT_INGEST_SECRET || "").trim();
+  const summaryIngestSecret = String(env.OPS_BOT_SUMMARY_INGEST_SECRET || ingestSecret).trim();
   const ingestEnabled = parseBoolean(env.OPS_BOT_INGEST_ENABLED, false);
   const allowedChatIds = new Set(splitCsv(env.OPS_BOT_ALLOWED_CHAT_IDS));
 
@@ -235,6 +239,13 @@ function loadConfig(env = process.env) {
     30,
     parseInteger(env.OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC, DEFAULT_REMOTE_SNAPSHOT_TTL_SEC),
   );
+  const remoteSummaryFile = path.resolve(
+    env.OPS_BOT_REMOTE_SUMMARY_FILE || path.join(CODEX_DIR, "ops_remote_summary.json"),
+  );
+  const remoteSummaryTtlSec = Math.max(
+    60,
+    parseInteger(env.OPS_BOT_REMOTE_SUMMARY_TTL_SEC, DEFAULT_REMOTE_SUMMARY_TTL_SEC),
+  );
 
   const webhookPath = webhookSecret
     ? `${webhookPathBase}/${encodeURIComponent(webhookSecret)}`
@@ -253,9 +264,11 @@ function loadConfig(env = process.env) {
     webhookPath,
     webhookPathBase,
     ingestPath,
+    summaryIngestPath,
     webhookSecret,
     telegramSecretToken,
     ingestSecret,
+    summaryIngestSecret,
     ingestEnabled,
     allowedChatIds,
     snapshotScript,
@@ -266,6 +279,8 @@ function loadConfig(env = process.env) {
     publicBaseUrl,
     remoteSnapshotFile,
     remoteSnapshotTtlSec,
+    remoteSummaryFile,
+    remoteSummaryTtlSec,
   };
 }
 
@@ -303,6 +318,99 @@ async function loadSummary(config, hours) {
   return {
     hours: safeHours,
     text: `${stdout}${stderr ? `\n${stderr}` : ""}`.trim(),
+  };
+}
+
+function loadRemoteSummary(config) {
+  try {
+    if (!fs.existsSync(config.remoteSummaryFile)) {
+      return null;
+    }
+    const raw = fs.readFileSync(config.remoteSummaryFile, "utf8");
+    if (!raw.trim()) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (!isObjectLike(parsed) || !isObjectLike(parsed.summaries)) {
+      return null;
+    }
+    return parsed;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function writeRemoteSummary(config, payload) {
+  const dirPath = path.dirname(config.remoteSummaryFile);
+  fs.mkdirSync(dirPath, { recursive: true });
+  const tempPath = `${config.remoteSummaryFile}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(tempPath, `${JSON.stringify(payload)}\n`, "utf8");
+  fs.renameSync(tempPath, config.remoteSummaryFile);
+}
+
+function pickSummaryEntry(summaries, requestedHours) {
+  if (!isObjectLike(summaries)) {
+    return null;
+  }
+  const exactKey = String(requestedHours);
+  if (typeof summaries[exactKey] === "string") {
+    return { hours: requestedHours, text: summaries[exactKey], exact: true };
+  }
+  const candidates = Object.keys(summaries)
+    .map((key) => Number.parseInt(key, 10))
+    .filter((value) => Number.isInteger(value) && value > 0 && value <= 168)
+    .sort((a, b) => {
+      const da = Math.abs(a - requestedHours);
+      const db = Math.abs(b - requestedHours);
+      if (da !== db) {
+        return da - db;
+      }
+      return a - b;
+    });
+  if (candidates.length === 0) {
+    return null;
+  }
+  const picked = candidates[0];
+  const pickedKey = String(picked);
+  const text = typeof summaries[pickedKey] === "string" ? summaries[pickedKey] : "";
+  return { hours: picked, text, exact: picked === requestedHours };
+}
+
+async function loadEffectiveSummary(config, hours) {
+  const safeHours = Number.isInteger(hours) && hours > 0 && hours <= 168 ? hours : DEFAULT_SUMMARY_HOURS;
+  const remote = loadRemoteSummary(config);
+  if (remote) {
+    const picked = pickSummaryEntry(remote.summaries, safeHours);
+    if (picked && picked.text.trim()) {
+      const receivedAtMs = Date.parse(String(remote.received_at || ""));
+      const ageSec = Number.isFinite(receivedAtMs)
+        ? Math.max(0, Math.floor((Date.now() - receivedAtMs) / 1000))
+        : Number.POSITIVE_INFINITY;
+      const stale = !(ageSec <= config.remoteSummaryTtlSec);
+      return {
+        hours: safeHours,
+        text: picked.text,
+        usedHours: picked.hours,
+        source: "remote_ingest",
+        remoteSource: String(remote.source || "unknown"),
+        remoteReceivedAt: String(remote.received_at || ""),
+        remoteAgeSec: ageSec,
+        remoteStale: stale,
+        exactWindow: picked.exact,
+      };
+    }
+  }
+
+  const localSummary = await loadSummary(config, safeHours);
+  return {
+    ...localSummary,
+    usedHours: localSummary.hours,
+    source: "local",
+    remoteSource: "",
+    remoteReceivedAt: "",
+    remoteAgeSec: 0,
+    remoteStale: false,
+    exactWindow: true,
   };
 }
 
@@ -822,8 +930,15 @@ async function handleTelegramCommand(config, logger, update) {
       responseText = formatStatusMessage(snapshot);
     } else if (name === "/summary") {
       const hours = args.length > 0 ? parseInteger(args[0], DEFAULT_SUMMARY_HOURS) : DEFAULT_SUMMARY_HOURS;
-      const summary = await loadSummary(config, hours);
-      responseText = `<b>log_summary --hours ${summary.hours}</b>\n<pre>${htmlEscape(truncateText(summary.text || "no data", 3600))}</pre>`;
+      const summary = await loadEffectiveSummary(config, hours);
+      const sourceTag = summary.source === "remote_ingest" ? `remote_ingest:${summary.remoteSource || "unknown"}` : "local";
+      const staleTag = summary.remoteStale ? " (stale)" : "";
+      const usedWindowTag = summary.exactWindow ? "" : `, nearest=${summary.usedHours}h`;
+      const ageTag = summary.source === "remote_ingest" ? `, age=${summary.remoteAgeSec}s${staleTag}` : "";
+      responseText =
+        `<b>log_summary --hours ${summary.hours}</b>\n` +
+        `<b>Source:</b> <code>${htmlEscape(sourceTag)}</code>${htmlEscape(ageTag + usedWindowTag)}\n` +
+        `<pre>${htmlEscape(truncateText(summary.text || "no data", 3600))}</pre>`;
     } else if (name === "/status_page") {
       if (config.publicBaseUrl) {
         const url = `${config.publicBaseUrl.replace(/\/$/, "")}/ops/status`;
@@ -856,6 +971,7 @@ function createServer(config, logger) {
           service: "ops-bot",
           webhook_path: config.webhookPath,
           ingest_path: config.ingestPath,
+          summary_ingest_path: config.summaryIngestPath,
           ingest_enabled: config.ingestEnabled,
           telegram_enabled: Boolean(config.tgBotToken),
         });
@@ -877,7 +993,7 @@ function createServer(config, logger) {
         sendText(
           res,
           200,
-          "PLANKA ops-bot service\nGET /health\nGET /ops/status\nGET /ops/status.json\nPOST /ops/ingest/status\n",
+          `PLANKA ops-bot service\nGET /health\nGET /ops/status\nGET /ops/status.json\nPOST ${config.ingestPath}\nPOST ${config.summaryIngestPath}\n`,
         );
         return;
       }
@@ -922,6 +1038,67 @@ function createServer(config, logger) {
           snapshot: payload.snapshot,
         };
         writeRemoteSnapshot(config, record);
+        sendJson(res, 200, { ok: true, stored: true, source: record.source, received_at: record.received_at });
+        return;
+      }
+
+      if (req.method === "POST" && config.ingestEnabled && url.pathname === config.summaryIngestPath) {
+        if (config.summaryIngestSecret) {
+          const providedSecret = extractHeader(req, "x-ops-status-secret");
+          if (providedSecret !== config.summaryIngestSecret) {
+            sendJson(res, 401, { error: "UNAUTHORIZED", message: "invalid summary ingest secret" });
+            return;
+          }
+        }
+
+        let body = "";
+        try {
+          body = await collectRequestBody(req, 4 * 1024 * 1024);
+        } catch (error) {
+          if (error && error.message === "request body too large") {
+            sendJson(res, 413, { error: "PAYLOAD_TOO_LARGE", message: "summary payload exceeds limit" });
+            return;
+          }
+          throw error;
+        }
+
+        let payload;
+        try {
+          payload = JSON.parse(body || "{}");
+        } catch (_error) {
+          sendJson(res, 400, { error: "BAD_REQUEST", message: "invalid json payload" });
+          return;
+        }
+
+        if (!isObjectLike(payload) || !isObjectLike(payload.summaries)) {
+          sendJson(res, 400, { error: "BAD_REQUEST", message: "summaries payload is required" });
+          return;
+        }
+
+        const summaries = {};
+        for (const [key, value] of Object.entries(payload.summaries)) {
+          const parsedHours = Number.parseInt(String(key), 10);
+          if (!Number.isInteger(parsedHours) || parsedHours < 1 || parsedHours > 168) {
+            continue;
+          }
+          if (typeof value !== "string" || !value.trim()) {
+            continue;
+          }
+          summaries[String(parsedHours)] = value;
+        }
+        if (Object.keys(summaries).length === 0) {
+          sendJson(res, 400, { error: "BAD_REQUEST", message: "at least one summary window is required" });
+          return;
+        }
+
+        const record = {
+          received_at: new Date().toISOString(),
+          source: String(payload.source || "unknown"),
+          pushed_at: String(payload.pushed_at || ""),
+          generated_at: String(payload.generated_at || ""),
+          summaries,
+        };
+        writeRemoteSummary(config, record);
         sendJson(res, 200, { ok: true, stored: true, source: record.source, received_at: record.received_at });
         return;
       }
@@ -1001,7 +1178,7 @@ function main() {
   });
   server.listen(config.port, config.bind, () => {
     logger.info(
-      `[ops-bot] listening on ${config.bind}:${config.port}; webhook_path=${config.webhookPath}; ingest_path=${config.ingestPath}; ingest_enabled=${config.ingestEnabled}; telegram_enabled=${Boolean(config.tgBotToken)}`,
+      `[ops-bot] listening on ${config.bind}:${config.port}; webhook_path=${config.webhookPath}; ingest_path=${config.ingestPath}; summary_ingest_path=${config.summaryIngestPath}; ingest_enabled=${config.ingestEnabled}; telegram_enabled=${Boolean(config.tgBotToken)}`,
     );
   });
 
@@ -1024,6 +1201,7 @@ module.exports = {
   handleTelegramCommand,
   isObjectLike,
   loadConfig,
+  loadEffectiveSummary,
   normalizeCommand,
   resolveIncomingMessage,
 };

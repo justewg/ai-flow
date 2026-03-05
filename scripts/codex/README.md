@@ -67,6 +67,7 @@
 - `scripts/codex/run.sh ops_bot_webhook_register [register|refresh|delete|info]` — управление Telegram webhook по env-переменным.
 - `scripts/codex/run.sh ops_bot_webhook_refresh` — shortcut для полного refresh webhook (`deleteWebhook + setWebhook + getWebhookInfo`).
 - `scripts/codex/run.sh ops_remote_status_push` — отправить текущий `status_snapshot` в удаленный ingest endpoint ops-бота (URL/secret берутся из env).
+- `scripts/codex/run.sh ops_remote_summary_push` — отправить bundle `log_summary` (локальное окно `6h` по умолчанию) в удаленный ingest endpoint ops-бота.
 
 Короткий rollout smoke-checklist для ops-бота:
 1. `scripts/codex/run.sh ops_bot_pm2_start`
@@ -442,6 +443,10 @@
   - формирует payload из `status_snapshot.sh` и отправляет его в `OPS_REMOTE_STATUS_PUSH_URL`
   - auth заголовок: `X-Ops-Status-Secret` из `OPS_REMOTE_STATUS_PUSH_SECRET`
   - используется `daemon_tick` на `EXIT` (fallback для старого запущенного `daemon_loop`) и `daemon_loop` по тикам для split runtime (локальная автоматика + удаленный ops-бот)
+- `ops_remote_summary_push.sh`
+  - формирует payload из `log_summary.sh --hours <window>` (окна из `OPS_REMOTE_SUMMARY_PUSH_HOURS`, по умолчанию `6`)
+  - отправляет bundle summary в `OPS_REMOTE_SUMMARY_PUSH_URL` (`/ops/ingest/log-summary`) с заголовком `X-Ops-Status-Secret`
+  - использует throttling по `OPS_REMOTE_SUMMARY_PUSH_MIN_INTERVAL_SEC` (по умолчанию `300`) и backoff `OPS_REMOTE_SUMMARY_PUSH_ENDPOINT_MISSING_BACKOFF_SEC` для `404 endpoint not found`
 
 Минимальный smoke-checklist для владельца окружения (rollout):
 - `node -v`, `pm2 -v`, `jq --version`
@@ -452,6 +457,7 @@
 - `scripts/codex/run.sh ops_bot_webhook_refresh` (ожидается `WEBHOOK_DELETE_OK=1`, `WEBHOOK_SET_OK=1`, `WEBHOOK_INFO_OK=1`)
 - `scripts/codex/run.sh ops_bot_webhook_register info` (ожидается `WEBHOOK_INFO_OK=1`)
 - `scripts/codex/run.sh ops_remote_status_push` (ожидается `OPS_REMOTE_PUSH_OK=1` при настроенных `OPS_REMOTE_STATUS_PUSH_*`)
+- `scripts/codex/run.sh ops_remote_summary_push` (ожидается `OPS_REMOTE_SUMMARY_PUSH_OK=1` при настроенных `OPS_REMOTE_SUMMARY_PUSH_*`)
 - HTTP-проверки: `GET /health`, `GET /ops/status`, `GET /ops/status.json`
 - webhook negative-checks: невалидный JSON -> `400`, слишком большой payload -> `413`, update без команды -> `200 command_handled=false`
 - Telegram webhook + команды: `/help`, `/status`, `/summary 6`, `/status_page`
@@ -539,8 +545,12 @@ chmod +x scripts/codex/*.sh
 - `OPS_BOT_INGEST_ENABLED` (включает ingest endpoint для внешнего runtime snapshot)
 - `OPS_BOT_INGEST_PATH` (path ingest endpoint; по умолчанию `/ops/ingest/status`)
 - `OPS_BOT_INGEST_SECRET` (секрет заголовка `X-Ops-Status-Secret` для ingest POST)
+- `OPS_BOT_SUMMARY_INGEST_PATH` (path ingest endpoint для remote `log_summary`; по умолчанию `/ops/ingest/log-summary`)
+- `OPS_BOT_SUMMARY_INGEST_SECRET` (секрет для summary-ingest; если не задан — используется `OPS_BOT_INGEST_SECRET`)
 - `OPS_BOT_REMOTE_SNAPSHOT_FILE` (файл кеша последнего принятого удаленного snapshot)
 - `OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC` (TTL удаленного snapshot в секундах; по умолчанию `600`)
+- `OPS_BOT_REMOTE_SUMMARY_FILE` (файл кеша последнего принятого удаленного summary bundle)
+- `OPS_BOT_REMOTE_SUMMARY_TTL_SEC` (TTL удаленного summary bundle в секундах; по умолчанию `1200`)
 - `OPS_BOT_ALLOWED_CHAT_IDS` (CSV списка разрешенных chat_id; если задано — остальные игнорируются)
 - `OPS_BOT_PUBLIC_BASE_URL` (публичный base URL для команды `/status_page`, например `https://planka.ewg40.ru`)
 - `OPS_BOT_REFRESH_SEC` (интервал автообновления `/ops/status` в секундах; по умолчанию `5`)
@@ -552,3 +562,11 @@ chmod +x scripts/codex/*.sh
 - `OPS_REMOTE_STATUS_PUSH_SECRET` (секрет заголовка `X-Ops-Status-Secret` для push)
 - `OPS_REMOTE_STATUS_PUSH_TIMEOUT_SEC` (HTTP timeout push-запроса; по умолчанию `6`)
 - `OPS_REMOTE_STATUS_PUSH_SOURCE` (лейбл источника, например `macbook-local`)
+- `OPS_REMOTE_SUMMARY_PUSH_ENABLED` (включает push локального summary bundle на удаленный ingest endpoint)
+- `OPS_REMOTE_SUMMARY_PUSH_URL` (полный URL summary ingest endpoint, например `https://planka-dev.ewg40.ru/ops/ingest/log-summary`)
+- `OPS_REMOTE_SUMMARY_PUSH_SECRET` (секрет заголовка `X-Ops-Status-Secret` для summary push; fallback к `OPS_REMOTE_STATUS_PUSH_SECRET`)
+- `OPS_REMOTE_SUMMARY_PUSH_TIMEOUT_SEC` (HTTP timeout summary push-запроса; по умолчанию `8`)
+- `OPS_REMOTE_SUMMARY_PUSH_SOURCE` (лейбл источника summary push; по умолчанию hostname)
+- `OPS_REMOTE_SUMMARY_PUSH_HOURS` (CSV окон summary для push; по умолчанию `6`)
+- `OPS_REMOTE_SUMMARY_PUSH_MIN_INTERVAL_SEC` (минимальный интервал между summary push; по умолчанию `300`)
+- `OPS_REMOTE_SUMMARY_PUSH_ENDPOINT_MISSING_BACKOFF_SEC` (backoff при `404 endpoint not found`; по умолчанию `3600`)

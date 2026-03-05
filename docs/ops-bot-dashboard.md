@@ -96,6 +96,9 @@ curl -sS "https://api.telegram.org/bot${TG_BOT_TOKEN}/getWebhookInfo"
    - `GET /ops/status.json`
 7. Проверить webhook:
    - `POST /telegram/webhook/<secret>` с валидным `X-Telegram-Bot-Api-Secret-Token`;
+   - невалидный JSON в webhook дает `400 BAD_REQUEST`;
+   - payload > 1 MiB дает `413 PAYLOAD_TOO_LARGE`;
+   - update без Telegram-команды обрабатывается безопасно (`200`, `command_handled=false`);
    - отправить в Telegram команды `/help`, `/status`, `/summary 6`, `/status_page`.
 8. Проверить логи PM2: `.tmp/codex/pm2/ops_bot.out.log`, `.tmp/codex/pm2/ops_bot.err.log` (нет необработанных ошибок).
 

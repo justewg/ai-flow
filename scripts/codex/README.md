@@ -398,6 +398,8 @@
 - `ops_bot_service.js`
   - HTTP сервис с endpoint-ами: `GET /health`, `GET /ops/status`, `GET /ops/status.json`
   - Telegram webhook handler: `POST /telegram/webhook[/<secret>]`
+  - невалидный webhook JSON -> `400 BAD_REQUEST`; payload > 1 MiB -> `413 PAYLOAD_TOO_LARGE`
+  - update без команды обрабатывается безопасно (`200`, `command_handled=false`)
   - команды в чате: `/status`, `/summary [hours]`, `/help`, `/status_page`
 - `ops_bot_start.sh`
   - запускает ops-бот сервис, предварительно загружая `.env` и `.env.deploy`
@@ -423,6 +425,7 @@
 - `scripts/codex/run.sh ops_bot_pm2_status` (ожидается `PM2_STATUS=online`)
 - `scripts/codex/run.sh ops_bot_pm2_health` (ожидается exit code `0`)
 - HTTP-проверки: `GET /health`, `GET /ops/status`, `GET /ops/status.json`
+- webhook negative-checks: невалидный JSON -> `400`, слишком большой payload -> `413`, update без команды -> `200 command_handled=false`
 - Telegram webhook + команды: `/help`, `/status`, `/summary 6`, `/status_page`
 
 Логи демона:

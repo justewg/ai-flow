@@ -662,25 +662,34 @@ function normalizeCommand(text) {
   return { name: command, args: parts.slice(1) };
 }
 
+function isObjectLike(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 async function handleTelegramCommand(config, logger, update) {
-  const message = resolveIncomingMessage(update);
-  if (!message) {
-    return;
+  if (!isObjectLike(update)) {
+    return false;
   }
 
-  const chatId = String(message.chat && message.chat.id ? message.chat.id : "");
+  const message = resolveIncomingMessage(update);
+  if (!message) {
+    return false;
+  }
+
+  const rawChatId = message && message.chat ? message.chat.id : "";
+  const chatId = rawChatId === undefined || rawChatId === null ? "" : String(rawChatId);
   if (!chatId) {
-    return;
+    return false;
   }
 
   if (config.allowedChatIds.size > 0 && !config.allowedChatIds.has(chatId)) {
     logger.warn(`[ops-bot] ignored command from unauthorized chat_id=${chatId}`);
-    return;
+    return false;
   }
 
   const { name, args } = normalizeCommand(message.text || "");
   if (!name) {
-    return;
+    return false;
   }
 
   let responseText = "";
@@ -710,6 +719,7 @@ async function handleTelegramCommand(config, logger, update) {
 
   responseText = truncateText(responseText, 3900);
   await sendTelegramMessage(config, chatId, responseText);
+  return true;
 }
 
 function createServer(config, logger) {
@@ -754,7 +764,17 @@ function createServer(config, logger) {
           }
         }
 
-        const body = await collectRequestBody(req, 1024 * 1024);
+        let body = "";
+        try {
+          body = await collectRequestBody(req, 1024 * 1024);
+        } catch (error) {
+          if (error && error.message === "request body too large") {
+            sendJson(res, 413, { error: "PAYLOAD_TOO_LARGE", message: "telegram update exceeds limit" });
+            return;
+          }
+          throw error;
+        }
+
         let update;
         try {
           update = JSON.parse(body || "{}");
@@ -763,11 +783,15 @@ function createServer(config, logger) {
           return;
         }
 
-        let commandHandled = true;
+        if (!isObjectLike(update)) {
+          sendJson(res, 200, { ok: true, command_handled: false, ignored_reason: "unsupported_update" });
+          return;
+        }
+
+        let commandHandled = false;
         try {
-          await handleTelegramCommand(config, logger, update);
+          commandHandled = await handleTelegramCommand(config, logger, update);
         } catch (error) {
-          commandHandled = false;
           logger.warn(
             `[ops-bot] TELEGRAM_COMMAND_ERROR: ${error && error.message ? error.message : "unknown"}`,
           );
@@ -823,3 +847,12 @@ function main() {
 if (require.main === module) {
   main();
 }
+
+module.exports = {
+  createServer,
+  handleTelegramCommand,
+  isObjectLike,
+  loadConfig,
+  normalizeCommand,
+  resolveIncomingMessage,
+};

@@ -223,6 +223,7 @@
   - при рабочем ответе (`REWORK`) переводит карточку dirty-gate issue в `Status/Flow=In Progress`
   - при dirty-worktree больше не “глушит” обслуживание активного контекста: если есть `daemon_active_task`/waiting/review, тик продолжает `daemon_check_replies` и `executor_tick`; при этом новые claim остаются заблокированы (`WAIT_DIRTY_WORKTREE_SKIP_NEW_CLAIM=1`)
   - `COMMIT` запускает полный dirty-gate flow: auto-commit tracked-файлов (`dev_commit_push.sh`) -> PR `development -> main` -> merge PR -> закрытие dirty-gate issue
+  - если финальный `project_set_status(Done)` для dirty-gate не прошел, daemon фиксирует pending-finalize и ретраит завершение автоматически на следующих тиках (без нового user-reply)
   - по успешному завершению пишет `WAIT_DIRTY_WORKTREE_COMMIT_FLOW_DONE=1` и снимает dirty-gate state
   - auto-`COMMIT` выполняется только из ветки `development` (иначе пишет `WAIT_DIRTY_WORKTREE_COMMIT_BLOCKED_BRANCH=...`)
   - `IGNORE` включает временный override (`WAIT_DIRTY_WORKTREE_OVERRIDE_SET=1`) для текущей dirty-signature без коммита

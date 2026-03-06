@@ -50,6 +50,10 @@
 - `[APP-07]` Добавлен bridge удаленной summary-статистики: endpoint `POST /ops/ingest/log-summary` в `ops_bot_service`, локальный push `scripts/codex/ops_remote_summary_push.sh` (окна настраиваются через `OPS_REMOTE_SUMMARY_PUSH_HOURS`, есть throttling/backoff), интеграция с daemon tick/loop и переключение Telegram `/summary` на remote source (`remote_ingest`) при наличии данных.
 
 ### Fixed
+- `[ISSUE-332]` Снижена GraphQL-нагрузка daemon-flow: проверки `issues/labels/comments/open PR` переведены на REST (`gh api repos/...`), GraphQL оставлен для Project v2 операций.
+- `[ISSUE-332]` Убрано дублирование dirty-gate Todo-скана: `find_first_todo_issue_json` теперь кэшируется в пределах тика и используется один раз для reply-path и gate-path.
+- `[ISSUE-332]` Добавлен TTL-кэш `dependency_issue_resolved` (`DEPENDENCY_ISSUE_RESOLVED_CACHE_TTL_SEC`, default `180`), чтобы не запрашивать Project-статус тех же `Depends-On` на каждом тике.
+- `[ISSUE-332]` Оптимизирован `project_set_status.sh`: при входном `target=PVTI_*` больше не выполняется загрузка/пагинация `items(first:100)`, обновление идет напрямую по `project item id`.
 - `[APP-07]` Исправлен частый залип `DIRTY-GATE` в `In Progress` после ответа `COMMIT`: `daemon_tick` больше не игнорирует ошибки финального `project_set_status(Done)`, сохраняет pending-finalize и автоматически ретраит закрытие dirty-gate на следующих тиках без нового комментария пользователя.
 - `[APP-07]` Исправлен пустой блок `Executor` в `/ops/status`: `status_snapshot.sh` теперь подставляет fallback из `watchdog_state_detail` (`executor_state/pid/pid_alive`) и в idle показывает `state=IDLE`, даже когда `executor_*` файлы очищены.
 - `[APP-07]` Исправлен fallback split-runtime статуса: при `local=UNKNOWN` `/ops/status(.json)` теперь использует последний `remote_ingest` snapshot даже если он stale (с полями `remote_stale`/`remote_age_sec`), чтобы статус не обнулялся при rate-limit backoff `daemon_loop`; также увеличен default `OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC` до `600`.

@@ -122,10 +122,8 @@ build_answer_comment() {
   if [[ -n "$pr_number" ]]; then
     if pr_json="$(
       "${ROOT_DIR}/scripts/codex/gh_retry.sh" \
-        gh pr view "$pr_number" \
-          --repo "$REPO" \
-          --json state,url \
-          --jq '.'
+        gh api "repos/${REPO}/pulls/${pr_number}" \
+          --jq '{state: (.state // "UNKNOWN"), url: (.html_url // "")}'
     )"; then
       pr_state="$(printf '%s' "$pr_json" | jq -r '.state // "UNKNOWN"')"
       pr_url="$(printf '%s' "$pr_json" | jq -r '.url // ""')"
@@ -254,10 +252,8 @@ comments_json=""
 issue_state=""
 if ! issue_state="$(
   "${ROOT_DIR}/scripts/codex/gh_retry.sh" \
-    gh issue view "$issue_number" \
-    --repo "$REPO" \
-    --json state \
-    --jq '.state'
+    gh api "repos/${REPO}/issues/${issue_number}" \
+    --jq '.state // ""'
 )"; then
   rc=$?
   if [[ "$rc" -eq 75 ]]; then
@@ -273,6 +269,7 @@ if ! issue_state="$(
   echo "NO_WAITING_USER_REPLY=1"
   exit 0
 fi
+issue_state="$(printf '%s' "$issue_state" | tr '[:lower:]' '[:upper:]')"
 
 if [[ "$issue_state" == "CLOSED" ]]; then
   clear_waiting_state
@@ -304,10 +301,8 @@ if is_review_feedback_kind "$kind_label"; then
     review_pr_json=""
     if ! review_pr_json="$(
       "${ROOT_DIR}/scripts/codex/gh_retry.sh" \
-        gh pr view "$review_pr_number" \
-          --repo "$REPO" \
-          --json state,mergedAt,closedAt \
-          --jq '.'
+        gh api "repos/${REPO}/pulls/${review_pr_number}" \
+          --jq '{state: (.state // ""), mergedAt: (.merged_at // ""), closedAt: (.closed_at // "")}'
     )"; then
       rc=$?
       if [[ "$rc" -eq 75 ]]; then
@@ -327,7 +322,7 @@ if is_review_feedback_kind "$kind_label"; then
       exit 0
     fi
 
-    review_pr_state="$(printf '%s' "$review_pr_json" | jq -r '.state // ""')"
+    review_pr_state="$(printf '%s' "$review_pr_json" | jq -r '.state // ""' | tr '[:lower:]' '[:upper:]')"
     review_pr_merged_at="$(printf '%s' "$review_pr_json" | jq -r '.mergedAt // ""')"
     review_pr_closed_at="$(printf '%s' "$review_pr_json" | jq -r '.closedAt // ""')"
 

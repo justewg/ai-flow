@@ -183,6 +183,7 @@
   - обновление title/body PR
 - `project_set_status.sh <task-id|project-item-id> <status-name> [flow-name]`
   - синхронное обновление полей `Status` и `Flow` карточки проекта
+  - fast-path для `PVTI_*`: не загружает `items(first:100)`/пагинацию, обновляет поля сразу по переданному `project item id`
 - `project_status_runtime.sh <enqueue|apply|list|clear> ...`
   - runtime-очередь действий `project_set_status` в `.tmp/codex/project_status_runtime_queue.json`
   - при деградации GitHub (`network/rate-limit`) сохраняет intent и не теряет изменение
@@ -242,6 +243,7 @@
   - перед критичными GitHub-операциями делает preflight (`github_health_check.sh`)
   - сетевые вызовы к GitHub выполняет через `gh_retry.sh`, чтобы кратковременные DNS/API-сбои не роняли flow
   - если активной задачи нет, проверяет открытые PR `development -> main` и при наличии ждет merge/close
+  - не-Project проверки (`issues/labels/comments/open PR`) выполняет через REST (`gh api repos/...`); GraphQL оставлен для Project v2
   - читает Project через GraphQL (без нестабильного `gh project item-list`)
   - в hybrid mode для Project-операций использует `DAEMON_GH_PROJECT_TOKEN`/`CODEX_GH_PROJECT_TOKEN` (если задан), сохраняя App token для `Issue/PR`
   - при исчерпании GraphQL rate limit пишет `WAIT_GITHUB_RATE_LIMIT=1` + детали (`..._STAGE`, `..._MSG`) и не берет новую задачу
@@ -249,9 +251,11 @@
   - берет задачу только из `Status=Todo`
   - issue с label из `AUTO_IGNORE_LABELS` (по умолчанию `auto:ignore`) исключаются из auto-claim очереди
   - `AUTO_IGNORE_LABELS` учитывается и в dirty-gate: такие `Todo`-задачи не считаются блокирующими для создания `DIRTY-GATE`
+  - dirty-gate использует один скан `find_first_todo_issue_json` на тик (общий кэш между `maybe_process_dirty_gate_reply` и `maybe_handle_dirty_worktree_gate`)
   - если активная задача получает ignore-label, daemon освобождает active-context, останавливает executor и возвращается в idle-цикл
   - перед подхватом читает `Flow Meta` у Issue и проверяет `Depends-On`
   - зависимость из `Depends-On` считается выполненной, если `Issue` закрыт (`state=CLOSED`) или карточка зависимости в Project имеет `Status=Done/Closed`
+  - результат проверки `Depends-On` кэшируется на TTL (`DEPENDENCY_ISSUE_RESOLVED_CACHE_TTL_SEC`, по умолчанию `180`), чтобы не дергать Project-статус на каждом тике
   - если в `Depends-On` указан несуществующий Issue (битая ссылка), зависимость игнорируется и не блокирует claim (`DEPENDENCY_MISSING_IGNORED`)
   - если токен в `Depends-On` не удается распарсить как Issue-ссылку, он игнорируется (`DEPENDENCY_TOKEN_IGNORED_UNRESOLVED`)
   - при незакрытых зависимостях не берет задачу, пишет `WAIT_DEPENDENCIES...` в вывод и отправляет одноразовый сигнал `CODEX_SIGNAL: AGENT_DEPENDENCY_BLOCKED` (через outbox при офлайне GitHub)
@@ -537,6 +541,7 @@ chmod +x scripts/codex/*.sh
 - `DAEMON_TG_DIRTY_REMINDER_SEC` (интервал reminder для блокировки `WAIT_DIRTY_WORKTREE`; минимум 60, по умолчанию 600)
 - `DAEMON_GH_TOKEN_FALLBACK_ENABLED` (или `CODEX_GH_TOKEN_FALLBACK_ENABLED`) — включает аварийный fallback на `DAEMON_GH_TOKEN`/`CODEX_GH_TOKEN` при недоступном auth endpoint
 - `DAEMON_GH_PROJECT_TOKEN` (или `CODEX_GH_PROJECT_TOKEN`) — отдельный PAT для Project v2 в hybrid mode (если Project user-owned)
+- `DEPENDENCY_ISSUE_RESOLVED_CACHE_TTL_SEC` — TTL (сек) кэша результата `dependency_issue_resolved`; `0` отключает кэш (по умолчанию `180`)
 - `WATCHDOG_DAEMON_LABEL` (какой daemon label перезапускать при hard recovery; по умолчанию `com.planka.codex-daemon`)
 - `WATCHDOG_DAEMON_INTERVAL_SEC` (интервал daemon после hard restart; по умолчанию 45)
 - `WATCHDOG_COOLDOWN_SEC` (минимальная пауза между recovery-действиями; по умолчанию 120)

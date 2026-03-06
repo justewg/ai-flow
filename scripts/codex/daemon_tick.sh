@@ -10,7 +10,6 @@ project_owner="${PROJECT_OWNER:-@me}"
 project_items_limit="${PROJECT_ITEMS_LIMIT:-200}"
 repo="${GITHUB_REPO:-justewg/planka}"
 repo_owner="${repo%%/*}"
-repo_name="${repo#*/}"
 trigger_status="${TRIGGER_STATUS:-Todo}"
 target_status="${TARGET_STATUS:-In Progress}"
 target_flow="${TARGET_FLOW:-In Progress}"
@@ -37,6 +36,11 @@ gql_last_success_utc_file="${CODEX_DIR}/graphql_rate_last_success_utc.txt"
 gql_last_limit_utc_file="${CODEX_DIR}/graphql_rate_last_limit_utc.txt"
 DIRTY_SKIP_NEW_CLAIM="0"
 auto_ignore_labels_raw="${AUTO_IGNORE_LABELS:-auto:ignore}"
+dirty_gate_todo_cached="0"
+dirty_gate_todo_cache_rc="0"
+dirty_gate_todo_cache_json=""
+dependency_status_cache_file="${CODEX_DIR}/dependency_issue_resolved_cache.json"
+DEPENDENCY_STATUS_CACHE_RESOLVED=""
 
 emit_lines() {
   local text="$1"
@@ -203,6 +207,11 @@ run_gh_retry_capture_project() {
   fi
 }
 
+list_open_development_main_prs_json() {
+  run_gh_retry_capture \
+    gh api "repos/${repo}/pulls?state=open&base=main&head=${repo_owner}:development&per_page=100"
+}
+
 read_file_or_default() {
   local file_path="$1"
   local default_value="$2"
@@ -349,6 +358,90 @@ init_auto_ignore_labels() {
 auto_ignore_labels_raw="$(resolve_config_value "AUTO_IGNORE_LABELS" "$auto_ignore_labels_raw")"
 init_auto_ignore_labels
 
+dependency_status_cache_ttl_raw="$(resolve_config_value "DEPENDENCY_ISSUE_RESOLVED_CACHE_TTL_SEC" "180")"
+if [[ "$dependency_status_cache_ttl_raw" =~ ^[0-9]+$ ]]; then
+  dependency_status_cache_ttl_sec="$dependency_status_cache_ttl_raw"
+else
+  dependency_status_cache_ttl_sec="180"
+fi
+
+ensure_dependency_status_cache_file() {
+  [[ "$dependency_status_cache_ttl_sec" =~ ^[0-9]+$ ]] || return 0
+  (( dependency_status_cache_ttl_sec > 0 )) || return 0
+  mkdir -p "$CODEX_DIR"
+  [[ -f "$dependency_status_cache_file" ]] || printf '{}\n' > "$dependency_status_cache_file"
+}
+
+clear_dependency_status_cache_entry() {
+  local dep_issue_number="$1"
+  local tmp_file
+
+  [[ "$dependency_status_cache_ttl_sec" =~ ^[0-9]+$ ]] || return 0
+  (( dependency_status_cache_ttl_sec > 0 )) || return 0
+  ensure_dependency_status_cache_file
+  tmp_file="$(mktemp "${CODEX_DIR}/dependency_cache.XXXXXX")"
+  if jq -c --arg issue "$dep_issue_number" 'del(.[$issue])' "$dependency_status_cache_file" > "$tmp_file"; then
+    mv "$tmp_file" "$dependency_status_cache_file"
+  else
+    rm -f "$tmp_file"
+  fi
+}
+
+cache_dependency_status_result() {
+  local dep_issue_number="$1"
+  local resolved_flag="$2"
+  local now_epoch="$3"
+  local expires_epoch tmp_file resolved_json
+
+  [[ "$dependency_status_cache_ttl_sec" =~ ^[0-9]+$ ]] || return 0
+  (( dependency_status_cache_ttl_sec > 0 )) || return 0
+  ensure_dependency_status_cache_file
+  expires_epoch=$(( now_epoch + dependency_status_cache_ttl_sec ))
+  if [[ "$resolved_flag" == "1" ]]; then
+    resolved_json="true"
+  else
+    resolved_json="false"
+  fi
+  tmp_file="$(mktemp "${CODEX_DIR}/dependency_cache.XXXXXX")"
+  if jq -c \
+    --arg issue "$dep_issue_number" \
+    --argjson expires "$expires_epoch" \
+    --argjson resolved "$resolved_json" \
+    '.[$issue] = {resolved: $resolved, expires_epoch: $expires}' \
+    "$dependency_status_cache_file" > "$tmp_file"; then
+    mv "$tmp_file" "$dependency_status_cache_file"
+  else
+    rm -f "$tmp_file"
+  fi
+}
+
+load_dependency_status_cache_entry() {
+  local dep_issue_number="$1"
+  local now_epoch="$2"
+  local cached_entry
+  DEPENDENCY_STATUS_CACHE_RESOLVED=""
+
+  [[ "$dependency_status_cache_ttl_sec" =~ ^[0-9]+$ ]] || return 1
+  (( dependency_status_cache_ttl_sec > 0 )) || return 1
+  ensure_dependency_status_cache_file
+  cached_entry="$(
+    jq -c --arg issue "$dep_issue_number" --argjson now "$now_epoch" '
+      (.[$issue] // null) as $entry
+      | if ($entry == null) then empty
+        elif (($entry.expires_epoch // 0) < $now) then empty
+        else $entry
+        end
+    ' "$dependency_status_cache_file" 2>/dev/null || true
+  )"
+  [[ -n "$cached_entry" ]] || return 1
+  if [[ "$(printf '%s' "$cached_entry" | jq -r '.resolved // false')" == "true" ]]; then
+    DEPENDENCY_STATUS_CACHE_RESOLVED="1"
+  else
+    DEPENDENCY_STATUS_CACHE_RESOLVED="0"
+  fi
+  return 0
+}
+
 is_auto_ignore_label() {
   local candidate="$1"
   local normalized entry
@@ -365,10 +458,8 @@ issue_has_auto_ignore_label() {
 
   if labels_out="$(
     run_gh_retry_capture \
-      gh issue view "$issue_number" \
-      --repo "$repo" \
-      --json labels \
-      --jq '.labels[].name'
+      gh api "repos/${repo}/issues/${issue_number}/labels?per_page=100" \
+      --jq '.[].name'
   )"; then
     :
   else
@@ -649,6 +740,24 @@ query($projectId: ID!, $itemsFirst: Int!) {
   '
 }
 
+find_first_todo_issue_json_cached() {
+  if [[ "$dirty_gate_todo_cached" == "1" ]]; then
+    printf '%s' "$dirty_gate_todo_cache_json"
+    return "$dirty_gate_todo_cache_rc"
+  fi
+
+  dirty_gate_todo_cached="1"
+  if dirty_gate_todo_cache_json="$(find_first_todo_issue_json)"; then
+    dirty_gate_todo_cache_rc="0"
+  else
+    dirty_gate_todo_cache_rc="$?"
+    dirty_gate_todo_cache_json=""
+  fi
+
+  printf '%s' "$dirty_gate_todo_cache_json"
+  return "$dirty_gate_todo_cache_rc"
+}
+
 clear_dirty_gate_local_state() {
   : > "$dirty_gate_issue_file"
   : > "$dirty_gate_issue_url_file"
@@ -756,29 +865,35 @@ is_resolved_project_status() {
 
 dependency_issue_resolved() {
   local dep_issue_number="$1"
-  local dep_state dep_item_id dep_status rc dep_state_out
+  local dep_state dep_item_id dep_status rc dep_state_out now_epoch resolved_flag
 
   if dep_state_out="$(
     run_gh_retry_capture \
-      gh issue view "$dep_issue_number" \
-      --repo "$repo" \
-      --json state \
-      --jq '.state' 2>&1
+      gh api "repos/${repo}/issues/${dep_issue_number}" \
+      --jq '.state // ""' 2>&1
   )"; then
     :
   else
     rc=$?
     [[ "$rc" -eq 75 ]] && return 75
     if is_github_issue_not_found_error "$dep_state_out"; then
+      clear_dependency_status_cache_entry "$dep_issue_number"
       echo "DEPENDENCY_MISSING_IGNORED=#${dep_issue_number}"
       return 0
     fi
     return "$rc"
   fi
 
-  dep_state="$(printf '%s\n' "$dep_state_out" | awk 'NF {print; exit}')"
+  dep_state="$(printf '%s\n' "$dep_state_out" | awk 'NF {print; exit}' | tr '[:lower:]' '[:upper:]')"
+  now_epoch="$(date +%s)"
   if [[ "$dep_state" == "CLOSED" ]]; then
+    cache_dependency_status_result "$dep_issue_number" "1" "$now_epoch"
     return 0
+  fi
+
+  if load_dependency_status_cache_entry "$dep_issue_number" "$now_epoch"; then
+    [[ "$DEPENDENCY_STATUS_CACHE_RESOLVED" == "1" ]] && return 0
+    return 1
   fi
 
   if dep_item_id="$(find_project_issue_item_id "$dep_issue_number")"; then
@@ -789,7 +904,10 @@ dependency_issue_resolved() {
     return "$rc"
   fi
 
-  [[ -n "$dep_item_id" ]] || return 1
+  if [[ -z "$dep_item_id" ]]; then
+    cache_dependency_status_result "$dep_issue_number" "0" "$now_epoch"
+    return 1
+  fi
 
   if dep_status="$(find_project_item_status_by_id "$dep_item_id")"; then
     :
@@ -799,10 +917,13 @@ dependency_issue_resolved() {
     return "$rc"
   fi
 
+  resolved_flag="0"
   if is_resolved_project_status "$dep_status"; then
-    return 0
+    resolved_flag="1"
   fi
 
+  cache_dependency_status_result "$dep_issue_number" "$resolved_flag" "$now_epoch"
+  [[ "$resolved_flag" == "1" ]] && return 0
   return 1
 }
 
@@ -1145,14 +1266,7 @@ ensure_dirty_gate_commit_pr() {
   DIRTY_GATE_COMMIT_PR_URL=""
 
   if pr_list_json="$(
-    run_gh_retry_capture \
-      gh pr list \
-        --repo "$repo" \
-        --state open \
-        --base main \
-        --head development \
-        --json number,url \
-        --jq '.'
+    list_open_development_main_prs_json
   )"; then
     :
   else
@@ -1166,7 +1280,7 @@ ensure_dirty_gate_commit_pr() {
   fi
 
   pr_number="$(printf '%s' "$pr_list_json" | jq -r '.[0].number // ""')"
-  pr_url="$(printf '%s' "$pr_list_json" | jq -r '.[0].url // ""')"
+  pr_url="$(printf '%s' "$pr_list_json" | jq -r '.[0].html_url // ""')"
 
   if [[ -z "$pr_number" ]]; then
     if create_out="$(
@@ -1241,10 +1355,8 @@ merge_dirty_gate_commit_pr() {
 
   if pr_view_json="$(
     run_gh_retry_capture \
-      gh pr view "$pr_number" \
-        --repo "$repo" \
-        --json state,mergedAt \
-        --jq '.'
+      gh api "repos/${repo}/pulls/${pr_number}" \
+        --jq '{state: (.state // ""), mergedAt: (.merged_at // "")}'
   )"; then
     :
   else
@@ -1412,10 +1524,8 @@ restore_dirty_gate_waiting_state() {
   if [[ -z "$question_id" ]]; then
     if ! issue_json="$(
       run_gh_retry_capture \
-        gh issue view "$gate_issue_number" \
-          --repo "$repo" \
-          --json body,url,state \
-          --jq '.'
+        gh api "repos/${repo}/issues/${gate_issue_number}" \
+          --jq '{body: (.body // ""), state: (.state // ""), html_url: (.html_url // "")}'
     )"; then
       local rc=$?
       if [[ "$rc" -eq 75 ]]; then
@@ -1425,10 +1535,10 @@ restore_dirty_gate_waiting_state() {
       fi
       return "$rc"
     fi
-    if [[ "$(printf '%s' "$issue_json" | jq -r '.state // ""')" == "OPEN" ]] &&
+    if [[ "$(printf '%s' "$issue_json" | jq -r '.state // ""' | tr '[:lower:]' '[:upper:]')" == "OPEN" ]] &&
       printf '%s' "$issue_json" | jq -r '.body // ""' | grep -q '^CODEX_SIGNAL: DIRTY_GATE_OPEN$'; then
       question_id="0"
-      question_url="$(printf '%s' "$issue_json" | jq -r '.url // empty')"
+      question_url="$(printf '%s' "$issue_json" | jq -r '.html_url // empty')"
     fi
   fi
 
@@ -1469,25 +1579,16 @@ restore_dirty_gate_waiting_state() {
 
 ensure_dirty_gate_issue_in_project() {
   local issue_number="$1"
-  local item_id issue_id issue_json add_json rc
+  local item_id issue_id add_json rc
 
   item_id="$(find_project_issue_item_id "$issue_number" || true)"
   if [[ -n "$item_id" ]]; then
     echo "WAIT_DIRTY_WORKTREE_GATE_PROJECT_ITEM_ID=${item_id}"
   else
-    if ! issue_json="$(
+    if ! issue_id="$(
       run_gh_retry_capture \
-        gh api graphql \
-        -f query='
-query($owner: String!, $repo: String!, $number: Int!) {
-  repository(owner: $owner, name: $repo) {
-    issue(number: $number) { id }
-  }
-}
-' \
-        -f owner="$repo_owner" \
-        -f repo="$repo_name" \
-        -F number="$issue_number"
+        gh api "repos/${repo}/issues/${issue_number}" \
+        --jq '.node_id // ""'
     )"; then
       rc=$?
       if [[ "$rc" -eq 75 ]]; then
@@ -1498,7 +1599,6 @@ query($owner: String!, $repo: String!, $number: Int!) {
       return "$rc"
     fi
 
-    issue_id="$(printf '%s' "$issue_json" | jq -r '.data.repository.issue.id // ""')"
     if [[ -z "$issue_id" || "$issue_id" == "null" ]]; then
       echo "DIRTY_GATE_PROJECT_LINK_SKIP=ISSUE_ID_MISSING"
       return 1
@@ -1559,15 +1659,13 @@ ensure_dirty_gate_issue() {
     existing_number="$(<"$dirty_gate_issue_file")"
     if existing_json="$(
       run_gh_retry_capture \
-        gh issue view "$existing_number" \
-          --repo "$repo" \
-          --json number,state,url \
-          --jq '.'
+        gh api "repos/${repo}/issues/${existing_number}" \
+          --jq '{number: (.number // ""), state: (.state // ""), html_url: (.html_url // "")}'
     )"; then
-      existing_state="$(printf '%s' "$existing_json" | jq -r '.state // ""')"
+      existing_state="$(printf '%s' "$existing_json" | jq -r '.state // ""' | tr '[:lower:]' '[:upper:]')"
       if [[ "$existing_state" == "OPEN" ]]; then
         DIRTY_GATE_ISSUE_NUMBER="$(printf '%s' "$existing_json" | jq -r '.number // ""')"
-        existing_url="$(printf '%s' "$existing_json" | jq -r '.url // ""')"
+        existing_url="$(printf '%s' "$existing_json" | jq -r '.html_url // ""')"
         DIRTY_GATE_ISSUE_URL="$existing_url"
       fi
     else
@@ -1745,7 +1843,7 @@ maybe_process_dirty_gate_reply() {
   [[ -s "$waiting_kind_file" ]] && waiting_kind="$(<"$waiting_kind_file")"
 
   # In idle (no Todo candidates), do not keep or restore DIRTY-GATE waiting context.
-  if ! blocked_json="$(find_first_todo_issue_json)"; then
+  if ! blocked_json="$(find_first_todo_issue_json_cached)"; then
     rc=$?
     [[ "$rc" -eq 75 ]] && return 0
     return 0
@@ -1871,7 +1969,7 @@ maybe_handle_dirty_worktree_gate() {
     return 0
   fi
 
-  if ! blocked_json="$(find_first_todo_issue_json)"; then
+  if ! blocked_json="$(find_first_todo_issue_json_cached)"; then
     rc=$?
     if [[ "$rc" -eq 75 ]]; then
       echo "WAIT_GITHUB_API_UNSTABLE=1"
@@ -2164,14 +2262,7 @@ fi
 
 open_prs_json=""
 if open_prs_json="$(
-  run_gh_retry_capture \
-    gh pr list \
-    --repo "$repo" \
-    --state open \
-    --base main \
-    --head development \
-    --json number,title,url \
-    --jq '.'
+  list_open_development_main_prs_json
 )"; then
   :
 else
@@ -2187,7 +2278,7 @@ fi
 open_pr_count="$(printf '%s' "$open_prs_json" | jq 'length')"
 if (( open_pr_count > 0 )); then
   echo "WAIT_OPEN_PR_COUNT=$open_pr_count"
-  printf '%s' "$open_prs_json" | jq -r '.[] | "OPEN_PR=#\(.number) \(.title) \(.url)"'
+  printf '%s' "$open_prs_json" | jq -r '.[] | "OPEN_PR=#\(.number) \(.title // "") \(.html_url // "")"'
   exit 0
 fi
 
@@ -2475,9 +2566,7 @@ fi
 issue_body=""
 if issue_body="$(
   run_gh_retry_capture \
-    gh issue view "$issue_number" \
-    --repo "$repo" \
-    --json body \
+    gh api "repos/${repo}/issues/${issue_number}" \
     --jq '.body // ""'
 )"; then
   :

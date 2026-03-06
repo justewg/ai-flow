@@ -419,6 +419,10 @@
   - запускает ops-бот сервис, предварительно загружая `.env` и `.env.deploy`
 - `ops_bot_health.sh`
   - проверяет локальный `GET /health` ops-бота
+- `ops_bot_post_smoke_check.sh`
+  - локальный post-rollout чекер для `ISSUE-316`: собирает статус по `health/webhook/commands/status-page`
+  - проверяет наличие `MANUAL_ROLLOUT_DONE` + полей `OPS_HEALTH/WEBHOOK_INFO/BOT_COMMANDS/OPS_STATUS_JSON` в входном файле (по умолчанию `.tmp/codex/issue_285_manual_enriched.md`)
+  - формирует структурированный отчет и список инцидентов (`.tmp/codex/issue_316_post_smoke_report.md`)
 - `ops_bot_pm2_ecosystem.config.cjs`
   - PM2 ecosystem-конфиг ops-бот сервиса (`autorestart`, отдельные log-файлы)
 - `ops_bot_pm2_start.sh`
@@ -454,6 +458,7 @@
 - `scripts/codex/run.sh ops_bot_pm2_start`
 - `scripts/codex/run.sh ops_bot_pm2_status` (ожидается `PM2_STATUS=online`)
 - `scripts/codex/run.sh ops_bot_pm2_health` (ожидается exit code `0`)
+- `scripts/codex/run.sh ops_bot_post_smoke_check` (агрегированный post-smoke отчет; exit code `0` при accepted, `2` при инцидентах)
 - `scripts/codex/run.sh ops_bot_webhook_register register` (ожидается `WEBHOOK_SET_OK=1` и `WEBHOOK_INFO_OK=1`)
 - `scripts/codex/run.sh ops_bot_webhook_refresh` (ожидается `WEBHOOK_DELETE_OK=1`, `WEBHOOK_SET_OK=1`, `WEBHOOK_INFO_OK=1`)
 - `scripts/codex/run.sh ops_bot_webhook_register info` (ожидается `WEBHOOK_INFO_OK=1`)

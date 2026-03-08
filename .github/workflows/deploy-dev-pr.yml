@@ -63,20 +63,26 @@ jobs:
 
       - name: Prepare SSH
         run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
+          SSH_DIR="${RUNNER_TEMP}/deploy_ssh"
+          mkdir -p "$SSH_DIR"
+          chmod 700 "$SSH_DIR"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$SSH_DIR/id_ed25519"
+          chmod 600 "$SSH_DIR/id_ed25519"
           if [[ -n "${DEPLOY_KNOWN_HOSTS}" ]]; then
-            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$SSH_DIR/known_hosts"
           else
-            ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" > ~/.ssh/known_hosts
+            ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" > "$SSH_DIR/known_hosts"
           fi
-          chmod 644 ~/.ssh/known_hosts
+          chmod 644 "$SSH_DIR/known_hosts"
+          echo "SSH_KEY_PATH=$SSH_DIR/id_ed25519" >> "$GITHUB_ENV"
+          echo "SSH_KNOWN_HOSTS=$SSH_DIR/known_hosts" >> "$GITHUB_ENV"
 
       - name: Deploy preview snapshot via rsync
         run: |
-          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH'"
+          ssh -i "$SSH_KEY_PATH" \
+            -o IdentitiesOnly=yes \
+            -o UserKnownHostsFile="$SSH_KNOWN_HOSTS" \
+            -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH'"
           rsync -az --delete \
             --exclude '.git/' \
             --exclude '.github/' \
@@ -84,11 +90,14 @@ jobs:
             --exclude 'node_modules/' \
             --exclude '.env' \
             --exclude '.env.*' \
-            -e "ssh -p ${DEPLOY_PORT}" \
+            -e "ssh -i ${SSH_KEY_PATH} -o IdentitiesOnly=yes -o UserKnownHostsFile=${SSH_KNOWN_HOSTS} -p ${DEPLOY_PORT}" \
             ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
 
       - name: Optional post-deploy command
         if: ${{ env.DEPLOY_POST_COMMAND != '' }}
         run: |
-          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+          ssh -i "$SSH_KEY_PATH" \
+            -o IdentitiesOnly=yes \
+            -o UserKnownHostsFile="$SSH_KNOWN_HOSTS" \
+            -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
             "cd '$DEPLOY_PATH' && $DEPLOY_POST_COMMAND"

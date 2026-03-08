@@ -1,22 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-git fetch origin
-git checkout main
-git pull --ff-only origin main
-git checkout development
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=./env/resolve_config.sh
+source "${ROOT_DIR}/scripts/codex/env/resolve_config.sh"
+codex_resolve_flow_config
 
-# Fast-forward only is too strict when `main` advances via merge commits.
-# If `main` is not yet an ancestor of `development`, do a regular merge.
-if git merge-base --is-ancestor main development; then
-  echo "SYNC_MAIN_ALREADY_INCLUDED_IN_DEVELOPMENT=1"
+git fetch origin
+git checkout "$FLOW_BASE_BRANCH"
+git pull --ff-only origin "$FLOW_BASE_BRANCH"
+git checkout "$FLOW_HEAD_BRANCH"
+
+# Fast-forward only is too strict when base branch advances via merge commits.
+# If base is not yet an ancestor of head, do a regular merge.
+if git merge-base --is-ancestor "$FLOW_BASE_BRANCH" "$FLOW_HEAD_BRANCH"; then
+  echo "SYNC_BASE_ALREADY_INCLUDED_IN_HEAD=1"
 else
-  if ! git merge --no-edit main; then
+  if ! git merge --no-edit "$FLOW_BASE_BRANCH"; then
     echo "BRANCH_SYNC_CONFLICT=1"
-    echo "BRANCH_SYNC_STAGE=MERGE_MAIN_INTO_DEVELOPMENT"
+    echo "BRANCH_SYNC_STAGE=MERGE_BASE_INTO_HEAD"
     exit 78
   fi
 fi
 
-git push origin development
+git push origin "$FLOW_HEAD_BRANCH"
 git status --short --branch

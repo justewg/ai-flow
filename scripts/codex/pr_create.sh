@@ -6,6 +6,11 @@ if [[ $# -ne 2 ]]; then
   exit 1
 fi
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=./env/resolve_config.sh
+source "${ROOT_DIR}/scripts/codex/env/resolve_config.sh"
+codex_resolve_flow_config
+
 title_file="$1"
 body_file="$2"
 
@@ -23,9 +28,8 @@ title="$(<"$title_file")"
 body="$(<"$body_file")"
 
 gh pr create \
-  --repo justewg/planka \
-  --base main \
-  --head development \
+  --repo "$FLOW_GITHUB_REPO" \
+  --base "$FLOW_BASE_BRANCH" \
+  --head "$FLOW_HEAD_BRANCH" \
   --title "$title" \
   --body "$body"
-

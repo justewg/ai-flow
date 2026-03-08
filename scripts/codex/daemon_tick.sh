@@ -3,13 +3,18 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CODEX_DIR="${ROOT_DIR}/.tmp/codex"
+# shellcheck source=./env/resolve_config.sh
+source "${ROOT_DIR}/scripts/codex/env/resolve_config.sh"
+codex_resolve_flow_config
 
 project_id="${PROJECT_ID:-PVT_kwHOAPt_Q84BPyyr}"
 project_number="${PROJECT_NUMBER:-2}"
 project_owner="${PROJECT_OWNER:-@me}"
 project_items_limit="${PROJECT_ITEMS_LIMIT:-200}"
-repo="${GITHUB_REPO:-justewg/planka}"
-repo_owner="${repo%%/*}"
+repo="$FLOW_GITHUB_REPO"
+repo_owner="$FLOW_REPO_OWNER"
+flow_base_branch="$FLOW_BASE_BRANCH"
+flow_head_branch="$FLOW_HEAD_BRANCH"
 trigger_status="${TRIGGER_STATUS:-Todo}"
 target_status="${TARGET_STATUS:-In Progress}"
 target_flow="${TARGET_FLOW:-In Progress}"
@@ -147,50 +152,15 @@ run_gh_retry_capture() {
 }
 
 strip_quotes() {
-  local value="$1"
-  value="${value%\"}"
-  value="${value#\"}"
-  value="${value%\'}"
-  value="${value#\'}"
-  printf '%s' "$value"
+  codex_strip_quotes "$1"
 }
 
 read_key_from_env_file() {
-  local file_path="$1"
-  local key="$2"
-  [[ -f "$file_path" ]] || return 1
-  local raw
-  raw="$(grep -E "^${key}=" "$file_path" | tail -n1 | cut -d'=' -f2- || true)"
-  [[ -n "$raw" ]] || return 1
-  strip_quotes "$raw"
+  codex_read_key_from_env_file "$1" "$2"
 }
 
 resolve_config_value() {
-  local key="$1"
-  local default_value="${2:-}"
-  local env_value="${!key:-}"
-  if [[ -n "$env_value" ]]; then
-    printf '%s' "$env_value"
-    return 0
-  fi
-
-  local env_candidates=()
-  if [[ -n "${DAEMON_GH_ENV_FILE:-}" ]]; then
-    env_candidates+=("${DAEMON_GH_ENV_FILE}")
-  fi
-  env_candidates+=("${ROOT_DIR}/.env")
-  env_candidates+=("${ROOT_DIR}/.env.deploy")
-
-  local env_file value
-  for env_file in "${env_candidates[@]}"; do
-    value="$(read_key_from_env_file "$env_file" "$key" || true)"
-    if [[ -n "$value" ]]; then
-      printf '%s' "$value"
-      return 0
-    fi
-  done
-
-  printf '%s' "$default_value"
+  codex_resolve_config_value "$1" "${2:-}"
 }
 
 project_gh_token="$(resolve_config_value "DAEMON_GH_PROJECT_TOKEN" "")"
@@ -207,9 +177,9 @@ run_gh_retry_capture_project() {
   fi
 }
 
-list_open_development_main_prs_json() {
+list_open_flow_prs_json() {
   run_gh_retry_capture \
-    gh api "repos/${repo}/pulls?state=open&base=main&head=${repo_owner}:development&per_page=100"
+    gh api "repos/${repo}/pulls?state=open&base=${flow_base_branch}&head=${repo_owner}:${flow_head_branch}&per_page=100"
 }
 
 read_file_or_default() {
@@ -1185,7 +1155,7 @@ auto_commit_dirty_worktree() {
   local -a stage_paths=()
 
   current_branch="$(git -C "${ROOT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
-  if [[ "$current_branch" != "development" ]]; then
+  if ! codex_emit_branch_mismatch_markers "FLOW_SMOKE" "$current_branch"; then
     echo "WAIT_DIRTY_WORKTREE_COMMIT_BLOCKED_BRANCH=${current_branch:-unknown}"
     return 1
   fi
@@ -1226,8 +1196,8 @@ auto_commit_dirty_worktree() {
     echo "WAIT_DIRTY_WORKTREE_COMMIT_PUSH_RETRY=1"
     if retry_out="$(
       {
-        git -C "${ROOT_DIR}" pull --rebase origin development
-        git -C "${ROOT_DIR}" push origin development
+        git -C "${ROOT_DIR}" pull --rebase origin "$flow_head_branch"
+        git -C "${ROOT_DIR}" push origin "$flow_head_branch"
       } 2>&1
     )"; then
       emit_lines "$retry_out"
@@ -1266,7 +1236,7 @@ ensure_dirty_gate_commit_pr() {
   DIRTY_GATE_COMMIT_PR_URL=""
 
   if pr_list_json="$(
-    list_open_development_main_prs_json
+    list_open_flow_prs_json
   )"; then
     :
   else
@@ -1287,8 +1257,8 @@ ensure_dirty_gate_commit_pr() {
       run_gh_retry_capture \
         gh pr create \
           --repo "$repo" \
-          --base main \
-          --head development \
+          --base "$flow_base_branch" \
+          --head "$flow_head_branch" \
           --title "chore: dirty-gate auto-commit" \
           --body "CODEX_SIGNAL: DIRTY_GATE_AUTO_COMMIT_PR
 
@@ -2262,7 +2232,7 @@ fi
 
 open_prs_json=""
 if open_prs_json="$(
-  list_open_development_main_prs_json
+  list_open_flow_prs_json
 )"; then
   :
 else
@@ -2275,6 +2245,10 @@ else
   exit "$rc"
 fi
 
+echo "FLOW_OPEN_PR_CHECK=1"
+echo "FLOW_OPEN_PR_CHECK_REPO=${repo}"
+echo "FLOW_OPEN_PR_CHECK_BASE=${flow_base_branch}"
+echo "FLOW_OPEN_PR_CHECK_HEAD=${flow_head_branch}"
 open_pr_count="$(printf '%s' "$open_prs_json" | jq 'length')"
 if (( open_pr_count > 0 )); then
   echo "WAIT_OPEN_PR_COUNT=$open_pr_count"

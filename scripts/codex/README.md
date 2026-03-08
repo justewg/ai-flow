@@ -8,6 +8,7 @@
 Для полного онбординга GitHub App auth-сервиса см.:
 - `docs/gh-app-daemon-integration-plan.md` (разделы `Runbook: APP-07.5` и `Онбординг сервиса`).
 - `docs/flow-portability-runbook.md` (миграция `current -> new project`, multi-project smoke, rollback, extraction strategy).
+- `docs/self-hosted-runner-deploy.md` (перевод deploy workflow на self-hosted runner `planka-deploy`).
 
 Команды:
 - `scripts/codex/run.sh help`

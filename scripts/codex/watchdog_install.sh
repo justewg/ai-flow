@@ -2,7 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CODEX_DIR="${ROOT_DIR}/.tmp/codex"
+# shellcheck source=./env/resolve_config.sh
+source "${ROOT_DIR}/scripts/codex/env/resolve_config.sh"
+CODEX_DIR="$(codex_export_state_dir)"
 
 label="${1:-com.planka.codex-watchdog}"
 interval="${2:-45}"
@@ -43,6 +45,10 @@ cat > "${plist_path}" <<EOF
   <dict>
     <key>PATH</key>
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>CODEX_STATE_DIR</key>
+    <string>${CODEX_DIR}</string>
+    <key>FLOW_STATE_DIR</key>
+    <string>${CODEX_DIR}</string>
   </dict>
 
   <key>StandardOutPath</key>
@@ -61,3 +67,4 @@ launchctl kickstart -k "gui/${UID}/${label}"
 echo "Installed launchd watchdog: ${label}"
 echo "Plist: ${plist_path}"
 echo "Interval: ${interval}s"
+echo "State dir: ${CODEX_DIR}"

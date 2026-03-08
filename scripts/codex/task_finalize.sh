@@ -2,9 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CODEX_DIR="${ROOT_DIR}/.tmp/codex"
 # shellcheck source=./env/resolve_config.sh
 source "${ROOT_DIR}/scripts/codex/env/resolve_config.sh"
+CODEX_DIR="$(codex_export_state_dir)"
 codex_resolve_flow_config
 REPO="$FLOW_GITHUB_REPO"
 BASE_BRANCH="$FLOW_BASE_BRANCH"

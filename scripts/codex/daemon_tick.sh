@@ -2,9 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CODEX_DIR="${ROOT_DIR}/.tmp/codex"
 # shellcheck source=./env/resolve_config.sh
 source "${ROOT_DIR}/scripts/codex/env/resolve_config.sh"
+CODEX_DIR="$(codex_export_state_dir)"
 codex_resolve_flow_config
 codex_resolve_project_config
 
@@ -1994,7 +1994,7 @@ maybe_handle_dirty_worktree_gate() {
 mkdir -p "$CODEX_DIR"
 
 # Runtime backlog-seed apply:
-# if .tmp/codex/backlog_seed_plan.json exists, try to create/link one task per tick.
+# If backlog_seed_plan.json exists in the active state dir, try to create/link one task per tick.
 if backlog_seed_out="$("${ROOT_DIR}/scripts/codex/backlog_seed_apply.sh" 2>&1)"; then
   emit_lines "$backlog_seed_out"
 else

@@ -65,6 +65,37 @@ codex_resolve_config_value() {
   printf '%s' "$default_value"
 }
 
+codex_resolve_state_dir() {
+  local root_dir="${ROOT_DIR:-${CODEX_ROOT_DIR:-$CODEX_CONFIG_ROOT_DIR}}"
+  local default_state_dir="${root_dir}/.tmp/codex"
+  local value=""
+
+  value="$(codex_try_config_value "CODEX_STATE_DIR" || true)"
+  if [[ -z "$value" ]]; then
+    value="$(codex_try_config_value "FLOW_STATE_DIR" || true)"
+  fi
+
+  if [[ -n "$value" ]]; then
+    printf '%s' "$value"
+    return 0
+  fi
+
+  printf '%s' "$default_state_dir"
+}
+
+codex_export_state_dir() {
+  local state_dir="${1:-}"
+
+  if [[ -z "$state_dir" ]]; then
+    state_dir="$(codex_resolve_state_dir)"
+  fi
+
+  CODEX_STATE_DIR="$state_dir"
+  FLOW_STATE_DIR="$state_dir"
+  export CODEX_STATE_DIR FLOW_STATE_DIR
+  printf '%s' "$state_dir"
+}
+
 codex_resolve_flow_config() {
   FLOW_GITHUB_REPO="$(codex_resolve_config_value "GITHUB_REPO" "justewg/planka")"
   FLOW_BASE_BRANCH="$(codex_resolve_config_value "FLOW_BASE_BRANCH" "main")"

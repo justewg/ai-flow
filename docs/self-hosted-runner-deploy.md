@@ -91,6 +91,7 @@ sudo chown -R gha-runner:gha-runner /var/sites/planka-dev /var/sites/planka
 
 - Если workflow висит в `queued`, в репозитории нет online runner с label `planka-deploy`, либо label настроен иначе.
 - Если workflow падает на шаге `Explain missing self-hosted runner`, это тот же случай: GitHub API не видит подходящий runner.
+- Если preflight пишет warning `Runner preflight skipped`, это нормально: стандартный `GITHUB_TOKEN` не имеет доступа к API списка repository runners. В этом случае workflow просто продолжает запуск self-hosted job без fail-fast проверки.
 - Проверить наличие runner можно в `Repository -> Settings -> Actions -> Runners`.
 - Проверить сервис на сервере:
 

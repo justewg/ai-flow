@@ -43,12 +43,29 @@ jobs:
         run: |
           set -euo pipefail
 
-          response="$(
-            curl -fsSL \
+          response_file="$(mktemp)"
+          status_code="$(
+            curl -sSL \
+              -o "$response_file" \
+              -w "%{http_code}" \
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/$REPOSITORY/actions/runners?per_page=100"
           )"
+
+          if [[ "$status_code" == "403" ]]; then
+            echo "::warning title=Runner preflight skipped::GITHUB_TOKEN cannot read repository runners API on this repo. Skipping fail-fast runner check and continuing to the self-hosted job."
+            echo "runner_available=unknown" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$status_code" != "200" ]]; then
+            echo "::error title=Runner preflight failed::GitHub API returned HTTP $status_code while checking self-hosted runners."
+            cat "$response_file"
+            exit 1
+          fi
+
+          response="$(cat "$response_file")"
 
           matching="$(
             echo "$response" | jq -c --arg label "$REQUIRED_LABEL" '
@@ -72,7 +89,7 @@ jobs:
 
   deploy:
     needs: preflight
-    if: ${{ needs.preflight.outputs.runner_available == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ needs.preflight.outputs.runner_available != 'false' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: [self-hosted, planka-deploy]
     env:
       DEPLOY_PATH: ${{ secrets.DEPLOY_DEV_PATH }}
@@ -120,7 +137,7 @@ jobs:
 
   fail-missing-runner:
     needs: preflight
-    if: ${{ needs.preflight.outputs.runner_available != 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ needs.preflight.outputs.runner_available == 'false' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-latest
 
     steps:

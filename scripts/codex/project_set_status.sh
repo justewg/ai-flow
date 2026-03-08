@@ -2,6 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=./env/resolve_config.sh
+source "${ROOT_DIR}/scripts/codex/env/resolve_config.sh"
+codex_resolve_project_config
 
 if [[ $# -lt 2 || $# -gt 3 ]]; then
   echo "Usage: $0 <task-id|project-item-id> <status-name> [flow-name]"
@@ -19,60 +22,21 @@ if [[ "$task_or_item_id" =~ ^ISSUE-([0-9]+)$ ]]; then
   issue_number_hint="${BASH_REMATCH[1]}"
 fi
 
-project_id="PVT_kwHOAPt_Q84BPyyr"
+project_id="$PROJECT_ID"
+
+project_token="$(codex_resolve_config_value "DAEMON_GH_PROJECT_TOKEN" "")"
+if [[ -z "$project_token" ]]; then
+  project_token="$(codex_resolve_config_value "CODEX_GH_PROJECT_TOKEN" "")"
+fi
+project_token="$(printf '%s' "$project_token" | tr -d '\r\n')"
 
 strip_quotes() {
-  local value="$1"
-  value="${value%\"}"
-  value="${value#\"}"
-  value="${value%\'}"
-  value="${value#\'}"
-  printf '%s' "$value"
+  codex_strip_quotes "$1"
 }
 
 read_key_from_env_file() {
-  local file_path="$1"
-  local key="$2"
-  [[ -f "$file_path" ]] || return 1
-  local raw
-  raw="$(grep -E "^${key}=" "$file_path" | tail -n1 | cut -d'=' -f2- || true)"
-  [[ -n "$raw" ]] || return 1
-  strip_quotes "$raw"
+  codex_read_key_from_env_file "$1" "$2"
 }
-
-resolve_config_value() {
-  local key="$1"
-  local default_value="${2:-}"
-  local env_value="${!key:-}"
-  if [[ -n "$env_value" ]]; then
-    printf '%s' "$env_value"
-    return 0
-  fi
-
-  local env_candidates=()
-  if [[ -n "${DAEMON_GH_ENV_FILE:-}" ]]; then
-    env_candidates+=("${DAEMON_GH_ENV_FILE}")
-  fi
-  env_candidates+=("${ROOT_DIR}/.env")
-  env_candidates+=("${ROOT_DIR}/.env.deploy")
-
-  local env_file value
-  for env_file in "${env_candidates[@]}"; do
-    value="$(read_key_from_env_file "$env_file" "$key" || true)"
-    if [[ -n "$value" ]]; then
-      printf '%s' "$value"
-      return 0
-    fi
-  done
-
-  printf '%s' "$default_value"
-}
-
-project_token="$(resolve_config_value "DAEMON_GH_PROJECT_TOKEN" "")"
-if [[ -z "$project_token" ]]; then
-  project_token="$(resolve_config_value "CODEX_GH_PROJECT_TOKEN" "")"
-fi
-project_token="$(printf '%s' "$project_token" | tr -d '\r\n')"
 
 run_project_gh() {
   if [[ -n "$project_token" ]]; then

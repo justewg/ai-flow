@@ -77,12 +77,29 @@ sudo chown -R gha-runner:gha-runner /var/sites/planka-dev /var/sites/planka
 
 Если нужен другой владелец каталогов, настройте group ACL так, чтобы runner мог читать/писать/удалять файлы.
 
+Важно: каталог runner лучше держать вне deploy-path, например в `/opt/actions-runner/planka-deploy`.
+Если runner уже установлен внутри `DEPLOY_PATH` (например, `/var/sites/planka/actions-runner`), deploy workflow должен исключать `actions-runner/` из `rsync --delete`, иначе прод-выкладка может ломать собственный workspace runner.
+
 ## Smoke-проверка
 
 1. Сделать push в `development`.
 2. Убедиться, что job `Deploy PR Preview to Dev Hosting` выполнен на runner `planka-deploy-01`.
 3. Проверить наличие обновленных файлов в `DEPLOY_DEV_PATH`.
 4. После merge в `main` проверить `Deploy Main to Hosting` и файлы в `DEPLOY_PATH`.
+
+## Troubleshooting
+
+- Если workflow висит в `queued`, в репозитории нет online runner с label `planka-deploy`, либо label настроен иначе.
+- Если workflow падает на шаге `Explain missing self-hosted runner`, это тот же случай: GitHub API не видит подходящий runner.
+- Проверить наличие runner можно в `Repository -> Settings -> Actions -> Runners`.
+- Проверить сервис на сервере:
+
+```bash
+cd /opt/actions-runner/planka-deploy
+sudo ./svc.sh status
+```
+
+- Если runner зарегистрирован, но не матчится, убедитесь, что при `config.sh` был указан label `planka-deploy`.
 
 ## Обновление runner
 

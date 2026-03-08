@@ -10,8 +10,56 @@ concurrency:
   group: deploy-main
   cancel-in-progress: true
 
+permissions:
+  actions: read
+  contents: read
+
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      runner_available: ${{ steps.check.outputs.runner_available }}
+
+    steps:
+      - name: Check self-hosted runner availability
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          REQUIRED_LABEL: planka-deploy
+        run: |
+          set -euo pipefail
+
+          response="$(
+            curl -fsSL \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPOSITORY/actions/runners?per_page=100"
+          )"
+
+          matching="$(
+            echo "$response" | jq -c --arg label "$REQUIRED_LABEL" '
+              [
+                .runners[]
+                | select(.status == "online")
+                | select(any((.labels // []); .name == $label))
+              ]
+            '
+          )"
+          count="$(echo "$matching" | jq 'length')"
+
+          echo "Online runners with label '$REQUIRED_LABEL': $count"
+          echo "$matching" | jq '[.[] | {name, status, busy, labels: [.labels[].name]}]'
+
+          if [[ "$count" -gt 0 ]]; then
+            echo "runner_available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "runner_available=false" >> "$GITHUB_OUTPUT"
+          fi
+
   deploy:
+    needs: preflight
+    if: ${{ needs.preflight.outputs.runner_available == 'true' }}
     runs-on: [self-hosted, planka-deploy]
     env:
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
@@ -29,6 +77,7 @@ jobs:
         run: |
           mkdir -p "$DEPLOY_PATH"
           rsync -az --delete \
+            --exclude 'actions-runner/' \
             --exclude '.git/' \
             --exclude '.github/' \
             --exclude '.tmp/' \
@@ -42,3 +91,14 @@ jobs:
         run: |
           cd "$DEPLOY_PATH"
           bash -lc "$DEPLOY_POST_COMMAND"
+
+  fail-missing-runner:
+    needs: preflight
+    if: ${{ needs.preflight.outputs.runner_available != 'true' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Explain missing self-hosted runner
+        run: |
+          echo "::error title=Self-hosted runner unavailable::No online runner with label 'planka-deploy' is registered for $GITHUB_REPOSITORY. Register or start the runner from docs/self-hosted-runner-deploy.md and rerun this workflow."
+          exit 1

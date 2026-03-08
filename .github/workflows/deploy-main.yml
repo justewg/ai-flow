@@ -12,44 +12,22 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, planka-deploy]
     env:
-      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
       DEPLOY_POST_COMMAND: ${{ secrets.DEPLOY_POST_COMMAND }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate required secrets
+      - name: Validate required settings
         run: |
-          : "${DEPLOY_HOST:?DEPLOY_HOST is required}"
-          : "${DEPLOY_PORT:?DEPLOY_PORT is required}"
-          : "${DEPLOY_USER:?DEPLOY_USER is required}"
           : "${DEPLOY_PATH:?DEPLOY_PATH is required}"
-          : "${DEPLOY_SSH_KEY:?DEPLOY_SSH_KEY is required}"
 
-      - name: Prepare SSH
+      - name: Deploy snapshot locally via rsync
         run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          if [[ -n "${DEPLOY_KNOWN_HOSTS}" ]]; then
-            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          else
-            ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" > ~/.ssh/known_hosts
-          fi
-          chmod 644 ~/.ssh/known_hosts
-
-      - name: Deploy snapshot via rsync
-        run: |
-          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH'"
+          mkdir -p "$DEPLOY_PATH"
           rsync -az --delete \
             --exclude '.git/' \
             --exclude '.github/' \
@@ -57,11 +35,10 @@ jobs:
             --exclude 'node_modules/' \
             --exclude '.env' \
             --exclude '.env.*' \
-            -e "ssh -p ${DEPLOY_PORT}" \
-            ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
+            ./ "$DEPLOY_PATH/"
 
       - name: Optional post-deploy command
         if: ${{ env.DEPLOY_POST_COMMAND != '' }}
         run: |
-          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
-            "cd '$DEPLOY_PATH' && $DEPLOY_POST_COMMAND"
+          cd "$DEPLOY_PATH"
+          bash -lc "$DEPLOY_POST_COMMAND"

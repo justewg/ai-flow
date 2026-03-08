@@ -7,6 +7,7 @@
 
 Для полного онбординга GitHub App auth-сервиса см.:
 - `docs/gh-app-daemon-integration-plan.md` (разделы `Runbook: APP-07.5` и `Онбординг сервиса`).
+- `docs/flow-portability-runbook.md` (миграция `current -> new project`, multi-project smoke, rollback, extraction strategy).
 
 Команды:
 - `scripts/codex/run.sh help`
@@ -77,12 +78,46 @@
 - Для параллельного запуска двух проектов на одном хосте задайте разные `<state-dir>`.
 - Если используете `daemon_install`/`watchdog_install`, задайте ещё и разные `label`, чтобы не столкнулись launchd-агенты.
 
+Матрица multi-profile env для двух проектов на одном хосте:
+
+| Параметр | Current project (пример: PLANKA) | New project (пример: ACME) | Зачем нужен |
+| --- | --- | --- | --- |
+| `DAEMON_GH_ENV_FILE` | `<root-dir>/.tmp/codex/profiles/default.env` или `.env` | `<root-dir>/.tmp/codex/profiles/acme.env` | Привязывает daemon/watchdog к нужному profile env-файлу. |
+| `CODEX_STATE_DIR` / `FLOW_STATE_DIR` | `<root-dir>/.tmp/codex` | `<root-dir>/.tmp/codex/acme` | Разводит state/log/runtime и фиксированные файлы `run.sh`. |
+| `PROJECT_PROFILE` | `default` | `acme` | Включает отдельный project-binding; для non-default требуются все `PROJECT_*`. |
+| `GITHUB_REPO` | `justewg/planka` | `<owner>/<new-repo>` | Определяет repo для Issue/PR-команд и executor prompt. |
+| `PROJECT_ID` / `PROJECT_NUMBER` / `PROJECT_OWNER` | default PLANKA binding или полный override | обязательный полный набор | Привязывает `daemon_tick`, `project_*`, `next_task` к конкретному Project v2. |
+| `DAEMON_GH_PROJECT_TOKEN` | токен текущего Project | отдельный токен нового Project | Нужен для hybrid mode user-owned Project v2. |
+| `WATCHDOG_DAEMON_LABEL` | `com.planka.codex-daemon` | `com.planka.codex-daemon.acme` | Позволяет watchdog перезапускать только свой daemon. |
+| launchd labels | `com.planka.codex-daemon` / `com.planka.codex-watchdog` | `com.planka.codex-daemon.acme` / `com.planka.codex-watchdog.acme` | Исключает конфликт plist и `launchctl`-процессов. |
+
 Bootstrap нового профиля:
 1. `scripts/codex/run.sh profile_init init --profile acme`
 2. Заполнить сгенерированный env-файл (`.tmp/codex/profiles/acme.env`) обязательными значениями `GITHUB_REPO`, `FLOW_BASE_BRANCH`, `FLOW_HEAD_BRANCH`, `PROJECT_PROFILE`, `PROJECT_ID`, `PROJECT_NUMBER`, `PROJECT_OWNER`, `DAEMON_GH_PROJECT_TOKEN` и `GH_APP_INTERNAL_SECRET` либо fallback-token pair.
 3. `scripts/codex/run.sh profile_init install --profile acme`
 4. `scripts/codex/run.sh profile_init preflight --profile acme`
 5. Для безопасной проверки команд без изменений использовать `--dry-run`.
+
+Запуск и остановка профиля:
+1. Первый запуск нового профиля: `scripts/codex/run.sh profile_init install --profile acme`
+2. Проверка launchd-состояния: `env DAEMON_GH_ENV_FILE=.tmp/codex/profiles/acme.env CODEX_STATE_DIR=.tmp/codex/acme FLOW_STATE_DIR=.tmp/codex/acme scripts/codex/run.sh daemon_status com.planka.codex-daemon.acme`
+3. Аналогично проверить watchdog: `env DAEMON_GH_ENV_FILE=.tmp/codex/profiles/acme.env CODEX_STATE_DIR=.tmp/codex/acme FLOW_STATE_DIR=.tmp/codex/acme scripts/codex/run.sh watchdog_status com.planka.codex-watchdog.acme`
+4. Штатная остановка профиля: `scripts/codex/run.sh daemon_uninstall com.planka.codex-daemon.acme` и `scripts/codex/run.sh watchdog_uninstall com.planka.codex-watchdog.acme`
+5. Повторный запуск после остановки: `env DAEMON_GH_ENV_FILE=.tmp/codex/profiles/acme.env CODEX_STATE_DIR=.tmp/codex/acme FLOW_STATE_DIR=.tmp/codex/acme scripts/codex/run.sh daemon_install com.planka.codex-daemon.acme 45`, затем `env DAEMON_GH_ENV_FILE=.tmp/codex/profiles/acme.env CODEX_STATE_DIR=.tmp/codex/acme FLOW_STATE_DIR=.tmp/codex/acme WATCHDOG_DAEMON_LABEL=com.planka.codex-daemon.acme WATCHDOG_DAEMON_INTERVAL_SEC=45 scripts/codex/run.sh watchdog_install com.planka.codex-watchdog.acme 45`
+
+Smoke-check после bootstrap нового профиля:
+1. `scripts/codex/run.sh profile_init preflight --profile acme` — ожидается `PREFLIGHT_READY=1`.
+2. `env DAEMON_GH_ENV_FILE=.tmp/codex/profiles/acme.env CODEX_STATE_DIR=.tmp/codex/acme FLOW_STATE_DIR=.tmp/codex/acme scripts/codex/run.sh github_health_check`
+3. `env DAEMON_GH_ENV_FILE=.tmp/codex/profiles/acme.env CODEX_STATE_DIR=.tmp/codex/acme FLOW_STATE_DIR=.tmp/codex/acme scripts/codex/run.sh status_snapshot`
+4. `env DAEMON_GH_ENV_FILE=.tmp/codex/profiles/acme.env CODEX_STATE_DIR=.tmp/codex/acme FLOW_STATE_DIR=.tmp/codex/acme scripts/codex/gh_app_auth_token.sh >/dev/null`
+5. Для параллельной эксплуатации двух проектов повторить те же проверки для current profile и убедиться, что snapshot/log-файлы лежат в разных `<state-dir>`.
+
+Rollback нового профиля:
+1. Остановить новый профиль: `scripts/codex/run.sh watchdog_uninstall com.planka.codex-watchdog.acme` и `scripts/codex/run.sh daemon_uninstall com.planka.codex-daemon.acme`
+2. Убедиться, что current profile продолжает работать в своём `<state-dir>` без изменений.
+3. Если проблема в env/config, исправить `.tmp/codex/profiles/acme.env` и повторить `profile_init install --profile acme`.
+4. Если откат полный, сохранить диагностические логи из `<state-dir>` нового профиля и только после этого удалить новый state-dir вручную.
+5. Детальный сценарий миграции и troubleshooting см. в `docs/flow-portability-runbook.md`.
 
 Короткий rollout smoke-checklist для ops-бота:
 1. `scripts/codex/run.sh ops_bot_pm2_start`

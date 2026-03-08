@@ -6,10 +6,11 @@ CODEX_DIR="${ROOT_DIR}/.tmp/codex"
 # shellcheck source=./env/resolve_config.sh
 source "${ROOT_DIR}/scripts/codex/env/resolve_config.sh"
 codex_resolve_flow_config
+codex_resolve_project_config
 
-project_id="${PROJECT_ID:-PVT_kwHOAPt_Q84BPyyr}"
-project_number="${PROJECT_NUMBER:-2}"
-project_owner="${PROJECT_OWNER:-@me}"
+project_id="$PROJECT_ID"
+project_number="$PROJECT_NUMBER"
+project_owner="$PROJECT_OWNER"
 project_items_limit="${PROJECT_ITEMS_LIMIT:-200}"
 repo="$FLOW_GITHUB_REPO"
 repo_owner="$FLOW_REPO_OWNER"

@@ -113,6 +113,12 @@
 - `GH_APP_INTERNAL_SECRET` — обязателен не только для auth-сервиса, но и для daemon/watchdog-клиента токена (`GET /token`).
 - Для корректной работы `daemon_tick` с Project v2 у GitHub App должен быть доступ `Projects: Read and write` на уровне `Account permissions` (user-owned project) или `Organization permissions` (org-owned project).
   - Если в daemon-логе есть `Resource not accessible by integration`, сначала проверить permissions App и обновить installation (`Configure`), затем повторить smoke.
+- `PROJECT_ID`, `PROJECT_NUMBER`, `PROJECT_OWNER` — binding текущего GitHub Project v2 для `daemon_tick`, `project_add_task.sh`, `project_set_status.sh`, `next_task.sh`.
+  - По умолчанию используется текущий PLANKA project (`PROJECT_ID=PVT_kwHOAPt_Q84BPyyr`, `PROJECT_NUMBER=2`, `PROJECT_OWNER=@me`).
+  - Для переноса helper-скриптов в другой Project задайте все три переменные через env или env-файл, без редактирования исходников.
+- `PROJECT_PROFILE` — имя профиля project-binding.
+  - По умолчанию `default`.
+  - Для любого non-default значения нужно явно задать `PROJECT_ID`, `PROJECT_NUMBER`, `PROJECT_OWNER`; при неполной конфигурации helper-скрипты и `daemon_tick` завершаются с явной ошибкой.
 - Для user-owned Project v2 рекомендуется hybrid mode:
   - `DAEMON_GH_PROJECT_TOKEN` (или `CODEX_GH_PROJECT_TOKEN`) используется только для Project-операций (`item-list`, `Status/Flow` update, claim из `Todo`);
   - `Issue/PR` продолжают работать на App token из auth-сервиса.

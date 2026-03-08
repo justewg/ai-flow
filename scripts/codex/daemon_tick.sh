@@ -2118,6 +2118,32 @@ while IFS= read -r line; do
   [[ -z "$line" || "$line" == "NO_WAITING_USER_REPLY=1" ]] && continue
   echo "$line"
 done <<< "$reply_probe_out"
+stale_reason="$(extract_kv "$reply_probe_out" "STALE_WAITING_CONTEXT_CLEARED")"
+stale_issue_number="$(extract_kv "$reply_probe_out" "STALE_WAITING_ISSUE_NUMBER")"
+if [[ "$stale_reason" == "REVIEW_PR_MERGED" || "$stale_reason" == "ISSUE_CLOSED" ]]; then
+  if [[ "$stale_issue_number" =~ ^[0-9]+$ ]]; then
+    stale_status_target="ISSUE-${stale_issue_number}"
+    if stale_status_out="$("${ROOT_DIR}/scripts/codex/project_set_status.sh" "$stale_status_target" "Done" "Done" 2>&1)"; then
+      emit_lines "$stale_status_out"
+      echo "STALE_WAITING_CONTEXT_DONE_SYNCED=1"
+      echo "STALE_WAITING_CONTEXT_DONE_TARGET=${stale_status_target}"
+    else
+      stale_status_rc=$?
+      emit_lines "$stale_status_out"
+      if is_github_network_error "$stale_status_out" || [[ "$stale_status_rc" -eq 75 ]]; then
+        echo "WAIT_GITHUB_API_UNSTABLE=1"
+        echo "WAIT_GITHUB_STAGE=STALE_CONTEXT_DONE_STATUS_UPDATE"
+        enqueue_project_status_runtime "$stale_status_target" "Done" "Done" "stale-context:${stale_reason}" || true
+        echo "STALE_WAITING_CONTEXT_DONE_DEFERRED=1"
+      else
+        while IFS= read -r line; do
+          [[ -z "$line" ]] && continue
+          echo "STALE_WAITING_CONTEXT_DONE_WARN: $line"
+        done <<< "$stale_status_out"
+      fi
+    fi
+  fi
+fi
 if printf '%s' "$reply_probe_out" | grep -q '^WAIT_USER_REPLY=1'; then
   exit 0
 fi

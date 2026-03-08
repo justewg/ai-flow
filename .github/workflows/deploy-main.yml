@@ -44,8 +44,9 @@ jobs:
           if [[ -n "${DEPLOY_KNOWN_HOSTS}" ]]; then
             printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$SSH_DIR/known_hosts"
           else
-            ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" > "$SSH_DIR/known_hosts"
+            ssh-keyscan -T 10 -p "$DEPLOY_PORT" "$DEPLOY_HOST" > "$SSH_DIR/known_hosts" || true
           fi
+          touch "$SSH_DIR/known_hosts"
           chmod 644 "$SSH_DIR/known_hosts"
           echo "SSH_KEY_PATH=$SSH_DIR/id_ed25519" >> "$GITHUB_ENV"
           echo "SSH_KNOWN_HOSTS=$SSH_DIR/known_hosts" >> "$GITHUB_ENV"
@@ -55,6 +56,7 @@ jobs:
           ssh -i "$SSH_KEY_PATH" \
             -o IdentitiesOnly=yes \
             -o UserKnownHostsFile="$SSH_KNOWN_HOSTS" \
+            -o StrictHostKeyChecking=accept-new \
             -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH'"
           rsync -az --delete \
             --exclude '.git/' \
@@ -63,7 +65,7 @@ jobs:
             --exclude 'node_modules/' \
             --exclude '.env' \
             --exclude '.env.*' \
-            -e "ssh -i ${SSH_KEY_PATH} -o IdentitiesOnly=yes -o UserKnownHostsFile=${SSH_KNOWN_HOSTS} -p ${DEPLOY_PORT}" \
+            -e "ssh -i ${SSH_KEY_PATH} -o IdentitiesOnly=yes -o UserKnownHostsFile=${SSH_KNOWN_HOSTS} -o StrictHostKeyChecking=accept-new -p ${DEPLOY_PORT}" \
             ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
 
       - name: Optional post-deploy command
@@ -72,5 +74,6 @@ jobs:
           ssh -i "$SSH_KEY_PATH" \
             -o IdentitiesOnly=yes \
             -o UserKnownHostsFile="$SSH_KNOWN_HOSTS" \
+            -o StrictHostKeyChecking=accept-new \
             -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
             "cd '$DEPLOY_PATH' && $DEPLOY_POST_COMMAND"

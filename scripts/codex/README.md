@@ -28,6 +28,7 @@
 - `scripts/codex/run.sh next_task` — показать следующую задачу со статусом `Planned` (приоритет P0→P1→P2, затем по номеру `PL-xxx`).
 - `scripts/codex/run.sh app_deps_mermaid [output-file]` — построить Mermaid DAG зависимостей APP-issues из `Flow Meta` (`Depends-On/Blocks`) и записать markdown-файл (по умолчанию `docs/app-issues-dependency-diagram.md`).
 - `scripts/codex/run.sh backlog_seed_apply` — применить runtime-план создания backlog-задач из `<state-dir>/backlog_seed_plan.json` (по умолчанию 1 задача за запуск).
+- `scripts/codex/run.sh profile_init <init|install|preflight|bootstrap> ...` — полуавтоматический bootstrap нового profile/repo без ручной правки install-скриптов.
 - `scripts/codex/run.sh daemon_tick` — один цикл демона: проверка `Todo`, подхват задачи, перевод в `In Progress`.
 - `scripts/codex/run.sh daemon_loop [interval-sec]` — непрерывный polling-цикл демона (по умолчанию 45 сек).
 - `scripts/codex/run.sh daemon_install [label] [interval-sec]` — установка и запуск `launchd`-агента.
@@ -75,6 +76,13 @@
 - По умолчанию используется `${ROOT_DIR}/.tmp/codex`.
 - Для параллельного запуска двух проектов на одном хосте задайте разные `<state-dir>`.
 - Если используете `daemon_install`/`watchdog_install`, задайте ещё и разные `label`, чтобы не столкнулись launchd-агенты.
+
+Bootstrap нового профиля:
+1. `scripts/codex/run.sh profile_init init --profile acme`
+2. Заполнить сгенерированный env-файл (`.tmp/codex/profiles/acme.env`) обязательными значениями `GITHUB_REPO`, `FLOW_BASE_BRANCH`, `FLOW_HEAD_BRANCH`, `PROJECT_PROFILE`, `PROJECT_ID`, `PROJECT_NUMBER`, `PROJECT_OWNER`, `DAEMON_GH_PROJECT_TOKEN` и `GH_APP_INTERNAL_SECRET` либо fallback-token pair.
+3. `scripts/codex/run.sh profile_init install --profile acme`
+4. `scripts/codex/run.sh profile_init preflight --profile acme`
+5. Для безопасной проверки команд без изменений использовать `--dry-run`.
 
 Короткий rollout smoke-checklist для ops-бота:
 1. `scripts/codex/run.sh ops_bot_pm2_start`
@@ -170,6 +178,7 @@
 - `GH_APP_HTTP_TIMEOUT_MS` — timeout HTTP-запроса к GitHub API (по умолчанию `10000` мс).
 - `GH_APP_PM2_APP_NAME` — имя PM2 процесса auth-сервиса (по умолчанию `planka-gh-app-auth`).
 - `GH_APP_PM2_RESTART_TIMEOUT_SEC` — timeout проверки авто-restart в `gh_app_auth_pm2_crash_test` (по умолчанию `20` сек).
+- `DAEMON_GH_ENV_FILE` — явный путь к profile env-файлу; `profile_init install` прокидывает его в `launchd`-plist, чтобы daemon/watchdog переживали новый shell/login без ручного export.
 
 ## Итеративный executor-flow (коммит1 -> вопрос -> ответ -> коммит2 -> финализация)
 1. Сделать первую рабочую дельту и выполнить `commit_push`.

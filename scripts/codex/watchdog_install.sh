@@ -9,6 +9,9 @@ CODEX_DIR="$(codex_export_state_dir)"
 label="${1:-com.planka.codex-watchdog}"
 interval="${2:-45}"
 plist_path="${HOME}/Library/LaunchAgents/${label}.plist"
+profile_env_file="${DAEMON_GH_ENV_FILE:-}"
+daemon_label="${WATCHDOG_DAEMON_LABEL:-com.planka.codex-daemon}"
+daemon_interval="${WATCHDOG_DAEMON_INTERVAL_SEC:-45}"
 
 if ! [[ "$interval" =~ ^[0-9]+$ ]] || (( interval < 10 )); then
   echo "Invalid interval: '$interval' (expected integer >= 10 sec)"
@@ -16,6 +19,15 @@ if ! [[ "$interval" =~ ^[0-9]+$ ]] || (( interval < 10 )); then
 fi
 
 mkdir -p "${HOME}/Library/LaunchAgents" "${CODEX_DIR}"
+
+optional_env_block=""
+if [[ -n "$profile_env_file" ]]; then
+  optional_env_block="$(cat <<EOF
+    <key>DAEMON_GH_ENV_FILE</key>
+    <string>${profile_env_file}</string>
+EOF
+)"
+fi
 
 cat > "${plist_path}" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -49,6 +61,11 @@ cat > "${plist_path}" <<EOF
     <string>${CODEX_DIR}</string>
     <key>FLOW_STATE_DIR</key>
     <string>${CODEX_DIR}</string>
+    <key>WATCHDOG_DAEMON_LABEL</key>
+    <string>${daemon_label}</string>
+    <key>WATCHDOG_DAEMON_INTERVAL_SEC</key>
+    <string>${daemon_interval}</string>
+${optional_env_block}
   </dict>
 
   <key>StandardOutPath</key>
@@ -68,3 +85,8 @@ echo "Installed launchd watchdog: ${label}"
 echo "Plist: ${plist_path}"
 echo "Interval: ${interval}s"
 echo "State dir: ${CODEX_DIR}"
+echo "Daemon label: ${daemon_label}"
+echo "Daemon interval: ${daemon_interval}s"
+if [[ -n "$profile_env_file" ]]; then
+  echo "Profile env: ${profile_env_file}"
+fi

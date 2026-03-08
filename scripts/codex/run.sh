@@ -32,6 +32,7 @@ Commands:
   next_task
   app_deps_mermaid
   backlog_seed_apply
+  profile_init
   daemon_tick
   daemon_loop
   daemon_install
@@ -287,6 +288,11 @@ case "$cmd" in
 
   backlog_seed_apply)
     "${ROOT_DIR}/scripts/codex/backlog_seed_apply.sh"
+    ;;
+
+  profile_init)
+    shift 1
+    "${ROOT_DIR}/scripts/codex/profile_init.sh" "$@"
     ;;
 
   daemon_tick)

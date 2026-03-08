@@ -9,6 +9,7 @@ CODEX_DIR="$(codex_export_state_dir)"
 label="${1:-com.planka.codex-daemon}"
 interval="${2:-45}"
 plist_path="${HOME}/Library/LaunchAgents/${label}.plist"
+profile_env_file="${DAEMON_GH_ENV_FILE:-}"
 
 if ! [[ "$interval" =~ ^[0-9]+$ ]] || (( interval < 5 )); then
   echo "Invalid interval: '$interval' (expected integer >= 5 sec)"
@@ -16,6 +17,15 @@ if ! [[ "$interval" =~ ^[0-9]+$ ]] || (( interval < 5 )); then
 fi
 
 mkdir -p "${HOME}/Library/LaunchAgents" "${CODEX_DIR}"
+
+optional_env_block=""
+if [[ -n "$profile_env_file" ]]; then
+  optional_env_block="$(cat <<EOF
+    <key>DAEMON_GH_ENV_FILE</key>
+    <string>${profile_env_file}</string>
+EOF
+)"
+fi
 
 cat > "${plist_path}" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -49,6 +59,7 @@ cat > "${plist_path}" <<EOF
     <string>${CODEX_DIR}</string>
     <key>FLOW_STATE_DIR</key>
     <string>${CODEX_DIR}</string>
+${optional_env_block}
   </dict>
 
   <key>StandardOutPath</key>
@@ -68,3 +79,6 @@ echo "Installed launchd agent: ${label}"
 echo "Plist: ${plist_path}"
 echo "Interval: ${interval}s"
 echo "State dir: ${CODEX_DIR}"
+if [[ -n "$profile_env_file" ]]; then
+  echo "Profile env: ${profile_env_file}"
+fi

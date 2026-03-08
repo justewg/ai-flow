@@ -66,6 +66,7 @@
 - `scripts/codex/run.sh ops_bot_pm2_restart` — перезапустить ops-бот сервис в PM2.
 - `scripts/codex/run.sh ops_bot_pm2_status` — показать статус ops-бот сервиса в PM2.
 - `scripts/codex/run.sh ops_bot_pm2_health` — проверить PM2 status=`online` + endpoint `/health` ops-бота.
+- `scripts/codex/run.sh ops_bot_post_smoke_check` — собрать агрегированный post-smoke отчет по rollout ops-бота.
 - `scripts/codex/run.sh ops_bot_webhook_register [register|refresh|delete|info]` — управление Telegram webhook по env-переменным.
 - `scripts/codex/run.sh ops_bot_webhook_refresh` — shortcut для полного refresh webhook (`deleteWebhook + setWebhook + getWebhookInfo`).
 - `scripts/codex/run.sh ops_remote_status_push` — отправить текущий `status_snapshot` в удаленный ingest endpoint ops-бота (URL/secret берутся из env).

@@ -3,7 +3,12 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CODEX_DIR="${ROOT_DIR}/.tmp/codex"
-REPO="${GITHUB_REPO:-justewg/planka}"
+# shellcheck source=./env/resolve_config.sh
+source "${ROOT_DIR}/scripts/codex/env/resolve_config.sh"
+codex_resolve_flow_config
+REPO="$FLOW_GITHUB_REPO"
+BASE_BRANCH="$FLOW_BASE_BRANCH"
+HEAD_BRANCH="$FLOW_HEAD_BRANCH"
 FINAL_STATUS="${FINAL_STATUS:-Review}"
 FINAL_FLOW="${FINAL_FLOW:-In Review}"
 
@@ -117,6 +122,16 @@ extract_task_id_from_message() {
 extract_pr_number_from_url() {
   local url="$1"
   printf '%s' "$url" | sed -E 's#.*/pull/([0-9]+).*#\1#'
+}
+
+smoke_check_branch_mismatch() {
+  local current_branch
+  current_branch="$(git -C "${ROOT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  if ! codex_emit_branch_mismatch_markers "FLOW_SMOKE" "$current_branch"; then
+    echo "FLOW_SMOKE_STAGE=TASK_FINALIZE_PRE_COMMIT"
+    return 1
+  fi
+  return 0
 }
 
 mark_pr_ready_if_draft() {
@@ -503,14 +518,22 @@ trap 'rm -f "$tmp_title" "$tmp_body"' EXIT
 printf '%s\n' "$pr_title" > "$tmp_title"
 printf '%s\n' "$pr_body" > "$tmp_body"
 
+if ! smoke_check_branch_mismatch; then
+  exit 1
+fi
+
 "${ROOT_DIR}/scripts/codex/dev_commit_push.sh" "$commit_message" "${stage_paths[@]}"
 
+echo "FLOW_OPEN_PR_CHECK=1"
+echo "FLOW_OPEN_PR_CHECK_REPO=$REPO"
+echo "FLOW_OPEN_PR_CHECK_BASE=$BASE_BRANCH"
+echo "FLOW_OPEN_PR_CHECK_HEAD=$HEAD_BRANCH"
 open_prs_json="$(
   gh pr list \
     --repo "$REPO" \
     --state open \
-    --base main \
-    --head development \
+    --base "$BASE_BRANCH" \
+    --head "$HEAD_BRANCH" \
     --json number,title,url \
     --jq '.'
 )"
@@ -535,7 +558,7 @@ elif (( open_pr_count == 1 )); then
   echo "PR_NUMBER=$pr_number"
   echo "PR_URL=$pr_url"
 else
-  echo "More than one open PR development->main. Manual resolve required."
+  echo "More than one open PR ${HEAD_BRANCH}->${BASE_BRANCH}. Manual resolve required."
   printf '%s\n' "$open_prs_json"
   exit 1
 fi

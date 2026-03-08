@@ -11,7 +11,9 @@ issue_number="$2"
 output_file="$3"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CODEX_DIR="${ROOT_DIR}/.tmp/codex"
+# shellcheck source=./env/resolve_config.sh
+source "${ROOT_DIR}/scripts/codex/env/resolve_config.sh"
+CODEX_DIR="$(codex_export_state_dir)"
 REPO="${GITHUB_REPO:-justewg/planka}"
 
 mkdir -p "$CODEX_DIR"
@@ -53,10 +55,10 @@ ${reply_text}
    - выполни: scripts/codex/run.sh task_ask question <message-file> (или blocker);
    - после этого остановись (ожидание ответа).
 6) По итогам рабочего шага:
-   - заполни .tmp/codex/commit_message.txt
-   - заполни .tmp/codex/stage_paths.txt
-   - обнови .tmp/codex/pr_title.txt и .tmp/codex/pr_body.txt
-   - в .tmp/codex/pr_body.txt обязательно зафиксируй:
+   - заполни ${CODEX_DIR}/commit_message.txt
+   - заполни ${CODEX_DIR}/stage_paths.txt
+   - обнови ${CODEX_DIR}/pr_title.txt и ${CODEX_DIR}/pr_body.txt
+   - в ${CODEX_DIR}/pr_body.txt обязательно зафиксируй:
      * что конкретно сделано по пунктам Issue;
      * какие файлы/секции изменены;
      * какие проверки выполнены и результат проверок;

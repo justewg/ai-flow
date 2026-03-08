@@ -2,7 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CODEX_DIR="${ROOT_DIR}/.tmp/codex"
+# shellcheck source=./env/resolve_config.sh
+source "${ROOT_DIR}/scripts/codex/env/resolve_config.sh"
+CODEX_DIR="$(codex_export_state_dir)"
 REPO="${GITHUB_REPO:-justewg/planka}"
 
 issue_file="${CODEX_DIR}/daemon_waiting_issue_number.txt"

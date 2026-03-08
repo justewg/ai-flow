@@ -2,7 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CODEX_DIR="${ROOT_DIR}/.tmp/codex"
+# shellcheck source=./env/resolve_config.sh
+source "${ROOT_DIR}/scripts/codex/env/resolve_config.sh"
+CODEX_DIR="$(codex_export_state_dir)"
 
 mkdir -p "${CODEX_DIR}"
 
@@ -73,7 +75,8 @@ Commands:
   ops_remote_summary_push
   issue_285_reframe_apply
 
-Fixed input files in .tmp/codex:
+Fixed input files in state dir
+(`CODEX_STATE_DIR` or `FLOW_STATE_DIR`, default `.tmp/codex`):
   pr_number.txt
   pr_title.txt
   pr_body.txt

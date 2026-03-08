@@ -32,7 +32,9 @@ elif [[ "$kind" != "question" ]]; then
 fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CODEX_DIR="${ROOT_DIR}/.tmp/codex"
+# shellcheck source=./env/resolve_config.sh
+source "${ROOT_DIR}/scripts/codex/env/resolve_config.sh"
+CODEX_DIR="$(codex_export_state_dir)"
 REPO="${GITHUB_REPO:-justewg/planka}"
 
 mkdir -p "$CODEX_DIR"
@@ -191,7 +193,7 @@ strip_technical_lines() {
     | sed 's/\r$//' \
     | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' \
     | sed '/^$/d' \
-    | grep -Eiv '(^Task:|^Issue:|^Exit code:|\.tmp/codex/executor\.log|^Проверь лог|^Проверь логи)'
+    | grep -Eiv '(^Task:|^Issue:|^Exit code:|executor\.log|^Проверь лог|^Проверь логи)'
 }
 
 extract_context_line() {
@@ -203,7 +205,7 @@ normalize_executor_question() {
   local line="$1"
   local normalized=""
   normalized="$(printf '%s' "$line" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
-  normalized="$(printf '%s' "$normalized" | sed -E 's#\.tmp/codex/executor\.log#лог задачи#g')"
+  normalized="$(printf '%s' "$normalized" | sed -E 's#[^[:space:]]*/executor\.log#лог задачи#g; s#executor\.log#лог задачи#g')"
 
   if printf '%s' "$normalized" | grep -Eiq 'дай команду как действовать дальше|как действовать дальше'; then
     printf 'Как действовать дальше?'

@@ -27,7 +27,7 @@
 - `scripts/codex/run.sh status_snapshot` — нормализованный JSON snapshot состояния автоматики (daemon/watchdog/executor/очереди/blockers).
 - `scripts/codex/run.sh next_task` — показать следующую задачу со статусом `Planned` (приоритет P0→P1→P2, затем по номеру `PL-xxx`).
 - `scripts/codex/run.sh app_deps_mermaid [output-file]` — построить Mermaid DAG зависимостей APP-issues из `Flow Meta` (`Depends-On/Blocks`) и записать markdown-файл (по умолчанию `docs/app-issues-dependency-diagram.md`).
-- `scripts/codex/run.sh backlog_seed_apply` — применить runtime-план создания backlog-задач из `.tmp/codex/backlog_seed_plan.json` (по умолчанию 1 задача за запуск).
+- `scripts/codex/run.sh backlog_seed_apply` — применить runtime-план создания backlog-задач из `<state-dir>/backlog_seed_plan.json` (по умолчанию 1 задача за запуск).
 - `scripts/codex/run.sh daemon_tick` — один цикл демона: проверка `Todo`, подхват задачи, перевод в `In Progress`.
 - `scripts/codex/run.sh daemon_loop [interval-sec]` — непрерывный polling-цикл демона (по умолчанию 45 сек).
 - `scripts/codex/run.sh daemon_install [label] [interval-sec]` — установка и запуск `launchd`-агента.
@@ -69,15 +69,22 @@
 - `scripts/codex/run.sh ops_remote_status_push` — отправить текущий `status_snapshot` в удаленный ingest endpoint ops-бота (URL/secret берутся из env).
 - `scripts/codex/run.sh ops_remote_summary_push` — отправить bundle `log_summary` (локальное окно `6h` по умолчанию) в удаленный ingest endpoint ops-бота.
 
+## State-dir и multi-project
+- Core flow state/log/runtime хранится в `<state-dir>`, где `<state-dir>=${CODEX_STATE_DIR:-${FLOW_STATE_DIR:-${ROOT_DIR}/.tmp/codex}}`.
+- Override задаётся через `CODEX_STATE_DIR`; если он не задан, используется `FLOW_STATE_DIR`.
+- По умолчанию используется `${ROOT_DIR}/.tmp/codex`.
+- Для параллельного запуска двух проектов на одном хосте задайте разные `<state-dir>`.
+- Если используете `daemon_install`/`watchdog_install`, задайте ещё и разные `label`, чтобы не столкнулись launchd-агенты.
+
 Короткий rollout smoke-checklist для ops-бота:
 1. `scripts/codex/run.sh ops_bot_pm2_start`
 2. `scripts/codex/run.sh ops_bot_pm2_status` (ожидается `PM2_STATUS=online`)
 3. `scripts/codex/run.sh ops_bot_pm2_health` (ожидается exit code `0` и JSON `status=ok`)
-4. `scripts/codex/run.sh status_snapshot | jq .overall_status` и `scripts/codex/run.sh log_summary --hours 1` (без падений даже при частично отсутствующих `.tmp/codex/*`)
+4. `scripts/codex/run.sh status_snapshot | jq .overall_status` и `scripts/codex/run.sh log_summary --hours 1` (без падений даже при частично отсутствующих `<state-dir>/*`)
 5. `scripts/codex/run.sh ops_bot_webhook_register register` и `scripts/codex/run.sh ops_bot_webhook_register info`
 6. Проверка Telegram-команд: `/status`, `/summary 6`, `/help`, `/status_page`
 
-`run.sh` читает фиксированные файлы из `.tmp/codex/`:
+`run.sh` читает фиксированные файлы из `<state-dir>/`:
 - `pr_number.txt`
 - `pr_title.txt`
 - `pr_body.txt`
@@ -168,7 +175,7 @@
 1. Сделать первую рабочую дельту и выполнить `commit_push`.
 2. Если нужно подтверждение/уточнение, подготовить файл с вопросом и вызвать `scripts/codex/run.sh task_ask question <message-file>`.
 3. После ответа пользователя продолжить реализацию второй дельты.
-4. На финальном шаге заполнить `.tmp/codex/commit_message.txt` и `.tmp/codex/stage_paths.txt`, при необходимости обновить `pr_title`/`pr_body`, затем вызвать `scripts/codex/run.sh task_finalize`.
+4. На финальном шаге заполнить `<state-dir>/commit_message.txt` и `<state-dir>/stage_paths.txt`, при необходимости обновить `pr_title`/`pr_body`, затем вызвать `scripts/codex/run.sh task_finalize`.
 5. Если PR остался draft, перевести его в `ready_for_review`.
 
 ## Команды
@@ -191,7 +198,7 @@
   - синхронное обновление полей `Status` и `Flow` карточки проекта
   - fast-path для `PVTI_*`: не загружает `items(first:100)`/пагинацию, обновляет поля сразу по переданному `project item id`
 - `project_status_runtime.sh <enqueue|apply|list|clear> ...`
-  - runtime-очередь действий `project_set_status` в `.tmp/codex/project_status_runtime_queue.json`
+  - runtime-очередь действий `project_set_status` в `<state-dir>/project_status_runtime_queue.json`
   - при деградации GitHub (`network/rate-limit`) сохраняет intent и не теряет изменение
   - `apply` по тикам аккуратно подчищает очередь при восстановлении GitHub API
 - `log_summary.sh [--hours N|--from ISO|--to ISO]`
@@ -214,11 +221,11 @@
   - строит Mermaid DAG в markdown (по умолчанию `docs/app-issues-dependency-diagram.md`)
   - ошибки парсинга отдельных токенов не прерывают генерацию, а добавляются в раздел `Ошибки парсинга`
 - `daemon_tick.sh`
-  - в начале каждого тика пытается применить runtime backlog-seed план (`.tmp/codex/backlog_seed_plan.json`) через `backlog_seed_apply.sh`
+  - в начале каждого тика пытается применить runtime backlog-seed план (`<state-dir>/backlog_seed_plan.json`) через `backlog_seed_apply.sh`
   - в стандартной конфигурации создает/линкует не более 1 backlog-задачи за тик (`BACKLOG_SEED_MAX_PER_TICK=1`)
   - если GitHub API недоступен, оставляет план нетронутым и повторит попытку на следующем тике
   - при rate-limit во время backlog-seed теперь поднимает явные wait-маркеры (`WAIT_GITHUB_RATE_LIMIT` + `..._STAGE/..._MSG`), чтобы daemon переходил в деградированный режим и отправлял корректные сигналы
-  - по мере успешного создания задач автоматически сокращает план; при пустом плане удаляет `.tmp/codex/backlog_seed_plan.json` и `.tmp/codex/backlog_seed_plan.md`
+  - по мере успешного создания задач автоматически сокращает план; при пустом плане удаляет `<state-dir>/backlog_seed_plan.json` и `<state-dir>/backlog_seed_plan.md`
   - минимальный формат плана: JSON c корневым `tasks[]`, где каждая задача содержит `code`, `title`, `description`, опционально `plan_key`, `depends_on_codes[]`, `blocks_codes[]`
   - останавливается только при изменениях tracked-файлов (staged/unstaged)
   - при блокировке на tracked-изменениях пишет явные маркеры:
@@ -253,7 +260,7 @@
   - читает Project через GraphQL (без нестабильного `gh project item-list`)
   - в hybrid mode для Project-операций использует `DAEMON_GH_PROJECT_TOKEN`/`CODEX_GH_PROJECT_TOKEN` (если задан), сохраняя App token для `Issue/PR`
   - при исчерпании GraphQL rate limit пишет `WAIT_GITHUB_RATE_LIMIT=1` + детали (`..._STAGE`, `..._MSG`) и не берет новую задачу
-  - ведет статистику окон между rate-limit событиями в `.tmp/codex/graphql_rate_stats.log` (`requests`, `duration_sec`, `start_utc`, `end_utc`)
+  - ведет статистику окон между rate-limit событиями в `<state-dir>/graphql_rate_stats.log` (`requests`, `duration_sec`, `start_utc`, `end_utc`)
   - берет задачу только из `Status=Todo`
   - issue с label из `AUTO_IGNORE_LABELS` (по умолчанию `auto:ignore`) исключаются из auto-claim очереди
   - `AUTO_IGNORE_LABELS` учитывается и в dirty-gate: такие `Todo`-задачи не считаются блокирующими для создания `DIRTY-GATE`
@@ -273,7 +280,7 @@
   - если `PL-xxx` отсутствует, использует fallback `ISSUE-<number>` по номеру Issue
   - при единственной задаче переводит ее в `Status/Flow=In Progress`
     - если `Status/Flow` апдейт временно недоступен, апдейт откладывается в runtime-очередь, claim не теряется
-  - сохраняет текущий `Task ID` в `.tmp/codex/project_task_id.txt` для последующего `task_finalize`
+  - сохраняет текущий `Task ID` в `<state-dir>/project_task_id.txt` для последующего `task_finalize`
 - `daemon_loop.sh [interval-sec]`
   - крутит `daemon_tick.sh` в цикле с lock-файлом и heartbeat-логом
   - при последовательных `WAIT_GITHUB_RATE_LIMIT` применяет экспоненциальный backoff сна (`base -> x2 -> x4`, по умолчанию `90 -> 180 -> 360`) и сбрасывает backoff после успешного non-rate-limit тика
@@ -349,7 +356,7 @@
   - запускает `executor_run.sh` в фоне и сохраняет pid/state
 - `executor_run.sh <task-id> <issue-number>`
   - выполняет `codex exec --full-auto` с подготовленным prompt
-  - пишет результат в `.tmp/codex/executor.log` и обновляет state (`DONE/FAILED`)
+  - пишет результат в `<state-dir>/executor.log` и обновляет state (`DONE/FAILED`)
   - обновляет heartbeat-файлы для диагностики "жив/завис"
 - `executor_tick.sh <task-id> <issue-number>`
   - на каждом тике делает `project_status_runtime apply` (executor тоже подчищает отложенные status-апдейты)
@@ -363,7 +370,7 @@
 - `task_ask.sh <question|blocker> <message-file>`
   - публикует структурированный комментарий в текущий Issue (`CODEX_SIGNAL: AGENT_QUESTION|AGENT_BLOCKER`)
   - при временной недоступности GitHub кладет комментарий в outbox и включает pending-waiting state
-  - сохраняет waiting-state в `.tmp/codex/`, чтобы daemon ждал ответ пользователя
+  - сохраняет waiting-state в `<state-dir>/`, чтобы daemon ждал ответ пользователя
 - `daemon_check_replies.sh`
   - если daemon в waiting-state, проверяет новые комментарии Issue после вопроса/ревью
   - для `AGENT_QUESTION/AGENT_BLOCKER` первый пользовательский комментарий (без `CODEX_SIGNAL:`) классифицирует как `QUESTION` или `REWORK`
@@ -377,7 +384,7 @@
     - `REWORK` -> публикует `CODEX_SIGNAL: AGENT_RESUMED_REVIEW` и передает задачу в доработку
   - поддерживает явный override в комментарии: `CODEX_MODE: QUESTION|REWORK`
   - пишет явные маркеры review-feedback цикла: `WAIT_REVIEW_FEEDBACK`, `REVIEW_FEEDBACK_RECEIVED`, `REVIEW_FEEDBACK_RESUMED`
-  - сохраняет ответ в `.tmp/codex/daemon_user_reply.txt`
+  - сохраняет ответ в `<state-dir>/daemon_user_reply.txt`
   - публикует `CODEX_SIGNAL: AGENT_RESUMED`, `CODEX_SIGNAL: AGENT_RESUMED_REVIEW` или `CODEX_SIGNAL: AGENT_ANSWER`; если GitHub недоступен, кладет ответ/ack в outbox
   - при pending-question (`вопрос еще не доставлен`) удерживает `WAIT_USER_REPLY`, не теряя контекст
 - `gh_retry.sh <command> [args...]`
@@ -479,57 +486,57 @@
 - Telegram webhook + команды: `/help`, `/status`, `/summary 6`, `/status_page`
 
 Логи демона:
-- `.tmp/codex/daemon.log` — heartbeat и результат `daemon_tick`
-- `.tmp/codex/launchd.out.log` — stdout агента `launchd`
-- `.tmp/codex/launchd.err.log` — stderr агента `launchd`
-- `.tmp/codex/watchdog.log` — heartbeat watchdog и recovery-действия
-- `.tmp/codex/watchdog_state.txt` — агрегированный статус watchdog
-- `.tmp/codex/watchdog_state_detail.txt` — причина/деталь статуса watchdog
-- `.tmp/codex/watchdog_last_action.txt` — последнее recovery-действие
-- `.tmp/codex/watchdog_last_action_epoch.txt` — timestamp последнего recovery-действия
-- `.tmp/codex/watchdog.launchd.out.log` — stdout watchdog-агента
-- `.tmp/codex/watchdog.launchd.err.log` — stderr watchdog-агента
-- `.tmp/codex/daemon_user_reply.txt` — последний ответ пользователя из Issue-комментариев
-- `.tmp/codex/daemon_review_task_id.txt` — задача, ожидающая review-feedback
-- `.tmp/codex/daemon_review_item_id.txt` — project item id задачи в review-feedback режиме
-- `.tmp/codex/daemon_review_issue_number.txt` — issue number задачи в review-feedback режиме
-- `.tmp/codex/daemon_review_pr_number.txt` — PR number для review-feedback режима
-- `.tmp/codex/daemon_state.txt` — текущий агрегированный state демона (`IDLE_NO_TASKS`, `WAIT_OPEN_PR`, `WAIT_GITHUB_OFFLINE` и т.д.)
-- `.tmp/codex/daemon_state_detail.txt` — краткая причина/деталь текущего state, включая признаки деградации (`DEGRADED=GITHUB_DNS_OFFLINE`, `DEGRADED=PENDING_OUTBOX:<n>` и т.п.)
-- `.tmp/codex/daemon_notify_mode.txt` — последний режим уведомлений (`degraded|healthy`)
-- `.tmp/codex/daemon_notify_last_epoch.txt` — timestamp последней попытки локального Telegram-уведомления
-- `.tmp/codex/daemon_notify_last_signature.txt` — подпись последнего состояния, по которой определяется `DEGRADED_CHANGED`
-- `.tmp/codex/graphql_rate_stats.log` — журнал rate-limit событий GraphQL (одно событие = окно от первого успешного запроса после лимита до нового лимита)
-- `.tmp/codex/graphql_rate_window_state.txt` — состояние текущего окна (`WAIT_SUCCESS|RUNNING`)
-- `.tmp/codex/graphql_rate_window_start_epoch.txt` — epoch старта текущего окна
-- `.tmp/codex/graphql_rate_window_start_utc.txt` — UTC-старт текущего окна
-- `.tmp/codex/graphql_rate_window_requests.txt` — число успешных GraphQL-запросов в текущем окне
-- `.tmp/codex/graphql_rate_last_success_utc.txt` — время последнего успешного GraphQL-запроса
-- `.tmp/codex/graphql_rate_last_limit_utc.txt` — время последнего зафиксированного rate-limit события
-- `.tmp/codex/executor.log` — полный лог автономного executor
-- `.tmp/codex/executor_state.txt` — состояние executor (`RUNNING|DONE|FAILED`)
-- `.tmp/codex/executor_pid.txt` — pid фонового executor-процесса
-- `.tmp/codex/executor_last_exit_code.txt` — код завершения последнего executor запуска
-- `.tmp/codex/executor_heartbeat_utc.txt` — время последнего heartbeat executor
-- `.tmp/codex/executor_heartbeat_epoch.txt` — epoch-время последнего heartbeat executor
-- `.tmp/codex/outbox/` — pending GitHub-действия (очередь)
-- `.tmp/codex/outbox_payloads/` — payload-файлы для pending действий
-- `.tmp/codex/outbox_failed/` — non-retryable ошибки outbox
+- `<state-dir>/daemon.log` — heartbeat и результат `daemon_tick`
+- `<state-dir>/launchd.out.log` — stdout агента `launchd`
+- `<state-dir>/launchd.err.log` — stderr агента `launchd`
+- `<state-dir>/watchdog.log` — heartbeat watchdog и recovery-действия
+- `<state-dir>/watchdog_state.txt` — агрегированный статус watchdog
+- `<state-dir>/watchdog_state_detail.txt` — причина/деталь статуса watchdog
+- `<state-dir>/watchdog_last_action.txt` — последнее recovery-действие
+- `<state-dir>/watchdog_last_action_epoch.txt` — timestamp последнего recovery-действия
+- `<state-dir>/watchdog.launchd.out.log` — stdout watchdog-агента
+- `<state-dir>/watchdog.launchd.err.log` — stderr watchdog-агента
+- `<state-dir>/daemon_user_reply.txt` — последний ответ пользователя из Issue-комментариев
+- `<state-dir>/daemon_review_task_id.txt` — задача, ожидающая review-feedback
+- `<state-dir>/daemon_review_item_id.txt` — project item id задачи в review-feedback режиме
+- `<state-dir>/daemon_review_issue_number.txt` — issue number задачи в review-feedback режиме
+- `<state-dir>/daemon_review_pr_number.txt` — PR number для review-feedback режима
+- `<state-dir>/daemon_state.txt` — текущий агрегированный state демона (`IDLE_NO_TASKS`, `WAIT_OPEN_PR`, `WAIT_GITHUB_OFFLINE` и т.д.)
+- `<state-dir>/daemon_state_detail.txt` — краткая причина/деталь текущего state, включая признаки деградации (`DEGRADED=GITHUB_DNS_OFFLINE`, `DEGRADED=PENDING_OUTBOX:<n>` и т.п.)
+- `<state-dir>/daemon_notify_mode.txt` — последний режим уведомлений (`degraded|healthy`)
+- `<state-dir>/daemon_notify_last_epoch.txt` — timestamp последней попытки локального Telegram-уведомления
+- `<state-dir>/daemon_notify_last_signature.txt` — подпись последнего состояния, по которой определяется `DEGRADED_CHANGED`
+- `<state-dir>/graphql_rate_stats.log` — журнал rate-limit событий GraphQL (одно событие = окно от первого успешного запроса после лимита до нового лимита)
+- `<state-dir>/graphql_rate_window_state.txt` — состояние текущего окна (`WAIT_SUCCESS|RUNNING`)
+- `<state-dir>/graphql_rate_window_start_epoch.txt` — epoch старта текущего окна
+- `<state-dir>/graphql_rate_window_start_utc.txt` — UTC-старт текущего окна
+- `<state-dir>/graphql_rate_window_requests.txt` — число успешных GraphQL-запросов в текущем окне
+- `<state-dir>/graphql_rate_last_success_utc.txt` — время последнего успешного GraphQL-запроса
+- `<state-dir>/graphql_rate_last_limit_utc.txt` — время последнего зафиксированного rate-limit события
+- `<state-dir>/executor.log` — полный лог автономного executor
+- `<state-dir>/executor_state.txt` — состояние executor (`RUNNING|DONE|FAILED`)
+- `<state-dir>/executor_pid.txt` — pid фонового executor-процесса
+- `<state-dir>/executor_last_exit_code.txt` — код завершения последнего executor запуска
+- `<state-dir>/executor_heartbeat_utc.txt` — время последнего heartbeat executor
+- `<state-dir>/executor_heartbeat_epoch.txt` — epoch-время последнего heartbeat executor
+- `<state-dir>/outbox/` — pending GitHub-действия (очередь)
+- `<state-dir>/outbox_payloads/` — payload-файлы для pending действий
+- `<state-dir>/outbox_failed/` — non-retryable ошибки outbox
 - `.tmp/codex/pm2/ops_bot.out.log` — stdout ops-бот сервиса (PM2)
 - `.tmp/codex/pm2/ops_bot.err.log` — stderr ops-бот сервиса (PM2)
 
 Быстрый анализ частоты GraphQL rate limit:
-- последние события: `tail -n 20 .tmp/codex/graphql_rate_stats.log`
+- последние события: `tail -n 20 <state-dir>/graphql_rate_stats.log`
 - среднее число успешных GraphQL-запросов до нового лимита:
-  `awk -F'\t' '/EVENT=RATE_LIMIT/ { for(i=1;i<=NF;i++) if($i ~ /^requests=/){ split($i,a,"="); sum+=a[2]; n++ } } END { if(n) printf("avg_requests=%.2f events=%d\n", sum/n, n); else print "no_data" }' .tmp/codex/graphql_rate_stats.log`
+  `awk -F'\t' '/EVENT=RATE_LIMIT/ { for(i=1;i<=NF;i++) if($i ~ /^requests=/){ split($i,a,"="); sum+=a[2]; n++ } } END { if(n) printf("avg_requests=%.2f events=%d\n", sum/n, n); else print "no_data" }' <state-dir>/graphql_rate_stats.log`
 - средняя длительность окна (сек):
-  `awk -F'\t' '/EVENT=RATE_LIMIT/ { for(i=1;i<=NF;i++) if($i ~ /^duration_sec=/){ split($i,a,"="); sum+=a[2]; n++ } } END { if(n) printf("avg_duration_sec=%.2f events=%d\n", sum/n, n); else print "no_data" }' .tmp/codex/graphql_rate_stats.log`
+  `awk -F'\t' '/EVENT=RATE_LIMIT/ { for(i=1;i<=NF;i++) if($i ~ /^duration_sec=/){ split($i,a,"="); sum+=a[2]; n++ } } END { if(n) printf("avg_duration_sec=%.2f events=%d\n", sum/n, n); else print "no_data" }' <state-dir>/graphql_rate_stats.log`
 
 Быстрая проверка включения App auth:
 - `scripts/codex/run.sh gh_app_auth_pm2_health`
-- `cat .tmp/codex/daemon_state.txt`
-- `cat .tmp/codex/daemon_state_detail.txt`
-- при необходимости: `tail -n 80 .tmp/codex/daemon.log`
+- `cat <state-dir>/daemon_state.txt`
+- `cat <state-dir>/daemon_state_detail.txt`
+- при необходимости: `tail -n 80 <state-dir>/daemon.log`
 
 ## Подготовка
 Скрипты должны быть исполняемыми:

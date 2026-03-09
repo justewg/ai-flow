@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=./env/resolve_config.sh
 source "${ROOT_DIR}/scripts/codex/env/resolve_config.sh"
 CODEX_DIR="$(codex_export_state_dir)"
+lock_dir="${CODEX_DIR}/watchdog.lock"
 
 label="${1:-com.planka.codex-watchdog}"
 interval="${2:-45}"
@@ -78,6 +79,7 @@ ${optional_env_block}
 EOF
 
 launchctl bootout "gui/${UID}" "${plist_path}" >/dev/null 2>&1 || true
+rmdir "${lock_dir}" >/dev/null 2>&1 || true
 launchctl bootstrap "gui/${UID}" "${plist_path}"
 launchctl kickstart -k "gui/${UID}/${label}"
 
@@ -85,6 +87,7 @@ echo "Installed launchd watchdog: ${label}"
 echo "Plist: ${plist_path}"
 echo "Interval: ${interval}s"
 echo "State dir: ${CODEX_DIR}"
+echo "Watchdog lock dir: ${lock_dir}"
 echo "Daemon label: ${daemon_label}"
 echo "Daemon interval: ${daemon_interval}s"
 if [[ -n "$profile_env_file" ]]; then

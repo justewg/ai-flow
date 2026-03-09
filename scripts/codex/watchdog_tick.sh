@@ -284,6 +284,9 @@ active_task="$(read_file_or_default "${CODEX_DIR}/daemon_active_task.txt" "")"
 active_issue="$(read_file_or_default "${CODEX_DIR}/daemon_active_issue_number.txt" "")"
 daemon_state="$(read_file_or_default "${CODEX_DIR}/daemon_state.txt" "UNKNOWN")"
 daemon_detail="$(read_file_or_default "${CODEX_DIR}/daemon_state_detail.txt" "")"
+daemon_agent_status_out="$("${ROOT_DIR}/scripts/codex/daemon_status.sh" "$DAEMON_LABEL" 2>&1 || true)"
+daemon_agent_state="$(printf '%s\n' "$daemon_agent_status_out" | awk 'NR==1{print $1}')"
+[[ -n "$daemon_agent_state" ]] || daemon_agent_state="UNKNOWN"
 executor_state="$(read_file_or_default "${CODEX_DIR}/executor_state.txt" "")"
 executor_pid="$(read_file_or_default "${CODEX_DIR}/executor_pid.txt" "")"
 executor_hb_epoch="$(read_file_or_default "${CODEX_DIR}/executor_heartbeat_epoch.txt" "0")"
@@ -313,7 +316,13 @@ fi
 action="NONE"
 reason=""
 
-if [[ -d "$DAEMON_LOCK_DIR" && $daemon_log_age -gt $daemon_log_stale_threshold ]]; then
+if [[ "$daemon_agent_state" == "NOT_INSTALLED" ]]; then
+  action="HARD_RESTART_DAEMON"
+  reason="DAEMON_NOT_INSTALLED"
+elif [[ "$daemon_agent_state" == "INSTALLED_NOT_LOADED" ]]; then
+  action="HARD_RESTART_DAEMON"
+  reason="DAEMON_NOT_LOADED"
+elif [[ -d "$DAEMON_LOCK_DIR" && $daemon_log_age -gt $daemon_log_stale_threshold ]]; then
   action="HARD_RESTART_DAEMON"
   reason="DAEMON_LOG_STALE_WITH_LOCK"
 elif [[ -n "$active_task" ]]; then
@@ -332,7 +341,12 @@ elif [[ -n "$active_task" ]]; then
   fi
 fi
 
-summary="active_task=${active_task:-none};active_issue=${active_issue:-none};daemon_state=${daemon_state};executor_state=${executor_state:-none};executor_pid=${executor_pid:-none};executor_pid_alive=${executor_pid_alive};daemon_log_age=${daemon_log_age}s;daemon_log_stale_threshold=${daemon_log_stale_threshold}s"
+summary="active_task=${active_task:-none};active_issue=${active_issue:-none};daemon_agent_state=${daemon_agent_state};daemon_state=${daemon_state};executor_state=${executor_state:-none};executor_pid=${executor_pid:-none};executor_pid_alive=${executor_pid_alive};daemon_log_age=${daemon_log_age}s;daemon_log_stale_threshold=${daemon_log_stale_threshold}s"
+if [[ "${WATCHDOG_AUTH_DEGRADED:-0}" == "1" ]]; then
+  auth_detail="${WATCHDOG_AUTH_LAST_DETAIL:-AUTH_UNAVAILABLE}"
+  auth_fallback_reason="${WATCHDOG_AUTH_FALLBACK_REASON:-DISABLED}"
+  summary="${summary};auth_degraded=1;auth_detail=${auth_detail};auth_fallback_reason=${auth_fallback_reason}"
+fi
 echo "WATCHDOG_SUMMARY=${summary}"
 log "WATCHDOG_SUMMARY=${summary}"
 

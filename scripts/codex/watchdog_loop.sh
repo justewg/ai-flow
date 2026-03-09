@@ -112,6 +112,7 @@ WATCHDOG_AUTH_FALLBACK_ENABLED="0"
 WATCHDOG_AUTH_FALLBACK_TOKEN_PRESENT="0"
 WATCHDOG_AUTH_FALLBACK_REASON="DISABLED"
 WATCHDOG_AUTH_FALLBACK_SOURCE=""
+WATCHDOG_AUTH_DEGRADED="0"
 
 refresh_watchdog_github_token() {
   local auth_log_file token line rc fallback_enabled_raw fallback_token
@@ -120,6 +121,7 @@ refresh_watchdog_github_token() {
   WATCHDOG_AUTH_FALLBACK_TOKEN_PRESENT="0"
   WATCHDOG_AUTH_FALLBACK_REASON="DISABLED"
   WATCHDOG_AUTH_FALLBACK_SOURCE=""
+  WATCHDOG_AUTH_DEGRADED="0"
   auth_log_file="$(mktemp "${CODEX_DIR}/watchdog_auth.XXXXXX")"
 
   fallback_enabled_raw="$(resolve_config_value "DAEMON_GH_TOKEN_FALLBACK_ENABLED" "")"
@@ -158,6 +160,7 @@ refresh_watchdog_github_token() {
       log "WATCHDOG_AUTH: $line"
     done < "$auth_log_file"
     rm -f "$auth_log_file"
+    WATCHDOG_AUTH_DEGRADED="0"
     return 0
   else
     rc=$?
@@ -176,6 +179,7 @@ refresh_watchdog_github_token() {
   if [[ "$WATCHDOG_AUTH_FALLBACK_ENABLED" == "1" && "$WATCHDOG_AUTH_FALLBACK_TOKEN_PRESENT" == "1" ]]; then
     export GH_TOKEN="$fallback_token"
     WATCHDOG_AUTH_FALLBACK_REASON="ACTIVE"
+    WATCHDOG_AUTH_DEGRADED="1"
     log "WATCHDOG_AUTH_FALLBACK_ACTIVE source=${WATCHDOG_AUTH_FALLBACK_SOURCE}; auth_rc=${rc}; auth_detail=${WATCHDOG_AUTH_LAST_DETAIL}"
     return 0
   fi
@@ -183,6 +187,7 @@ refresh_watchdog_github_token() {
   if [[ "$WATCHDOG_AUTH_FALLBACK_ENABLED" == "1" ]]; then
     WATCHDOG_AUTH_FALLBACK_REASON="TOKEN_MISSING"
   fi
+  WATCHDOG_AUTH_DEGRADED="1"
   return "$rc"
 }
 
@@ -200,11 +205,15 @@ while true; do
       detail="${detail}; AUTH_FALLBACK_SOURCE=${WATCHDOG_AUTH_FALLBACK_SOURCE}"
     fi
     set_state "WAIT_AUTH_SERVICE" "$detail"
-    sleep "$interval"
-    continue
+    log "WATCHDOG_AUTH_DEGRADED_CONTINUE=1"
   fi
 
-  if output="$("${ROOT_DIR}/scripts/codex/watchdog_tick.sh" 2>&1)"; then
+  if output="$(
+    WATCHDOG_AUTH_DEGRADED="${WATCHDOG_AUTH_DEGRADED}" \
+    WATCHDOG_AUTH_LAST_DETAIL="${WATCHDOG_AUTH_LAST_DETAIL}" \
+    WATCHDOG_AUTH_FALLBACK_REASON="${WATCHDOG_AUTH_FALLBACK_REASON}" \
+    "${ROOT_DIR}/scripts/codex/watchdog_tick.sh" 2>&1
+  )"; then
     while IFS= read -r line; do
       [[ -z "$line" ]] && continue
       log "$line"

@@ -12,6 +12,8 @@ task_file="${CODEX_DIR}/daemon_waiting_task_id.txt"
 question_id_file="${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
 kind_file="${CODEX_DIR}/daemon_waiting_kind.txt"
 pending_post_file="${CODEX_DIR}/daemon_waiting_pending_post.txt"
+waiting_since_file="${CODEX_DIR}/daemon_waiting_since_utc.txt"
+waiting_comment_url_file="${CODEX_DIR}/daemon_waiting_comment_url.txt"
 review_task_file="${CODEX_DIR}/daemon_review_task_id.txt"
 review_item_file="${CODEX_DIR}/daemon_review_item_id.txt"
 review_issue_file="${CODEX_DIR}/daemon_review_issue_number.txt"
@@ -216,13 +218,23 @@ emit_wait_state() {
   fi
 }
 
+has_waiting_context_artifacts() {
+  [[ -s "$issue_file" ]] ||
+    [[ -s "$task_file" ]] ||
+    [[ -s "$question_id_file" ]] ||
+    [[ -s "$kind_file" ]] ||
+    [[ -s "$pending_post_file" ]] ||
+    [[ -s "$waiting_since_file" ]] ||
+    [[ -s "$waiting_comment_url_file" ]]
+}
+
 clear_waiting_state() {
   : > "$issue_file"
   : > "$task_file"
   : > "$question_id_file"
   : > "$kind_file"
-  : > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
-  : > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
+  : > "$waiting_since_file"
+  : > "$waiting_comment_url_file"
   : > "$pending_post_file"
 }
 
@@ -233,7 +245,62 @@ clear_review_context() {
   : > "$review_pr_file"
 }
 
+clear_stale_waiting_context() {
+  local reason="$1"
+  local issue_number="${2:-}"
+  local task_id="${3:-}"
+  local kind_label="${4:-}"
+  local review_task=""
+  local review_issue=""
+
+  [[ -s "$review_task_file" ]] && review_task="$(<"$review_task_file")"
+  [[ -s "$review_issue_file" ]] && review_issue="$(<"$review_issue_file")"
+
+  clear_waiting_state
+  if is_review_feedback_kind "$kind_label" ||
+    [[ -n "$task_id" && "$review_task" == "$task_id" ]] ||
+    [[ -n "$issue_number" && "$review_issue" == "$issue_number" ]]; then
+    clear_review_context
+  fi
+
+  echo "STALE_WAITING_CONTEXT_CLEARED=${reason}"
+  [[ -n "$issue_number" ]] && echo "STALE_WAITING_ISSUE_NUMBER=$issue_number"
+  [[ -n "$task_id" ]] && echo "STALE_WAITING_TASK_ID=$task_id"
+}
+
+recover_anchor_comment_id() {
+  local kind_label="$1"
+  local task_id="$2"
+  local comments_json="$3"
+
+  if is_review_feedback_kind "$kind_label"; then
+    printf '%s' "$comments_json" |
+      jq -r --arg task "$task_id" '
+        [
+          .[]
+          | select(((.body // "") | test("(?m)^CODEX_SIGNAL: AGENT_IN_REVIEW$")))
+          | select(((.body // "") | test("(?m)^CODEX_EXPECT: USER_REVIEW$")))
+          | select(((.body // "") | test("(?m)^CODEX_TASK: " + $task + "$")))
+        ][-1].id // empty
+      '
+  else
+    printf '%s' "$comments_json" |
+      jq -r --arg task "$task_id" '
+        [
+          .[]
+          | select(((.body // "") | test("(?m)^CODEX_SIGNAL: (AGENT_QUESTION|AGENT_BLOCKER)$")))
+          | select(((.body // "") | test("(?m)^CODEX_EXPECT: USER_REPLY$")))
+          | select(((.body // "") | test("(?m)^CODEX_TASK: " + $task + "$")))
+        ][-1].id // empty
+      '
+  fi
+}
+
 if [[ ! -s "$issue_file" || ! -s "$question_id_file" ]]; then
+  if has_waiting_context_artifacts; then
+    clear_waiting_state
+    echo "STALE_WAITING_CONTEXT_CLEARED=MISSING_WAITING_MARKERS"
+  fi
   echo "NO_WAITING_USER_REPLY=1"
   exit 0
 fi
@@ -247,6 +314,18 @@ issue_author=""
 [[ -s "$task_file" ]] && task_id="$(<"$task_file")"
 [[ -s "$kind_file" ]] && kind_label="$(<"$kind_file")"
 [[ -s "$pending_post_file" ]] && pending_post="$(<"$pending_post_file")"
+
+if ! [[ "$issue_number" =~ ^[0-9]+$ ]]; then
+  clear_stale_waiting_context "INVALID_ISSUE_NUMBER" "$issue_number" "$task_id" "$kind_label"
+  echo "NO_WAITING_USER_REPLY=1"
+  exit 0
+fi
+
+if [[ -z "$task_id" || -z "$kind_label" ]]; then
+  clear_stale_waiting_context "MISSING_TASK_OR_KIND" "$issue_number" "$task_id" "$kind_label"
+  echo "NO_WAITING_USER_REPLY=1"
+  exit 0
+fi
 
 comments_json=""
 
@@ -381,35 +460,20 @@ if ! [[ "$question_comment_id" =~ ^[0-9]+$ ]]; then
     exit "$rc"
   fi
 
-  if is_review_feedback_kind "$kind_label"; then
-    recovered_qid="$(
-      printf '%s' "$comments_json" |
-        jq -r '
-          [ .[]
-            | select(((.body // "") | test("(?m)^CODEX_SIGNAL: AGENT_IN_REVIEW$")))
-            | select(((.body // "") | test("(?m)^CODEX_EXPECT: USER_REVIEW$")))
-          ][-1].id // empty
-        '
-    )"
-  else
-    recovered_qid="$(
-      printf '%s' "$comments_json" |
-        jq -r '
-          [ .[]
-            | select(((.body // "") | test("(?m)^CODEX_SIGNAL: (AGENT_QUESTION|AGENT_BLOCKER)$")))
-            | select(((.body // "") | test("(?m)^CODEX_EXPECT: USER_REPLY$")))
-          ][-1].id // empty
-        '
-    )"
-  fi
+  recovered_qid="$(recover_anchor_comment_id "$kind_label" "$task_id" "$comments_json")"
 
   if [[ -n "$recovered_qid" ]]; then
     question_comment_id="$recovered_qid"
     printf '%s\n' "$question_comment_id" > "$question_id_file"
     echo "RECOVERED_QUESTION_COMMENT_ID=$question_comment_id"
   else
-    emit_wait_state "$task_id" "$issue_number" "$question_comment_id" "$kind_label"
-    echo "WAITING_FOR_VALID_QUESTION_ID=1"
+    if [[ "$pending_post" == "1" ]]; then
+      emit_wait_state "$task_id" "$issue_number" "$question_comment_id" "$kind_label"
+      echo "WAITING_FOR_VALID_QUESTION_ID=1"
+    else
+      clear_stale_waiting_context "MISSING_ANCHOR_REQUEST" "$issue_number" "$task_id" "$kind_label"
+      echo "NO_WAITING_USER_REPLY=1"
+    fi
     exit 0
   fi
 fi
@@ -426,6 +490,42 @@ if [[ -z "$comments_json" ]]; then
       exit 0
     fi
     exit "$rc"
+  fi
+fi
+
+if [[ "$question_comment_id" == "0" ]]; then
+  if is_review_feedback_kind "$kind_label"; then
+    if [[ "$pending_post" != "1" ]]; then
+      clear_stale_waiting_context "REVIEW_WAIT_WITHOUT_ANCHOR" "$issue_number" "$task_id" "$kind_label"
+      echo "NO_WAITING_USER_REPLY=1"
+      exit 0
+    fi
+  elif [[ "$task_id" != DIRTY-GATE-ISSUE-* && "$pending_post" != "1" ]]; then
+    clear_stale_waiting_context "WAIT_WITHOUT_ANCHOR" "$issue_number" "$task_id" "$kind_label"
+    echo "NO_WAITING_USER_REPLY=1"
+    exit 0
+  fi
+elif [[ "$question_comment_id" =~ ^[0-9]+$ ]]; then
+  anchor_exists="$(
+    printf '%s' "$comments_json" | jq -r --argjson qid "$question_comment_id" '
+      any(.[]; (.id | tonumber) == $qid)
+    '
+  )"
+  if [[ "$anchor_exists" != "true" ]]; then
+    recovered_qid="$(recover_anchor_comment_id "$kind_label" "$task_id" "$comments_json")"
+    if [[ -n "$recovered_qid" ]]; then
+      question_comment_id="$recovered_qid"
+      printf '%s\n' "$question_comment_id" > "$question_id_file"
+      echo "RECOVERED_QUESTION_COMMENT_ID=$question_comment_id"
+    elif [[ "$pending_post" == "1" ]]; then
+      emit_wait_state "$task_id" "$issue_number" "$question_comment_id" "$kind_label"
+      echo "WAITING_FOR_QUESTION_POST=1"
+      exit 0
+    else
+      clear_stale_waiting_context "ANCHOR_COMMENT_MISSING" "$issue_number" "$task_id" "$kind_label"
+      echo "NO_WAITING_USER_REPLY=1"
+      exit 0
+    fi
   fi
 fi
 

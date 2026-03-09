@@ -6,6 +6,9 @@
 - `scripts/codex/run.sh <command>`
 
 Для полного онбординга GitHub App auth-сервиса см.:
+- `docs/flow-onboarding-checklist.md` (сверхкороткий чеклист внедрения flow в новый repo/локальную папку).
+- `docs/flow-onboarding-quickstart.md` (быстрый onboarding flow-комплекта в новый repo/локальную папку проекта).
+- `docs/flow-toolkit-packaging.md` (что переносить в другой проект и как выносить automation в отдельный toolkit-repo).
 - `docs/gh-app-daemon-integration-plan.md` (разделы `Runbook: APP-07.5` и `Онбординг сервиса`).
 - `docs/flow-portability-runbook.md` (миграция `current -> new project`, multi-project smoke, rollback, extraction strategy).
 - `docs/self-hosted-runner-deploy.md` (перевод deploy workflow на self-hosted runner `planka-deploy`).

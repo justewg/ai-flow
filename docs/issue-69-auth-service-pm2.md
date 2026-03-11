@@ -4,14 +4,14 @@
 Запускать `gh_app_auth_service.js` под `PM2` с авто-перезапуском, отдельными логами и явной health-проверкой для операционного контура.
 
 ## Что добавлено
-- PM2 ecosystem-конфиг: `.flow/scripts/gh_app_auth_pm2_ecosystem.config.cjs`
+- PM2 ecosystem-конфиг: `.flow/shared/scripts/gh_app_auth_pm2_ecosystem.config.cjs`
 - Команды-обертки:
-  - `.flow/scripts/run.sh gh_app_auth_pm2_start`
-  - `.flow/scripts/run.sh gh_app_auth_pm2_stop`
-  - `.flow/scripts/run.sh gh_app_auth_pm2_restart`
-  - `.flow/scripts/run.sh gh_app_auth_pm2_status`
-  - `.flow/scripts/run.sh gh_app_auth_pm2_health`
-  - `.flow/scripts/run.sh gh_app_auth_pm2_crash_test`
+  - `.flow/shared/scripts/run.sh gh_app_auth_pm2_start`
+  - `.flow/shared/scripts/run.sh gh_app_auth_pm2_stop`
+  - `.flow/shared/scripts/run.sh gh_app_auth_pm2_restart`
+  - `.flow/shared/scripts/run.sh gh_app_auth_pm2_status`
+  - `.flow/shared/scripts/run.sh gh_app_auth_pm2_health`
+  - `.flow/shared/scripts/run.sh gh_app_auth_pm2_crash_test`
 - Логи PM2 auth-сервиса:
   - `.flow/logs/pm2/gh_app_auth.out.log`
   - `.flow/logs/pm2/gh_app_auth.err.log`
@@ -31,12 +31,12 @@
 
 ### 2. Старт сервиса под PM2
 ```bash
-.flow/scripts/run.sh gh_app_auth_pm2_start
+.flow/shared/scripts/run.sh gh_app_auth_pm2_start
 ```
 
 ### 3. Проверка состояния и health
 ```bash
-.flow/scripts/run.sh gh_app_auth_pm2_health
+.flow/shared/scripts/run.sh gh_app_auth_pm2_health
 ```
 
 Ожидаемо:
@@ -45,7 +45,7 @@
 
 ### 4. Проверка авто-restart после падения
 ```bash
-.flow/scripts/run.sh gh_app_auth_pm2_crash_test
+.flow/shared/scripts/run.sh gh_app_auth_pm2_crash_test
 ```
 
 Ожидаемо:
@@ -54,9 +54,9 @@
 
 ### 5. Операционные команды
 ```bash
-.flow/scripts/run.sh gh_app_auth_pm2_status
-.flow/scripts/run.sh gh_app_auth_pm2_restart
-.flow/scripts/run.sh gh_app_auth_pm2_stop
+.flow/shared/scripts/run.sh gh_app_auth_pm2_status
+.flow/shared/scripts/run.sh gh_app_auth_pm2_restart
+.flow/shared/scripts/run.sh gh_app_auth_pm2_stop
 ```
 
 ### 6. Диагностика логов

@@ -36,14 +36,14 @@ Execution-Mode: daemon
 1. Ты делаешь merge PR `development -> main`.
 2. Ты пишешь `merged`.
 3. Я запускаю синхронизацию веток:
-   - `.flow/scripts/run.sh sync_branches`
+   - `.flow/shared/scripts/run.sh sync_branches`
 4. Я проверяю очередь запуска:
    - `Status=Todo` (твоя явная команда "запускай");
    - при подхвате сразу перевожу задачу в `In Progress` (`project_set_status`) как ACK.
 5. После подхвата:
    - реализую изменения в рабочем цикле.
 6. По готовности:
-   - запускаю `.flow/scripts/run.sh task_finalize` (commit+push, create/update PR, перевод в `Status=Review`, `Flow=In Review`);
+   - запускаю `.flow/shared/scripts/run.sh task_finalize` (commit+push, create/update PR, перевод в `Status=Review`, `Flow=In Review`);
    - перевожу PR в финальный сигнал ревью (`ready_for_review`);
    - отправляю ссылку на PR для ревью;
    - после merge цикл повторяется.
@@ -198,31 +198,31 @@ Telegram-сигналы по Issue-вопросам:
 
 ## 8. Точка эволюции (следующий шаг)
 Минимальный план внедрения daemon-версии:
-1. `.flow/scripts/daemon_loop.sh` (poll + lock + state machine).
-2. Обновление `.flow/scripts/README.md` с командами демона.
+1. `.flow/shared/scripts/daemon_loop.sh` (poll + lock + state machine).
+2. Обновление `.flow/shared/scripts/README.md` с командами демона.
 3. Проверка наличия значения `Status`: `Todo` в проекте.
 4. Запуск демона как системного сервиса (`launchd`) на рабочей машине.
 5. Опционально: workflow `repository_dispatch` для ускоренного триггера после merge.
 
 ### 8.1. Команды launchd
 - Установить и запустить сервис:
-  - `.flow/scripts/run.sh daemon_install`
+  - `.flow/shared/scripts/run.sh daemon_install`
 - Установить с кастомным интервалом (например, 30 сек):
-  - `.flow/scripts/run.sh daemon_install com.flow.codex-daemon.planka 30`
+  - `.flow/shared/scripts/run.sh daemon_install com.flow.codex-daemon.planka 30`
 - Проверить статус:
-  - `.flow/scripts/run.sh daemon_status`
+  - `.flow/shared/scripts/run.sh daemon_status`
 - Остановить и удалить сервис:
-  - `.flow/scripts/run.sh daemon_uninstall`
+  - `.flow/shared/scripts/run.sh daemon_uninstall`
 
 ### 8.2. Команды watchdog
 - Установить и запустить watchdog:
-  - `.flow/scripts/run.sh watchdog_install`
+  - `.flow/shared/scripts/run.sh watchdog_install`
 - Проверить статус watchdog:
-  - `.flow/scripts/run.sh watchdog_status`
+  - `.flow/shared/scripts/run.sh watchdog_status`
 - Выполнить ручной тик watchdog:
-  - `.flow/scripts/run.sh watchdog_tick`
+  - `.flow/shared/scripts/run.sh watchdog_tick`
 - Остановить и удалить watchdog:
-  - `.flow/scripts/run.sh watchdog_uninstall`
+  - `.flow/shared/scripts/run.sh watchdog_uninstall`
 
 ## 9. Как настроить статусы в GitHub Project
 ### 9.1. Рекомендуемый путь (UI)

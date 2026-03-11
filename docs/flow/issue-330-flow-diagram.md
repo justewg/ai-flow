@@ -17,7 +17,7 @@ flowchart LR
     PD["Done / Done"]:::state
   end
 
-  subgraph Daemon["Daemon + Executor (.flow/scripts)"]
+  subgraph Daemon["Daemon + Executor (.flow/shared/scripts)"]
     DL["daemon_loop + daemon_tick"]:::proc
     DCHK["Проверки: lock, open PR, Depends-On,<br/>dirty tracked, GitHub health"]:::proc
     DST["executor_tick -> executor_start"]:::proc

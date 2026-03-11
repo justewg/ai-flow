@@ -35,6 +35,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=./env/resolve_config.sh
 source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
 CODEX_DIR="$(codex_export_state_dir)"
+RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
 REPO="${GITHUB_REPO:-justewg/planka}"
 
 mkdir -p "$CODEX_DIR"
@@ -117,18 +118,18 @@ format_recent_executor_paragraphs() {
 }
 
 extract_recent_codex_blocks_from_log() {
-  if [[ ! -f "${CODEX_DIR}/executor.log" ]]; then
+  if [[ ! -f "${RUNTIME_LOG_DIR}/executor.log" ]]; then
     return 0
   fi
 
   local start_line=""
   local log_slice_file=""
-  start_line="$(grep -n '^=== EXECUTOR_RUN_START ' "${CODEX_DIR}/executor.log" | tail -n1 | cut -d: -f1 || true)"
+  start_line="$(grep -n '^=== EXECUTOR_RUN_START ' "${RUNTIME_LOG_DIR}/executor.log" | tail -n1 | cut -d: -f1 || true)"
   log_slice_file="$(mktemp "${CODEX_DIR}/executor_log_slice.XXXXXX")"
   if [[ -n "$start_line" ]]; then
-    sed -n "${start_line},\$p" "${CODEX_DIR}/executor.log" > "$log_slice_file"
+    sed -n "${start_line},\$p" "${RUNTIME_LOG_DIR}/executor.log" > "$log_slice_file"
   else
-    tail -n 1200 "${CODEX_DIR}/executor.log" > "$log_slice_file"
+    tail -n 1200 "${RUNTIME_LOG_DIR}/executor.log" > "$log_slice_file"
   fi
 
   awk '
@@ -301,8 +302,8 @@ infer_executor_question() {
     fi
   fi
 
-  if [[ -z "$candidate" && -f "${CODEX_DIR}/executor.log" ]]; then
-    src_text="$(tail -n 400 "${CODEX_DIR}/executor.log" 2>/dev/null || true)"
+  if [[ -z "$candidate" && -f "${RUNTIME_LOG_DIR}/executor.log" ]]; then
+    src_text="$(tail -n 400 "${RUNTIME_LOG_DIR}/executor.log" 2>/dev/null || true)"
     candidate="$(extract_question_line "$src_text")"
     if [[ -z "$candidate" ]]; then
       candidate="$(extract_decision_line "$src_text")"

@@ -13,6 +13,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=./env/resolve_config.sh
 source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
 CODEX_DIR="$(codex_export_state_dir)"
+RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
 
 STATE_FILE="${CODEX_DIR}/executor_state.txt"
 PID_FILE="${CODEX_DIR}/executor_pid.txt"
@@ -106,7 +107,7 @@ Task: ${task_id}
 Issue: #${issue_number}
 Exit code: ${last_rc:-unknown}
 
-Проверь логи ${CODEX_DIR}/executor.log и дай команду как действовать дальше.
+Проверь логи ${RUNTIME_LOG_DIR}/executor.log и дай команду как действовать дальше.
 EOF
       if ask_out="$("${ROOT_DIR}/.flow/scripts/task_ask.sh" blocker "$msg_file" 2>&1)"; then
         echo "EXECUTOR_FAILURE_BLOCKER_POSTED=1"

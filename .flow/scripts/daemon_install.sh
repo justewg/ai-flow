@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=./env/resolve_config.sh
 source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
 CODEX_DIR="$(codex_export_state_dir)"
+RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
 lock_dir="${CODEX_DIR}/daemon.lock"
 launchd_dir="$(codex_resolve_flow_launchd_dir)"
 launchagents_dir="$(codex_resolve_flow_launchagents_dir)"
@@ -21,7 +22,7 @@ if ! [[ "$interval" =~ ^[0-9]+$ ]] || (( interval < 5 )); then
   exit 1
 fi
 
-mkdir -p "${launchagents_dir}" "${launchd_dir}" "${CODEX_DIR}"
+mkdir -p "${launchagents_dir}" "${launchd_dir}" "${CODEX_DIR}" "${RUNTIME_LOG_DIR}"
 
 optional_env_block=""
 if [[ -n "$profile_env_file" ]]; then
@@ -68,10 +69,10 @@ ${optional_env_block}
   </dict>
 
   <key>StandardOutPath</key>
-  <string>${CODEX_DIR}/launchd.out.log</string>
+  <string>${RUNTIME_LOG_DIR}/launchd.out.log</string>
 
   <key>StandardErrorPath</key>
-  <string>${CODEX_DIR}/launchd.err.log</string>
+  <string>${RUNTIME_LOG_DIR}/launchd.err.log</string>
 </dict>
 </plist>
 EOF
@@ -88,6 +89,7 @@ echo "Canonical plist: ${canonical_plist_path}"
 echo "LaunchAgents plist: ${plist_path}"
 echo "Interval: ${interval}s"
 echo "State dir: ${CODEX_DIR}"
+echo "Runtime log dir: ${RUNTIME_LOG_DIR}"
 echo "Daemon lock dir: ${lock_dir}"
 if [[ -n "$profile_env_file" ]]; then
   echo "Profile env: ${profile_env_file}"

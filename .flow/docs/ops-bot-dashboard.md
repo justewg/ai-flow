@@ -125,8 +125,8 @@ location /telegram/webhook/ {
 
 ## Диагностика
 - PM2 logs:
-  - `.flow/logs/pm2/ops_bot.out.log`
-  - `.flow/logs/pm2/ops_bot.err.log`
+  - `<log-dir>/pm2/ops_bot.out.log`
+  - `<log-dir>/pm2/ops_bot.err.log`
 - Health:
   - `.flow/scripts/run.sh ops_bot_pm2_health`
 - Snapshot sanity:
@@ -153,7 +153,7 @@ location /telegram/webhook/ {
    - payload > 1 MiB дает `413 PAYLOAD_TOO_LARGE`;
    - update без Telegram-команды обрабатывается безопасно (`200`, `command_handled=false`);
    - отправить в Telegram команды `/help`, `/status`, `/summary 6`, `/status_page`.
-9. Проверить логи PM2: `.flow/logs/pm2/ops_bot.out.log`, `.flow/logs/pm2/ops_bot.err.log` (нет необработанных ошибок).
+9. Проверить логи PM2: `<log-dir>/pm2/ops_bot.out.log`, `<log-dir>/pm2/ops_bot.err.log` (нет необработанных ошибок).
 
 ## Безопасность
 - Не открывать сервис наружу напрямую, только через nginx.

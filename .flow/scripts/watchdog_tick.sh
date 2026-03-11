@@ -5,15 +5,16 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=./env/resolve_config.sh
 source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
 CODEX_DIR="$(codex_export_state_dir)"
+RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
 PROJECT_LABEL="$(codex_resolve_project_display_label)"
 LAUNCHD_NAMESPACE="$(codex_resolve_flow_launchd_namespace)"
 
-LOG_FILE="${CODEX_DIR}/watchdog.log"
+LOG_FILE="${RUNTIME_LOG_DIR}/watchdog.log"
 STATE_FILE="${CODEX_DIR}/watchdog_state.txt"
 DETAIL_FILE="${CODEX_DIR}/watchdog_state_detail.txt"
 LAST_ACTION_FILE="${CODEX_DIR}/watchdog_last_action.txt"
 LAST_ACTION_EPOCH_FILE="${CODEX_DIR}/watchdog_last_action_epoch.txt"
-DAEMON_LOG_FILE="${CODEX_DIR}/daemon.log"
+DAEMON_LOG_FILE="${RUNTIME_LOG_DIR}/daemon.log"
 DAEMON_LOCK_DIR="${CODEX_DIR}/daemon.lock"
 
 DAEMON_LABEL="${WATCHDOG_DAEMON_LABEL:-${LAUNCHD_NAMESPACE}.codex-daemon}"
@@ -24,7 +25,7 @@ DAEMON_LOG_STALE_SEC="${WATCHDOG_DAEMON_LOG_STALE_SEC:-180}"
 DAEMON_RATE_LIMIT_MAX_SLEEP_SEC="${DAEMON_RATE_LIMIT_MAX_SLEEP_SEC:-360}"
 DAEMON_LOG_STALE_RATE_LIMIT_SEC="${WATCHDOG_DAEMON_LOG_STALE_RATE_LIMIT_SEC:-0}"
 
-mkdir -p "$CODEX_DIR"
+mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
 
 parse_uint_or_default() {
   local raw="$1"

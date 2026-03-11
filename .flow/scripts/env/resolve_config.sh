@@ -80,9 +80,74 @@ codex_resolve_flow_codex_state_root_dir() {
 }
 
 codex_resolve_flow_logs_dir() {
-  local flow_root_dir
-  flow_root_dir="$(codex_resolve_flow_root_dir)"
-  codex_resolve_bootstrap_value "FLOW_LOGS_DIR" "${flow_root_dir}/logs"
+  local value=""
+  value="$(codex_try_config_value "FLOW_LOGS_DIR" || true)"
+  if [[ -n "$value" ]]; then
+    printf '%s' "$value"
+    return 0
+  fi
+
+  local ai_flow_logs_root_dir project_log_slug
+  ai_flow_logs_root_dir="$(codex_resolve_ai_flow_logs_root_dir)"
+  project_log_slug="$(codex_resolve_project_log_slug)"
+  printf '%s/%s' "$ai_flow_logs_root_dir" "$project_log_slug"
+}
+
+codex_resolve_ai_flow_root_dir() {
+  local root_dir sites_root_dir
+  root_dir="$(codex_resolve_root_dir)"
+  sites_root_dir="$(cd "${root_dir}/.." && pwd)"
+  codex_resolve_bootstrap_value "AI_FLOW_ROOT_DIR" "${sites_root_dir}/.ai-flow"
+}
+
+codex_resolve_ai_flow_shared_dir() {
+  local ai_flow_root_dir
+  ai_flow_root_dir="$(codex_resolve_ai_flow_root_dir)"
+  codex_resolve_bootstrap_value "AI_FLOW_SHARED_DIR" "${ai_flow_root_dir}/shared"
+}
+
+codex_resolve_ai_flow_logs_root_dir() {
+  local ai_flow_root_dir
+  ai_flow_root_dir="$(codex_resolve_ai_flow_root_dir)"
+  codex_resolve_bootstrap_value "AI_FLOW_LOGS_ROOT_DIR" "${ai_flow_root_dir}/logs"
+}
+
+codex_slugify_value() {
+  local value="${1:-}"
+  value="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
+  value="$(printf '%s' "$value" | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-{2,}/-/g')"
+  [[ -n "$value" ]] || value="default"
+  printf '%s' "$value"
+}
+
+codex_resolve_project_log_slug() {
+  local value profile_name repo_slug repo_name
+  value="$(codex_try_config_value "FLOW_LOG_NAMESPACE" || true)"
+  if [[ -n "$value" ]]; then
+    codex_slugify_value "$value"
+    return 0
+  fi
+
+  profile_name="$(codex_try_config_value "PROJECT_PROFILE" || true)"
+  if [[ -n "$profile_name" && "$profile_name" != "default" ]]; then
+    codex_slugify_value "$profile_name"
+    return 0
+  fi
+
+  repo_slug="$(codex_try_config_value "GITHUB_REPO" || true)"
+  repo_name="${repo_slug##*/}"
+  if [[ -n "$repo_name" && "$repo_name" != "$repo_slug" ]]; then
+    codex_slugify_value "$repo_name"
+    return 0
+  fi
+
+  codex_slugify_value "default"
+}
+
+codex_resolve_flow_runtime_log_dir() {
+  local flow_logs_dir
+  flow_logs_dir="$(codex_resolve_flow_logs_dir)"
+  codex_resolve_bootstrap_value "FLOW_RUNTIME_LOG_DIR" "${flow_logs_dir}/runtime"
 }
 
 codex_resolve_flow_pm2_log_dir() {

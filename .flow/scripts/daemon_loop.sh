@@ -6,9 +6,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
 codex_load_flow_env
 CODEX_DIR="$(codex_export_state_dir)"
+RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
 PROJECT_LABEL="$(codex_resolve_project_display_label)"
 LOCK_DIR="${CODEX_DIR}/daemon.lock"
-LOG_FILE="${CODEX_DIR}/daemon.log"
+LOG_FILE="${RUNTIME_LOG_DIR}/daemon.log"
 STATE_FILE="${CODEX_DIR}/daemon_state.txt"
 STATE_DETAIL_FILE="${CODEX_DIR}/daemon_state_detail.txt"
 NOTIFY_MODE_FILE="${CODEX_DIR}/daemon_notify_mode.txt"
@@ -35,7 +36,7 @@ if ! [[ "$rate_limit_backoff_max_sec" =~ ^[0-9]+$ ]] || (( rate_limit_backoff_ma
   rate_limit_backoff_max_sec="$rate_limit_backoff_base_sec"
 fi
 
-mkdir -p "$CODEX_DIR"
+mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
 
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   echo "Daemon already running (lock: $LOCK_DIR)"

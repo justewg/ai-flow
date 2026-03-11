@@ -5,7 +5,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=./env/resolve_config.sh
 source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
 codex_load_flow_env
+FLOW_LOGS_DIR="$(codex_resolve_flow_logs_dir)"
 PM2_LOG_DIR="$(codex_resolve_flow_pm2_log_dir)"
+FLOW_PM2_LOG_DIR="${PM2_LOG_DIR}"
+export FLOW_LOGS_DIR FLOW_PM2_LOG_DIR
 PM2_APP_NAME="${GH_APP_PM2_APP_NAME:-planka-gh-app-auth}"
 PM2_ECOSYSTEM_FILE="${ROOT_DIR}/.flow/scripts/gh_app_auth_pm2_ecosystem.config.cjs"
 

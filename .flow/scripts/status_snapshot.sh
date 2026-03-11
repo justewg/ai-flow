@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=./env/resolve_config.sh
 source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
 CODEX_DIR="$(codex_export_state_dir)"
+RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
+FLOW_LOGS_DIR="$(codex_resolve_flow_logs_dir)"
 project_profile="$(codex_resolve_project_profile_name)"
 project_repo="$(codex_resolve_project_repo_slug)"
 project_label="$(codex_resolve_project_display_label)"
@@ -157,7 +159,8 @@ rate_last_success_file="${CODEX_DIR}/graphql_rate_last_success_utc.txt"
 rate_last_limit_file="${CODEX_DIR}/graphql_rate_last_limit_utc.txt"
 
 daemon_log_file="${CODEX_DIR}/daemon.log"
-watchdog_log_file="${CODEX_DIR}/watchdog.log"
+daemon_log_file="${RUNTIME_LOG_DIR}/daemon.log"
+watchdog_log_file="${RUNTIME_LOG_DIR}/watchdog.log"
 
 daemon_state="$(read_file_or_default "$daemon_state_file" "UNKNOWN")"
 daemon_detail="$(read_file_or_default "$daemon_detail_file" "")"
@@ -355,6 +358,8 @@ jq -n \
   --arg project_repo "$project_repo" \
   --arg project_label "$project_label" \
   --arg state_dir "$CODEX_DIR" \
+  --arg flow_logs_dir "$FLOW_LOGS_DIR" \
+  --arg runtime_log_dir "$RUNTIME_LOG_DIR" \
   --arg daemon_state "$daemon_state" \
   --arg daemon_detail "$daemon_detail" \
   --arg watchdog_state "$watchdog_state" \
@@ -395,7 +400,9 @@ jq -n \
       profile: $project_profile,
       repo: $project_repo,
       label: $project_label,
-      state_dir: $state_dir
+      state_dir: $state_dir,
+      log_dir: $flow_logs_dir,
+      runtime_log_dir: $runtime_log_dir
     },
     overall_status: $overall_status,
     action_required: $action_required,

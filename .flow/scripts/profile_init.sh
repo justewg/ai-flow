@@ -157,6 +157,9 @@ if ! [[ "$watchdog_interval" =~ ^[0-9]+$ ]] || (( watchdog_interval < 10 )); the
 fi
 
 emit_profile_summary() {
+  local flow_logs_dir runtime_log_dir
+  flow_logs_dir="$(resolve_flow_logs_dir_for_profile)"
+  runtime_log_dir="$(resolve_runtime_log_dir_for_profile)"
   cat <<EOF
 PROFILE=${profile}
 PROFILE_SLUG=${profile_slug}
@@ -164,6 +167,8 @@ PROJECT_PROFILE=${project_profile}
 ENV_FILE=${env_file}
 SAMPLE_ENV_FILE=${flow_sample_env_file}
 STATE_DIR=${state_dir}
+LOG_DIR=${flow_logs_dir}
+RUNTIME_LOG_DIR=${runtime_log_dir}
 DAEMON_LABEL=${daemon_label}
 DAEMON_INTERVAL=${daemon_interval}
 WATCHDOG_LABEL=${watchdog_label}
@@ -270,6 +275,14 @@ OPS_BOT_REMOTE_SUMMARY_TTL_SEC=1200
 # OPS_REMOTE_SUMMARY_PUSH_HOURS=6
 # OPS_REMOTE_SUMMARY_PUSH_MIN_INTERVAL_SEC=300
 
+# Optional host-level shared flow root/log layout.
+# Defaults:
+#   AI_FLOW_ROOT_DIR=<sites-root>/.ai-flow
+#   FLOW_LOGS_DIR=<AI_FLOW_ROOT_DIR>/logs/<project-profile>
+# Uncomment only if you want explicit non-default paths.
+# AI_FLOW_ROOT_DIR=
+# FLOW_LOGS_DIR=
+
 CODEX_STATE_DIR=${state_dir}
 FLOW_STATE_DIR=${state_dir}
 
@@ -288,10 +301,56 @@ ensure_dir() {
   mkdir -p "$dir_path"
 }
 
+resolve_flow_logs_dir_for_profile() {
+  local configured_logs_dir ai_flow_logs_root_dir
+  configured_logs_dir="$(codex_read_key_from_env_file "$env_file" "FLOW_LOGS_DIR" || true)"
+  if [[ -n "$configured_logs_dir" ]]; then
+    printf '%s' "$configured_logs_dir"
+    return 0
+  fi
+  ai_flow_logs_root_dir="$(codex_resolve_ai_flow_logs_root_dir)"
+  printf '%s/%s' "$ai_flow_logs_root_dir" "$(codex_slugify_value "$project_profile")"
+}
+
+resolve_runtime_log_dir_for_profile() {
+  local flow_logs_dir
+  flow_logs_dir="$(resolve_flow_logs_dir_for_profile)"
+  printf '%s/runtime' "$flow_logs_dir"
+}
+
+ensure_legacy_state_log_links() {
+  local state_dir_path="$1"
+  local runtime_log_dir_path="$2"
+  local log_name state_link target_link
+  local -a log_names=(
+    daemon.log
+    executor.log
+    watchdog.log
+    graphql_rate_stats.log
+    launchd.out.log
+    launchd.err.log
+    watchdog.launchd.out.log
+    watchdog.launchd.err.log
+  )
+
+  ensure_dir "$runtime_log_dir_path"
+
+  for log_name in "${log_names[@]}"; do
+    state_link="${state_dir_path}/${log_name}"
+    target_link="${runtime_log_dir_path}/${log_name}"
+    if [[ "$dry_run" == "1" ]]; then
+      printf 'DRY_RUN ln -sfn %s %s\n' "$target_link" "$state_link"
+      continue
+    fi
+    ln -sfn "$target_link" "$state_link"
+  done
+}
+
 init_profile() {
   emit_profile_summary
   ensure_dir "$(dirname "$env_file")"
   ensure_dir "$state_dir"
+  ensure_legacy_state_log_links "$state_dir" "$(resolve_runtime_log_dir_for_profile)"
 
   if [[ -f "$env_file" && "$force" != "1" ]]; then
     if [[ ! -f "$flow_sample_env_file" ]]; then
@@ -428,6 +487,7 @@ install_profile() {
   fi
 
   ensure_dir "$state_dir"
+  ensure_legacy_state_log_links "$state_dir" "$(resolve_runtime_log_dir_for_profile)"
 
   local daemon_cmd=("${ROOT_DIR}/.flow/scripts/daemon_install.sh" "$daemon_label" "$daemon_interval")
   local watchdog_cmd=("${ROOT_DIR}/.flow/scripts/watchdog_install.sh" "$watchdog_label" "$watchdog_interval")

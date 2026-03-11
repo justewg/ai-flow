@@ -6,8 +6,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
 codex_load_flow_env
 CODEX_DIR="$(codex_export_state_dir)"
+RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
 LOCK_DIR="${CODEX_DIR}/watchdog.lock"
-LOG_FILE="${CODEX_DIR}/watchdog.log"
+LOG_FILE="${RUNTIME_LOG_DIR}/watchdog.log"
 STATE_FILE="${CODEX_DIR}/watchdog_state.txt"
 DETAIL_FILE="${CODEX_DIR}/watchdog_state_detail.txt"
 
@@ -17,7 +18,7 @@ if ! [[ "$interval" =~ ^[0-9]+$ ]] || (( interval < 10 )); then
   exit 1
 fi
 
-mkdir -p "$CODEX_DIR"
+mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
 
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   echo "Watchdog already running (lock: $LOCK_DIR)"

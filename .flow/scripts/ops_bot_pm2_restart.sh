@@ -5,6 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=./env/resolve_config.sh
 source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
 codex_load_flow_env
+FLOW_LOGS_DIR="$(codex_resolve_flow_logs_dir)"
+FLOW_PM2_LOG_DIR="$(codex_resolve_flow_pm2_log_dir)"
+export FLOW_LOGS_DIR FLOW_PM2_LOG_DIR
 PM2_APP_NAME="${OPS_BOT_PM2_APP_NAME:-planka-ops-bot}"
 
 if ! command -v pm2 >/dev/null 2>&1; then

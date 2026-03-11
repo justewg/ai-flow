@@ -80,9 +80,11 @@
 - `.flow/scripts/run.sh ops_remote_summary_push` — отправить bundle `log_summary` (локальное окно `6h` по умолчанию) в удаленный ingest endpoint ops-бота.
 
 ## State-dir и multi-project
-- Core flow state/log/runtime хранится в `<state-dir>`, где `<state-dir>=${CODEX_STATE_DIR:-${FLOW_STATE_DIR:-${ROOT_DIR}/.flow/state/codex/default}}`.
+- Core flow state хранится в `<state-dir>`, где `<state-dir>=${CODEX_STATE_DIR:-${FLOW_STATE_DIR:-${ROOT_DIR}/.flow/state/codex/default}}`.
+- Runtime и PM2 логи живут отдельно в `<log-dir>`; по умолчанию `<log-dir>=<sites-root>/.ai-flow/logs/<project>`.
 - Override задаётся через `CODEX_STATE_DIR`; если он не задан, используется `FLOW_STATE_DIR`.
 - По умолчанию используется `${ROOT_DIR}/.flow/state/codex/default`.
+- Shared host-level flow root для общих логов по проектам: `${ROOT_DIR}/../.ai-flow`.
 - `.tmp/codex/` больше не является runtime-root; если каталог присутствует, это только compatibility-symlink layer к `.flow/`.
 - Для параллельного запуска двух проектов на одном хосте задайте разные `<state-dir>`.
 - Если используете `daemon_install`/`watchdog_install`, задайте ещё и разные `label`, чтобы не столкнулись launchd-агенты.
@@ -92,7 +94,9 @@
 | Параметр | Current project (пример: PLANKA) | New project (пример: ACME) | Зачем нужен |
 | --- | --- | --- | --- |
 | `DAEMON_GH_ENV_FILE` | `<root-dir>/.flow/config/flow.env` | `<root-dir>/.flow/config/flow.env` | Привязывает daemon/watchdog к project-scoped flow env-файлу. |
-| `CODEX_STATE_DIR` / `FLOW_STATE_DIR` | `<root-dir>/.flow/state/codex/planka` | `<root-dir>/.flow/state/codex/acme` | Разводит state/log/runtime и фиксированные файлы `run.sh`. |
+| `CODEX_STATE_DIR` / `FLOW_STATE_DIR` | `<root-dir>/.flow/state/codex/planka` | `<root-dir>/.flow/state/codex/acme` | Разводит state, locks, runtime queue и фиксированные файлы `run.sh`. |
+| `AI_FLOW_ROOT_DIR` | `<sites-root>/.ai-flow` | `<sites-root>/.ai-flow` или свой host-level root | Общий host-level namespace для shared логов и будущего общего flow-toolkit слоя. |
+| `FLOW_LOGS_DIR` | `<sites-root>/.ai-flow/logs/planka` | `<sites-root>/.ai-flow/logs/acme` | Разводит runtime/PM2 логи по проектам и позволяет держать их вне repo. |
 | `PROJECT_PROFILE` | `default` | `acme` | Включает отдельный project-binding; для non-default требуются все `PROJECT_*`. |
 | `GITHUB_REPO` | `<owner>/<current-repo>` | `<owner>/<new-repo>` | Определяет repo для Issue/PR-команд и executor prompt. |
 | `PROJECT_ID` / `PROJECT_NUMBER` / `PROJECT_OWNER` | binding текущего проекта или полный override | обязательный полный набор | Привязывает `daemon_tick`, `project_*`, `next_task` к конкретному Project v2. |
@@ -561,16 +565,16 @@ Rollback нового профиля:
 - Telegram webhook + команды: `/help`, `/status`, `/summary 6`, `/status_page`
 
 Логи демона:
-- `<state-dir>/daemon.log` — heartbeat и результат `daemon_tick`
-- `<state-dir>/launchd.out.log` — stdout агента `launchd`
-- `<state-dir>/launchd.err.log` — stderr агента `launchd`
-- `<state-dir>/watchdog.log` — heartbeat watchdog и recovery-действия
+- `<log-dir>/runtime/daemon.log` — heartbeat и результат `daemon_tick`
+- `<log-dir>/runtime/launchd.out.log` — stdout агента `launchd`
+- `<log-dir>/runtime/launchd.err.log` — stderr агента `launchd`
+- `<log-dir>/runtime/watchdog.log` — heartbeat watchdog и recovery-действия
 - `<state-dir>/watchdog_state.txt` — агрегированный статус watchdog
 - `<state-dir>/watchdog_state_detail.txt` — причина/деталь статуса watchdog
 - `<state-dir>/watchdog_last_action.txt` — последнее recovery-действие
 - `<state-dir>/watchdog_last_action_epoch.txt` — timestamp последнего recovery-действия
-- `<state-dir>/watchdog.launchd.out.log` — stdout watchdog-агента
-- `<state-dir>/watchdog.launchd.err.log` — stderr watchdog-агента
+- `<log-dir>/runtime/watchdog.launchd.out.log` — stdout watchdog-агента
+- `<log-dir>/runtime/watchdog.launchd.err.log` — stderr watchdog-агента
 - `.flow/tmp/` — временные toolkit-артефакты и migration manifest; не смешивается с runtime-state профиля
 - `<state-dir>/daemon_user_reply.txt` — последний ответ пользователя из Issue-комментариев
 - `<state-dir>/daemon_review_task_id.txt` — задача, ожидающая review-feedback
@@ -582,14 +586,14 @@ Rollback нового профиля:
 - `<state-dir>/daemon_notify_mode.txt` — последний режим уведомлений (`degraded|healthy`)
 - `<state-dir>/daemon_notify_last_epoch.txt` — timestamp последней попытки локального Telegram-уведомления
 - `<state-dir>/daemon_notify_last_signature.txt` — подпись последнего состояния, по которой определяется `DEGRADED_CHANGED`
-- `<state-dir>/graphql_rate_stats.log` — журнал rate-limit событий GraphQL (одно событие = окно от первого успешного запроса после лимита до нового лимита)
+- `<log-dir>/runtime/graphql_rate_stats.log` — журнал rate-limit событий GraphQL (одно событие = окно от первого успешного запроса после лимита до нового лимита)
 - `<state-dir>/graphql_rate_window_state.txt` — состояние текущего окна (`WAIT_SUCCESS|RUNNING`)
 - `<state-dir>/graphql_rate_window_start_epoch.txt` — epoch старта текущего окна
 - `<state-dir>/graphql_rate_window_start_utc.txt` — UTC-старт текущего окна
 - `<state-dir>/graphql_rate_window_requests.txt` — число успешных GraphQL-запросов в текущем окне
 - `<state-dir>/graphql_rate_last_success_utc.txt` — время последнего успешного GraphQL-запроса
 - `<state-dir>/graphql_rate_last_limit_utc.txt` — время последнего зафиксированного rate-limit события
-- `<state-dir>/executor.log` — полный лог автономного executor
+- `<log-dir>/runtime/executor.log` — полный лог автономного executor
 - `<state-dir>/executor_state.txt` — состояние executor (`RUNNING|DONE|FAILED`)
 - `<state-dir>/executor_pid.txt` — pid фонового executor-процесса
 - `<state-dir>/executor_last_exit_code.txt` — код завершения последнего executor запуска
@@ -598,21 +602,21 @@ Rollback нового профиля:
 - `<state-dir>/outbox/` — pending GitHub-действия (очередь)
 - `<state-dir>/outbox_payloads/` — payload-файлы для pending действий
 - `<state-dir>/outbox_failed/` — non-retryable ошибки outbox
-- `.flow/logs/pm2/ops_bot.out.log` — stdout ops-бот сервиса (PM2)
-- `.flow/logs/pm2/ops_bot.err.log` — stderr ops-бот сервиса (PM2)
+- `<log-dir>/pm2/ops_bot.out.log` — stdout ops-бот сервиса (PM2)
+- `<log-dir>/pm2/ops_bot.err.log` — stderr ops-бот сервиса (PM2)
 
 Быстрый анализ частоты GraphQL rate limit:
-- последние события: `tail -n 20 <state-dir>/graphql_rate_stats.log`
+- последние события: `tail -n 20 <log-dir>/runtime/graphql_rate_stats.log`
 - среднее число успешных GraphQL-запросов до нового лимита:
-  `awk -F'\t' '/EVENT=RATE_LIMIT/ { for(i=1;i<=NF;i++) if($i ~ /^requests=/){ split($i,a,"="); sum+=a[2]; n++ } } END { if(n) printf("avg_requests=%.2f events=%d\n", sum/n, n); else print "no_data" }' <state-dir>/graphql_rate_stats.log`
+  `awk -F'\t' '/EVENT=RATE_LIMIT/ { for(i=1;i<=NF;i++) if($i ~ /^requests=/){ split($i,a,"="); sum+=a[2]; n++ } } END { if(n) printf("avg_requests=%.2f events=%d\n", sum/n, n); else print "no_data" }' <log-dir>/runtime/graphql_rate_stats.log`
 - средняя длительность окна (сек):
-  `awk -F'\t' '/EVENT=RATE_LIMIT/ { for(i=1;i<=NF;i++) if($i ~ /^duration_sec=/){ split($i,a,"="); sum+=a[2]; n++ } } END { if(n) printf("avg_duration_sec=%.2f events=%d\n", sum/n, n); else print "no_data" }' <state-dir>/graphql_rate_stats.log`
+  `awk -F'\t' '/EVENT=RATE_LIMIT/ { for(i=1;i<=NF;i++) if($i ~ /^duration_sec=/){ split($i,a,"="); sum+=a[2]; n++ } } END { if(n) printf("avg_duration_sec=%.2f events=%d\n", sum/n, n); else print "no_data" }' <log-dir>/runtime/graphql_rate_stats.log`
 
 Быстрая проверка включения App auth:
 - `.flow/scripts/run.sh gh_app_auth_pm2_health`
 - `cat <state-dir>/daemon_state.txt`
 - `cat <state-dir>/daemon_state_detail.txt`
-- при необходимости: `tail -n 80 <state-dir>/daemon.log`
+- при необходимости: `tail -n 80 <log-dir>/runtime/daemon.log`
 
 ## Подготовка
 Скрипты должны быть исполняемыми:
@@ -672,3 +676,5 @@ chmod +x .flow/scripts/*.sh
 - `OPS_REMOTE_SUMMARY_PUSH_HOURS` (CSV окон summary для push; по умолчанию `6`)
 - `OPS_REMOTE_SUMMARY_PUSH_MIN_INTERVAL_SEC` (минимальный интервал между summary push; по умолчанию `300`)
 - `OPS_REMOTE_SUMMARY_PUSH_ENDPOINT_MISSING_BACKOFF_SEC` (backoff при `404 endpoint not found`; по умолчанию `3600`)
+- `AI_FLOW_ROOT_DIR` (host-level shared flow root; по умолчанию `<sites-root>/.ai-flow`)
+- `FLOW_LOGS_DIR` (project log dir; по умолчанию `<AI_FLOW_ROOT_DIR>/logs/<project-profile-or-repo>`)

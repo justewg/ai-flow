@@ -13,6 +13,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=./env/resolve_config.sh
 source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
 CODEX_DIR="$(codex_export_state_dir)"
+RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
 
 STATE_FILE="${CODEX_DIR}/executor_state.txt"
 PID_FILE="${CODEX_DIR}/executor_pid.txt"
@@ -20,12 +21,12 @@ TASK_FILE="${CODEX_DIR}/executor_task_id.txt"
 ISSUE_FILE="${CODEX_DIR}/executor_issue_number.txt"
 START_FILE="${CODEX_DIR}/executor_last_started_utc.txt"
 START_EPOCH_FILE="${CODEX_DIR}/executor_last_start_epoch.txt"
-LOG_FILE="${CODEX_DIR}/executor.log"
+LOG_FILE="${RUNTIME_LOG_DIR}/executor.log"
 HEARTBEAT_FILE="${CODEX_DIR}/executor_heartbeat_utc.txt"
 HEARTBEAT_EPOCH_FILE="${CODEX_DIR}/executor_heartbeat_epoch.txt"
 HEARTBEAT_PID_FILE="${CODEX_DIR}/executor_heartbeat_pid.txt"
 
-mkdir -p "$CODEX_DIR"
+mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
 
 if ! command -v codex >/dev/null 2>&1; then
   printf '%s\n' "FAILED" > "$STATE_FILE"

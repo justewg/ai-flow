@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=./env/resolve_config.sh
 source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
 CODEX_DIR="$(codex_export_state_dir)"
+RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
 codex_resolve_flow_config
 codex_resolve_project_config
 
@@ -33,7 +34,7 @@ dirty_gate_override_signature_file="${CODEX_DIR}/dirty_gate_override_signature.t
 dirty_gate_last_reply_id_file="${CODEX_DIR}/dirty_gate_last_reply_comment_id.txt"
 dirty_gate_finalize_pending_file="${CODEX_DIR}/dirty_gate_finalize_pending_issue_number.txt"
 DIRTY_GATE_ISSUE_CREATED_THIS_TICK="0"
-gql_stats_log_file="${CODEX_DIR}/graphql_rate_stats.log"
+gql_stats_log_file="${RUNTIME_LOG_DIR}/graphql_rate_stats.log"
 gql_window_state_file="${CODEX_DIR}/graphql_rate_window_state.txt"
 gql_window_start_epoch_file="${CODEX_DIR}/graphql_rate_window_start_epoch.txt"
 gql_window_start_utc_file="${CODEX_DIR}/graphql_rate_window_start_utc.txt"
@@ -47,6 +48,8 @@ dirty_gate_todo_cache_rc="0"
 dirty_gate_todo_cache_json=""
 dependency_status_cache_file="${CODEX_DIR}/dependency_issue_resolved_cache.json"
 DEPENDENCY_STATUS_CACHE_RESOLVED=""
+
+mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
 
 emit_lines() {
   local text="$1"

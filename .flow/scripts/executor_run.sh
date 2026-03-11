@@ -13,7 +13,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=./env/resolve_config.sh
 source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
 CODEX_DIR="$(codex_export_state_dir)"
-LOG_FILE="${CODEX_DIR}/executor.log"
+RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
+LOG_FILE="${RUNTIME_LOG_DIR}/executor.log"
 PROMPT_FILE="${CODEX_DIR}/executor_prompt.txt"
 STATE_FILE="${CODEX_DIR}/executor_state.txt"
 EXIT_FILE="${CODEX_DIR}/executor_last_exit_code.txt"
@@ -23,7 +24,7 @@ HEARTBEAT_FILE="${CODEX_DIR}/executor_heartbeat_utc.txt"
 HEARTBEAT_EPOCH_FILE="${CODEX_DIR}/executor_heartbeat_epoch.txt"
 HEARTBEAT_PID_FILE="${CODEX_DIR}/executor_heartbeat_pid.txt"
 
-mkdir -p "$CODEX_DIR"
+mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
 
 touch_heartbeat() {
   date -u '+%Y-%m-%dT%H:%M:%SZ' > "$HEARTBEAT_FILE"

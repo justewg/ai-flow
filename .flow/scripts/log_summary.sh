@@ -5,9 +5,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=./env/resolve_config.sh
 source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
 CODEX_DIR="$(codex_export_state_dir)"
-DAEMON_LOG_SRC="${CODEX_DIR}/daemon.log"
-WATCHDOG_LOG_SRC="${CODEX_DIR}/watchdog.log"
-GQL_STATS_LOG_SRC="${CODEX_DIR}/graphql_rate_stats.log"
+RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
+DAEMON_LOG_SRC="${RUNTIME_LOG_DIR}/daemon.log"
+WATCHDOG_LOG_SRC="${RUNTIME_LOG_DIR}/watchdog.log"
+GQL_STATS_LOG_SRC="${RUNTIME_LOG_DIR}/graphql_rate_stats.log"
 RUNTIME_QUEUE_FILE_SRC="${CODEX_DIR}/project_status_runtime_queue.json"
 
 TMP_BASE="${TMPDIR:-/tmp}"

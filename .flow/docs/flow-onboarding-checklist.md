@@ -59,6 +59,7 @@
 ### Для profile
 - [ ] Выбери `PROJECT_PROFILE`, например `acme`.
 - [ ] Подтверди будущий state-dir, например `.flow/state/codex/acme`.
+- [ ] Подтверди будущий log-dir, по умолчанию `<sites-root>/.ai-flow/logs/acme`.
 - [ ] При необходимости зафиксируй namespace launchd labels: `FLOW_LAUNCHD_NAMESPACE=com.flow` (это же дефолт).
 
 ### Для auth
@@ -107,6 +108,7 @@ cd /path/to/new-project
   - [ ] `.flow/config/flow.sample.env`
   - [ ] `.flow/config/flow.env`
   - [ ] `.flow/state/codex/acme`
+  - [ ] `<sites-root>/.ai-flow/logs/acme` или явный `FLOW_LOGS_DIR`
   - [ ] `.flow/config/root/github-actions.required-files.txt`
   - [ ] `.flow/config/root/github-actions.required-secrets.txt`
   - [ ] `.github/workflows/*.yml`

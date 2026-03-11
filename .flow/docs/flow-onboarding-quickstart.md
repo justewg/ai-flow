@@ -167,6 +167,7 @@ cd <HOME>/sites/acme-app
 - созданы `.flow/config/root/github-actions.required-files.txt` и `.flow/config/root/github-actions.required-secrets.txt`
 - развернуты `.github/workflows/*.yml` и, если он был в source-kit, `.github/pull_request_template.md`
 - создан `.flow/state/codex/acme`
+- подготовлен log-dir проекта: по умолчанию `<sites-root>/.ai-flow/logs/acme`
 
 ### Шаг 3. Создать flow env и state-dir
 ```bash
@@ -176,6 +177,7 @@ cd <HOME>/sites/acme-app
 Ожидаемый результат:
 - создан `.flow/config/flow.env`
 - создан `.flow/state/codex/acme`
+- log-dir по умолчанию будет вычислен как `<sites-root>/.ai-flow/logs/acme`
 
 Если перед этим уже был выполнен `apply_migration_kit`, шаг можно пропустить: рабочий `.flow/config/flow.env` уже материализован из `.flow/config/flow.sample.env`.
 
@@ -205,6 +207,8 @@ GH_APP_PORT=8787
 
 CODEX_STATE_DIR=<HOME>/sites/acme-app/.flow/state/codex/acme
 FLOW_STATE_DIR=<HOME>/sites/acme-app/.flow/state/codex/acme
+# AI_FLOW_ROOT_DIR=<HOME>/sites/.ai-flow
+# FLOW_LOGS_DIR=<HOME>/sites/.ai-flow/logs/acme
 
 WATCHDOG_DAEMON_LABEL=com.flow.codex-daemon.acme
 WATCHDOG_DAEMON_INTERVAL_SEC=45

@@ -13,8 +13,9 @@
 ## Термины
 - `current project` — существующий проект, где flow уже работает.
 - `new project` — новый consumer-repo/Project v2, который подключается к flow-комплекту.
-- `profile` — набор `env + state-dir + launchd labels`, отделяющий один проект от другого.
-- `<state-dir>` — каталог runtime-состояния, логов, fixed input files и snapshot-артефактов `run.sh`.
+- `profile` — набор `env + state-dir + log-dir + launchd labels`, отделяющий один проект от другого.
+- `<state-dir>` — каталог runtime-состояния, locks, queues, fixed input files и snapshot-артефактов `run.sh`.
+- `<log-dir>` — каталог runtime/PM2 логов проекта; по умолчанию `<sites-root>/.ai-flow/logs/<project>`.
 
 ## Целевая схема для двух проектов
 

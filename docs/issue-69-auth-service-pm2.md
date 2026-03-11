@@ -4,17 +4,17 @@
 Запускать `gh_app_auth_service.js` под `PM2` с авто-перезапуском, отдельными логами и явной health-проверкой для операционного контура.
 
 ## Что добавлено
-- PM2 ecosystem-конфиг: `scripts/codex/gh_app_auth_pm2_ecosystem.config.cjs`
+- PM2 ecosystem-конфиг: `.flow/scripts/gh_app_auth_pm2_ecosystem.config.cjs`
 - Команды-обертки:
-  - `scripts/codex/run.sh gh_app_auth_pm2_start`
-  - `scripts/codex/run.sh gh_app_auth_pm2_stop`
-  - `scripts/codex/run.sh gh_app_auth_pm2_restart`
-  - `scripts/codex/run.sh gh_app_auth_pm2_status`
-  - `scripts/codex/run.sh gh_app_auth_pm2_health`
-  - `scripts/codex/run.sh gh_app_auth_pm2_crash_test`
+  - `.flow/scripts/run.sh gh_app_auth_pm2_start`
+  - `.flow/scripts/run.sh gh_app_auth_pm2_stop`
+  - `.flow/scripts/run.sh gh_app_auth_pm2_restart`
+  - `.flow/scripts/run.sh gh_app_auth_pm2_status`
+  - `.flow/scripts/run.sh gh_app_auth_pm2_health`
+  - `.flow/scripts/run.sh gh_app_auth_pm2_crash_test`
 - Логи PM2 auth-сервиса:
-  - `.tmp/codex/pm2/gh_app_auth.out.log`
-  - `.tmp/codex/pm2/gh_app_auth.err.log`
+  - `.flow/logs/pm2/gh_app_auth.out.log`
+  - `.flow/logs/pm2/gh_app_auth.err.log`
 
 ## Операционная инструкция
 ### 1. Предусловия
@@ -31,12 +31,12 @@
 
 ### 2. Старт сервиса под PM2
 ```bash
-scripts/codex/run.sh gh_app_auth_pm2_start
+.flow/scripts/run.sh gh_app_auth_pm2_start
 ```
 
 ### 3. Проверка состояния и health
 ```bash
-scripts/codex/run.sh gh_app_auth_pm2_health
+.flow/scripts/run.sh gh_app_auth_pm2_health
 ```
 
 Ожидаемо:
@@ -45,7 +45,7 @@ scripts/codex/run.sh gh_app_auth_pm2_health
 
 ### 4. Проверка авто-restart после падения
 ```bash
-scripts/codex/run.sh gh_app_auth_pm2_crash_test
+.flow/scripts/run.sh gh_app_auth_pm2_crash_test
 ```
 
 Ожидаемо:
@@ -54,15 +54,15 @@ scripts/codex/run.sh gh_app_auth_pm2_crash_test
 
 ### 5. Операционные команды
 ```bash
-scripts/codex/run.sh gh_app_auth_pm2_status
-scripts/codex/run.sh gh_app_auth_pm2_restart
-scripts/codex/run.sh gh_app_auth_pm2_stop
+.flow/scripts/run.sh gh_app_auth_pm2_status
+.flow/scripts/run.sh gh_app_auth_pm2_restart
+.flow/scripts/run.sh gh_app_auth_pm2_stop
 ```
 
 ### 6. Диагностика логов
 ```bash
-tail -n 100 .tmp/codex/pm2/gh_app_auth.out.log
-tail -n 100 .tmp/codex/pm2/gh_app_auth.err.log
+tail -n 100 .flow/logs/pm2/gh_app_auth.out.log
+tail -n 100 .flow/logs/pm2/gh_app_auth.err.log
 ```
 
 ## Критерии приемки (чек)

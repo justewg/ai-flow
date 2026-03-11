@@ -36,14 +36,14 @@ Execution-Mode: daemon
 1. Ты делаешь merge PR `development -> main`.
 2. Ты пишешь `merged`.
 3. Я запускаю синхронизацию веток:
-   - `scripts/codex/run.sh sync_branches`
+   - `.flow/scripts/run.sh sync_branches`
 4. Я проверяю очередь запуска:
    - `Status=Todo` (твоя явная команда "запускай");
    - при подхвате сразу перевожу задачу в `In Progress` (`project_set_status`) как ACK.
 5. После подхвата:
    - реализую изменения в рабочем цикле.
 6. По готовности:
-   - запускаю `scripts/codex/run.sh task_finalize` (commit+push, create/update PR, перевод в `Status=Review`, `Flow=In Review`);
+   - запускаю `.flow/scripts/run.sh task_finalize` (commit+push, create/update PR, перевод в `Status=Review`, `Flow=In Review`);
    - перевожу PR в финальный сигнал ревью (`ready_for_review`);
    - отправляю ссылку на PR для ревью;
    - после merge цикл повторяется.
@@ -100,7 +100,7 @@ Execution-Mode: daemon
 6. При завершении разработки:
    - выполнить `task_finalize` для commit/push и create/update PR;
    - перевести карточку в `Status=Review`, `Flow=In Review`.
-7. Логировать heartbeat и действия в `.tmp/codex/daemon.log`.
+7. Логировать heartbeat и действия в `<state-dir>/daemon.log`.
 8. Корректно обрабатывать ошибки (retry/backoff, без дублирования действий).
 9. Не запускать подхват задач при изменениях tracked-файлов (wait-state), чтобы не конфликтовать с ручной работой в чате.
 10. Untracked-файлы (черновики, артефакты, заметки) не должны блокировать daemon-flow.
@@ -198,31 +198,31 @@ Telegram-сигналы по Issue-вопросам:
 
 ## 8. Точка эволюции (следующий шаг)
 Минимальный план внедрения daemon-версии:
-1. `scripts/codex/daemon_loop.sh` (poll + lock + state machine).
-2. Обновление `scripts/codex/README.md` с командами демона.
+1. `.flow/scripts/daemon_loop.sh` (poll + lock + state machine).
+2. Обновление `.flow/scripts/README.md` с командами демона.
 3. Проверка наличия значения `Status`: `Todo` в проекте.
 4. Запуск демона как системного сервиса (`launchd`) на рабочей машине.
 5. Опционально: workflow `repository_dispatch` для ускоренного триггера после merge.
 
 ### 8.1. Команды launchd
 - Установить и запустить сервис:
-  - `scripts/codex/run.sh daemon_install`
+  - `.flow/scripts/run.sh daemon_install`
 - Установить с кастомным интервалом (например, 30 сек):
-  - `scripts/codex/run.sh daemon_install com.planka.codex-daemon 30`
+  - `.flow/scripts/run.sh daemon_install com.flow.codex-daemon.planka 30`
 - Проверить статус:
-  - `scripts/codex/run.sh daemon_status`
+  - `.flow/scripts/run.sh daemon_status`
 - Остановить и удалить сервис:
-  - `scripts/codex/run.sh daemon_uninstall`
+  - `.flow/scripts/run.sh daemon_uninstall`
 
 ### 8.2. Команды watchdog
 - Установить и запустить watchdog:
-  - `scripts/codex/run.sh watchdog_install`
+  - `.flow/scripts/run.sh watchdog_install`
 - Проверить статус watchdog:
-  - `scripts/codex/run.sh watchdog_status`
+  - `.flow/scripts/run.sh watchdog_status`
 - Выполнить ручной тик watchdog:
-  - `scripts/codex/run.sh watchdog_tick`
+  - `.flow/scripts/run.sh watchdog_tick`
 - Остановить и удалить watchdog:
-  - `scripts/codex/run.sh watchdog_uninstall`
+  - `.flow/scripts/run.sh watchdog_uninstall`
 
 ## 9. Как настроить статусы в GitHub Project
 ### 9.1. Рекомендуемый путь (UI)

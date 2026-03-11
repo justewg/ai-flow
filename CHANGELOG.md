@@ -31,13 +31,13 @@
 - `[PL-020]` Проведен успешный smoke-тест автозакрытия: после merge PR задачи `PL-019` и `PL-020` автоматически переведены в `Done`.
 - `[PL-021]` Добавлены Telegram push-уведомления из GitHub Actions через `TG_BOT_TOKEN` и `TG_CHAT_ID`.
 - `[PL-022]` Добавлены Telegram-сигналы на события PR-ревью и финальные статусы post-merge workflow (`Deploy Main to Hosting`, `Project Auto Close Tasks`).
-- `[APP-07]` Добавлен детальный runbook `APP-07.5` в `docs/gh-app-daemon-integration-plan.md`: выдача доступа GitHub App к Project v2, обновление installation и верификация через App token.
-- `[APP-07]` Добавлен onboarding-checklist включения auth-сервиса GitHub App в `docs/gh-app-daemon-integration-plan.md` (env, pm2, launchd, деградация/recovery).
+- `[APP-07]` Добавлен детальный runbook `APP-07.5` в `docs/codex/gh-app-daemon-integration-plan.md`: выдача доступа GitHub App к Project v2, обновление installation и верификация через App token.
+- `[APP-07]` Добавлен onboarding-checklist включения auth-сервиса GitHub App в `docs/codex/gh-app-daemon-integration-plan.md` (env, pm2, launchd, деградация/recovery).
 - `[APP-07]` Обновлен `README.md`: добавлена ссылка на runbook/онбординг GitHub App auth-сервиса.
 - `[APP-07]` Обновлен `scripts/codex/README.md`: добавлены указания по Project v2 permissions для App и быстрый health-check включения сервиса.
 - `[APP-07]` Созданы smoke-артефакты проверки авторства через App token: `Issue #142` и `PR #143`.
 - `[APP-07]` Зафиксирован hybrid-режим для user-owned Project v2: App token для `Issue/PR`, отдельный `DAEMON_GH_PROJECT_TOKEN` для Project операций.
-- `[APP-07]` В `docs/gh-app-daemon-integration-plan.md` добавлена инструкция, где выпускать PAT для `DAEMON_GH_PROJECT_TOKEN` и как проверять доступы.
+- `[APP-07]` В `docs/codex/gh-app-daemon-integration-plan.md` добавлена инструкция, где выпускать PAT для `DAEMON_GH_PROJECT_TOKEN` и как проверять доступы.
 - `[APP-07]` Добавлен единый snapshot состояния автоматики: `scripts/codex/status_snapshot.sh` + команда `scripts/codex/run.sh status_snapshot` (daemon/watchdog/executor/queues/blockers/rate-limit/backlog-seed).
 - `[APP-07]` Добавлен ops-сервис `scripts/codex/ops_bot_service.js`: web dashboard (`/ops/status`), JSON status (`/ops/status.json`) и Telegram webhook-команды (`/status`, `/summary`, `/help`, `/status_page`).
 - `[APP-07]` Добавлена PM2-обвязка ops-сервиса (`ops_bot_pm2_*`) и runbook интеграции с nginx/webhook: `docs/ops-bot-dashboard.md`.
@@ -51,8 +51,9 @@
 - `[PL-017]` В deploy workflow добавлен preflight на `ubuntu-latest`: он проверяет наличие online runner с label `planka-deploy` и теперь падает сразу с понятной ошибкой вместо бесконечного `queued`.
 - `[PL-017]` В self-hosted deploy `rsync` теперь исключает `actions-runner/`: это защищает прод-выкладку, если runner установлен внутри `DEPLOY_PATH` (например, `/var/sites/planka/actions-runner`), и убирает падение `rsync` с exit code `24`.
 - `[PL-017]` Preflight self-hosted runner check смягчен: при `403` от GitHub API (обычный `GITHUB_TOKEN` не видит repository runners) workflow теперь пишет warning и продолжает deploy вместо ложного падения.
-- `[FLOW]` Добавлен `docs/flow-onboarding-quickstart.md` — короткий onboarding нового consumer-project: локальная папка, GitHub repo/Project, profile env, auth, install, smoke и cutover checklist.
-- `[FLOW]` Добавлены `docs/flow-onboarding-checklist.md` и `docs/flow-toolkit-packaging.md`: первый даёт ultra-short checklist внедрения flow в новый проект, второй фиксирует переносимый комплект файлов и рекомендуемую стратегию выноса automation в отдельный toolkit-repo (`git subtree` предпочтительнее `submodule`).
+- `[FLOW]` Добавлен `docs/codex/flow-onboarding-quickstart.md` — короткий onboarding нового consumer-project: локальная папка, GitHub repo/Project, profile env, auth, install, smoke и cutover checklist.
+- `[FLOW]` Добавлены `docs/codex/flow-onboarding-checklist.md` и `docs/codex/flow-toolkit-packaging.md`: первый даёт ultra-short checklist внедрения flow в новый проект, второй фиксирует переносимый комплект файлов и рекомендуемую стратегию выноса automation в отдельный toolkit-repo (`git subtree` предпочтительнее `submodule`).
+- `[FLOW]` Добавлены `scripts/codex/create_migration_kit.sh` и `scripts/codex/apply_migration_kit.sh`: toolkit теперь переносится через `migration_kit.tgz` с безопасными шаблонами `.tmp/codex/profiles/<profile>.sample.env` и `.env.codex`, без упаковки живых токенов исходного проекта.
 - `[FLOW]` `scripts/codex/daemon_check_replies.sh` теперь автоматически чистит stale waiting-context, если в state остался `WAIT_USER_REPLY`, но нет валидного request-anchor (пустые обязательные маркеры, пропавший anchor-comment, review wait без review-comment). Это не даёт автоматики бессрочно блокировать подбор новых задач.
 - `[FLOW]` Self-healing launchd/runtime: `daemon_install.sh` и `watchdog_install.sh` теперь удаляют stale lock-dir перед reinstall; `watchdog_loop.sh` продолжает supervision даже при недоступном auth-service, а `watchdog_tick.sh` считает `daemon NOT_INSTALLED/INSTALLED_NOT_LOADED` recoverable-case и пытается поднять daemon автоматически.
 - `[APP-07]` Добавлен helper-скрипт `scripts/codex/issue_285_reframe_apply.sh` и команда `scripts/codex/run.sh issue_285_reframe_apply` для автоматического рефрейма `Issue #285` в manual-only rollout, split задач на automation/post-smoke и проставления label `auto:ignore` для ручной задачи.

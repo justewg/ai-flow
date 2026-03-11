@@ -145,6 +145,13 @@ vite.config.ts.timestamp-*
 # local codex temp inputs
 .tmp/
 
+# .flow runtime/state/secrets
+.flow/config/profiles/*.env
+.flow/launchd/*.plist
+.flow/logs/
+.flow/state/
+.flow/tmp/
+
 # private keys (must never be committed)
 *.private-key.pem
 *.private-key.key

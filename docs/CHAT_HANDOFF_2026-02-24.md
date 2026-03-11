@@ -1,5 +1,7 @@
 # Handoff: полная сводка контекста (на 2026-02-24)
 
+> Исторический handoff сохранён как снимок контекста на 2026-02-24. Канонический toolkit-layout с марта 2026 года живёт в `.flow/`: `.flow/scripts/*`, `.flow/docs/*`, `.flow/config/*`, `.flow/state/*`. Пути `scripts/codex/*` и `.tmp/codex/*` ниже нужно читать как legacy-обозначения прежнего layout.
+
 ## 1) Что это за проект и как им управляют
 - Проект: `planka`, основной рабочий процесс автоматизирован через локальный daemon + watchdog + GitHub Project + GitHub Actions + Telegram.
 - Ветка разработки: `development`, PR обычно `development -> main`.
@@ -85,10 +87,10 @@
 Принято решение идти через GitHub App (вместо второго user-аккаунта) для отдельной авторизации автоматизации.
 
 Сделано по направлению:
-- подготовлены документы и план (`docs/gh-app-daemon-integration-plan.md`, `docs/app-issues-dependency-diagram.md`);
+- подготовлены документы и план (`.flow/docs/gh-app-daemon-integration-plan.md`, `docs/app-issues-dependency-diagram.md`);
 - описаны шаги APP-01, APP-02 и последовательность зависимостей APP-xx;
 - добавлен локальный auth-service под Node.js + PM2 обвязка;
-- подготовлены `.env`-поля и запускные скрипты в `scripts/codex/`.
+- подготовлены `.env`-поля и запускные скрипты в `.flow/scripts/`.
 
 Принцип:
 - daemon получает токен через локальный auth-service, который ротирует installation token GitHub App.
@@ -133,8 +135,8 @@
 Незакоммиченные файлы прямо сейчас:
 - `AGENT.md`
 - `TASKFLOW.md`
-- `scripts/codex/README.md`
-- `scripts/codex/daemon_check_replies.sh`
+- `.flow/scripts/README.md`
+- `.flow/scripts/daemon_check_replies.sh`
 
 Смысл этих незакоммиченных правок:
 - добавлен режим классификации ответа на `AGENT_BLOCKER`:
@@ -146,7 +148,7 @@
 Рекомендуемый первый промпт новому агенту:
 1. “Прочитай `docs/CHAT_HANDOFF_2026-02-24.md` полностью.”
 2. “Проверь текущее состояние git/daemon и подтверди, что понял контекст.”
-3. “Продолжай с незакоммиченных правок по `daemon_check_replies.sh` и документации.”
+3. “Продолжай с незакоммиченных правок по `.flow/scripts/daemon_check_replies.sh` и документации.”
 
 Рекомендуемый второй шаг:
 - Попросить агента сделать smoke-тест сценария:

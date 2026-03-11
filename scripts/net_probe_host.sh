@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DEFAULT_LOG_FILE="${ROOT_DIR}/.flow/tmp/net_probe_host.log"
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -11,7 +14,7 @@ Usage:
 Defaults:
   duration-sec: 900   (15 minutes)
   interval-sec: 20
-  output-log:   .tmp/codex/net_probe_host.log
+  output-log:   .flow/tmp/net_probe_host.log
 EOF
 }
 
@@ -117,7 +120,7 @@ collect_sample() {
 run_probe() {
   local duration_sec="${1:-900}"
   local interval_sec="${2:-20}"
-  local log_file="${3:-.tmp/codex/net_probe_host.log}"
+  local log_file="${3:-$DEFAULT_LOG_FILE}"
 
   if ! is_uint "$duration_sec" || (( duration_sec < 5 )); then
     echo "Invalid duration-sec: $duration_sec (expected integer >= 5)"
@@ -150,7 +153,7 @@ run_probe() {
 
 monitor_probe() {
   local interval_sec="${1:-20}"
-  local log_file="${2:-.tmp/codex/net_probe_host.log}"
+  local log_file="${2:-$DEFAULT_LOG_FILE}"
 
   if ! is_uint "$interval_sec" || (( interval_sec < 1 )); then
     echo "Invalid interval-sec: $interval_sec (expected integer >= 1)"
@@ -171,13 +174,13 @@ main() {
   local cmd="${1:-run}"
   case "$cmd" in
     run)
-      run_probe "${2:-900}" "${3:-20}" "${4:-.tmp/codex/net_probe_host.log}"
+      run_probe "${2:-900}" "${3:-20}" "${4:-$DEFAULT_LOG_FILE}"
       ;;
     monitor)
-      monitor_probe "${2:-20}" "${3:-.tmp/codex/net_probe_host.log}"
+      monitor_probe "${2:-20}" "${3:-$DEFAULT_LOG_FILE}"
       ;;
     summary)
-      print_summary "${2:-.tmp/codex/net_probe_host.log}"
+      print_summary "${2:-$DEFAULT_LOG_FILE}"
       ;;
     help|-h|--help)
       usage

@@ -64,6 +64,11 @@ sudo ./svc.sh status
 5. Проверить, что runner online в GitHub UI:
    `Repository -> Settings -> Actions -> Runners`.
 
+Важно:
+- runner, зарегистрированный для `justewg/planka`, автоматически не появится в `justewg/favs`;
+- для нового consumer-project нужен отдельный repo-level runner в его `Settings -> Actions -> Runners`, либо общий org-level runner;
+- если workflow в новом repo ждёт label `planka-deploy`, runner с этим label должен быть виден именно в новом repo-контуре.
+
 ## Права на deploy-path
 
 Пользователь runner (`gha-runner`) должен иметь права записи в `DEPLOY_DEV_PATH` и `DEPLOY_PATH`.
@@ -90,6 +95,7 @@ sudo chown -R gha-runner:gha-runner /var/sites/planka-dev /var/sites/planka
 ## Troubleshooting
 
 - Если workflow висит в `queued`, в репозитории нет online runner с label `planka-deploy`, либо label настроен иначе.
+- Если такой runner есть в другом repo, это не помогает: GitHub не шарит repository-level runners между репозиториями автоматически.
 - Если workflow падает на шаге `Explain missing self-hosted runner`, это тот же случай: GitHub API не видит подходящий runner.
 - Если preflight пишет warning `Runner preflight skipped`, это нормально: стандартный `GITHUB_TOKEN` не имеет доступа к API списка repository runners. В этом случае workflow просто продолжает запуск self-hosted job без fail-fast проверки.
 - Проверить наличие runner можно в `Repository -> Settings -> Actions -> Runners`.

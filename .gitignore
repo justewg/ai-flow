@@ -148,6 +148,8 @@ vite.config.ts.timestamp-*
 # .flow runtime/state/secrets
 .flow/config/flow.env
 .flow/config/profiles/*.env
+.flow/scripts
+.flow/docs
 .flow/launchd/*.plist
 .flow/logs/
 .flow/state/

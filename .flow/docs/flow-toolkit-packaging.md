@@ -46,6 +46,17 @@
 3. подключать в consumer-repo через `git subtree` или pinned vendor-copy;
 4. оставить thin-wrapper `.flow/scripts/run.sh`, если нужен совместимый entrypoint.
 
+### Transitional host-level shared layout
+До выделения отдельного toolkit-repo допустим промежуточный режим:
+- host-level root: `<sites-root>/.ai-flow`
+- shared toolkit surface: `<sites-root>/.ai-flow/shared/scripts` и `<sites-root>/.ai-flow/shared/docs`
+- source of truth пока остаётся в versioned `PLANKA/.flow/scripts` и `PLANKA/.flow/docs`
+- `.ai-flow/shared/*` можно сделать symlink-ами на эти каталоги, чтобы consumer-project уже подключались к единому host-level toolkit пути
+
+Этот режим нужен только как переходный слой:
+- он даёт одну точку подключения для `favs` и следующих проектов;
+- но не заменяет отдельный git-repo/submodule для самого toolkit.
+
 ## Что должно считаться toolkit-ядром
 
 ### Обязательное ядро

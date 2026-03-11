@@ -12,6 +12,7 @@
 Если нужен отдельный onboarding GitHub App auth-сервиса, см. `.flow/docs/gh-app-daemon-integration-plan.md`.
 Если нужен help по repo Actions secrets, см. `.flow/docs/github-actions-repo-secrets.md`.
 Если нужен пошаговый чеклист без лишнего контекста, см. `.flow/docs/flow-onboarding-checklist.md`.
+Если toolkit уже опубликован на этом хосте в shared-root, можно также использовать `<sites-root>/.ai-flow/shared/scripts` и `<sites-root>/.ai-flow/shared/docs` как общий источник wrapper/docs для нескольких consumer-project.
 
 ## Что считается результатом
 После прохождения quickstart у вас есть:

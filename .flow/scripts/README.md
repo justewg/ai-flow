@@ -85,6 +85,8 @@
 - Override задаётся через `CODEX_STATE_DIR`; если он не задан, используется `FLOW_STATE_DIR`.
 - По умолчанию используется `${ROOT_DIR}/.flow/state/codex/default`.
 - Shared host-level flow root для общих логов по проектам: `${ROOT_DIR}/../.ai-flow`.
+- Shared toolkit surface для consumer-project можно публиковать через `${ROOT_DIR}/../.ai-flow/shared/{scripts,docs}`.
+- В текущем transitional режиме source of truth остаётся в versioned PLANKA `.flow/scripts` и `.flow/docs`, а `.ai-flow/shared` может указывать на них symlink-ами.
 - `.tmp/codex/` больше не является runtime-root; если каталог присутствует, это только compatibility-symlink layer к `.flow/`.
 - Для параллельного запуска двух проектов на одном хосте задайте разные `<state-dir>`.
 - Если используете `daemon_install`/`watchdog_install`, задайте ещё и разные `label`, чтобы не столкнулись launchd-агенты.

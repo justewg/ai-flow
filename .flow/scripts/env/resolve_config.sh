@@ -106,6 +106,22 @@ codex_resolve_ai_flow_shared_dir() {
   codex_resolve_bootstrap_value "AI_FLOW_SHARED_DIR" "${ai_flow_root_dir}/shared"
 }
 
+codex_resolve_flow_shared_dir() {
+  codex_resolve_ai_flow_shared_dir
+}
+
+codex_resolve_flow_shared_scripts_dir() {
+  local shared_dir
+  shared_dir="$(codex_resolve_flow_shared_dir)"
+  codex_resolve_bootstrap_value "FLOW_SHARED_SCRIPTS_DIR" "${shared_dir}/scripts"
+}
+
+codex_resolve_flow_shared_docs_dir() {
+  local shared_dir
+  shared_dir="$(codex_resolve_flow_shared_dir)"
+  codex_resolve_bootstrap_value "FLOW_SHARED_DOCS_DIR" "${shared_dir}/docs"
+}
+
 codex_resolve_ai_flow_logs_root_dir() {
   local ai_flow_root_dir
   ai_flow_root_dir="$(codex_resolve_ai_flow_root_dir)"

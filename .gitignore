@@ -151,9 +151,12 @@ vite.config.ts.timestamp-*
 .flow/scripts
 .flow/docs
 .flow/shared
-.flow/launchd/*.plist
+.flow/launchd
+.flow/launchd/*
 .flow/logs/
 .flow/state/
+.flow/state
+.flow/state.legacy-*
 .flow/tmp/
 
 # private keys (must never be committed)

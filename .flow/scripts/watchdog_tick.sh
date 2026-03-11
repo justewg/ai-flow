@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=./env/resolve_config.sh
 source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
 CODEX_DIR="$(codex_export_state_dir)"
+PROJECT_LABEL="$(codex_resolve_project_display_label)"
 LAUNCHD_NAMESPACE="$(codex_resolve_flow_launchd_namespace)"
 
 LOG_FILE="${CODEX_DIR}/watchdog.log"
@@ -166,7 +167,7 @@ notify_action() {
   else
     check_icon="🚨"
   fi
-  title="<b>${check_icon} 🛟 WATCHDOG: $(html_escape "$action")</b>"
+  title="<b>${check_icon} 🛟 ${PROJECT_LABEL}: watchdog $(html_escape "$action")</b>"
   aux_text=$'ACTION='"${action}"$'\n'
   aux_text+=$'REASON='"${reason}"$'\n'
   aux_text+=$'DETAIL='"${detail}"$'\n'

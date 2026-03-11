@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=./env/resolve_config.sh
+source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
+codex_load_flow_env
 PM2_APP_NAME="${OPS_BOT_PM2_APP_NAME:-planka-ops-bot}"
 require_online="0"
 if [[ "${1:-}" == "--require-online" ]]; then

@@ -33,7 +33,7 @@
 - [ ] В текущем проекте выполнен `.flow/scripts/run.sh create_migration_kit --project acme`
 - [ ] `migration_kit.tgz` перенесён в новый repo и распакован в корне
 - [ ] После распаковки выполнен `.flow/scripts/run.sh apply_migration_kit --project acme`
-- [ ] Проверено, что после `apply_migration_kit` появились `.flow/config/profiles/acme.sample.env`, `.flow/config/profiles/acme.env` и `.flow/config/root/.env.codex`
+- [ ] Проверено, что после `apply_migration_kit` появились `.flow/config/flow.sample.env` и `.flow/config/flow.env`
 - [ ] Проверено, что после `apply_migration_kit` появились `.flow/config/root/github-actions.required-files.txt` и `.flow/config/root/github-actions.required-secrets.txt`
 - [ ] Проверено, что `apply_migration_kit` развернул `.github/workflows/*.yml` и `.github/pull_request_template.md` из source overlay
 - [ ] Понимание зафиксировано: `.tmp/codex/` больше не runtime-источник, а только legacy compatibility layer.
@@ -101,13 +101,12 @@ cd /path/to/new-project
 .flow/scripts/run.sh profile_init init --profile acme
 ```
 
-- [ ] Если уже использован `migration_kit.tgz`, этот шаг можно пропустить: `apply_migration_kit` сам создаёт рабочий `.env` из `.sample.env`.
+- [ ] Если уже использован `migration_kit.tgz`, этот шаг можно пропустить: `apply_migration_kit` сам создаёт рабочий `.flow/config/flow.env` из `.flow/config/flow.sample.env`.
 
 - [ ] Убедись, что появились:
-  - [ ] `.flow/config/profiles/acme.sample.env`
-  - [ ] `.flow/config/profiles/acme.env`
+  - [ ] `.flow/config/flow.sample.env`
+  - [ ] `.flow/config/flow.env`
   - [ ] `.flow/state/codex/acme`
-  - [ ] `.flow/config/root/.env.codex`
   - [ ] `.flow/config/root/github-actions.required-files.txt`
   - [ ] `.flow/config/root/github-actions.required-secrets.txt`
   - [ ] `.github/workflows/*.yml`
@@ -122,7 +121,7 @@ cd /path/to/new-project
 - [ ] Для deploy overlay исправлен `GH_REPO_SELF_HOSTED_RUNNER`, если audit показал отсутствие online runner.
 
 ## 3. Заполни env-файл
-- [ ] Открой `.flow/config/profiles/acme.env`.
+- [ ] Открой `.flow/config/flow.env`.
 - [ ] Пропиши:
   - [ ] `PROJECT_PROFILE=acme`
   - [ ] `GITHUB_REPO=<owner>/<repo>`
@@ -137,8 +136,7 @@ cd /path/to/new-project
   - [ ] `FLOW_STATE_DIR=<root>/.flow/state/codex/acme`
   - [ ] `WATCHDOG_DAEMON_LABEL=com.flow.codex-daemon.acme`
   - [ ] `WATCHDOG_DAEMON_INTERVAL_SEC=45`
-- [ ] Открой `.flow/config/root/.env.codex`.
-- [ ] Перенеси нужные automation-переменные в `.env` или `.env.deploy`:
+- [ ] Убедись, что дополнительные flow-переменные тоже заполнены прямо в `.flow/config/flow.env`:
   - [ ] `GH_APP_ID`
   - [ ] `GH_APP_INSTALLATION_ID`
   - [ ] `GH_APP_PRIVATE_KEY_PATH` (рекомендуемо `<HOME>/.secrets/gh-apps/codex-flow.private-key.pem`)
@@ -194,25 +192,25 @@ cd /path/to/new-project
 - [ ] Проверка GitHub API:
 
 ```bash
-env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh github_health_check
+env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh github_health_check
 ```
 
 - [ ] Проверка snapshot:
 
 ```bash
-env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh status_snapshot
+env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh status_snapshot
 ```
 
 - [ ] Проверка daemon:
 
 ```bash
-env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh daemon_status com.flow.codex-daemon.acme
+env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh daemon_status com.flow.codex-daemon.acme
 ```
 
 - [ ] Проверка watchdog:
 
 ```bash
-env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh watchdog_status com.flow.codex-watchdog.acme
+env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh watchdog_status com.flow.codex-watchdog.acme
 ```
 
 ## 8. Сделай smoke на живой карточке
@@ -248,7 +246,7 @@ env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/stat
 ```
 
 - [ ] Сохрани `.flow/state/codex/acme`.
-- [ ] Исправь `.flow/config/profiles/acme.env`.
+- [ ] Исправь `.flow/config/flow.env`.
 - [ ] Повтори preflight/install.
 
 ## Куда смотреть дальше

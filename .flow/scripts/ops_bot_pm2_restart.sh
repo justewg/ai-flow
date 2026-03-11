@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=./env/resolve_config.sh
+source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
+codex_load_flow_env
 PM2_APP_NAME="${OPS_BOT_PM2_APP_NAME:-planka-ops-bot}"
 
 if ! command -v pm2 >/dev/null 2>&1; then

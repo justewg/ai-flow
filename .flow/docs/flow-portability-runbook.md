@@ -20,8 +20,8 @@
 
 | Контур | Repo | Profile | Env file | State dir | Daemon label | Watchdog label |
 | --- | --- | --- | --- | --- | --- | --- |
-| Current | `<owner>/<current-repo>` | `current` | `.flow/config/profiles/current.env` | `.flow/state/codex/current` | `com.flow.codex-daemon.current` | `com.flow.codex-watchdog.current` |
-| New | `<owner>/<new-repo>` | `acme` | `.flow/config/profiles/acme.env` | `.flow/state/codex/acme` | `com.flow.codex-daemon.acme` | `com.flow.codex-watchdog.acme` |
+| Current | `<owner>/<current-repo>` | `current` | `.flow/config/flow.env` | `.flow/state/codex/current` | `com.flow.codex-daemon.current` | `com.flow.codex-watchdog.current` |
+| New | `<owner>/<new-repo>` | `acme` | `.flow/config/flow.env` | `.flow/state/codex/acme` | `com.flow.codex-daemon.acme` | `com.flow.codex-watchdog.acme` |
 
 Инварианты:
 - у каждого проекта свой `CODEX_STATE_DIR/FLOW_STATE_DIR`;
@@ -58,9 +58,8 @@
 2. В new project после распаковки выполнить:
    `.flow/scripts/run.sh apply_migration_kit --project acme`
 3. Kit должен принести безопасные шаблоны:
-   - `.flow/config/profiles/acme.sample.env`
-   - `.flow/config/profiles/acme.env`
-   - `.flow/config/root/.env.codex`
+   - `.flow/config/flow.sample.env`
+   - `.flow/config/flow.env`
    - `.flow/config/root/github-actions.required-files.txt`
    - `.flow/config/root/github-actions.required-secrets.txt`
 4. Если в source-project использовался repo automation overlay, `apply_migration_kit` также развернет snapshot `.github/workflows/` и `.github/pull_request_template.md`.
@@ -71,7 +70,7 @@
 1. Выполнить:
    `.flow/scripts/run.sh profile_init init --profile acme`
 2. Если перед этим уже был выполнен `apply_migration_kit`, шаг `init` можно пропустить.
-3. Открыть `.flow/config/profiles/acme.env`.
+3. Открыть `.flow/config/flow.env`.
 4. Заполнить минимум:
    - `PROJECT_PROFILE=acme`
    - `GITHUB_REPO=<owner>/<new-repo>`
@@ -87,7 +86,7 @@
    - `FLOW_STATE_DIR=<root-dir>/.flow/state/codex/acme`
    - `WATCHDOG_DAEMON_LABEL=<daemon-label-new>`
    - `WATCHDOG_DAEMON_INTERVAL_SEC=45`
-6. Открыть `.flow/config/root/.env.codex` и перенести нужные automation-переменные в `.env` или `.env.deploy` нового проекта.
+6. Дополнить `.flow/config/flow.env` всеми нужными automation-переменными этого consumer-project; `.flow/config/flow.sample.env` оставить как безопасный шаблон.
 
 ### 4. Установить automation для new project
 1. Запустить:
@@ -103,15 +102,15 @@
    `.flow/scripts/run.sh profile_init preflight --profile acme`
    Ожидается `PREFLIGHT_READY=1`.
 2. Проверка daemon:
-   `env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh daemon_status com.flow.codex-daemon.acme`
+   `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh daemon_status com.flow.codex-daemon.acme`
 3. Проверка watchdog:
-   `env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh watchdog_status com.flow.codex-watchdog.acme`
+   `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh watchdog_status com.flow.codex-watchdog.acme`
 4. Проверка GitHub API:
-   `env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh github_health_check`
+   `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh github_health_check`
 5. Проверка snapshot:
-   `env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh status_snapshot`
+   `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh status_snapshot`
 6. Проверка App token exchange:
-   `env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh gh_app_auth_probe`
+   `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh gh_app_auth_probe`
 7. Функциональный smoke:
    - создать тестовую карточку в новом Project v2 со статусом `Todo`;
    - дождаться claim демоном в `In Progress`;
@@ -135,8 +134,8 @@
 2. Для new project штатный запуск выполняется через:
    `.flow/scripts/run.sh profile_init install --profile acme`
 3. Если daemon/watchdog уже были удалены, можно поднять их вручную с тем же env:
-   - `env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh daemon_install com.flow.codex-daemon.acme 45`
-   - `env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme WATCHDOG_DAEMON_LABEL=com.flow.codex-daemon.acme WATCHDOG_DAEMON_INTERVAL_SEC=45 .flow/scripts/run.sh watchdog_install com.flow.codex-watchdog.acme 45`
+   - `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh daemon_install com.flow.codex-daemon.acme 45`
+   - `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme WATCHDOG_DAEMON_LABEL=com.flow.codex-daemon.acme WATCHDOG_DAEMON_INTERVAL_SEC=45 .flow/scripts/run.sh watchdog_install com.flow.codex-watchdog.acme 45`
 
 ### Остановка
 1. Остановить watchdog нового профиля:
@@ -148,7 +147,7 @@
 ### Rollback
 1. Если проблема только в конфигурации new project, остановить только новый profile.
 2. Сохранить логи и snapshot из `.flow/state/codex/acme`.
-3. Исправить `.flow/config/profiles/acme.env`.
+3. Исправить `.flow/config/flow.env`.
 4. Повторить `profile_init install --profile acme` и затем `profile_init preflight --profile acme`.
 5. Если перенос отменяется полностью:
    - оставить current project как единственный рабочий контур;
@@ -165,7 +164,7 @@
 
 Что делать:
 1. Проверить вывод `CHECK_FAIL ...` из `profile_init preflight/install`.
-2. Дополнить `.flow/config/profiles/<profile>.env`.
+2. Дополнить `.flow/config/flow.env`.
 3. Повторить `profile_init install --profile <profile>`.
 
 ### `Non-default Project profile requires explicit PROJECT_ID, PROJECT_NUMBER and PROJECT_OWNER`
@@ -201,7 +200,7 @@
 - не выставлен `DAEMON_GH_ENV_FILE` или перепутан `<state-dir>`.
 
 Что делать:
-1. Сверить `CODEX_STATE_DIR/FLOW_STATE_DIR` с profile env-файлом.
+1. Сверить `CODEX_STATE_DIR/FLOW_STATE_DIR` с `.flow/config/flow.env`.
 2. Повторять команды через явный префикс:
    `env DAEMON_GH_ENV_FILE=... CODEX_STATE_DIR=... FLOW_STATE_DIR=... .flow/scripts/run.sh ...`
 3. Убедиться, что `commit_message.txt`, `pr_body.txt` и остальные fixed files лежат в нужном `<state-dir>`.
@@ -262,7 +261,7 @@
    - `lib/` для shared bash helpers;
    - `services/` для Node-процессов;
    - `docs/` для runbook;
-   - `templates/` для profile env и consumer bootstrap.
+   - `templates/` для `flow.sample.env` и consumer bootstrap.
 3. В consumer-repo оставить только:
    - pinned toolkit snapshot;
    - env-файлы проекта;

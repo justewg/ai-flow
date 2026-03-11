@@ -5,17 +5,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=./env/resolve_config.sh
 source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
 CODEX_DIR="$(codex_export_state_dir)"
+project_profile="$(codex_resolve_project_profile_name)"
+project_repo="$(codex_resolve_project_repo_slug)"
+project_label="$(codex_resolve_project_display_label)"
+codex_load_flow_env
 mkdir -p "${CODEX_DIR}"
-
-load_env_file() {
-  local file_path="$1"
-  if [[ -f "$file_path" ]]; then
-    set -a
-    # shellcheck disable=SC1090
-    source "$file_path"
-    set +a
-  fi
-}
 
 is_truthy() {
   local raw="$1"
@@ -26,9 +20,6 @@ is_truthy() {
     *) return 1 ;;
   esac
 }
-
-load_env_file "${ROOT_DIR}/.env"
-load_env_file "${ROOT_DIR}/.env.deploy"
 
 enabled_raw="${OPS_REMOTE_STATUS_PUSH_ENABLED:-1}"
 if ! is_truthy "$enabled_raw"; then
@@ -58,7 +49,13 @@ fi
 
 source_name="${OPS_REMOTE_STATUS_SOURCE:-}"
 if [[ -z "$source_name" ]]; then
-  source_name="$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo local-runtime)"
+  if [[ -n "$project_profile" && "$project_profile" != "default" ]]; then
+    source_name="$project_profile"
+  elif [[ -n "$project_repo" ]]; then
+    source_name="${project_repo##*/}"
+  else
+    source_name="$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo local-runtime)"
+  fi
 fi
 
 snapshot_json="$("${ROOT_DIR}/.flow/scripts/status_snapshot.sh")"
@@ -70,7 +67,13 @@ fi
 pushed_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 payload_json="$(
   printf '%s' "$snapshot_json" \
-    | jq -c --arg source "$source_name" --arg pushed_at "$pushed_at" '{source:$source,pushed_at:$pushed_at,snapshot:.}'
+    | jq -c \
+      --arg source "$source_name" \
+      --arg pushed_at "$pushed_at" \
+      --arg profile "$project_profile" \
+      --arg repo "$project_repo" \
+      --arg label "$project_label" \
+      '{source:$source,pushed_at:$pushed_at,profile:$profile,repo:$repo,label:$label,snapshot:.}'
 )"
 
 secret="${OPS_REMOTE_STATUS_PUSH_SECRET:-}"

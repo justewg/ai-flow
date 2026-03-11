@@ -31,7 +31,7 @@
 - вместе с overlay переносится только manifest required secrets, но не их значения.
 
 Допустимое исключение для migration kit:
-- безопасные шаблоны `.flow/config/root/.env.codex` и `.flow/config/profiles/<profile>.sample.env` без живых секретов
+- безопасный шаблон `.flow/config/flow.sample.env` без живых секретов
 - `.flow/tmp/migration_kit_manifest.env` как временный descriptor распакованного kit
 - `.flow/templates/github/` как source overlay для `.github/workflows/` и `.github/pull_request_template.md`
 - `.flow/config/root/github-actions.required-files.txt`
@@ -88,8 +88,7 @@
 - consumer-specific README / docs / issue templates
 
 Если перенос делается через `migration_kit.tgz`, в него можно включать только шаблоны:
-- `.flow/config/root/.env.codex` для root-level automation env
-- `.flow/config/profiles/<profile>.sample.env` для profile env
+- `.flow/config/flow.sample.env` как единый безопасный шаблон flow-конфига consumer-project
 - `.flow/tmp/migration_kit_manifest.env` как временный descriptor применяемого kit
 - `.flow/templates/github/` для repo workflow overlay
 - `.flow/config/root/github-actions.required-files.txt` и `.flow/config/root/github-actions.required-secrets.txt` как manifests
@@ -201,7 +200,7 @@
 - `vendor/codex-flow-toolkit/.flow/scripts/...`
 - `vendor/codex-flow-toolkit/docs/...`
 - `.flow/scripts/run.sh` — thin wrapper
-- `.flow/config/profiles/<profile>.env`
+- `.flow/config/flow.env`
 
 ### Зачем thin wrapper
 Потому что тогда:

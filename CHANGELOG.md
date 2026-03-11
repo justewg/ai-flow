@@ -31,6 +31,9 @@
 - `[PL-020]` Проведен успешный smoke-тест автозакрытия: после merge PR задачи `PL-019` и `PL-020` автоматически переведены в `Done`.
 - `[PL-021]` Добавлены Telegram push-уведомления из GitHub Actions через `TG_BOT_TOKEN` и `TG_CHAT_ID`.
 - `[PL-022]` Добавлены Telegram-сигналы на события PR-ревью и финальные статусы post-merge workflow (`Deploy Main to Hosting`, `Project Auto Close Tasks`).
+- `[APP-07]` Flow-конфигурация переведена на единый project-scoped файл `.flow/config/flow.env` с шаблоном `.flow/config/flow.sample.env`; `.env.codex` убран как второй слой, а `profile_init`, `migration_kit`, `onboarding_audit`, launchd и PM2-entrypoints переведены на новый контракт.
+- `[APP-07]` Live runtime переведен на новый `.flow`-контракт: launchd-агенты переустановлены как `com.flow.codex-daemon.planka` / `com.flow.codex-watchdog.planka` с `DAEMON_GH_ENV_FILE=.flow/config/flow.env`, а `.flow` остается единственным каноническим automation-root.
+- `[APP-07]` Ops-bot и status/Telegram слой подготовлены к multi-project режиму: remote snapshot/summary разделяются по источникам, `/status` отдает сводку по нескольким runtime, а daemon/watchdog Telegram-оповещения снова включают label проекта.
 - `[APP-07]` Добавлен детальный runbook `APP-07.5` в `docs/codex/gh-app-daemon-integration-plan.md`: выдача доступа GitHub App к Project v2, обновление installation и верификация через App token.
 - `[APP-07]` Добавлен onboarding-checklist включения auth-сервиса GitHub App в `docs/codex/gh-app-daemon-integration-plan.md` (env, pm2, launchd, деградация/recovery).
 - `[APP-07]` Обновлен `README.md`: добавлена ссылка на runbook/онбординг GitHub App auth-сервиса.

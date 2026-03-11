@@ -21,8 +21,8 @@ usage() {
 Usage: .flow/scripts/onboarding_audit.sh [options]
 
 Options:
-  --profile <name>      Проверять profile env и state-dir для указанного профиля.
-  --env-file <path>     Явный путь к profile env-файлу.
+  --profile <name>      Проверять project-scoped flow env и state-dir для указанного профиля.
+  --env-file <path>     Явный путь к flow env-файлу.
   --state-dir <path>    Явный путь к profile state-dir.
   --skip-network        Не выполнять GitHub API / Project v2 проверки.
   -h, --help            Показать справку.
@@ -77,9 +77,8 @@ done
 
 if [[ -n "$profile" ]]; then
   profile_slug="$(slugify "$profile")"
-  flow_profile_config_dir="$(codex_resolve_flow_profile_config_dir)"
   flow_codex_state_root_dir="$(codex_resolve_flow_codex_state_root_dir)"
-  [[ -n "$env_file" ]] || env_file="${flow_profile_config_dir}/${profile_slug}.env"
+  [[ -n "$env_file" ]] || env_file="$(codex_resolve_flow_env_file)"
   [[ -n "$state_dir" ]] || state_dir="${flow_codex_state_root_dir}/${profile_slug}"
 fi
 
@@ -429,9 +428,9 @@ if [[ -z "$profile" && -z "$env_file" ]]; then
 elif [[ -z "$env_file" || ! -f "$env_file" ]]; then
   report_fail "PROFILE_ENV_FILE" "missing:${env_file}"
   if [[ -n "$profile" ]]; then
-      report_action "PROFILE_ENV_FILE" "Создай profile env через: .flow/scripts/run.sh profile_init init --profile ${profile}"
+      report_action "PROFILE_ENV_FILE" "Создай flow env через: .flow/scripts/run.sh profile_init init --profile ${profile}"
   else
-    report_action "PROFILE_ENV_FILE" "Передай существующий env-file через --env-file <path> или создай profile env через profile_init init."
+    report_action "PROFILE_ENV_FILE" "Передай существующий flow env через --env-file <path> или создай его через profile_init init."
   fi
   if [[ -n "$state_dir" ]]; then
     if [[ -d "$state_dir" ]]; then

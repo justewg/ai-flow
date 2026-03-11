@@ -19,6 +19,9 @@ if [[ -z "$message_text" ]]; then
 fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=./env/resolve_config.sh
+source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
+codex_load_flow_env
 
 strip_quotes() {
   local value="$1"
@@ -43,27 +46,18 @@ read_key_from_env_file() {
 bot_token="${DAEMON_TG_BOT_TOKEN:-${TG_BOT_TOKEN:-}}"
 chat_id="${DAEMON_TG_CHAT_ID:-${TG_CHAT_ID:-}}"
 
-env_candidates=()
-if [[ -n "${DAEMON_TG_ENV_FILE:-}" ]]; then
-  env_candidates+=("${DAEMON_TG_ENV_FILE}")
+if [[ -z "$bot_token" ]]; then
+  bot_token="$(codex_resolve_config_value "DAEMON_TG_BOT_TOKEN" "")"
 fi
-env_candidates+=("${ROOT_DIR}/.env")
-env_candidates+=("${ROOT_DIR}/.env.deploy")
-
-for env_file in "${env_candidates[@]}"; do
-  if [[ -z "$bot_token" ]]; then
-    bot_token="$(read_key_from_env_file "$env_file" "DAEMON_TG_BOT_TOKEN" || true)"
-  fi
-  if [[ -z "$bot_token" ]]; then
-    bot_token="$(read_key_from_env_file "$env_file" "TG_BOT_TOKEN" || true)"
-  fi
-  if [[ -z "$chat_id" ]]; then
-    chat_id="$(read_key_from_env_file "$env_file" "DAEMON_TG_CHAT_ID" || true)"
-  fi
-  if [[ -z "$chat_id" ]]; then
-    chat_id="$(read_key_from_env_file "$env_file" "TG_CHAT_ID" || true)"
-  fi
-done
+if [[ -z "$bot_token" ]]; then
+  bot_token="$(codex_resolve_config_value "TG_BOT_TOKEN" "")"
+fi
+if [[ -z "$chat_id" ]]; then
+  chat_id="$(codex_resolve_config_value "DAEMON_TG_CHAT_ID" "")"
+fi
+if [[ -z "$chat_id" ]]; then
+  chat_id="$(codex_resolve_config_value "TG_CHAT_ID" "")"
+fi
 
 if [[ -z "$bot_token" || -z "$chat_id" ]]; then
   echo "SKIP_TG_NOTIFY_MISSING_CREDENTIALS=1"

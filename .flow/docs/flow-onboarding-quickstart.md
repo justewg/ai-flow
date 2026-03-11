@@ -17,7 +17,7 @@
 После прохождения quickstart у вас есть:
 - локальная папка проекта с каталогом `.flow/scripts`;
 - восстановленный repo automation overlay в `.github/workflows/` и `.github/pull_request_template.md`, если он нужен этому consumer-project;
-- profile env-файл для этого проекта;
+- единый flow env-файл для этого проекта;
 - работающий auth-сервис или настроенный fallback;
 - установленный daemon/watchdog для нового profile;
 - канонические `launchd` plist в `.flow/launchd/` и install-links в `~/Library/LaunchAgents/`;
@@ -127,7 +127,7 @@ gh project view <PROJECT_NUMBER> --owner <PROJECT_OWNER> --format json --jq '.id
 Если нужно перенести комплект без ручной выборки файлов, можно собрать архив:
 - в текущем проекте: `.flow/scripts/run.sh create_migration_kit --project acme`
 - в новом проекте после распаковки: `.flow/scripts/run.sh apply_migration_kit --project acme`
-- archive положит безопасные шаблоны: `.flow/config/profiles/acme.sample.env` и `.flow/config/root/.env.codex`, без копирования живых токенов из исходного проекта
+- archive положит безопасный шаблон `.flow/config/flow.sample.env` без копирования живых токенов из исходного проекта
 - archive также положит `.flow/templates/github/` как source overlay для `.github/workflows/` и `.github/pull_request_template.md`
 - `apply_migration_kit` развернёт этот overlay в новый repo и оставит manifest required secrets в `.flow/config/root/github-actions.required-secrets.txt`
 
@@ -162,31 +162,30 @@ cd <HOME>/sites/acme-app
 ```
 
 После этого ожидается:
-- создан `.flow/config/profiles/acme.sample.env`
-- создан `.flow/config/profiles/acme.env`
-- создан `.flow/config/root/.env.codex`
+- создан `.flow/config/flow.sample.env`
+- создан `.flow/config/flow.env`
 - созданы `.flow/config/root/github-actions.required-files.txt` и `.flow/config/root/github-actions.required-secrets.txt`
 - развернуты `.github/workflows/*.yml` и, если он был в source-kit, `.github/pull_request_template.md`
 - создан `.flow/state/codex/acme`
 
-### Шаг 3. Создать profile env и state-dir
+### Шаг 3. Создать flow env и state-dir
 ```bash
 .flow/scripts/run.sh profile_init init --profile acme
 ```
 
 Ожидаемый результат:
-- создан `.flow/config/profiles/acme.env`
+- создан `.flow/config/flow.env`
 - создан `.flow/state/codex/acme`
 
-Если перед этим уже был выполнен `apply_migration_kit`, шаг можно пропустить: рабочий `.env` уже материализован из `.sample.env`.
+Если перед этим уже был выполнен `apply_migration_kit`, шаг можно пропустить: рабочий `.flow/config/flow.env` уже материализован из `.flow/config/flow.sample.env`.
 
-### Шаг 4. Проверить, что именно осталось настроить в profile
+### Шаг 4. Проверить, что именно осталось настроить в flow env
 ```bash
 .flow/scripts/run.sh onboarding_audit --profile acme
 ```
 
 ### Шаг 5. Заполнить env-файл
-Открыть `.flow/config/profiles/acme.env` и задать минимум:
+Открыть `.flow/config/flow.env` и задать минимум:
 
 ```dotenv
 PROJECT_PROFILE=acme
@@ -228,7 +227,7 @@ DAEMON_GH_TOKEN=<fallback-pat>
 
 Но это аварийный режим, не основной. Для штатного flow `DAEMON_GH_PROJECT_TOKEN` всё равно должен быть заполнен.
 
-Отдельно открыть `.flow/config/root/.env.codex` и перенести нужные automation-переменные в `.env` или `.env.deploy` consumer-project:
+Если consumer-project использует auth-service, ops-bot или remote push, эти переменные тоже нужно заполнить прямо в `.flow/config/flow.env`:
 - `GH_APP_ID`
 - `GH_APP_INSTALLATION_ID`
 - `GH_APP_PRIVATE_KEY_PATH` — рекомендуемо хранить как `<HOME>/.secrets/gh-apps/codex-flow.private-key.pem`
@@ -257,7 +256,7 @@ DAEMON_GH_TOKEN=<fallback-pat>
 Ожидается:
 - `PREFLIGHT_READY=1`
 
-Если нет, исправляйте `CHECK_FAIL ...` в `.flow/config/profiles/acme.env`, а не исходники `.flow/scripts`.
+Если нет, исправляйте `CHECK_FAIL ...` в `.flow/config/flow.env`, а не исходники `.flow/scripts`.
 
 ## Поднять auth-сервис
 Если используется GitHub App:
@@ -299,22 +298,22 @@ DAEMON_GH_TOKEN=<fallback-pat>
 
 ### 1. API и auth
 ```bash
-env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh github_health_check
+env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh github_health_check
 ```
 
 ### 2. Snapshot состояния
 ```bash
-env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh status_snapshot
+env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh status_snapshot
 ```
 
 ### 3. Статус daemon
 ```bash
-env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh daemon_status com.flow.codex-daemon.acme
+env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh daemon_status com.flow.codex-daemon.acme
 ```
 
 ### 4. Статус watchdog
 ```bash
-env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh watchdog_status com.flow.codex-watchdog.acme
+env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh watchdog_status com.flow.codex-watchdog.acme
 ```
 
 ### 5. Smoke на живой карточке
@@ -336,8 +335,8 @@ env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/stat
 
 ### Ручной запуск daemon/watchdog с явным env
 ```bash
-env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh daemon_install com.flow.codex-daemon.acme 45
-env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme WATCHDOG_DAEMON_LABEL=com.flow.codex-daemon.acme WATCHDOG_DAEMON_INTERVAL_SEC=45 .flow/scripts/run.sh watchdog_install com.flow.codex-watchdog.acme 45
+env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh daemon_install com.flow.codex-daemon.acme 45
+env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme WATCHDOG_DAEMON_LABEL=com.flow.codex-daemon.acme WATCHDOG_DAEMON_INTERVAL_SEC=45 .flow/scripts/run.sh watchdog_install com.flow.codex-watchdog.acme 45
 ```
 
 Что создаётся при install:
@@ -364,7 +363,7 @@ env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/stat
 - profile не `default`, но project-binding заполнен не полностью.
 
 Что делать:
-- заполнить все три переменные в `.flow/config/profiles/<profile>.env`.
+- заполнить все три переменные в `.flow/config/flow.env`.
 
 ### `Resource not accessible by integration`
 Причина:
@@ -403,7 +402,7 @@ env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/stat
 
 ## Минимальный cutover checklist
 1. `profile_init init` выполнен.
-2. `.flow/config/profiles/<profile>.env` заполнен.
+2. `.flow/config/flow.env` заполнен.
 3. `profile_init preflight` даёт `PREFLIGHT_READY=1`.
 4. auth-сервис healthy или fallback сознательно включен.
 5. `profile_init install` завершился без ошибки.

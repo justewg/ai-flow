@@ -33,9 +33,9 @@
 - `.flow/scripts/run.sh next_task` — показать следующую задачу со статусом `Planned` (приоритет P0→P1→P2, затем по номеру `PL-xxx`).
 - `.flow/scripts/run.sh app_deps_mermaid [output-file]` — построить Mermaid DAG зависимостей APP-issues из `Flow Meta` (`Depends-On/Blocks`) и записать markdown-файл (по умолчанию `docs/app-issues-dependency-diagram.md`).
 - `.flow/scripts/run.sh backlog_seed_apply` — применить runtime-план создания backlog-задач из `<state-dir>/backlog_seed_plan.json` (по умолчанию 1 задача за запуск).
-- `.flow/scripts/run.sh onboarding_audit [--profile <name>] [--skip-network]` — первичный аудит consumer-project: toolkit-файлы, локальные команды, git/gh, profile env, repo и Project v2, repo workflow overlay и наличие обязательных GitHub Actions secrets.
-- `.flow/scripts/run.sh create_migration_kit --project <name> [--source-profile <name>] [--output <path>]` — собрать переносимый `migration_kit.tgz` с toolkit, `.flow/docs`, `.flow/config/profiles/<profile>.sample.env`, root template `.flow/config/root/.env.codex` и repo workflow overlay из текущего `.github/`.
-- `.flow/scripts/run.sh apply_migration_kit [--project <name>] [--root-env-output <path>]` — после распаковки kit материализовать рабочий profile env из `.sample.env`, оставить root template `.flow/config/root/.env.codex` и развернуть `.github/workflows/` overlay. Secrets values после этого всё равно создаются вручную в GitHub UI.
+- `.flow/scripts/run.sh onboarding_audit [--profile <name>] [--skip-network]` — первичный аудит consumer-project: toolkit-файлы, локальные команды, git/gh, project-scoped flow env, repo и Project v2, repo workflow overlay и наличие обязательных GitHub Actions secrets.
+- `.flow/scripts/run.sh create_migration_kit --project <name> [--source-profile <name>] [--output <path>]` — собрать переносимый `migration_kit.tgz` с toolkit, `.flow/docs`, `.flow/config/flow.sample.env` и repo workflow overlay из текущего `.github/`.
+- `.flow/scripts/run.sh apply_migration_kit [--project <name>]` — после распаковки kit материализовать рабочий `.flow/config/flow.env` из `.flow/config/flow.sample.env` и развернуть `.github/workflows/` overlay. Secrets values после этого всё равно создаются вручную в GitHub UI.
 - `.flow/scripts/run.sh profile_init <init|install|preflight|bootstrap> ...` — полуавтоматический bootstrap нового profile/repo без ручной правки install-скриптов.
 - `.flow/scripts/run.sh daemon_tick` — один цикл демона: проверка `Todo`, подхват задачи, перевод в `In Progress`.
 - `.flow/scripts/run.sh daemon_loop [interval-sec]` — непрерывный polling-цикл демона (по умолчанию 45 сек).
@@ -91,7 +91,7 @@
 
 | Параметр | Current project (пример: PLANKA) | New project (пример: ACME) | Зачем нужен |
 | --- | --- | --- | --- |
-| `DAEMON_GH_ENV_FILE` | `<root-dir>/.flow/config/profiles/default.env` или `.env` | `<root-dir>/.flow/config/profiles/acme.env` | Привязывает daemon/watchdog к нужному profile env-файлу. |
+| `DAEMON_GH_ENV_FILE` | `<root-dir>/.flow/config/flow.env` | `<root-dir>/.flow/config/flow.env` | Привязывает daemon/watchdog к project-scoped flow env-файлу. |
 | `CODEX_STATE_DIR` / `FLOW_STATE_DIR` | `<root-dir>/.flow/state/codex/planka` | `<root-dir>/.flow/state/codex/acme` | Разводит state/log/runtime и фиксированные файлы `run.sh`. |
 | `PROJECT_PROFILE` | `default` | `acme` | Включает отдельный project-binding; для non-default требуются все `PROJECT_*`. |
 | `GITHUB_REPO` | `<owner>/<current-repo>` | `<owner>/<new-repo>` | Определяет repo для Issue/PR-команд и executor prompt. |
@@ -108,16 +108,15 @@ Bootstrap нового профиля:
 3. В новом проекте выполнить:
    `.flow/scripts/run.sh apply_migration_kit --project acme`
 4. После `apply_migration_kit` должны появиться:
-   - `.flow/config/profiles/acme.sample.env`
-   - `.flow/config/profiles/acme.env`
-   - `.flow/config/root/.env.codex`
+   - `.flow/config/flow.sample.env`
+   - `.flow/config/flow.env`
    - `.flow/config/root/github-actions.required-files.txt`
    - `.flow/config/root/github-actions.required-secrets.txt`
    - `.github/workflows/*.yml` и, если был в source overlay, `.github/pull_request_template.md`
 5. `.flow/scripts/run.sh onboarding_audit --profile acme` — проверить toolkit, docs, env и получить список недостающих настроек.
 6. При необходимости дополнительно использовать:
    `.flow/scripts/run.sh profile_init preflight --profile acme`
-7. `.flow/config/root/.env.codex` использовать как шаблон для automation-переменных в `.env` или `.env.deploy`, не коммитить в него живые секреты.
+7. `.flow/config/flow.sample.env` использовать только как безопасный шаблон; канонический runtime-config хранить в `.flow/config/flow.env`.
 8. Repo Actions secrets нужно создать вручную в GitHub UI нового repo по списку из `.flow/config/root/github-actions.required-secrets.txt`.
    Что именно вписывать в каждый secret: `.flow/docs/github-actions-repo-secrets.md`.
 9. После заполнения env:
@@ -126,22 +125,22 @@ Bootstrap нового профиля:
 
 Запуск и остановка профиля:
 1. Первый запуск нового профиля: `.flow/scripts/run.sh profile_init install --profile acme`
-2. Проверка launchd-состояния: `env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh daemon_status com.flow.codex-daemon.acme`
-3. Аналогично проверить watchdog: `env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh watchdog_status com.flow.codex-watchdog.acme`
+2. Проверка launchd-состояния: `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh daemon_status com.flow.codex-daemon.acme`
+3. Аналогично проверить watchdog: `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh watchdog_status com.flow.codex-watchdog.acme`
 4. Штатная остановка профиля: `.flow/scripts/run.sh daemon_uninstall com.flow.codex-daemon.acme` и `.flow/scripts/run.sh watchdog_uninstall com.flow.codex-watchdog.acme`
-5. Повторный запуск после остановки: `env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh daemon_install com.flow.codex-daemon.acme 45`, затем `env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme WATCHDOG_DAEMON_LABEL=com.flow.codex-daemon.acme WATCHDOG_DAEMON_INTERVAL_SEC=45 .flow/scripts/run.sh watchdog_install com.flow.codex-watchdog.acme 45`
+5. Повторный запуск после остановки: `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh daemon_install com.flow.codex-daemon.acme 45`, затем `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme WATCHDOG_DAEMON_LABEL=com.flow.codex-daemon.acme WATCHDOG_DAEMON_INTERVAL_SEC=45 .flow/scripts/run.sh watchdog_install com.flow.codex-watchdog.acme 45`
 
 Smoke-check после bootstrap нового профиля:
 1. `.flow/scripts/run.sh profile_init preflight --profile acme` — ожидается `PREFLIGHT_READY=1`.
-2. `env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh github_health_check`
-3. `env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh status_snapshot`
-4. `env DAEMON_GH_ENV_FILE=.flow/config/profiles/acme.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh gh_app_auth_probe`
+2. `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh github_health_check`
+3. `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh status_snapshot`
+4. `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh gh_app_auth_probe`
 5. Для параллельной эксплуатации двух проектов повторить те же проверки для current profile и убедиться, что snapshot/log-файлы лежат в разных `<state-dir>`.
 
 Rollback нового профиля:
 1. Остановить новый профиль: `.flow/scripts/run.sh watchdog_uninstall com.flow.codex-watchdog.acme` и `.flow/scripts/run.sh daemon_uninstall com.flow.codex-daemon.acme`
 2. Убедиться, что current profile продолжает работать в своём `<state-dir>` без изменений.
-3. Если проблема в env/config, исправить `.flow/config/profiles/acme.env` и повторить `profile_init install --profile acme`.
+3. Если проблема в env/config, исправить `.flow/config/flow.env` и повторить `profile_init install --profile acme`.
 4. Если откат полный, сохранить диагностические логи из `<state-dir>` нового профиля и только после этого удалить новый state-dir вручную.
 5. Детальный сценарий миграции и troubleshooting см. в `.flow/docs/flow-portability-runbook.md`.
 
@@ -227,7 +226,7 @@ Rollback нового профиля:
     - Рекомендуемо: токен отдельного bot-аккаунта (не личный), чтобы авторство действий было отделено.
     - Тип токена: `Tokens (classic)` (для простого старта) или fine-grained PAT с эквивалентными правами.
     - Минимальные права для текущего flow: `repo`, `read:project`, `project`.
-    - После выпуска записать в `.env` и перезапустить сервисы.
+    - После выпуска записать в `.flow/config/flow.env` и перезапустить сервисы.
   - После изменения значения перезапусти сервисы:
     - `.flow/scripts/run.sh daemon_uninstall && .flow/scripts/run.sh daemon_install`
     - `.flow/scripts/run.sh watchdog_uninstall && .flow/scripts/run.sh watchdog_install`
@@ -240,7 +239,7 @@ Rollback нового профиля:
 - `GH_APP_PM2_APP_NAME` — имя PM2 процесса auth-сервиса (по умолчанию `planka-gh-app-auth`).
 - `GH_APP_PM2_USE_DEFAULT` — если `1/true/yes/on`, `onboarding_audit` считает shared/default auth-service допустимым без отдельного `GH_APP_PM2_APP_NAME`, но только если явно заданы координаты сервиса через `DAEMON_GH_AUTH_TOKEN_URL` или `GH_APP_BIND/GH_APP_PORT`.
 - `GH_APP_PM2_RESTART_TIMEOUT_SEC` — timeout проверки авто-restart в `gh_app_auth_pm2_crash_test` (по умолчанию `20` сек).
-- `DAEMON_GH_ENV_FILE` — явный путь к profile env-файлу; `profile_init install` прокидывает его в `launchd`-plist, чтобы daemon/watchdog переживали новый shell/login без ручного export.
+- `DAEMON_GH_ENV_FILE` — явный путь к project-scoped flow env-файлу; `profile_init install` прокидывает его в `launchd`-plist, чтобы daemon/watchdog переживали новый shell/login без ручного export.
 
 ## Итеративный executor-flow (коммит1 -> вопрос -> ответ -> коммит2 -> финализация)
 1. Сделать первую рабочую дельту и выполнить `commit_push`.
@@ -402,7 +401,7 @@ Rollback нового профиля:
     - `MEDIUM_RESET_EXECUTOR` (`executor_reset` + `daemon_tick`)
     - `HARD_RESTART_DAEMON` (`daemon_uninstall` + `daemon_install`)
   - использует cooldown, чтобы не спамить recovery-действиями
-  - в Telegram-алерте `Action` остается только в заголовке (`🛟 WATCHDOG: <ACTION>`), отдельный блок в теле содержит только `⚙️ Reason`
+  - в Telegram-алерте `Action` остается только в заголовке (`🛟 <project>: watchdog <ACTION>`), отдельный блок в теле содержит только `⚙️ Reason`
   - отправляет Telegram-сигнал о срабатывании recovery (если доступен бот)
 - `watchdog_loop.sh [interval-sec]`
   - крутит `watchdog_tick.sh` в цикле с отдельным lock-файлом
@@ -476,7 +475,7 @@ Rollback нового профиля:
   - endpoint-ы: `GET /health`, `GET /token` (защищен `X-Internal-Secret`)
   - генерирует JWT, получает installation token, кэширует и обновляет его до истечения
 - `gh_app_auth_start.sh`
-  - запускает auth-сервис, предварительно загружая `.env` и `.env.deploy`
+  - запускает auth-сервис, предварительно загружая `.flow/config/flow.env` (с legacy fallback через resolver)
 - `gh_app_auth_health.sh`
   - проверяет локальный `GET /health`
 - `gh_app_auth_probe.sh`
@@ -505,8 +504,9 @@ Rollback нового профиля:
   - невалидный webhook JSON -> `400 BAD_REQUEST`; payload > 1 MiB -> `413 PAYLOAD_TOO_LARGE`
   - update без команды обрабатывается безопасно (`200`, `command_handled=false`)
   - команды в чате: `/status`, `/summary [hours]`, `/help`, `/status_page`
+  - `/status` агрегирует все известные project/runtime snapshots на этом automation-contour и отдает их отдельными блоками
 - `ops_bot_start.sh`
-  - запускает ops-бот сервис, предварительно загружая `.env` и `.env.deploy`
+  - запускает ops-бот сервис, предварительно загружая `.flow/config/flow.env` (с legacy fallback через resolver)
 - `ops_bot_health.sh`
   - проверяет локальный `GET /health` ops-бота
 - `ops_bot_post_smoke_check.sh`
@@ -536,10 +536,12 @@ Rollback нового профиля:
   - wrapper без аргументов для `ops_bot_webhook_register.sh refresh`
 - `ops_remote_status_push.sh`
   - формирует payload из `status_snapshot.sh` и отправляет его в `OPS_REMOTE_STATUS_PUSH_URL`
+  - в payload добавляет `profile`, `repo`, `label`; default `source` берется из `PROJECT_PROFILE`/repo, а не только из hostname
   - auth заголовок: `X-Ops-Status-Secret` из `OPS_REMOTE_STATUS_PUSH_SECRET`
   - используется `daemon_tick` на `EXIT` (fallback для старого запущенного `daemon_loop`) и `daemon_loop` по тикам для split runtime (локальная автоматика + удаленный ops-бот)
 - `ops_remote_summary_push.sh`
   - формирует payload из `log_summary.sh --hours <window>` (окна из `OPS_REMOTE_SUMMARY_PUSH_HOURS`, по умолчанию `6`)
+  - в payload добавляет `profile`, `repo`, `label`; remote ingest хранит summary раздельно по source
   - отправляет bundle summary в `OPS_REMOTE_SUMMARY_PUSH_URL` (`/ops/ingest/log-summary`) с заголовком `X-Ops-Status-Secret`
   - использует throttling по `OPS_REMOTE_SUMMARY_PUSH_MIN_INTERVAL_SEC` (по умолчанию `300`) и backoff `OPS_REMOTE_SUMMARY_PUSH_ENDPOINT_MISSING_BACKOFF_SEC` для `404 endpoint not found`
 
@@ -622,7 +624,7 @@ chmod +x .flow/scripts/*.sh
 Опциональные переменные для локальных Telegram-алертов демона:
 - `DAEMON_TG_BOT_TOKEN` (или `TG_BOT_TOKEN`)
 - `DAEMON_TG_CHAT_ID` (или `TG_CHAT_ID`)
-- `DAEMON_TG_ENV_FILE` (путь к env-файлу; по умолчанию проверяются `.env`, `.env.deploy`)
+- `DAEMON_TG_ENV_FILE` (путь к env-файлу; по умолчанию используется `.flow/config/flow.env` с legacy fallback через resolver)
 - `DAEMON_TG_REMINDER_SEC` (интервал reminder в секундах, минимум 60; по умолчанию 1800)
 - `DAEMON_TG_GH_DNS_REMINDER_SEC` (интервал напоминаний именно для деградации `GITHUB_DNS_OFFLINE` при доступном Telegram; минимум 60, по умолчанию 300)
 - `DAEMON_TG_DIRTY_REMINDER_SEC` (интервал reminder для блокировки `WAIT_DIRTY_WORKTREE`; минимум 60, по умолчанию 600)
@@ -646,9 +648,10 @@ chmod +x .flow/scripts/*.sh
 - `OPS_BOT_INGEST_SECRET` (секрет заголовка `X-Ops-Status-Secret` для ingest POST)
 - `OPS_BOT_SUMMARY_INGEST_PATH` (path ingest endpoint для remote `log_summary`; по умолчанию `/ops/ingest/log-summary`)
 - `OPS_BOT_SUMMARY_INGEST_SECRET` (секрет для summary-ingest; если не задан — используется `OPS_BOT_INGEST_SECRET`)
-- `OPS_BOT_REMOTE_SNAPSHOT_FILE` (файл кеша последнего принятого удаленного snapshot)
+- `OPS_BOT_REMOTE_STATE_DIR` (каталог раздельного remote ingest storage; по умолчанию `.flow/state/ops-bot/remote`)
+- `OPS_BOT_REMOTE_SNAPSHOT_FILE` (legacy-файл кеша последнего принятого удаленного snapshot; по умолчанию `.flow/state/ops-bot/remote/_legacy/snapshot.json`)
 - `OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC` (TTL удаленного snapshot в секундах; по умолчанию `600`)
-- `OPS_BOT_REMOTE_SUMMARY_FILE` (файл кеша последнего принятого удаленного summary bundle)
+- `OPS_BOT_REMOTE_SUMMARY_FILE` (legacy-файл кеша последнего принятого удаленного summary bundle; по умолчанию `.flow/state/ops-bot/remote/_legacy/summary.json`)
 - `OPS_BOT_REMOTE_SUMMARY_TTL_SEC` (TTL удаленного summary bundle в секундах; по умолчанию `1200`)
 - `OPS_BOT_ALLOWED_CHAT_IDS` (CSV списка разрешенных chat_id; если задано — остальные игнорируются)
 - `OPS_BOT_PUBLIC_BASE_URL` (внешний URL status/webhook server для ops-bot: используется для `/status_page`, Telegram webhook registration и публичного ingress, например `https://ops.example.com`)
@@ -660,12 +663,12 @@ chmod +x .flow/scripts/*.sh
 - `OPS_REMOTE_STATUS_PUSH_URL` (полный URL ingest endpoint, например `https://planka-dev.ewg40.ru/ops/ingest/status`)
 - `OPS_REMOTE_STATUS_PUSH_SECRET` (секрет заголовка `X-Ops-Status-Secret` для push)
 - `OPS_REMOTE_STATUS_PUSH_TIMEOUT_SEC` (HTTP timeout push-запроса; по умолчанию `6`)
-- `OPS_REMOTE_STATUS_PUSH_SOURCE` (лейбл источника, например `macbook-local`)
+- `OPS_REMOTE_STATUS_PUSH_SOURCE` (лейбл источника; по умолчанию `PROJECT_PROFILE`, затем repo-name, затем hostname)
 - `OPS_REMOTE_SUMMARY_PUSH_ENABLED` (включает push локального summary bundle на удаленный ingest endpoint)
 - `OPS_REMOTE_SUMMARY_PUSH_URL` (полный URL summary ingest endpoint, например `https://planka-dev.ewg40.ru/ops/ingest/log-summary`)
 - `OPS_REMOTE_SUMMARY_PUSH_SECRET` (секрет заголовка `X-Ops-Status-Secret` для summary push; fallback к `OPS_REMOTE_STATUS_PUSH_SECRET`)
 - `OPS_REMOTE_SUMMARY_PUSH_TIMEOUT_SEC` (HTTP timeout summary push-запроса; по умолчанию `8`)
-- `OPS_REMOTE_SUMMARY_PUSH_SOURCE` (лейбл источника summary push; по умолчанию hostname)
+- `OPS_REMOTE_SUMMARY_PUSH_SOURCE` (лейбл источника summary push; по умолчанию `PROJECT_PROFILE`, затем repo-name, затем hostname)
 - `OPS_REMOTE_SUMMARY_PUSH_HOURS` (CSV окон summary для push; по умолчанию `6`)
 - `OPS_REMOTE_SUMMARY_PUSH_MIN_INTERVAL_SEC` (минимальный интервал между summary push; по умолчанию `300`)
 - `OPS_REMOTE_SUMMARY_PUSH_ENDPOINT_MISSING_BACKOFF_SEC` (backoff при `404 endpoint not found`; по умолчанию `3600`)

@@ -8,7 +8,9 @@ const path = require("path");
 const { execFile } = require("child_process");
 
 const ROOT_DIR = path.resolve(__dirname, "../..");
-const CODEX_DIR = path.join(ROOT_DIR, ".tmp", "codex");
+const FLOW_ROOT_DIR = path.join(ROOT_DIR, ".flow");
+const DEFAULT_CODEX_DIR = path.join(FLOW_ROOT_DIR, "state", "codex", "default");
+const DEFAULT_OPS_REMOTE_STATE_DIR = path.join(FLOW_ROOT_DIR, "state", "ops-bot", "remote");
 const DEFAULT_BIND = "127.0.0.1";
 const DEFAULT_PORT = 8790;
 const DEFAULT_WEBHOOK_PATH = "/telegram/webhook";
@@ -56,6 +58,16 @@ function splitCsv(value) {
     .filter(Boolean);
 }
 
+function slugifySegment(value, fallback = "unknown") {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || fallback;
+}
+
 function htmlEscape(input) {
   return String(input ?? "")
     .replace(/&/g, "&amp;")
@@ -71,6 +83,42 @@ function truncateText(value, maxChars) {
     return text;
   }
   return `${text.slice(0, Math.max(0, maxChars - 14))}\n...[truncated]`;
+}
+
+function readJsonFile(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) {
+      return null;
+    }
+    const raw = fs.readFileSync(filePath, "utf8");
+    if (!raw.trim()) {
+      return null;
+    }
+    return JSON.parse(raw);
+  } catch (_error) {
+    return null;
+  }
+}
+
+function readEnvKey(filePath, key) {
+  try {
+    if (!fs.existsSync(filePath)) {
+      return "";
+    }
+    const lines = fs.readFileSync(filePath, "utf8").split(/\r?\n/);
+    for (const line of lines) {
+      if (!line.startsWith(`${key}=`)) {
+        continue;
+      }
+      return line
+        .slice(key.length + 1)
+        .trim()
+        .replace(/^['"]|['"]$/g, "");
+    }
+  } catch (_error) {
+    return "";
+  }
+  return "";
 }
 
 function execFileAsync(file, args = [], options = {}) {
@@ -221,10 +269,10 @@ function loadConfig(env = process.env) {
   const allowedChatIds = new Set(splitCsv(env.OPS_BOT_ALLOWED_CHAT_IDS));
 
   const snapshotScript = path.resolve(
-    env.OPS_BOT_STATUS_SNAPSHOT_SCRIPT || path.join(ROOT_DIR, "scripts", "codex", "status_snapshot.sh"),
+    env.OPS_BOT_STATUS_SNAPSHOT_SCRIPT || path.join(ROOT_DIR, ".flow", "scripts", "status_snapshot.sh"),
   );
   const logSummaryScript = path.resolve(
-    env.OPS_BOT_LOG_SUMMARY_SCRIPT || path.join(ROOT_DIR, "scripts", "codex", "log_summary.sh"),
+    env.OPS_BOT_LOG_SUMMARY_SCRIPT || path.join(ROOT_DIR, ".flow", "scripts", "log_summary.sh"),
   );
 
   const refreshSec = Math.max(2, parseInteger(env.OPS_BOT_REFRESH_SEC, DEFAULT_REFRESH_SEC));
@@ -232,15 +280,22 @@ function loadConfig(env = process.env) {
 
   const tgBotToken = String(env.OPS_BOT_TG_BOT_TOKEN || env.DAEMON_TG_BOT_TOKEN || env.TG_BOT_TOKEN || "").trim();
   const publicBaseUrl = String(env.OPS_BOT_PUBLIC_BASE_URL || "").trim();
+  const flowEnvFile = path.join(ROOT_DIR, ".flow", "config", "flow.env");
+  const profileConfigDir = path.join(ROOT_DIR, ".flow", "config", "profiles");
+  const localStateRootDir = path.join(ROOT_DIR, ".flow", "state", "codex");
+  const codexStateDir = path.resolve(env.CODEX_STATE_DIR || env.FLOW_STATE_DIR || DEFAULT_CODEX_DIR);
+  const remoteStateDir = path.resolve(
+    env.OPS_BOT_REMOTE_STATE_DIR || path.join(ROOT_DIR, ".flow", "state", "ops-bot", "remote"),
+  );
   const remoteSnapshotFile = path.resolve(
-    env.OPS_BOT_REMOTE_SNAPSHOT_FILE || path.join(CODEX_DIR, "ops_remote_snapshot.json"),
+    env.OPS_BOT_REMOTE_SNAPSHOT_FILE || path.join(remoteStateDir, "_legacy", "snapshot.json"),
   );
   const remoteSnapshotTtlSec = Math.max(
     30,
     parseInteger(env.OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC, DEFAULT_REMOTE_SNAPSHOT_TTL_SEC),
   );
   const remoteSummaryFile = path.resolve(
-    env.OPS_BOT_REMOTE_SUMMARY_FILE || path.join(CODEX_DIR, "ops_remote_summary.json"),
+    env.OPS_BOT_REMOTE_SUMMARY_FILE || path.join(remoteStateDir, "_legacy", "summary.json"),
   );
   const remoteSummaryTtlSec = Math.max(
     60,
@@ -277,6 +332,11 @@ function loadConfig(env = process.env) {
     cmdTimeoutMs,
     tgBotToken,
     publicBaseUrl,
+    flowEnvFile,
+    profileConfigDir,
+    localStateRootDir,
+    codexStateDir,
+    remoteStateDir,
     remoteSnapshotFile,
     remoteSnapshotTtlSec,
     remoteSummaryFile,
@@ -285,9 +345,17 @@ function loadConfig(env = process.env) {
 }
 
 async function loadSnapshot(config) {
+  return loadSnapshotForEnv(config, {});
+}
+
+async function loadSnapshotForEnv(config, envOverrides) {
   try {
     const { stdout } = await execFileAsync(config.snapshotScript, [], {
       cwd: ROOT_DIR,
+      env: {
+        ...process.env,
+        ...envOverrides,
+      },
       timeout: config.cmdTimeoutMs,
       maxBuffer: 1024 * 1024,
     });
@@ -308,6 +376,18 @@ async function loadSnapshot(config) {
   }
 }
 
+function resolveProfileStateDir(config, envFile, profileName) {
+  const fromCodex = readEnvKey(envFile, "CODEX_STATE_DIR");
+  if (fromCodex) {
+    return path.resolve(ROOT_DIR, fromCodex);
+  }
+  const fromFlow = readEnvKey(envFile, "FLOW_STATE_DIR");
+  if (fromFlow) {
+    return path.resolve(ROOT_DIR, fromFlow);
+  }
+  return path.join(config.localStateRootDir, profileName);
+}
+
 async function loadSummary(config, hours) {
   const safeHours = Number.isInteger(hours) && hours > 0 && hours <= 168 ? hours : DEFAULT_SUMMARY_HOURS;
   const { stdout, stderr } = await execFileAsync(config.logSummaryScript, ["--hours", String(safeHours)], {
@@ -321,31 +401,65 @@ async function loadSummary(config, hours) {
   };
 }
 
-function loadRemoteSummary(config) {
-  try {
-    if (!fs.existsSync(config.remoteSummaryFile)) {
-      return null;
+function remoteSourceDir(config, source) {
+  return path.join(config.remoteStateDir, slugifySegment(source));
+}
+
+function remoteSnapshotPath(config, source) {
+  return path.join(remoteSourceDir(config, source), "snapshot.json");
+}
+
+function remoteSummaryPath(config, source) {
+  return path.join(remoteSourceDir(config, source), "summary.json");
+}
+
+function listRemoteRecords(config, fileName, shapeKey) {
+  const records = [];
+  if (fs.existsSync(config.remoteStateDir)) {
+    for (const entry of fs.readdirSync(config.remoteStateDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      const parsed = readJsonFile(path.join(config.remoteStateDir, entry.name, fileName));
+      if (isObjectLike(parsed) && isObjectLike(parsed[shapeKey])) {
+        records.push(parsed);
+      }
     }
-    const raw = fs.readFileSync(config.remoteSummaryFile, "utf8");
-    if (!raw.trim()) {
-      return null;
-    }
-    const parsed = JSON.parse(raw);
-    if (!isObjectLike(parsed) || !isObjectLike(parsed.summaries)) {
-      return null;
-    }
-    return parsed;
-  } catch (_error) {
-    return null;
   }
+  return records.sort((left, right) => {
+    const leftMs = Date.parse(String(left.received_at || left.pushed_at || "")) || 0;
+    const rightMs = Date.parse(String(right.received_at || right.pushed_at || "")) || 0;
+    return rightMs - leftMs;
+  });
+}
+
+function loadRemoteSummaries(config) {
+  const records = listRemoteRecords(config, "summary.json", "summaries");
+  const legacy = readJsonFile(config.remoteSummaryFile);
+  if (isObjectLike(legacy) && isObjectLike(legacy.summaries)) {
+    records.push(legacy);
+  }
+  return records.sort((left, right) => {
+    const leftMs = Date.parse(String(left.received_at || left.pushed_at || "")) || 0;
+    const rightMs = Date.parse(String(right.received_at || right.pushed_at || "")) || 0;
+    return rightMs - leftMs;
+  });
 }
 
 function writeRemoteSummary(config, payload) {
-  const dirPath = path.dirname(config.remoteSummaryFile);
+  const dirPath = remoteSourceDir(config, payload.source || "unknown");
   fs.mkdirSync(dirPath, { recursive: true });
-  const tempPath = `${config.remoteSummaryFile}.${process.pid}.${Date.now()}.tmp`;
+  const filePath = remoteSummaryPath(config, payload.source || "unknown");
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   fs.writeFileSync(tempPath, `${JSON.stringify(payload)}\n`, "utf8");
-  fs.renameSync(tempPath, config.remoteSummaryFile);
+  fs.renameSync(tempPath, filePath);
+  if (config.remoteSummaryFile) {
+    const legacyDir = path.dirname(config.remoteSummaryFile);
+    fs.mkdirSync(legacyDir, { recursive: true });
+    const legacyTempPath = `${config.remoteSummaryFile}.${process.pid}.${Date.now()}.tmp`;
+    fs.writeFileSync(legacyTempPath, `${JSON.stringify(payload)}\n`, "utf8");
+    fs.renameSync(legacyTempPath, config.remoteSummaryFile);
+  }
 }
 
 function pickSummaryEntry(summaries, requestedHours) {
@@ -376,10 +490,34 @@ function pickSummaryEntry(summaries, requestedHours) {
   return { hours: picked, text, exact: picked === requestedHours };
 }
 
+function collectRemoteSummarySources(config) {
+  return loadRemoteSummaries(config).map((record) => {
+    const receivedAtMs = Date.parse(String(record.received_at || ""));
+    const ageSec = Number.isFinite(receivedAtMs)
+      ? Math.max(0, Math.floor((Date.now() - receivedAtMs) / 1000))
+      : Number.POSITIVE_INFINITY;
+    return {
+      source: String(record.source || "unknown"),
+      profile: String(record.profile || ""),
+      repo: String(record.repo || ""),
+      label: String(record.label || record.repo || record.source || "unknown"),
+      received_at: String(record.received_at || ""),
+      pushed_at: String(record.pushed_at || ""),
+      generated_at: String(record.generated_at || ""),
+      age_sec: ageSec,
+      stale: !(ageSec <= config.remoteSummaryTtlSec),
+      windows: Object.keys(record.summaries || {})
+        .map((key) => Number.parseInt(key, 10))
+        .filter((value) => Number.isInteger(value) && value > 0)
+        .sort((a, b) => a - b),
+    };
+  });
+}
+
 async function loadEffectiveSummary(config, hours) {
   const safeHours = Number.isInteger(hours) && hours > 0 && hours <= 168 ? hours : DEFAULT_SUMMARY_HOURS;
-  const remote = loadRemoteSummary(config);
-  if (remote) {
+  const remoteSources = collectRemoteSummarySources(config);
+  for (const remote of loadRemoteSummaries(config)) {
     const picked = pickSummaryEntry(remote.summaries, safeHours);
     if (picked && picked.text.trim()) {
       const receivedAtMs = Date.parse(String(remote.received_at || ""));
@@ -393,10 +531,14 @@ async function loadEffectiveSummary(config, hours) {
         usedHours: picked.hours,
         source: "remote_ingest",
         remoteSource: String(remote.source || "unknown"),
+        remoteProfile: String(remote.profile || ""),
+        remoteRepo: String(remote.repo || ""),
+        remoteLabel: String(remote.label || remote.repo || remote.source || "unknown"),
         remoteReceivedAt: String(remote.received_at || ""),
         remoteAgeSec: ageSec,
         remoteStale: stale,
         exactWindow: picked.exact,
+        remoteSources,
       };
     }
   }
@@ -407,38 +549,44 @@ async function loadEffectiveSummary(config, hours) {
     usedHours: localSummary.hours,
     source: "local",
     remoteSource: "",
+    remoteProfile: "",
+    remoteRepo: "",
+    remoteLabel: "",
     remoteReceivedAt: "",
     remoteAgeSec: 0,
     remoteStale: false,
     exactWindow: true,
+    remoteSources,
   };
 }
 
-function loadRemoteSnapshot(config) {
-  try {
-    if (!fs.existsSync(config.remoteSnapshotFile)) {
-      return null;
-    }
-    const raw = fs.readFileSync(config.remoteSnapshotFile, "utf8");
-    if (!raw.trim()) {
-      return null;
-    }
-    const parsed = JSON.parse(raw);
-    if (!isObjectLike(parsed) || !isObjectLike(parsed.snapshot)) {
-      return null;
-    }
-    return parsed;
-  } catch (_error) {
-    return null;
+function loadRemoteSnapshots(config) {
+  const records = listRemoteRecords(config, "snapshot.json", "snapshot");
+  const legacy = readJsonFile(config.remoteSnapshotFile);
+  if (isObjectLike(legacy) && isObjectLike(legacy.snapshot)) {
+    records.push(legacy);
   }
+  return records.sort((left, right) => {
+    const leftMs = Date.parse(String(left.received_at || left.pushed_at || "")) || 0;
+    const rightMs = Date.parse(String(right.received_at || right.pushed_at || "")) || 0;
+    return rightMs - leftMs;
+  });
 }
 
 function writeRemoteSnapshot(config, payload) {
-  const dirPath = path.dirname(config.remoteSnapshotFile);
+  const dirPath = remoteSourceDir(config, payload.source || "unknown");
   fs.mkdirSync(dirPath, { recursive: true });
-  const tempPath = `${config.remoteSnapshotFile}.${process.pid}.${Date.now()}.tmp`;
+  const filePath = remoteSnapshotPath(config, payload.source || "unknown");
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   fs.writeFileSync(tempPath, `${JSON.stringify(payload)}\n`, "utf8");
-  fs.renameSync(tempPath, config.remoteSnapshotFile);
+  fs.renameSync(tempPath, filePath);
+  if (config.remoteSnapshotFile) {
+    const legacyDir = path.dirname(config.remoteSnapshotFile);
+    fs.mkdirSync(legacyDir, { recursive: true });
+    const legacyTempPath = `${config.remoteSnapshotFile}.${process.pid}.${Date.now()}.tmp`;
+    fs.writeFileSync(legacyTempPath, `${JSON.stringify(payload)}\n`, "utf8");
+    fs.renameSync(legacyTempPath, config.remoteSnapshotFile);
+  }
 }
 
 function hasLocalRuntimeSignal(snapshot) {
@@ -464,11 +612,40 @@ function hasLocalRuntimeSignal(snapshot) {
   return false;
 }
 
+function collectRemoteSnapshotSources(config) {
+  return loadRemoteSnapshots(config).map((record) => {
+    const receivedAtMs = Date.parse(String(record.received_at || ""));
+    const ageSec = Number.isFinite(receivedAtMs)
+      ? Math.max(0, Math.floor((Date.now() - receivedAtMs) / 1000))
+      : Number.POSITIVE_INFINITY;
+    const snapshot = isObjectLike(record.snapshot) ? record.snapshot : {};
+    const project = isObjectLike(snapshot.project) ? snapshot.project : {};
+    return {
+      source: String(record.source || "unknown"),
+      profile: String(record.profile || project.profile || ""),
+      repo: String(record.repo || project.repo || ""),
+      label: String(record.label || project.label || record.repo || record.source || "unknown"),
+      received_at: String(record.received_at || ""),
+      pushed_at: String(record.pushed_at || ""),
+      generated_at: String(snapshot.generated_at || ""),
+      age_sec: ageSec,
+      stale: !(ageSec <= config.remoteSnapshotTtlSec),
+      overall_status: String(snapshot.overall_status || "UNKNOWN"),
+      headline: String(snapshot.headline || ""),
+    };
+  });
+}
+
 async function loadEffectiveSnapshot(config) {
   const localSnapshot = await loadSnapshot(config);
-  const remote = loadRemoteSnapshot(config);
+  const remoteSources = collectRemoteSnapshotSources(config);
+  const remotes = loadRemoteSnapshots(config);
+  const remote = remotes.length > 0 ? remotes[0] : null;
   if (!remote) {
-    return localSnapshot;
+    return {
+      ...localSnapshot,
+      remote_sources: remoteSources,
+    };
   }
 
   const localHasSignal = hasLocalRuntimeSignal(localSnapshot);
@@ -482,9 +659,15 @@ async function loadEffectiveSnapshot(config) {
     const remoteSnapshot = { ...remote.snapshot };
     remoteSnapshot.snapshot_source = "remote_ingest";
     remoteSnapshot.remote_source = String(remote.source || "unknown");
+    remoteSnapshot.remote_profile = String(remote.profile || remoteSnapshot?.project?.profile || "");
+    remoteSnapshot.remote_repo = String(remote.repo || remoteSnapshot?.project?.repo || "");
+    remoteSnapshot.remote_label = String(
+      remote.label || remoteSnapshot?.project?.label || remote.repo || remote.source || "unknown",
+    );
     remoteSnapshot.remote_received_at = String(remote.received_at || "");
     remoteSnapshot.remote_age_sec = ageSec;
     remoteSnapshot.remote_stale = !remoteFresh;
+    remoteSnapshot.remote_sources = remoteSources;
     if (!remoteFresh) {
       const staleAgeText = Number.isFinite(ageSec) ? `${ageSec}s` : "unknown";
       const baseHeadline = String(remoteSnapshot.headline || "Remote snapshot");
@@ -503,7 +686,141 @@ async function loadEffectiveSnapshot(config) {
     return remoteSnapshot;
   }
 
-  return localSnapshot;
+  return {
+    ...localSnapshot,
+    remote_sources: remoteSources,
+  };
+}
+
+async function loadLocalProjectSnapshots(config) {
+  const envFiles = [];
+  const seen = new Set();
+
+  if (fs.existsSync(config.flowEnvFile)) {
+    envFiles.push(config.flowEnvFile);
+    seen.add(path.resolve(config.flowEnvFile));
+  }
+
+  if (fs.existsSync(config.profileConfigDir)) {
+    for (const entry of fs.readdirSync(config.profileConfigDir, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith(".env")) {
+        continue;
+      }
+      const envFile = path.join(config.profileConfigDir, entry.name);
+      const resolvedPath = path.resolve(envFile);
+      if (seen.has(resolvedPath)) {
+        continue;
+      }
+      seen.add(resolvedPath);
+      envFiles.push(envFile);
+    }
+  }
+
+  if (envFiles.length === 0) {
+    return [];
+  }
+  envFiles.sort((left, right) => left.localeCompare(right));
+
+  const snapshots = [];
+  for (const envFile of envFiles) {
+    const profileName = path.basename(envFile, ".env");
+    const stateDir = resolveProfileStateDir(config, envFile, profileName);
+    const snapshot = await loadSnapshotForEnv(config, {
+      DAEMON_GH_ENV_FILE: envFile,
+      CODEX_STATE_DIR: stateDir,
+      FLOW_STATE_DIR: stateDir,
+    });
+    snapshot.project = isObjectLike(snapshot.project) ? snapshot.project : {};
+    if (!snapshot.project.profile) {
+      snapshot.project.profile = profileName;
+    }
+    if (!snapshot.project.state_dir) {
+      snapshot.project.state_dir = stateDir;
+    }
+    snapshot.snapshot_transport = "local";
+    snapshots.push(snapshot);
+  }
+  return snapshots;
+}
+
+function loadRemoteProjectSnapshots(config) {
+  return loadRemoteSnapshots(config).map((record) => {
+    const snapshot = isObjectLike(record.snapshot) ? { ...record.snapshot } : {};
+    snapshot.project = isObjectLike(snapshot.project) ? snapshot.project : {};
+    if (!snapshot.project.profile && record.profile) {
+      snapshot.project.profile = String(record.profile);
+    }
+    if (!snapshot.project.repo && record.repo) {
+      snapshot.project.repo = String(record.repo);
+    }
+    if (!snapshot.project.label) {
+      snapshot.project.label = String(record.label || record.repo || record.source || "unknown");
+    }
+    snapshot.snapshot_source = "remote_ingest";
+    snapshot.remote_source = String(record.source || "unknown");
+    snapshot.remote_label = String(record.label || record.repo || record.source || "unknown");
+    snapshot.remote_received_at = String(record.received_at || "");
+    snapshot.snapshot_transport = "remote";
+    return snapshot;
+  });
+}
+
+function dedupeProjectSnapshots(snapshots) {
+  const seen = new Set();
+  const result = [];
+  for (const snapshot of snapshots) {
+    const project = isObjectLike(snapshot.project) ? snapshot.project : {};
+    const key = `${project.label || project.repo || "unknown"}|${snapshot.snapshot_transport || "unknown"}|${snapshot.remote_source || ""}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(snapshot);
+  }
+  return result;
+}
+
+function statusRank(status) {
+  switch (String(status || "").toUpperCase()) {
+    case "ERROR":
+      return 60;
+    case "BLOCKED":
+      return 50;
+    case "DEGRADED":
+      return 40;
+    case "WAITING_USER":
+      return 30;
+    case "WAITING_SYSTEM":
+      return 20;
+    case "WORKING":
+      return 10;
+    case "HEALTHY":
+      return 0;
+    default:
+      return -1;
+  }
+}
+
+async function loadProjectSnapshotsOverview(config) {
+  const localSnapshots = await loadLocalProjectSnapshots(config);
+  const remoteSnapshots = loadRemoteProjectSnapshots(config).filter((remoteSnapshot) => {
+    const remoteLabel = String(remoteSnapshot?.project?.label || remoteSnapshot?.project?.repo || "");
+    return !localSnapshots.some((localSnapshot) => {
+      const localLabel = String(localSnapshot?.project?.label || localSnapshot?.project?.repo || "");
+      return localLabel && remoteLabel && localLabel === remoteLabel;
+    });
+  });
+
+  return dedupeProjectSnapshots([...localSnapshots, ...remoteSnapshots]).sort((left, right) => {
+    const leftRank = statusRank(left.overall_status);
+    const rightRank = statusRank(right.overall_status);
+    if (leftRank !== rightRank) {
+      return rightRank - leftRank;
+    }
+    const leftLabel = String(left?.project?.label || left?.project?.repo || "");
+    const rightLabel = String(right?.project?.label || right?.project?.repo || "");
+    return leftLabel.localeCompare(rightLabel);
+  });
 }
 
 function statusBadgeClass(status) {
@@ -531,7 +848,7 @@ function renderStatusPage(config) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PLANKA Automation Ops</title>
+  <title>Automation Ops</title>
   <style>
     :root {
       --bg-0: #f4f7f2;
@@ -642,7 +959,7 @@ function renderStatusPage(config) {
   <div class="wrap">
     <div class="top">
       <div>
-        <h1>PLANKA Ops Board</h1>
+        <h1>Automation Ops Board</h1>
         <div class="stamp" id="stamp">loading...</div>
       </div>
       <div id="mainStatus" class="status neutral">loading</div>
@@ -651,8 +968,15 @@ function renderStatusPage(config) {
     <div class="grid">
       <section class="card hero">
         <h2>Current Decision</h2>
+        <p class="line"><span class="k">Project</span><span id="project" class="v">-</span></p>
+        <p class="line"><span class="k">Source</span><span id="source" class="v">-</span></p>
         <p class="line"><span class="k">Headline</span><span id="headline" class="v">-</span></p>
         <p class="line"><span class="k">Action</span><span id="action" class="v">-</span></p>
+      </section>
+
+      <section class="card hero">
+        <h2>Remote Sources</h2>
+        <div class="mono" id="remoteSources">-</div>
       </section>
 
       <section class="card a">
@@ -720,6 +1044,11 @@ function renderStatusPage(config) {
 
     function render(snapshot) {
       setText("stamp", "updated " + (snapshot.generated_at || "-"));
+      const project = snapshot.project || {};
+      const remoteSources = Array.isArray(snapshot.remote_sources) ? snapshot.remote_sources : [];
+      const remoteSourceLabel = snapshot.remote_label || snapshot.remote_source || "local";
+      setText("project", project.label || project.repo || "-");
+      setText("source", remoteSourceLabel);
       setText("headline", snapshot.headline || "-");
       setText("action", snapshot.action_required || "none");
 
@@ -778,6 +1107,16 @@ function renderStatusPage(config) {
         line("remaining", valueOr(seed.remaining, 0)),
         line("next_code", seed.next_code || "-")
       ].join("\\n"));
+
+      setText("remoteSources", remoteSources.length > 0
+        ? remoteSources.map((item) => [
+            line("label", item.label || item.repo || item.source || "-"),
+            line("status", item.overall_status || "-"),
+            line("age_sec", valueOr(item.age_sec, "-")),
+            line("stale", valueOr(item.stale, false)),
+            line("headline", item.headline || "-")
+          ].join("\\n")).join("\\n\\n")
+        : "none");
     }
 
     async function tick() {
@@ -800,40 +1139,54 @@ function renderStatusPage(config) {
 </html>`;
 }
 
-function formatStatusMessage(snapshot) {
-  const daemon = snapshot.daemon || {};
-  const executor = snapshot.executor || {};
-  const queues = snapshot.queues || {};
-  const blockers = snapshot.blockers || {};
-  const seed = snapshot.backlog_seed || {};
+function formatStatusMessage(snapshotList) {
+  const items = Array.isArray(snapshotList) ? snapshotList : [snapshotList];
+  const sections = ["<b>Automation Status</b>"];
 
-  const lines = [];
-  lines.push("<b>PLANKA Automation Status</b>");
-  lines.push(`<b>State:</b> <code>${htmlEscape(snapshot.overall_status || "UNKNOWN")}</code>`);
-  lines.push(`<b>Headline:</b> ${htmlEscape(snapshot.headline || "-")}`);
-  lines.push(`<b>Action:</b> <code>${htmlEscape(snapshot.action_required || "none")}</code>`);
-  lines.push("");
-  lines.push(`<b>Daemon:</b> <code>${htmlEscape(daemon.state || "-")}</code> · GitHub=<code>${htmlEscape(daemon.github_status || "-")}</code>`);
-  lines.push(`<b>Executor:</b> <code>${htmlEscape(executor.state || "-")}</code> · pid_alive=<code>${htmlEscape(String(executor.pid_alive ?? false))}</code>`);
-  lines.push(`<b>Queues:</b> outbox=<code>${htmlEscape(String(queues.outbox_pending ?? 0))}</code>, runtime=<code>${htmlEscape(String(queues.runtime_status_pending ?? 0))}</code>`);
-  lines.push(`<b>Blockers:</b> open_pr=<code>${htmlEscape(String(blockers.open_pr_count ?? 0))}</code>`);
-  if (blockers.dependencies && blockers.dependencies.blockers) {
-    lines.push(`<b>Depends:</b> <code>${htmlEscape(blockers.dependencies.blockers)}</code>`);
-  }
-  if (blockers.dirty_worktree) {
-    lines.push(`<b>Dirty:</b> blocking_todo=<code>${htmlEscape(String(blockers.dirty_worktree.blocking_todo ?? false))}</code> count=<code>${htmlEscape(String(blockers.dirty_worktree.tracked_count ?? 0))}</code>`);
-  }
-  lines.push(`<b>Backlog-seed:</b> plan=<code>${htmlEscape(String(seed.plan_present ?? false))}</code> remaining=<code>${htmlEscape(String(seed.remaining ?? 0))}</code> next=<code>${htmlEscape(seed.next_code || "-")}</code>`);
-  lines.push(`<b>Generated:</b> <code>${htmlEscape(snapshot.generated_at || "-")}</code>`);
+  for (const snapshot of items) {
+    const daemon = snapshot.daemon || {};
+    const executor = snapshot.executor || {};
+    const queues = snapshot.queues || {};
+    const blockers = snapshot.blockers || {};
+    const seed = snapshot.backlog_seed || {};
+    const project = snapshot.project || {};
+    const sourceLabel = snapshot.remote_label || snapshot.remote_source || snapshot.snapshot_transport || "local";
 
-  return lines.join("\n");
+    const blockLines = [];
+    blockLines.push(`State=${snapshot.overall_status || "UNKNOWN"}`);
+    blockLines.push(`Headline=${snapshot.headline || "-"}`);
+    blockLines.push(`Action=${snapshot.action_required || "none"}`);
+    blockLines.push(`Source=${sourceLabel}`);
+    blockLines.push(`Daemon=${daemon.state || "-"} · GitHub=${daemon.github_status || "-"}`);
+    blockLines.push(`Executor=${executor.state || "-"} · pid_alive=${String(executor.pid_alive ?? false)}`);
+    blockLines.push(`Queues=outbox=${String(queues.outbox_pending ?? 0)}, runtime=${String(queues.runtime_status_pending ?? 0)}`);
+    blockLines.push(`Blockers=open_pr=${String(blockers.open_pr_count ?? 0)}`);
+    if (blockers.dependencies && blockers.dependencies.blockers) {
+      blockLines.push(`Depends=${blockers.dependencies.blockers}`);
+    }
+    if (blockers.dirty_worktree) {
+      blockLines.push(
+        `Dirty=blocking_todo=${String(blockers.dirty_worktree.blocking_todo ?? false)} count=${String(blockers.dirty_worktree.tracked_count ?? 0)}`,
+      );
+    }
+    blockLines.push(
+      `Backlog-seed=plan=${String(seed.plan_present ?? false)} remaining=${String(seed.remaining ?? 0)} next=${seed.next_code || "-"}`,
+    );
+    blockLines.push(`Generated=${snapshot.generated_at || "-"}`);
+
+    sections.push("");
+    sections.push(`<b>${htmlEscape(project.label || project.repo || "unknown project")}</b>`);
+    sections.push(`<blockquote><code>${htmlEscape(blockLines.join("\n"))}</code></blockquote>`);
+  }
+
+  return sections.join("\n");
 }
 
 function formatHelpMessage(config) {
   const lines = [];
-  lines.push("<b>PLANKA Ops Bot</b>");
+  lines.push("<b>Automation Ops Bot</b>");
   lines.push("Available commands:");
-  lines.push("<code>/status</code> - current automation snapshot");
+  lines.push("<code>/status</code> - automation snapshot for all known projects");
   lines.push("<code>/summary [hours]</code> - log summary, default 6h");
   lines.push("<code>/help</code> - this help");
   if (config.publicBaseUrl) {
@@ -926,12 +1279,15 @@ async function handleTelegramCommand(config, logger, update) {
     if (name === "/start" || name === "/help") {
       responseText = formatHelpMessage(config);
     } else if (name === "/status") {
-      const snapshot = await loadEffectiveSnapshot(config);
-      responseText = formatStatusMessage(snapshot);
+      const snapshots = await loadProjectSnapshotsOverview(config);
+      responseText = formatStatusMessage(snapshots);
     } else if (name === "/summary") {
       const hours = args.length > 0 ? parseInteger(args[0], DEFAULT_SUMMARY_HOURS) : DEFAULT_SUMMARY_HOURS;
       const summary = await loadEffectiveSummary(config, hours);
-      const sourceTag = summary.source === "remote_ingest" ? `remote_ingest:${summary.remoteSource || "unknown"}` : "local";
+      const sourceTag =
+        summary.source === "remote_ingest"
+          ? `remote_ingest:${summary.remoteLabel || summary.remoteRepo || summary.remoteSource || "unknown"}`
+          : "local";
       const staleTag = summary.remoteStale ? " (stale)" : "";
       const usedWindowTag = summary.exactWindow ? "" : `, nearest=${summary.usedHours}h`;
       const ageTag = summary.source === "remote_ingest" ? `, age=${summary.remoteAgeSec}s${staleTag}` : "";
@@ -993,7 +1349,7 @@ function createServer(config, logger) {
         sendText(
           res,
           200,
-          `PLANKA ops-bot service\nGET /health\nGET /ops/status\nGET /ops/status.json\nPOST ${config.ingestPath}\nPOST ${config.summaryIngestPath}\n`,
+          `Automation ops-bot service\nGET /health\nGET /ops/status\nGET /ops/status.json\nPOST ${config.ingestPath}\nPOST ${config.summaryIngestPath}\n`,
         );
         return;
       }
@@ -1034,6 +1390,9 @@ function createServer(config, logger) {
         const record = {
           received_at: new Date().toISOString(),
           source: String(payload.source || "unknown"),
+          profile: String(payload.profile || payload.snapshot?.project?.profile || ""),
+          repo: String(payload.repo || payload.snapshot?.project?.repo || ""),
+          label: String(payload.label || payload.snapshot?.project?.label || payload.repo || payload.source || "unknown"),
           pushed_at: String(payload.pushed_at || ""),
           snapshot: payload.snapshot,
         };
@@ -1094,6 +1453,9 @@ function createServer(config, logger) {
         const record = {
           received_at: new Date().toISOString(),
           source: String(payload.source || "unknown"),
+          profile: String(payload.profile || ""),
+          repo: String(payload.repo || ""),
+          label: String(payload.label || payload.repo || payload.source || "unknown"),
           pushed_at: String(payload.pushed_at || ""),
           generated_at: String(payload.generated_at || ""),
           summaries,
@@ -1202,6 +1564,7 @@ module.exports = {
   isObjectLike,
   loadConfig,
   loadEffectiveSummary,
+  loadProjectSnapshotsOverview,
   normalizeCommand,
   resolveIncomingMessage,
 };

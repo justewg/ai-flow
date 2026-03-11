@@ -4,7 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=./env/resolve_config.sh
 source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
+codex_load_flow_env
 CODEX_DIR="$(codex_export_state_dir)"
+PROJECT_LABEL="$(codex_resolve_project_display_label)"
 LOCK_DIR="${CODEX_DIR}/daemon.lock"
 LOG_FILE="${CODEX_DIR}/daemon.log"
 STATE_FILE="${CODEX_DIR}/daemon_state.txt"
@@ -51,51 +53,8 @@ log() {
   printf '%s %s\n' "$ts" "$*" >> "$LOG_FILE"
 }
 
-strip_quotes() {
-  local value="$1"
-  value="${value%\"}"
-  value="${value#\"}"
-  value="${value%\'}"
-  value="${value#\'}"
-  printf '%s' "$value"
-}
-
-read_key_from_env_file() {
-  local file_path="$1"
-  local key="$2"
-  [[ -f "$file_path" ]] || return 1
-  local raw
-  raw="$(grep -E "^${key}=" "$file_path" | tail -n1 | cut -d'=' -f2- || true)"
-  [[ -n "$raw" ]] || return 1
-  strip_quotes "$raw"
-}
-
 resolve_config_value() {
-  local key="$1"
-  local default_value="${2:-}"
-  local env_value="${!key:-}"
-  if [[ -n "$env_value" ]]; then
-    printf '%s' "$env_value"
-    return 0
-  fi
-
-  local env_candidates=()
-  if [[ -n "${DAEMON_GH_ENV_FILE:-}" ]]; then
-    env_candidates+=("${DAEMON_GH_ENV_FILE}")
-  fi
-  env_candidates+=("${ROOT_DIR}/.env")
-  env_candidates+=("${ROOT_DIR}/.env.deploy")
-
-  local env_file value
-  for env_file in "${env_candidates[@]}"; do
-    value="$(read_key_from_env_file "$env_file" "$key" || true)"
-    if [[ -n "$value" ]]; then
-      printf '%s' "$value"
-      return 0
-    fi
-  done
-
-  printf '%s' "$default_value"
+  codex_resolve_config_value "$@"
 }
 
 is_truthy() {
@@ -651,7 +610,7 @@ notify_github_runtime_if_needed() {
         | paste -sd ',' -
     )"
     stage_line="$(printf '%s\n' "$output" | grep -m1 -E '^(WAIT_GITHUB_STAGE=|RUNTIME_PROJECT_STATUS_WAIT_ERROR=|WAIT_GITHUB_RATE_LIMIT_STAGE=)' || true)"
-    msg="<b>✅ PLANKA: GitHub ответил, runtime-задачи применены</b>"$'\n'
+    msg="<b>✅ ${PROJECT_LABEL}: GitHub ответил, runtime-задачи применены</b>"$'\n'
     msg+="<b>📌 State:</b> <code>$(html_escape "$state")</code>"$'\n'
     msg+="<b>📦 Applied:</b> <code>${applied_count}</code>"
     [[ -n "$targets" ]] && msg+=" · <b>Targets:</b> <code>$(html_escape "$targets")</code>"
@@ -686,10 +645,10 @@ notify_github_runtime_if_needed() {
       local wait_line msg msg_file notify_out rc title_line action_line
       wait_line="$(printf '%s\n' "$output" | grep -m1 -E '^(WAIT_GITHUB_STAGE=|RUNTIME_PROJECT_STATUS_WAIT_ERROR=|WAIT_GITHUB_RATE_LIMIT_STAGE=|WAIT_GITHUB_RATE_LIMIT_MSG=)' || true)"
       [[ -z "$wait_line" ]] && wait_line="$(printf '%s' "$detail" | tr '|' '\n' | sed 's/^[[:space:]]*//' | grep -m1 -E '^(DEGRADED=GITHUB_|GITHUB_STATUS=)' || true)"
-      title_line="<b>⛔ PLANKA: GitHub недоступен, ждём восстановление</b>"
+      title_line="<b>⛔ ${PROJECT_LABEL}: GitHub недоступен, ждём восстановление</b>"
       action_line="<b>➡️ Action:</b> <code>авто-ретраи включены, выполняем при восстановлении GitHub</code>"
       if [[ "$state" == "WAIT_GITHUB_RATE_LIMIT" || "$wait_line" == *"RATE_LIMIT"* || "$detail" == *"GITHUB_GRAPHQL_RATE_LIMIT"* ]]; then
-        title_line="<b>⏳ PLANKA: GitHub GraphQL rate limit, ждём окно</b>"
+        title_line="<b>⏳ ${PROJECT_LABEL}: GitHub GraphQL rate limit, ждём окно</b>"
         action_line="<b>➡️ Action:</b> <code>авто-ретраи включены, продолжим после сброса лимита</code>"
       fi
       msg="${title_line}"$'\n'
@@ -779,11 +738,11 @@ build_notify_message() {
 
   local title
   if [[ "$reason" == WAIT_DIRTY_WORKTREE_* ]]; then
-    title="<b>🚨 🧹 PLANKA: daemon paused (dirty worktree)</b>"
+    title="<b>🚨 🧹 ${PROJECT_LABEL}: daemon paused (dirty worktree)</b>"
   elif [[ "$reason" == "DIRTY_WORKTREE_RESOLVED" ]]; then
-    title="<b>💤 ✅ PLANKA: dirty worktree resolved</b>"
+    title="<b>💤 ✅ ${PROJECT_LABEL}: dirty worktree resolved</b>"
   else
-    title="<b>⚠️ DAEMON: degradation signal</b>"
+    title="<b>⚠️ ${PROJECT_LABEL}: daemon degradation signal</b>"
   fi
 
   local gh_status tg_status gh_icon tg_icon

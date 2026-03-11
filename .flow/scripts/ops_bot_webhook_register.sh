@@ -2,16 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-
-load_env_file() {
-  local file_path="$1"
-  if [[ -f "$file_path" ]]; then
-    set -a
-    # shellcheck disable=SC1090
-    source "$file_path"
-    set +a
-  fi
-}
+# shellcheck source=./env/resolve_config.sh
+source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
+codex_load_flow_env
 
 ensure_cmd() {
   local name="$1"
@@ -46,7 +39,7 @@ Usage:
   .flow/scripts/ops_bot_webhook_register.sh delete
   .flow/scripts/ops_bot_webhook_register.sh info
 
-Environment (from .env/.env.deploy or process env):
+Environment (from .flow/config/flow.env or process env):
   OPS_BOT_PUBLIC_BASE_URL (required for register; example: https://planka.ewg40.ru)
   OPS_BOT_WEBHOOK_PATH (optional, default: /telegram/webhook)
   OPS_BOT_WEBHOOK_SECRET (optional; appended to webhook path)
@@ -56,9 +49,6 @@ Environment (from .env/.env.deploy or process env):
   OPS_BOT_TG_BOT_TOKEN (or DAEMON_TG_BOT_TOKEN or TG_BOT_TOKEN)
 EOF
 }
-
-load_env_file "${ROOT_DIR}/.env"
-load_env_file "${ROOT_DIR}/.env.deploy"
 
 ensure_cmd curl
 ensure_cmd jq

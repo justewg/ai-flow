@@ -10,6 +10,8 @@
 - summary ingest endpoint: `POST /ops/ingest/log-summary` (опционально, для split-runtime `/summary`)
 - команды в чате: `/status`, `/summary [hours]`, `/help`, `/status_page`
 
+`/status` в Telegram теперь возвращает не один snapshot, а сводку по всем известным проектам/рантаймам на этом контуре автоматики. Каждый проект выводится отдельным блоком `<blockquote><code>...</code></blockquote>`.
+
 Источник данных статуса: `.flow/scripts/status_snapshot.sh` (только локальные файлы `.flow/state/codex/*`, без обязательного вызова GitHub API).
 
 Важно: у ops-bot есть два разных контура, и они могут использоваться одновременно.
@@ -17,6 +19,8 @@
 - Public/remote contour: внешний status/webhook server с HTTPS ingress + Telegram webhook + optional ingest endpoints (`OPS_BOT_PUBLIC_BASE_URL`, nginx, `OPS_REMOTE_*` push с другого runtime).
 
 В split-runtime модели daemon/watchdog могут работать на локальном Mac, а публичный Telegram/webhook/status-page жить на сервере. Тогда используются оба контура одновременно: локальный runtime формирует snapshot/summary, а серверный public ops-bot принимает их через ingest и отвечает в Telegram/webhook.
+
+Важно для multi-project режима: remote ingest теперь хранится раздельно по `source/profile/repo` в `.flow/state/ops-bot/remote/<source>/...`, поэтому `planka`, `favs` и следующие consumer-project не перетирают друг друга. `/ops/status` и `/ops/status.json` показывают не только effective snapshot, но и список всех известных remote sources.
 
 ## Локальный запуск
 ```bash
@@ -56,6 +60,7 @@ OPS_BOT_INGEST_PATH=/ops/ingest/status
 OPS_BOT_INGEST_SECRET=<shared-secret>
 OPS_BOT_SUMMARY_INGEST_PATH=/ops/ingest/log-summary
 OPS_BOT_SUMMARY_INGEST_SECRET=<shared-secret>
+OPS_BOT_REMOTE_STATE_DIR=.flow/state/ops-bot/remote
 OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC=600
 OPS_BOT_REMOTE_SUMMARY_TTL_SEC=1200
 ```
@@ -65,7 +70,7 @@ OPS_BOT_REMOTE_SUMMARY_TTL_SEC=1200
 OPS_REMOTE_STATUS_PUSH_ENABLED=1
 OPS_REMOTE_STATUS_PUSH_URL=https://ops-runtime.example.com/ops/ingest/status
 OPS_REMOTE_STATUS_PUSH_SECRET=<shared-secret>
-OPS_REMOTE_STATUS_SOURCE=macbook-local
+OPS_REMOTE_STATUS_SOURCE=planka
 OPS_REMOTE_SUMMARY_PUSH_ENABLED=1
 OPS_REMOTE_SUMMARY_PUSH_URL=https://ops-runtime.example.com/ops/ingest/log-summary
 OPS_REMOTE_SUMMARY_PUSH_SECRET=<shared-secret>
@@ -79,7 +84,7 @@ OPS_REMOTE_SUMMARY_PUSH_MIN_INTERVAL_SEC=300
 .flow/scripts/run.sh ops_remote_summary_push
 ```
 
-После этого серверный `/ops/status.json` начнет отдавать удаленный snapshot, если локальные серверные state-файлы пустые (`UNKNOWN`), а `/summary` в Telegram будет использовать удаленный summary bundle вместо пустых server-local логов.
+После этого серверный `/ops/status.json` начнет отдавать удаленный snapshot, если локальные серверные state-файлы пустые (`UNKNOWN`), а `/summary` в Telegram будет использовать удаленный summary bundle вместо пустых server-local логов. Если ingest идет от нескольких consumer-project, dashboard покажет их отдельными source-блоками.
 
 ## Nginx интеграция
 Идея: nginx принимает публичный трафик и проксирует в локальный сервис `127.0.0.1:8790`.

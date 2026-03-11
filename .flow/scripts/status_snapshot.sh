@@ -5,6 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=./env/resolve_config.sh
 source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
 CODEX_DIR="$(codex_export_state_dir)"
+project_profile="$(codex_resolve_project_profile_name)"
+project_repo="$(codex_resolve_project_repo_slug)"
+project_label="$(codex_resolve_project_display_label)"
 
 now_epoch="$(date +%s)"
 now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -348,6 +351,10 @@ jq -n \
   --arg overall_status "$overall_status" \
   --arg action_required "$action_required" \
   --arg headline "$headline" \
+  --arg project_profile "$project_profile" \
+  --arg project_repo "$project_repo" \
+  --arg project_label "$project_label" \
+  --arg state_dir "$CODEX_DIR" \
   --arg daemon_state "$daemon_state" \
   --arg daemon_detail "$daemon_detail" \
   --arg watchdog_state "$watchdog_state" \
@@ -384,6 +391,12 @@ jq -n \
   --argjson backlog_plan_present "$backlog_plan_present" \
   '{
     generated_at: $generated_at,
+    project: {
+      profile: $project_profile,
+      repo: $project_repo,
+      label: $project_label,
+      state_dir: $state_dir
+    },
     overall_status: $overall_status,
     action_required: $action_required,
     headline: $headline,

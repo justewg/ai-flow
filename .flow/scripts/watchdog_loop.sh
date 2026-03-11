@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=./env/resolve_config.sh
 source "${ROOT_DIR}/.flow/scripts/env/resolve_config.sh"
+codex_load_flow_env
 CODEX_DIR="$(codex_export_state_dir)"
 LOCK_DIR="${CODEX_DIR}/watchdog.lock"
 LOG_FILE="${CODEX_DIR}/watchdog.log"
@@ -34,51 +35,8 @@ log() {
   printf '%s %s\n' "$ts" "$*" >> "$LOG_FILE"
 }
 
-strip_quotes() {
-  local value="$1"
-  value="${value%\"}"
-  value="${value#\"}"
-  value="${value%\'}"
-  value="${value#\'}"
-  printf '%s' "$value"
-}
-
-read_key_from_env_file() {
-  local file_path="$1"
-  local key="$2"
-  [[ -f "$file_path" ]] || return 1
-  local raw
-  raw="$(grep -E "^${key}=" "$file_path" | tail -n1 | cut -d'=' -f2- || true)"
-  [[ -n "$raw" ]] || return 1
-  strip_quotes "$raw"
-}
-
 resolve_config_value() {
-  local key="$1"
-  local default_value="${2:-}"
-  local env_value="${!key:-}"
-  if [[ -n "$env_value" ]]; then
-    printf '%s' "$env_value"
-    return 0
-  fi
-
-  local env_candidates=()
-  if [[ -n "${DAEMON_GH_ENV_FILE:-}" ]]; then
-    env_candidates+=("${DAEMON_GH_ENV_FILE}")
-  fi
-  env_candidates+=("${ROOT_DIR}/.env")
-  env_candidates+=("${ROOT_DIR}/.env.deploy")
-
-  local env_file value
-  for env_file in "${env_candidates[@]}"; do
-    value="$(read_key_from_env_file "$env_file" "$key" || true)"
-    if [[ -n "$value" ]]; then
-      printf '%s' "$value"
-      return 0
-    fi
-  done
-
-  printf '%s' "$default_value"
+  codex_resolve_config_value "$@"
 }
 
 is_truthy() {

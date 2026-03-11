@@ -133,6 +133,7 @@ JSON
     OPS_BOT_INGEST_ENABLED: overrides.ingestEnabled ? "1" : "",
     OPS_BOT_INGEST_SECRET: overrides.ingestSecret || "",
     OPS_BOT_SUMMARY_INGEST_SECRET: overrides.summaryIngestSecret || "",
+    OPS_BOT_REMOTE_STATE_DIR: overrides.remoteStateDir || "",
     OPS_BOT_REMOTE_SNAPSHOT_FILE: overrides.remoteSnapshotFile || "",
     OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC: overrides.remoteSnapshotTtlSec || "",
     OPS_BOT_REMOTE_SUMMARY_FILE: overrides.remoteSummaryFile || "",
@@ -170,7 +171,7 @@ test("ops bot endpoints and invalid updates are handled safely", async (t) => {
   });
   assert.equal(statusPage.statusCode, 200);
   assert.match(String(statusPage.headers["content-type"] || ""), /text\/html/);
-  assert.match(statusPage.bodyText, /PLANKA Ops Board/);
+  assert.match(statusPage.bodyText, /Automation Ops Board/);
 
   const invalidJson = await requestJson({
     method: "POST",
@@ -269,18 +270,20 @@ test("telegram secret token is enforced when configured", async (t) => {
 });
 
 test("ingest endpoint stores remote snapshot and serves it when local runtime is unknown", async (t) => {
-  const remoteSnapshotFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "planka-ops-remote-")), "snapshot.json");
+  const remoteStateDir = fs.mkdtempSync(path.join(os.tmpdir(), "planka-ops-remote-"));
+  const remoteSnapshotFile = path.join(remoteStateDir, "_legacy", "snapshot.json");
   t.after(() => {
-    fs.rmSync(path.dirname(remoteSnapshotFile), { recursive: true, force: true });
+    fs.rmSync(remoteStateDir, { recursive: true, force: true });
   });
 
   const config = createConfig(t, {
     ingestEnabled: true,
     ingestSecret: "ingest-secret",
+    remoteStateDir,
     remoteSnapshotFile,
     remoteSnapshotTtlSec: "600",
     snapshotPayload:
-      '{"generated_at":"2026-03-05T00:00:00Z","overall_status":"WAITING_SYSTEM","headline":"local unknown","daemon":{"state":"UNKNOWN"},"watchdog":{"state":"UNKNOWN"},"executor":{"state":""}}',
+      '{"generated_at":"2026-03-05T00:00:00Z","project":{"profile":"server","repo":"justewg/planka","label":"server · justewg/planka"},"overall_status":"WAITING_SYSTEM","headline":"local unknown","daemon":{"state":"UNKNOWN"},"watchdog":{"state":"UNKNOWN"},"executor":{"state":""}}',
   });
   const service = createServer(config, { info() {}, warn() {}, error() {} });
   const port = await listen(service);
@@ -307,9 +310,13 @@ test("ingest endpoint stores remote snapshot and serves it when local runtime is
     },
     body: JSON.stringify({
       source: "macbook-local",
+      profile: "favs",
+      repo: "justewg/favs",
+      label: "favs · justewg/favs",
       pushed_at: "2026-03-05T10:00:00Z",
       snapshot: {
         generated_at: "2026-03-05T10:00:00Z",
+        project: { profile: "favs", repo: "justewg/favs", label: "favs · justewg/favs" },
         overall_status: "WORKING",
         headline: "remote live",
         daemon: { state: "WAIT_USER_REPLY" },
@@ -328,14 +335,18 @@ test("ingest endpoint stores remote snapshot and serves it when local runtime is
   assert.equal(statusJson.body.overall_status, "WORKING");
   assert.equal(statusJson.body.snapshot_source, "remote_ingest");
   assert.equal(statusJson.body.remote_source, "macbook-local");
+  assert.equal(statusJson.body.remote_label, "favs · justewg/favs");
+  assert.equal(Array.isArray(statusJson.body.remote_sources), true);
+  assert.equal(statusJson.body.remote_sources.length, 1);
 
   const staleConfig = createConfig(t, {
     ingestEnabled: true,
     ingestSecret: "ingest-secret",
+    remoteStateDir,
     remoteSnapshotFile,
     remoteSnapshotTtlSec: "1",
     snapshotPayload:
-      '{"generated_at":"2026-03-05T00:00:00Z","overall_status":"WAITING_SYSTEM","headline":"local unknown","daemon":{"state":"UNKNOWN"},"watchdog":{"state":"UNKNOWN"},"executor":{"state":""}}',
+      '{"generated_at":"2026-03-05T00:00:00Z","project":{"profile":"server","repo":"justewg/planka","label":"server · justewg/planka"},"overall_status":"WAITING_SYSTEM","headline":"local unknown","daemon":{"state":"UNKNOWN"},"watchdog":{"state":"UNKNOWN"},"executor":{"state":""}}',
   });
   const staleService = createServer(staleConfig, { info() {}, warn() {}, error() {} });
   const stalePort = await listen(staleService);
@@ -354,14 +365,16 @@ test("ingest endpoint stores remote snapshot and serves it when local runtime is
 });
 
 test("summary ingest stores remote bundle and effective summary prefers remote source", async (t) => {
-  const remoteSummaryFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "planka-ops-remote-summary-")), "summary.json");
+  const remoteStateDir = fs.mkdtempSync(path.join(os.tmpdir(), "planka-ops-remote-summary-"));
+  const remoteSummaryFile = path.join(remoteStateDir, "_legacy", "summary.json");
   t.after(() => {
-    fs.rmSync(path.dirname(remoteSummaryFile), { recursive: true, force: true });
+    fs.rmSync(remoteStateDir, { recursive: true, force: true });
   });
 
   const config = createConfig(t, {
     ingestEnabled: true,
     summaryIngestSecret: "summary-secret",
+    remoteStateDir,
     remoteSummaryFile,
     remoteSummaryTtlSec: "1200",
   });
@@ -389,6 +402,9 @@ test("summary ingest stores remote bundle and effective summary prefers remote s
     },
     body: JSON.stringify({
       source: "macbook-local",
+      profile: "favs",
+      repo: "justewg/favs",
+      label: "favs · justewg/favs",
       pushed_at: "2026-03-05T11:00:00Z",
       summaries: {
         "6": "remote summary 6h",
@@ -404,9 +420,91 @@ test("summary ingest stores remote bundle and effective summary prefers remote s
   assert.equal(summary6.usedHours, 6);
   assert.equal(summary6.exactWindow, true);
   assert.equal(summary6.text, "remote summary 6h");
+  assert.equal(summary6.remoteLabel, "favs · justewg/favs");
+  assert.equal(Array.isArray(summary6.remoteSources), true);
+  assert.equal(summary6.remoteSources.length, 1);
 
   const summary4 = await loadEffectiveSummary(config, 4);
   assert.equal(summary4.source, "remote_ingest");
   assert.equal(summary4.usedHours, 6);
   assert.equal(summary4.exactWindow, false);
+});
+
+test("multiple remote runtimes are stored separately and exposed in status json", async (t) => {
+  const remoteStateDir = fs.mkdtempSync(path.join(os.tmpdir(), "planka-ops-multi-remote-"));
+  t.after(() => {
+    fs.rmSync(remoteStateDir, { recursive: true, force: true });
+  });
+
+  const config = createConfig(t, {
+    ingestEnabled: true,
+    ingestSecret: "ingest-secret",
+    remoteStateDir,
+    snapshotPayload:
+      '{"generated_at":"2026-03-05T00:00:00Z","project":{"profile":"server","repo":"justewg/planka","label":"server · justewg/planka"},"overall_status":"WAITING_SYSTEM","headline":"local unknown","daemon":{"state":"UNKNOWN"},"watchdog":{"state":"UNKNOWN"},"executor":{"state":""}}',
+  });
+  const service = createServer(config, { info() {}, warn() {}, error() {} });
+  const port = await listen(service);
+  t.after(async () => {
+    await closeServer(service);
+  });
+
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const headers = {
+    "Content-Type": "application/json",
+    "X-Ops-Status-Secret": "ingest-secret",
+  };
+
+  const plankaIngest = await requestJson({
+    method: "POST",
+    url: `${baseUrl}${config.ingestPath}`,
+    headers,
+    body: JSON.stringify({
+      source: "planka",
+      profile: "planka",
+      repo: "justewg/planka",
+      label: "justewg/planka",
+      pushed_at: "2026-03-05T10:00:00Z",
+      snapshot: {
+        generated_at: "2026-03-05T10:00:00Z",
+        project: { profile: "planka", repo: "justewg/planka", label: "justewg/planka" },
+        overall_status: "WAITING_USER",
+        headline: "planka waiting",
+        daemon: { state: "WAIT_USER_REPLY" },
+      },
+    }),
+  });
+  assert.equal(plankaIngest.statusCode, 200);
+
+  const favsIngest = await requestJson({
+    method: "POST",
+    url: `${baseUrl}${config.ingestPath}`,
+    headers,
+    body: JSON.stringify({
+      source: "favs",
+      profile: "favs",
+      repo: "justewg/favs",
+      label: "justewg/favs",
+      pushed_at: "2026-03-05T10:01:00Z",
+      snapshot: {
+        generated_at: "2026-03-05T10:01:00Z",
+        project: { profile: "favs", repo: "justewg/favs", label: "justewg/favs" },
+        overall_status: "WORKING",
+        headline: "favs active",
+        daemon: { state: "EXECUTOR_RUNNING" },
+      },
+    }),
+  });
+  assert.equal(favsIngest.statusCode, 200);
+
+  const statusJson = await requestJson({
+    method: "GET",
+    url: `${baseUrl}/ops/status.json`,
+  });
+  assert.equal(statusJson.statusCode, 200);
+  assert.equal(statusJson.body.remote_label, "justewg/favs");
+  assert.equal(Array.isArray(statusJson.body.remote_sources), true);
+  assert.equal(statusJson.body.remote_sources.length, 2);
+  assert.equal(statusJson.body.remote_sources[0].label, "justewg/favs");
+  assert.equal(statusJson.body.remote_sources[1].label, "justewg/planka");
 });

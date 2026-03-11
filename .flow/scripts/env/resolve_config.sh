@@ -8,84 +8,107 @@ codex_resolve_root_dir() {
   printf '%s' "${ROOT_DIR:-${CODEX_ROOT_DIR:-$CODEX_CONFIG_ROOT_DIR}}"
 }
 
+codex_resolve_bootstrap_value() {
+  local key="$1"
+  local default_value="${2:-}"
+  local env_value="${!key:-}"
+  if [[ -n "$env_value" ]]; then
+    printf '%s' "$env_value"
+    return 0
+  fi
+  printf '%s' "$default_value"
+}
+
 codex_resolve_flow_root_dir() {
   local root_dir
   root_dir="$(codex_resolve_root_dir)"
-  codex_resolve_config_value "FLOW_ROOT_DIR" "${root_dir}/.flow"
+  codex_resolve_bootstrap_value "FLOW_ROOT_DIR" "${root_dir}/.flow"
 }
 
 codex_resolve_flow_scripts_dir() {
   local flow_root_dir
   flow_root_dir="$(codex_resolve_flow_root_dir)"
-  codex_resolve_config_value "FLOW_SCRIPTS_DIR" "${flow_root_dir}/scripts"
+  codex_resolve_bootstrap_value "FLOW_SCRIPTS_DIR" "${flow_root_dir}/scripts"
 }
 
 codex_resolve_flow_docs_dir() {
   local flow_root_dir
   flow_root_dir="$(codex_resolve_flow_root_dir)"
-  codex_resolve_config_value "FLOW_DOCS_DIR" "${flow_root_dir}/docs"
+  codex_resolve_bootstrap_value "FLOW_DOCS_DIR" "${flow_root_dir}/docs"
 }
 
 codex_resolve_flow_config_dir() {
   local flow_root_dir
   flow_root_dir="$(codex_resolve_flow_root_dir)"
-  codex_resolve_config_value "FLOW_CONFIG_DIR" "${flow_root_dir}/config"
+  codex_resolve_bootstrap_value "FLOW_CONFIG_DIR" "${flow_root_dir}/config"
 }
 
 codex_resolve_flow_profile_config_dir() {
   local flow_config_dir
   flow_config_dir="$(codex_resolve_flow_config_dir)"
-  codex_resolve_config_value "FLOW_PROFILE_CONFIG_DIR" "${flow_config_dir}/profiles"
+  codex_resolve_bootstrap_value "FLOW_PROFILE_CONFIG_DIR" "${flow_config_dir}/profiles"
 }
 
 codex_resolve_flow_root_config_dir() {
   local flow_config_dir
   flow_config_dir="$(codex_resolve_flow_config_dir)"
-  codex_resolve_config_value "FLOW_ROOT_CONFIG_DIR" "${flow_config_dir}/root"
+  codex_resolve_bootstrap_value "FLOW_ROOT_CONFIG_DIR" "${flow_config_dir}/root"
+}
+
+codex_resolve_flow_env_file() {
+  local flow_config_dir
+  flow_config_dir="$(codex_resolve_flow_config_dir)"
+  codex_resolve_bootstrap_value "FLOW_ENV_FILE" "${flow_config_dir}/flow.env"
+}
+
+codex_resolve_flow_sample_env_file() {
+  local flow_config_dir
+  flow_config_dir="$(codex_resolve_flow_config_dir)"
+  codex_resolve_bootstrap_value "FLOW_SAMPLE_ENV_FILE" "${flow_config_dir}/flow.sample.env"
 }
 
 codex_resolve_flow_state_root_dir() {
   local flow_root_dir
   flow_root_dir="$(codex_resolve_flow_root_dir)"
-  codex_resolve_config_value "FLOW_STATE_ROOT_DIR" "${flow_root_dir}/state"
+  codex_resolve_bootstrap_value "FLOW_STATE_ROOT_DIR" "${flow_root_dir}/state"
 }
 
 codex_resolve_flow_codex_state_root_dir() {
   local flow_state_root_dir
   flow_state_root_dir="$(codex_resolve_flow_state_root_dir)"
-  codex_resolve_config_value "FLOW_CODEX_STATE_ROOT_DIR" "${flow_state_root_dir}/codex"
+  codex_resolve_bootstrap_value "FLOW_CODEX_STATE_ROOT_DIR" "${flow_state_root_dir}/codex"
 }
 
 codex_resolve_flow_logs_dir() {
   local flow_root_dir
   flow_root_dir="$(codex_resolve_flow_root_dir)"
-  codex_resolve_config_value "FLOW_LOGS_DIR" "${flow_root_dir}/logs"
+  codex_resolve_bootstrap_value "FLOW_LOGS_DIR" "${flow_root_dir}/logs"
 }
 
 codex_resolve_flow_pm2_log_dir() {
   local flow_logs_dir
   flow_logs_dir="$(codex_resolve_flow_logs_dir)"
-  codex_resolve_config_value "FLOW_PM2_LOG_DIR" "${flow_logs_dir}/pm2"
+  codex_resolve_bootstrap_value "FLOW_PM2_LOG_DIR" "${flow_logs_dir}/pm2"
 }
 
 codex_resolve_flow_tmp_dir() {
   local flow_root_dir
   flow_root_dir="$(codex_resolve_flow_root_dir)"
-  codex_resolve_config_value "FLOW_TMP_DIR" "${flow_root_dir}/tmp"
+  codex_resolve_bootstrap_value "FLOW_TMP_DIR" "${flow_root_dir}/tmp"
 }
 
 codex_resolve_flow_launchd_dir() {
   local flow_root_dir
   flow_root_dir="$(codex_resolve_flow_root_dir)"
-  codex_resolve_config_value "FLOW_LAUNCHD_DIR" "${flow_root_dir}/launchd"
+  codex_resolve_bootstrap_value "FLOW_LAUNCHD_DIR" "${flow_root_dir}/launchd"
 }
 
 codex_resolve_flow_launchagents_dir() {
-  codex_resolve_config_value "FLOW_LAUNCHAGENTS_DIR" "${HOME}/Library/LaunchAgents"
+  codex_resolve_bootstrap_value "FLOW_LAUNCHAGENTS_DIR" "${HOME}/Library/LaunchAgents"
 }
 
 codex_resolve_flow_launchd_namespace() {
-  codex_resolve_config_value "FLOW_LAUNCHD_NAMESPACE" "com.flow"
+  codex_resolve_bootstrap_value "FLOW_LAUNCHD_NAMESPACE" "com.flow"
 }
 
 codex_strip_quotes() {
@@ -107,6 +130,89 @@ codex_read_key_from_env_file() {
   codex_strip_quotes "$raw"
 }
 
+codex_load_env_file() {
+  local file_path="$1"
+  if [[ -f "$file_path" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$file_path"
+    set +a
+  fi
+}
+
+codex_detect_legacy_profile_env_file() {
+  local explicit_profile="${1:-}"
+  local profile_config_dir flow_env_file default_profile_file detected=""
+  profile_config_dir="$(codex_resolve_flow_profile_config_dir)"
+  flow_env_file="$(codex_resolve_flow_env_file)"
+  [[ -d "$profile_config_dir" ]] || return 1
+
+  if [[ -n "$explicit_profile" ]]; then
+    detected="${profile_config_dir}/${explicit_profile}.env"
+    [[ -f "$detected" ]] && { printf '%s' "$detected"; return 0; }
+  fi
+
+  if [[ -n "${PROJECT_PROFILE:-}" ]]; then
+    detected="${profile_config_dir}/${PROJECT_PROFILE}.env"
+    [[ -f "$detected" ]] && { printf '%s' "$detected"; return 0; }
+  fi
+
+  detected="${profile_config_dir}/default.env"
+  if [[ -f "$detected" && "$detected" != "$flow_env_file" ]]; then
+    printf '%s' "$detected"
+    return 0
+  fi
+
+  local count=0 first=""
+  while IFS= read -r detected; do
+    [[ -n "$detected" ]] || continue
+    [[ "$detected" == "$flow_env_file" ]] && continue
+    count=$((count + 1))
+    if [[ "$count" == "1" ]]; then
+      first="$detected"
+    fi
+  done <<EOF
+$(find "$profile_config_dir" -maxdepth 1 -type f -name '*.env' | sort)
+EOF
+
+  if [[ "$count" == "1" && -n "$first" ]]; then
+    printf '%s' "$first"
+    return 0
+  fi
+
+  return 1
+}
+
+codex_collect_env_files() {
+  local explicit_profile="${1:-}"
+  local root_dir flow_env_file legacy_env_file
+  root_dir="$(codex_resolve_root_dir)"
+  flow_env_file="$(codex_resolve_flow_env_file)"
+
+  if [[ -n "${DAEMON_GH_ENV_FILE:-}" ]]; then
+    printf '%s\n' "${DAEMON_GH_ENV_FILE}"
+  fi
+  printf '%s\n' "$flow_env_file"
+  legacy_env_file="$(codex_detect_legacy_profile_env_file "$explicit_profile" || true)"
+  if [[ -n "$legacy_env_file" && "$legacy_env_file" != "$flow_env_file" ]]; then
+    printf '%s\n' "$legacy_env_file"
+  fi
+  printf '%s\n' "${root_dir}/.env"
+  printf '%s\n' "${root_dir}/.env.deploy"
+}
+
+codex_load_flow_env() {
+  local explicit_profile="${1:-}"
+  local env_file
+  while IFS= read -r env_file; do
+    [[ -n "$env_file" ]] || continue
+    [[ -f "$env_file" ]] || continue
+    codex_load_env_file "$env_file"
+  done <<EOF
+$(codex_collect_env_files "$explicit_profile")
+EOF
+}
+
 codex_try_config_value() {
   local key="$1"
   local env_value="${!key:-}"
@@ -115,30 +221,17 @@ codex_try_config_value() {
     return 0
   fi
 
-  local root_dir
-  local flow_root_dir
-  local flow_config_dir
-  local flow_root_config_dir
-  root_dir="$(codex_resolve_root_dir)"
-  flow_root_dir="${FLOW_ROOT_DIR:-${root_dir}/.flow}"
-  flow_config_dir="${FLOW_CONFIG_DIR:-${flow_root_dir}/config}"
-  flow_root_config_dir="${FLOW_ROOT_CONFIG_DIR:-${flow_config_dir}/root}"
-  local -a env_candidates=()
-  if [[ -n "${DAEMON_GH_ENV_FILE:-}" ]]; then
-    env_candidates+=("${DAEMON_GH_ENV_FILE}")
-  fi
-  env_candidates+=("${root_dir}/.env")
-  env_candidates+=("${root_dir}/.env.deploy")
-  env_candidates+=("${flow_root_config_dir}/.env.codex")
-
   local env_file value
-  for env_file in "${env_candidates[@]}"; do
+  while IFS= read -r env_file; do
+    [[ -n "$env_file" ]] || continue
     value="$(codex_read_key_from_env_file "$env_file" "$key" || true)"
     if [[ -n "$value" ]]; then
       printf '%s' "$value"
       return 0
     fi
-  done
+  done <<EOF
+$(codex_collect_env_files)
+EOF
 
   return 1
 }
@@ -201,6 +294,39 @@ codex_resolve_flow_config() {
   FLOW_BASE_BRANCH="$(codex_resolve_config_value "FLOW_BASE_BRANCH" "main")"
   FLOW_HEAD_BRANCH="$(codex_resolve_config_value "FLOW_HEAD_BRANCH" "development")"
   FLOW_REPO_OWNER="${FLOW_GITHUB_REPO%%/*}"
+}
+
+codex_resolve_project_profile_name() {
+  codex_resolve_config_value "PROJECT_PROFILE" "default"
+}
+
+codex_resolve_project_repo_slug() {
+  codex_resolve_config_value "GITHUB_REPO" "justewg/planka"
+}
+
+codex_resolve_project_repo_name() {
+  local repo_slug
+  repo_slug="$(codex_resolve_project_repo_slug)"
+  printf '%s' "${repo_slug##*/}"
+}
+
+codex_resolve_project_display_label() {
+  local profile_name repo_slug repo_name
+  profile_name="$(codex_resolve_project_profile_name)"
+  repo_slug="$(codex_resolve_project_repo_slug)"
+  repo_name="${repo_slug##*/}"
+
+  if [[ -z "$profile_name" || "$profile_name" == "default" ]]; then
+    printf '%s' "$repo_slug"
+    return 0
+  fi
+
+  if [[ "$profile_name" == "$repo_name" ]]; then
+    printf '%s' "$repo_slug"
+    return 0
+  fi
+
+  printf '%s · %s' "$profile_name" "$repo_slug"
 }
 
 codex_resolve_project_config() {

@@ -228,6 +228,31 @@ run_gh_retry_capture_project() {
   fi
 }
 
+run_project_item_list_fallback() {
+  local owner_value="$1"
+  shift
+  local out=""
+  local rc=0
+
+  if out="$(run_gh_retry_capture_project gh project item-list "$project_number" --owner "$owner_value" "$@" 2>&1)"; then
+    printf '%s' "$out"
+    return 0
+  fi
+
+  rc=$?
+  if [[ "$owner_value" != "@me" ]] && printf '%s' "$out" | grep -Eiq 'unknown owner type'; then
+    echo "PROJECT_ITEM_LIST_OWNER_RETRY=@me" >&2
+    if out="$(run_gh_retry_capture_project gh project item-list "$project_number" --owner "@me" "$@" 2>&1)"; then
+      printf '%s' "$out"
+      return 0
+    fi
+    rc=$?
+  fi
+
+  printf '%s' "$out" >&2
+  return "$rc"
+}
+
 list_open_flow_prs_json() {
   run_gh_retry_capture \
     gh api "repos/${repo}/pulls?state=open&base=${flow_base_branch}&head=${repo_owner}:${flow_head_branch}&per_page=100"
@@ -2547,12 +2572,11 @@ if (( matched_count > 0 && queue_count == 0 )); then
   exit 0
 fi
 
-if (( queue_count == 0 )); then
+  if (( queue_count == 0 )); then
   fallback_items_json=""
   if fallback_items_json="$(
-    run_gh_retry_capture_project \
-      gh project item-list "$project_number" \
-      --owner "$project_owner" \
+    run_project_item_list_fallback \
+      "$project_owner" \
       --limit "$project_items_limit" \
       --format json \
       --jq '.'

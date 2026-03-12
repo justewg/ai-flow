@@ -101,8 +101,14 @@
   - использовать `gh ... --jq` вместо пайпов с `jq`, где возможно, чтобы уменьшить инфраструктурные подтверждения.
 - Список стабильных командных префиксов и шаблонов хранится в `COMMAND_TEMPLATES.md` и считается рабочим стандартом.
 - Regex-маски в `COMMAND_TEMPLATES.md` считаются allowlist для автоматического flow-команд.
+- `/.flow/shared` теперь git-submodule `justewg/ai-flow`.
+- Если меняются файлы `/.flow/shared/*`, их нужно коммитить и пушить в submodule-репозиторий `ai-flow`, а в PLANKA фиксировать только обновление gitlink на новый commit submodule.
 - По умолчанию использовать `.flow/shared/scripts/run.sh` как единую точку входа для git/gh операций; `scripts/codex/run.sh` считать только legacy compatibility wrapper.
 - Для подготовки входных данных runner-а использовать только отдельные вызовы `.flow/shared/scripts/run.sh write/append/clear/copy`; не использовать chain-команды (`&&`, `;`, heredoc) для рабочего flow.
+- Для команд с переменными аргументами использовать file-based dispatch:
+  - записывать команду в `.flow/tmp/run/dispatch_command.txt`;
+  - аргументы записывать по одному в `.flow/tmp/run/dispatch_args.txt`;
+  - затем запускать `.flow/shared/scripts/run.sh dispatch`.
 - При необходимости нового типа команды:
   - сначала добавляем шаблон в `COMMAND_TEMPLATES.md`;
   - затем используем в рабочем цикле.

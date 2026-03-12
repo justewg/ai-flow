@@ -8,8 +8,8 @@
 - Trigger: `pull_request.closed` для ветки `main`
 - Gate: срабатывает только если PR действительно `merged == true`
 - Парсинг: ищет все `PL-[0-9]{3}` в `title` и `body` PR
-- Действие: для каждого найденного ID вызывает compatibility wrapper `scripts/codex/project_set_status.sh <task-id> Done Done`, который в текущем layout резолвится в канонический `.flow/scripts/project_set_status.sh`.
-- Технически апдейт выполняется через GraphQL `updateProjectV2ItemFieldValue` по `project_id` (без owner-resolution через `gh project ...`), чтобы избежать нестабильной ошибки `unknown owner type` в Actions.
+- Действие: для каждого найденного ID вызывает tracked helper `scripts/ci/project_set_status.sh <task-id> Done Done`.
+- Технически helper сам резолвит Project v2 по `PROJECT_OWNER/PROJECT_NUMBER`, находит item по `Task ID` или `ISSUE-<n>`, затем обновляет `Status` и `Flow` через GraphQL `updateProjectV2ItemFieldValue`.
 
 ## Что нужно настроить в GitHub Secrets
 - `PROJECT_AUTOMATION_TOKEN`

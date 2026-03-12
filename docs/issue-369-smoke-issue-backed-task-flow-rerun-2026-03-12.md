@@ -23,10 +23,17 @@
 - активный runtime-state содержит `daemon_active_task=ISSUE-369`, `daemon_active_issue_number=369` и `pr_head=development`, `pr_base=main`, то есть flow идёт по ожидаемой цепочке `Todo -> In Progress -> executor -> review PR`;
 - в git-дельте для `ISSUE-369` нет новых flow-скриптов или обходных команд: smoke rerun использует уже влитый fixed-input путь через `run.sh` и последующий `task_finalize`.
 
+## Что подтверждено после выхода в review
+
+- по состоянию на `2026-03-12` существует ровно один review PR `#370` (`development -> main`) с заголовком `ISSUE-369 smoke-отчёт по issue-backed flow rerun`;
+- `gh pr view` возвращает для `#370` состояние `OPEN` и `isDraft=false`, то есть итоговый PR уже находится в `ready for review` без дополнительного ручного перевода;
+- текущий rerun остаётся в границах одного issue-backed task и одного review PR: отдельные draft task или дополнительные PR для `ISSUE-369` не создавались.
+
 ## Локальные проверки перед финализацией
 
 - `bash -n .flow/shared/scripts/run.sh .flow/shared/scripts/daemon_tick.sh .flow/shared/scripts/task_finalize.sh`
 - `git diff --check`
+- `gh pr view 370 --json number,title,state,isDraft,headRefName,baseRefName,url`
 
 ## Что вне scope
 

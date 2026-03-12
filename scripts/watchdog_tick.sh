@@ -24,6 +24,7 @@ DAEMON_LABEL="${WATCHDOG_DAEMON_LABEL:-$DEFAULT_DAEMON_LABEL}"
 DAEMON_INTERVAL="${WATCHDOG_DAEMON_INTERVAL_SEC:-45}"
 COOLDOWN_SEC="${WATCHDOG_COOLDOWN_SEC:-120}"
 EXECUTOR_STALE_SEC="${WATCHDOG_EXECUTOR_STALE_SEC:-180}"
+ACTIVE_TASK_GRACE_SEC="${WATCHDOG_ACTIVE_TASK_GRACE_SEC:-90}"
 DAEMON_LOG_STALE_SEC="${WATCHDOG_DAEMON_LOG_STALE_SEC:-180}"
 DAEMON_RATE_LIMIT_MAX_SLEEP_SEC="${DAEMON_RATE_LIMIT_MAX_SLEEP_SEC:-360}"
 DAEMON_LOG_STALE_RATE_LIMIT_SEC="${WATCHDOG_DAEMON_LOG_STALE_RATE_LIMIT_SEC:-0}"
@@ -85,6 +86,7 @@ parse_uint_or_default() {
 
 COOLDOWN_SEC="$(parse_uint_or_default "$COOLDOWN_SEC" "120")"
 EXECUTOR_STALE_SEC="$(parse_uint_or_default "$EXECUTOR_STALE_SEC" "180")"
+ACTIVE_TASK_GRACE_SEC="$(parse_uint_or_default "$ACTIVE_TASK_GRACE_SEC" "90")"
 DAEMON_LOG_STALE_SEC="$(parse_uint_or_default "$DAEMON_LOG_STALE_SEC" "180")"
 DAEMON_INTERVAL="$(parse_uint_or_default "$DAEMON_INTERVAL" "45")"
 DAEMON_RATE_LIMIT_MAX_SLEEP_SEC="$(parse_uint_or_default "$DAEMON_RATE_LIMIT_MAX_SLEEP_SEC" "360")"
@@ -92,6 +94,7 @@ DAEMON_LOG_STALE_RATE_LIMIT_SEC="$(parse_uint_or_default "$DAEMON_LOG_STALE_RATE
 
 if (( COOLDOWN_SEC < 30 )); then COOLDOWN_SEC=30; fi
 if (( EXECUTOR_STALE_SEC < 60 )); then EXECUTOR_STALE_SEC=60; fi
+if (( ACTIVE_TASK_GRACE_SEC < 30 )); then ACTIVE_TASK_GRACE_SEC=30; fi
 if (( DAEMON_LOG_STALE_SEC < 60 )); then DAEMON_LOG_STALE_SEC=60; fi
 if (( DAEMON_INTERVAL < 5 )); then DAEMON_INTERVAL=45; fi
 if (( DAEMON_RATE_LIMIT_MAX_SLEEP_SEC < DAEMON_INTERVAL )); then
@@ -362,6 +365,13 @@ if is_pid_alive "$executor_pid"; then
   executor_pid_alive="1"
 fi
 
+claim_epoch="$(read_file_or_default "${CODEX_DIR}/daemon_last_claim_epoch.txt" "0")"
+claim_epoch="$(parse_uint_or_default "$claim_epoch" "0")"
+claim_age_sec=0
+if (( claim_epoch > 0 && now_epoch >= claim_epoch )); then
+  claim_age_sec=$(( now_epoch - claim_epoch ))
+fi
+
 action="NONE"
 reason=""
 
@@ -385,12 +395,14 @@ elif [[ -n "$active_task" ]]; then
     action="SOFT_DAEMON_TICK"
     reason="DAEMON_IDLE_WITH_ACTIVE_TASK"
   elif [[ -z "$executor_state" ]]; then
-    action="SOFT_DAEMON_TICK"
-    reason="ACTIVE_TASK_WITHOUT_EXECUTOR_STATE"
+    if (( claim_age_sec >= ACTIVE_TASK_GRACE_SEC )); then
+      action="SOFT_DAEMON_TICK"
+      reason="ACTIVE_TASK_WITHOUT_EXECUTOR_STATE"
+    fi
   fi
 fi
 
-summary="active_task=${active_task:-none};active_issue=${active_issue:-none};daemon_agent_state=${daemon_agent_state};daemon_state=${daemon_state};executor_state=${executor_state:-none};executor_pid=${executor_pid:-none};executor_pid_alive=${executor_pid_alive};daemon_log_age=${daemon_log_age}s;daemon_log_stale_threshold=${daemon_log_stale_threshold}s"
+summary="active_task=${active_task:-none};active_issue=${active_issue:-none};daemon_agent_state=${daemon_agent_state};daemon_state=${daemon_state};executor_state=${executor_state:-none};executor_pid=${executor_pid:-none};executor_pid_alive=${executor_pid_alive};daemon_log_age=${daemon_log_age}s;daemon_log_stale_threshold=${daemon_log_stale_threshold}s;claim_age=${claim_age_sec}s;claim_grace_threshold=${ACTIVE_TASK_GRACE_SEC}s"
 if [[ "${WATCHDOG_AUTH_DEGRADED:-0}" == "1" ]]; then
   auth_detail="${WATCHDOG_AUTH_LAST_DETAIL:-AUTH_UNAVAILABLE}"
   auth_fallback_reason="${WATCHDOG_AUTH_FALLBACK_REASON:-DISABLED}"

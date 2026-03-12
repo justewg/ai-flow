@@ -6,6 +6,7 @@ on:
       - completed
     workflows:
       - Deploy Main to Hosting
+      - Deploy PR Preview to Dev Hosting
       - Project Auto Close Tasks
 
 jobs:
@@ -21,6 +22,7 @@ jobs:
       WF_BRANCH: ${{ github.event.workflow_run.head_branch }}
       WF_SHA: ${{ github.event.workflow_run.head_sha }}
       WF_ACTOR: ${{ github.event.workflow_run.actor.login }}
+      WF_REPOSITORY: ${{ github.event.workflow_run.repository.full_name }}
 
     steps:
       - name: Validate required secrets
@@ -56,6 +58,7 @@ jobs:
 
           NOW_UTC="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
           MESSAGE="<b>${CHECK_ICON} ${HEADER_STATUS_ICON} $(html_escape "${WF_NAME}")</b>"$'\n'
+          MESSAGE+="📦 <code>$(html_escape "${WF_REPOSITORY}")</code>"$'\n'
           if [[ -n "${PR_NUMBER}" && -n "${PR_URL}" ]]; then
             MESSAGE+="🔗 <a href=\"$(html_escape "${PR_URL}")\">𝐏𝐑#${PR_NUMBER}</a>"$'\n'
           fi

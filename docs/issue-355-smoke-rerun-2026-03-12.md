@@ -18,14 +18,14 @@
 ## Что сделано в этой дельте
 
 - добавлен этот smoke-report как repo-side артефакт `ISSUE-355`;
-- в `.flow/config/flow.sample.env` уточнено, что `FLOW_HEAD_BRANCH` обязан указывать на активную task-ветку, потому что от него зависят branch-mismatch checks, `dev_commit_push` и выбор head branch для PR;
+- в `.flow/config/flow.sample.env` зафиксировано, что `FLOW_HEAD_BRANCH` должен оставаться интеграционной веткой `development`, а не временной task-веткой;
 - локальный runtime был переведён на отдельную ветку `issue-355` вне git-дельты репозитория, чтобы финализация не переиспользовала head предыдущего smoke.
 
 ## Что подтверждает rerun
 
 - проблема прошлого прогона была не в tracked repo-коде PLANKA, а в live runtime binding на старую head-ветку;
-- для новых smoke-задач после merge предыдущего PR нужно обновлять `FLOW_HEAD_BRANCH` синхронно с task-веткой;
-- после отделения новой ветки `task_finalize` может формировать отдельный PR без смешения с `ISSUE-352`.
+- для новых smoke-задач task-ветка должна оставаться временной, а финальный PR-head обязан быть `development`;
+- после отделения новой ветки `task_finalize` должен сначала вернуть дельту в `development`, а уже затем формировать PR `development -> main`.
 
 ## Проверки
 

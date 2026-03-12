@@ -455,7 +455,13 @@ fi
 issue_state="$(printf '%s' "$issue_state_json" | jq -r '.state // ""' | tr '[:lower:]' '[:upper:]')"
 issue_auto_ignore="$(printf '%s' "$issue_state_json" | jq -r 'if .auto_ignore then "1" else "0" end')"
 
+review_branch_name=""
+[[ -s "$review_branch_file" ]] && review_branch_name="$(<"$review_branch_file")"
+
 if [[ "$issue_state" == "CLOSED" ]]; then
+  if is_review_feedback_kind "$kind_label"; then
+    cleanup_review_task_branch_if_merged "$review_branch_name"
+  fi
   clear_waiting_state
   clear_review_context
   echo "STALE_WAITING_CONTEXT_CLEARED=ISSUE_CLOSED"
@@ -465,6 +471,9 @@ if [[ "$issue_state" == "CLOSED" ]]; then
 fi
 
 if [[ "$issue_auto_ignore" == "1" ]]; then
+  if is_review_feedback_kind "$kind_label"; then
+    cleanup_review_task_branch_if_merged "$review_branch_name"
+  fi
   clear_waiting_state
   clear_review_context
   echo "STALE_WAITING_CONTEXT_CLEARED=ISSUE_AUTO_IGNORE"
@@ -479,10 +488,8 @@ fi
 if is_review_feedback_kind "$kind_label"; then
   review_pr_number=""
   review_issue_number=""
-  review_branch_name=""
   [[ -s "$review_pr_file" ]] && review_pr_number="$(<"$review_pr_file")"
   [[ -s "$review_issue_file" ]] && review_issue_number="$(<"$review_issue_file")"
-  [[ -s "$review_branch_file" ]] && review_branch_name="$(<"$review_branch_file")"
 
   if [[ -n "$review_issue_number" && "$review_issue_number" != "$issue_number" ]]; then
     emit_wait_state "$task_id" "$issue_number" "$question_comment_id" "$kind_label"

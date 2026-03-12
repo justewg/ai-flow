@@ -6,6 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/env/bootstrap.sh"
 CODEX_DIR="$(codex_export_state_dir)"
 STATE_TMP_DIR="$(codex_resolve_state_tmp_dir "$CODEX_DIR")"
+# shellcheck source=./env/project_issue_cache.sh
+source "${SCRIPT_DIR}/env/project_issue_cache.sh"
 mkdir -p "$STATE_TMP_DIR"
 RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
 TICK_LOCK_DIR="${CODEX_DIR}/daemon_tick.lock"
@@ -54,6 +56,7 @@ dirty_gate_todo_cache_json=""
 dependency_status_cache_file="${CODEX_DIR}/dependency_issue_resolved_cache.json"
 DEPENDENCY_STATUS_CACHE_RESOLVED=""
 claim_epoch_file="${CODEX_DIR}/daemon_last_claim_epoch.txt"
+project_issue_cache_max_age_sec="${PROJECT_ISSUE_CACHE_MAX_AGE_SEC:-1800}"
 
 mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
 
@@ -379,6 +382,35 @@ gql_stats_on_limit() {
   printf '%s\n' "0" > "$gql_window_requests_file"
 
   printf '%s|%s|%s|%s' "$requests" "$duration" "$start_utc" "$now_utc"
+}
+
+build_cached_trigger_queue_json() {
+  local status_name="$1"
+  local max_age_sec="${2:-1800}"
+  local cached_json="[]"
+
+  cached_json="$(project_issue_cache_list_recent_status "$status_name" "$max_age_sec" 2>/dev/null || printf '[]')"
+  printf '%s' "$cached_json" | jq -c '
+    [
+      .[]
+      | {
+          item_id: (.item_id // ""),
+          content_type: "Issue",
+          issue_number: (.issue_number // ""),
+          title: (
+            if (.title // "") != "" then .title
+            elif (.issue_number // "") != "" then ("Issue #" + (.issue_number // ""))
+            else ""
+            end
+          ),
+          task_id: (.task_id // ""),
+          status_name: (.status // ""),
+          flow: (.flow // ""),
+          priority: (.priority // "")
+        }
+    ]
+    | sort_by((try (.issue_number | tonumber) catch 999999))
+  '
 }
 
 trim() {
@@ -2428,10 +2460,22 @@ if (( open_pr_count > 0 )); then
 fi
 
 project_json=""
+queue_json=""
+queue_count=0
+cached_queue_json="$(build_cached_trigger_queue_json "$trigger_status" "$project_issue_cache_max_age_sec")"
+cached_queue_count="$(printf '%s' "$cached_queue_json" | jq 'length')"
+
+if (( cached_queue_count > 0 )); then
+  echo "LOCAL_STATUS_CACHE_QUEUE_USED=1"
+  echo "LOCAL_STATUS_CACHE_TRIGGER=$trigger_status"
+  echo "LOCAL_STATUS_CACHE_COUNT=$cached_queue_count"
+  queue_json="$cached_queue_json"
+  queue_count="$cached_queue_count"
+else
 if project_json="$(
   run_gh_retry_capture_project \
-    gh api graphql \
-    -f query='
+  gh api graphql \
+  -f query='
 query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
   node(id: $projectId) {
     ... on ProjectV2 {
@@ -2661,6 +2705,7 @@ fi
   queue_json="$fallback_queue_json"
   queue_count="$fallback_queue_count"
 fi
+fi
 
 valid_queue_json="$(printf '%s' "$queue_json" | jq -c '[.[] | select(.task_id != "")]')"
 valid_queue_before_filter_count="$(printf '%s' "$valid_queue_json" | jq 'length')"
@@ -2887,6 +2932,7 @@ printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_active_task.txt"
 printf '%s\n' "$item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"
 printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
 printf '%s\n' "$task_id" > "${CODEX_DIR}/project_task_id.txt"
+project_issue_cache_upsert "$task_id" "$item_id" "$issue_number" "$title" "$target_status" "$target_flow" "daemon_claim"
 "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
 date -u '+%Y-%m-%dT%H:%M:%SZ' > "${CODEX_DIR}/daemon_last_claim_utc.txt"
 date +%s > "$claim_epoch_file"

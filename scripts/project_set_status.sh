@@ -5,6 +5,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./env/bootstrap.sh
 source "${SCRIPT_DIR}/env/bootstrap.sh"
 codex_resolve_project_config
+CODEX_DIR="$(codex_export_state_dir)"
+STATE_TMP_DIR="$(codex_resolve_state_tmp_dir "$CODEX_DIR")"
+# shellcheck source=./env/project_issue_cache.sh
+source "${SCRIPT_DIR}/env/project_issue_cache.sh"
 
 if [[ $# -lt 2 || $# -gt 3 ]]; then
   echo "Usage: $0 <task-id|project-item-id> <status-name> [flow-name]"
@@ -18,8 +22,11 @@ task_or_item_id="$1"
 status_name="$2"
 flow_name="${3:-$2}"
 issue_number_hint=""
+task_id_hint=""
+matched_title=""
 if [[ "$task_or_item_id" =~ ^ISSUE-([0-9]+)$ ]]; then
   issue_number_hint="${BASH_REMATCH[1]}"
+  task_id_hint="$task_or_item_id"
 fi
 
 project_id="$PROJECT_ID"
@@ -187,47 +194,65 @@ if [[ "$task_or_item_id" == PVTI_* ]]; then
   )"
   item_id="$task_or_item_id"
 else
-  project_json="$(
-    fetch_project_initial_with_items
-  )"
-
-  all_items_json="$(printf '%s' "$project_json" | jq -c '.data.node.items.nodes // []')"
-  has_next_page="$(printf '%s' "$project_json" | jq -r '.data.node.items.pageInfo.hasNextPage // false')"
-  end_cursor="$(printf '%s' "$project_json" | jq -r '.data.node.items.pageInfo.endCursor // ""')"
-
-  if [[ "$has_next_page" == "true" ]]; then
-    for _ in {1..50}; do
-      [[ "$has_next_page" != "true" ]] && break
-      [[ -z "$end_cursor" || "$end_cursor" == "null" ]] && break
-
-      page_json="$(
-        fetch_project_items_page "$end_cursor"
-      )"
-
-      page_items_json="$(printf '%s' "$page_json" | jq -c '.data.node.items.nodes // []')"
-      all_items_json="$(jq -c -n --argjson acc "$all_items_json" --argjson page "$page_items_json" '$acc + $page')"
-      has_next_page="$(printf '%s' "$page_json" | jq -r '.data.node.items.pageInfo.hasNextPage // false')"
-      end_cursor="$(printf '%s' "$page_json" | jq -r '.data.node.items.pageInfo.endCursor // ""')"
-    done
+  cached_item_id=""
+  if [[ -n "$task_id_hint" ]]; then
+    cached_item_id="$(project_issue_cache_get_field "$task_id_hint" "item_id")"
+    matched_title="$(project_issue_cache_get_field "$task_id_hint" "title")"
   fi
 
-  item_id="$(
-    printf '%s' "$all_items_json" |
-      jq -r --arg task "$task_or_item_id" --arg issue_num "$issue_number_hint" '
-        .[]
-        | select(
-            (.fieldValueByName.text // "") == $task
-            or ((.content.title // "") | contains($task))
-            or (
-              ($issue_num != "")
-              and ((.content.__typename // "") == "Issue")
-              and ((.content.number // "") | tostring) == $issue_num
+  if [[ "$cached_item_id" == PVTI_* ]]; then
+    project_json="$(
+      fetch_project_fields_only
+    )"
+    item_id="$cached_item_id"
+  else
+    project_json="$(
+      fetch_project_initial_with_items
+    )"
+
+    all_items_json="$(printf '%s' "$project_json" | jq -c '.data.node.items.nodes // []')"
+    has_next_page="$(printf '%s' "$project_json" | jq -r '.data.node.items.pageInfo.hasNextPage // false')"
+    end_cursor="$(printf '%s' "$project_json" | jq -r '.data.node.items.pageInfo.endCursor // ""')"
+
+    if [[ "$has_next_page" == "true" ]]; then
+      for _ in {1..50}; do
+        [[ "$has_next_page" != "true" ]] && break
+        [[ -z "$end_cursor" || "$end_cursor" == "null" ]] && break
+
+        page_json="$(
+          fetch_project_items_page "$end_cursor"
+        )"
+
+        page_items_json="$(printf '%s' "$page_json" | jq -c '.data.node.items.nodes // []')"
+        all_items_json="$(jq -c -n --argjson acc "$all_items_json" --argjson page "$page_items_json" '$acc + $page')"
+        has_next_page="$(printf '%s' "$page_json" | jq -r '.data.node.items.pageInfo.hasNextPage // false')"
+        end_cursor="$(printf '%s' "$page_json" | jq -r '.data.node.items.pageInfo.endCursor // ""')"
+      done
+    fi
+
+    match_json="$(
+      printf '%s' "$all_items_json" |
+        jq -c --arg task "$task_or_item_id" --arg issue_num "$issue_number_hint" '
+          .[]
+          | select(
+              (.fieldValueByName.text // "") == $task
+              or ((.content.title // "") | contains($task))
+              or (
+                ($issue_num != "")
+                and ((.content.__typename // "") == "Issue")
+                and ((.content.number // "") | tostring) == $issue_num
+              )
             )
-          )
-        | .id
-      ' |
-      head -n1
-  )"
+          | {
+              id: .id,
+              title: (.content.title // "")
+            }
+        ' |
+        head -n1
+    )"
+    item_id="$(printf '%s' "$match_json" | jq -r '.id // ""')"
+    matched_title="$(printf '%s' "$match_json" | jq -r '.title // ""')"
+  fi
 fi
 if [[ -z "$item_id" || "$item_id" == "null" ]]; then
   echo "Task not found in project: $task_or_item_id"
@@ -309,5 +334,11 @@ mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
   -f itemId="$item_id" \
   -f fieldId="$flow_field_id" \
   -f optionId="$flow_option_id" >/dev/null
+
+if [[ -n "$task_id_hint" ]]; then
+  project_issue_cache_upsert "$task_id_hint" "$item_id" "$issue_number_hint" "$matched_title" "$status_name" "$flow_name" "project_set_status"
+  echo "CACHE_TASK_ID=$task_id_hint"
+  echo "CACHE_ITEM_ID=$item_id"
+fi
 
 echo "Updated $task_or_item_id: Status=$status_name, Flow=$flow_name"

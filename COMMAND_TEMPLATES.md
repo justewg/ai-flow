@@ -22,7 +22,7 @@
 ## Wrapper-first (рекомендуемый режим)
 - Canonical entrypoint: `.flow/shared/scripts/run.sh`
   - Шаблон: `.flow/shared/scripts/run.sh <command>`
-  - Поддерживаемые команды: `help`, `clear`, `write`, `append`, `copy`, `sync_branches`, `pr_list_open`, `pr_view`, `pr_create`, `pr_edit`, `commit_push`, `project_add_task`, `project_set_status`, `next_task`, `onboarding_audit`, `create_migration_kit`, `apply_migration_kit`, `daemon_tick`, `daemon_loop`, `daemon_install`, `daemon_uninstall`, `daemon_status`, `executor_reset`, `executor_start`, `executor_tick`, `executor_build_prompt`, `task_ask`, `daemon_check_replies`, `task_finalize`
+  - Поддерживаемые команды: `help`, `clear`, `write`, `append`, `copy`, `dispatch`, `issue_create`, `issue_view`, `sync_branches`, `pr_list`, `pr_list_open`, `pr_view`, `pr_create`, `pr_edit`, `pr_merge`, `commit_push`, `git_ls_remote_heads`, `git_delete_branch`, `project_add_task`, `project_set_status`, `next_task`, `onboarding_audit`, `create_migration_kit`, `apply_migration_kit`, `daemon_tick`, `daemon_loop`, `daemon_install`, `daemon_uninstall`, `daemon_status`, `executor_reset`, `executor_start`, `executor_tick`, `executor_build_prompt`, `task_ask`, `daemon_check_replies`, `task_finalize`
 - Legacy compatibility wrapper: `scripts/codex/run.sh`
   - Шаблон: `scripts/codex/run.sh <command>`
   - Regex mask: `^scripts/codex/run\.sh(?:\s+.+)?$`
@@ -143,3 +143,4 @@
 ## Принцип ограничений
 - Для операций удаления, сложных merge/rebase/cherry-pick и потенциально деструктивных действий требуется отдельное подтверждение.
 - Для минимизации confirm-шумов избегаем shell-chain команд (`&&`, `;`, heredoc) и используем только отдельные вызовы `.flow/shared/scripts/run.sh` или legacy wrapper `scripts/codex/run.sh`.
+- В интерактивном Codex-режиме `gh issue create/view`, `gh pr list/merge/view`, `git ls-remote --heads`, `git branch -D`, `project_set_status` должны идти через fixed-input команды `run.sh` + `dispatch`, а не прямыми CLI-вызовами с плавающими аргументами.

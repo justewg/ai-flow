@@ -103,12 +103,13 @@
 - Regex-маски в `COMMAND_TEMPLATES.md` считаются allowlist для автоматического flow-команд.
 - `/.flow/shared` теперь git-submodule `justewg/ai-flow`.
 - Если меняются файлы `/.flow/shared/*`, их нужно коммитить и пушить в submodule-репозиторий `ai-flow`, а в PLANKA фиксировать только обновление gitlink на новый commit submodule.
-- По умолчанию использовать `.flow/shared/scripts/run.sh` как единую точку входа для git/gh операций; `scripts/codex/run.sh` считать только legacy compatibility wrapper.
+- По умолчанию использовать `.flow/shared/scripts/run.sh` как каноническую точку входа toolkit; для interactive approval-friendly запуска допускается `scripts/codex/run.sh` как стабильный wrapper-prefix.
 - Для подготовки входных данных runner-а использовать только отдельные вызовы `.flow/shared/scripts/run.sh write/append/clear/copy`; не использовать chain-команды (`&&`, `;`, heredoc) для рабочего flow.
 - Для команд с переменными аргументами использовать file-based dispatch:
   - записывать команду в `.flow/tmp/run/dispatch_command.txt`;
   - аргументы записывать по одному в `.flow/tmp/run/dispatch_args.txt`;
-  - затем запускать `.flow/shared/scripts/run.sh dispatch`.
+  - затем запускать один стабильный entrypoint `scripts/codex/run.sh dispatch` или `.flow/shared/scripts/run.sh dispatch`;
+  - прямые вызовы `gh ...`, `git ...`, `.flow/shared/scripts/project_set_status.sh ...` в интерактивном режиме не использовать, если для них уже есть fixed-input команда `run.sh`.
 - При необходимости нового типа команды:
   - сначала добавляем шаблон в `COMMAND_TEMPLATES.md`;
   - затем используем в рабочем цикле.

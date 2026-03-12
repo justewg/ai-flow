@@ -5,8 +5,8 @@
 
 ## Выполненный сценарий
 1. Проверен рабочий контур daemon-flow без ручной подмены токена в ходе шага:
-   - `.flow/scripts/run.sh github_health_check` -> `GITHUB_HEALTHY=1`.
-   - `.flow/scripts/run.sh daemon_tick` -> активная задача `ISSUE-70`, `EXECUTOR_RUNNING=1`.
+   - `.flow/shared/scripts/run.sh github_health_check` -> `GITHUB_HEALTHY=1`.
+   - `.flow/shared/scripts/run.sh daemon_tick` -> активная задача `ISSUE-70`, `EXECUTOR_RUNNING=1`.
 2. Зафиксирован автоподхват задачи демоном:
    - `<state-dir>/daemon.log` (исторически это был `.tmp/codex/daemon.log`), `2026-02-24T01:51:26Z`:
      - `CLAIMED_TASK_ID=ISSUE-70`

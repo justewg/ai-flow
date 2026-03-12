@@ -146,10 +146,17 @@ vite.config.ts.timestamp-*
 .tmp/
 
 # .flow runtime/state/secrets
+.flow/config/flow.env
 .flow/config/profiles/*.env
-.flow/launchd/*.plist
+.flow/scripts
+.flow/docs
+.flow/shared
+.flow/launchd
+.flow/launchd/*
 .flow/logs/
 .flow/state/
+.flow/state
+.flow/state.legacy-*
 .flow/tmp/
 
 # private keys (must never be committed)

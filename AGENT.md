@@ -100,8 +100,8 @@
   - использовать `gh ... --jq` вместо пайпов с `jq`, где возможно, чтобы уменьшить инфраструктурные подтверждения.
 - Список стабильных командных префиксов и шаблонов хранится в `COMMAND_TEMPLATES.md` и считается рабочим стандартом.
 - Regex-маски в `COMMAND_TEMPLATES.md` считаются allowlist для автоматического flow-команд.
-- По умолчанию использовать `.flow/scripts/run.sh` как единую точку входа для git/gh операций; `scripts/codex/run.sh` считать только legacy compatibility wrapper.
-- Для подготовки входных данных runner-а использовать только отдельные вызовы `.flow/scripts/run.sh write/append/clear/copy`; не использовать chain-команды (`&&`, `;`, heredoc) для рабочего flow.
+- По умолчанию использовать `.flow/shared/scripts/run.sh` как единую точку входа для git/gh операций; `scripts/codex/run.sh` считать только legacy compatibility wrapper.
+- Для подготовки входных данных runner-а использовать только отдельные вызовы `.flow/shared/scripts/run.sh write/append/clear/copy`; не использовать chain-команды (`&&`, `;`, heredoc) для рабочего flow.
 - При необходимости нового типа команды:
   - сначала добавляем шаблон в `COMMAND_TEMPLATES.md`;
   - затем используем в рабочем цикле.
@@ -109,19 +109,19 @@
 ### 8. Потоковая разработка (stream)
 После сообщения `merged`:
 
-1) Синхронизирую ветки (`.flow/scripts/run.sh sync_branches`).
+1) Синхронизирую ветки (`.flow/shared/scripts/run.sh sync_branches`).
 2) Для daemon-flow задача на запуск задается переводом `Status` из `Backlog` в `Todo`.
 3) Демон мониторит `Status=Todo`, подхватывает задачу и переводит ее в `In Progress` (ACK).
 4) После подхвата:
    - запускается автономный executor (`codex exec`) и выполняет реализацию в рамках Issue.
    - executor коммитит русскими сообщениями и обновляет PR по мере прогресса.
-   - если есть блокер/вопрос, публикую комментарий в Issue через `.flow/scripts/run.sh task_ask ...`;
+   - если есть блокер/вопрос, публикую комментарий в Issue через `.flow/shared/scripts/run.sh task_ask ...`;
    - если executor завершил прогон, но не финализировал задачу, публикую `AGENT_BLOCKER` в Issue и перехожу в ожидание твоего решения;
    - жду ответ в Issue-комментариях; daemon классифицирует reply:
      - `QUESTION` -> публикует `AGENT_ANSWER` и остается в `WAIT_USER_REPLY`;
      - `REWORK` -> публикует `AGENT_RESUMED` и продолжает выполнение.
 5) По готовности:
-   - выполняю `.flow/scripts/run.sh task_finalize` (commit+push, create/update PR, `Status=Review`, `Flow=In Review`);
+   - выполняю `.flow/shared/scripts/run.sh task_finalize` (commit+push, create/update PR, `Status=Review`, `Flow=In Review`);
    - отправляю PR на ревью и прошу ревью;
    - двигаю статус задачи по flow.
 

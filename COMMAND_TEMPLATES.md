@@ -10,7 +10,7 @@
 - команды из списка ниже считаются стандартным потоком разработки;
 - если нужен новый тип команды, сначала добавляем его сюда, затем начинаем использовать;
 - стараемся вызывать команды в одном и том же формате (без случайных вариаций).
-- приоритет: сначала canonical-команды из `.flow/scripts/*.sh`; `scripts/codex/*.sh` считаются legacy compatibility wrapper.
+- приоритет: сначала canonical-команды из `.flow/shared/scripts/*.sh`; `scripts/codex/*.sh` считаются legacy compatibility wrapper.
 
 Модель применения:
 - `Префикс` — человекочитаемая короткая маска команды.
@@ -20,57 +20,57 @@
 - Я выполняю команды только в рамках allowlist-масок из этого файла.
 
 ## Wrapper-first (рекомендуемый режим)
-- Canonical entrypoint: `.flow/scripts/run.sh`
-  - Шаблон: `.flow/scripts/run.sh <command>`
+- Canonical entrypoint: `.flow/shared/scripts/run.sh`
+  - Шаблон: `.flow/shared/scripts/run.sh <command>`
   - Поддерживаемые команды: `help`, `clear`, `write`, `append`, `copy`, `sync_branches`, `pr_list_open`, `pr_view`, `pr_create`, `pr_edit`, `commit_push`, `project_add_task`, `project_set_status`, `next_task`, `onboarding_audit`, `create_migration_kit`, `apply_migration_kit`, `daemon_tick`, `daemon_loop`, `daemon_install`, `daemon_uninstall`, `daemon_status`, `executor_reset`, `executor_start`, `executor_tick`, `executor_build_prompt`, `task_ask`, `daemon_check_replies`, `task_finalize`
 - Legacy compatibility wrapper: `scripts/codex/run.sh`
   - Шаблон: `scripts/codex/run.sh <command>`
   - Regex mask: `^scripts/codex/run\.sh(?:\s+.+)?$`
   - UI mask: `scripts/codex/run.sh`
-- Canonical helper: `.flow/scripts/dev_commit_push.sh`
-  - Шаблон: `.flow/scripts/dev_commit_push.sh "<message>" <path...>`
+- Canonical helper: `.flow/shared/scripts/dev_commit_push.sh`
+  - Шаблон: `.flow/shared/scripts/dev_commit_push.sh "<message>" <path...>`
 - Legacy compatibility wrapper: `scripts/codex/dev_commit_push.sh`
   - Шаблон: `scripts/codex/dev_commit_push.sh "<message>" <path...>`
   - Regex mask: `^scripts/codex/dev_commit_push\.sh(?:\s+.+)?$`
   - UI mask: `scripts/codex/dev_commit_push.sh`
-- Canonical helper: `.flow/scripts/pr_list_open.sh`
-  - Шаблон: `.flow/scripts/pr_list_open.sh`
+- Canonical helper: `.flow/shared/scripts/pr_list_open.sh`
+  - Шаблон: `.flow/shared/scripts/pr_list_open.sh`
 - Legacy compatibility wrapper: `scripts/codex/pr_list_open.sh`
   - Шаблон: `scripts/codex/pr_list_open.sh`
   - Regex mask: `^scripts/codex/pr_list_open\.sh$`
   - UI mask: `scripts/codex/pr_list_open.sh`
-- Canonical helper: `.flow/scripts/pr_view.sh`
-  - Шаблон: `.flow/scripts/pr_view.sh <pr-number>`
+- Canonical helper: `.flow/shared/scripts/pr_view.sh`
+  - Шаблон: `.flow/shared/scripts/pr_view.sh <pr-number>`
 - Legacy compatibility wrapper: `scripts/codex/pr_view.sh`
   - Шаблон: `scripts/codex/pr_view.sh <pr-number>`
   - Regex mask: `^scripts/codex/pr_view\.sh\s+\d+$`
   - UI mask: `scripts/codex/pr_view.sh`
-- Canonical helper: `.flow/scripts/pr_create.sh`
-  - Шаблон: `.flow/scripts/pr_create.sh <title-file> <body-file>`
+- Canonical helper: `.flow/shared/scripts/pr_create.sh`
+  - Шаблон: `.flow/shared/scripts/pr_create.sh <title-file> <body-file>`
 - Legacy compatibility wrapper: `scripts/codex/pr_create.sh`
   - Шаблон: `scripts/codex/pr_create.sh <title-file> <body-file>`
   - Regex mask: `^scripts/codex/pr_create\.sh(?:\s+.+){2,}$`
   - UI mask: `scripts/codex/pr_create.sh`
-- Canonical helper: `.flow/scripts/pr_edit.sh`
-  - Шаблон: `.flow/scripts/pr_edit.sh <pr-number> <title-file> <body-file>`
+- Canonical helper: `.flow/shared/scripts/pr_edit.sh`
+  - Шаблон: `.flow/shared/scripts/pr_edit.sh <pr-number> <title-file> <body-file>`
 - Legacy compatibility wrapper: `scripts/codex/pr_edit.sh`
   - Шаблон: `scripts/codex/pr_edit.sh <pr-number> <title-file> <body-file>`
   - Regex mask: `^scripts/codex/pr_edit\.sh\s+\d+(?:\s+.+){2,}$`
   - UI mask: `scripts/codex/pr_edit.sh`
-- Canonical helper: `.flow/scripts/project_set_status.sh`
-  - Шаблон: `.flow/scripts/project_set_status.sh <task-id|project-item-id> <status-name> [flow-name]`
+- Canonical helper: `.flow/shared/scripts/project_set_status.sh`
+  - Шаблон: `.flow/shared/scripts/project_set_status.sh <task-id|project-item-id> <status-name> [flow-name]`
 - Legacy compatibility wrapper: `scripts/codex/project_set_status.sh`
   - Шаблон: `scripts/codex/project_set_status.sh <task-id|project-item-id> <status-name> [flow-name]`
   - Regex mask: `^scripts/codex/project_set_status\.sh(?:\s+.+){2,3}$`
   - UI mask: `scripts/codex/project_set_status.sh`
-- Canonical helper: `.flow/scripts/task_ask.sh`
-  - Шаблон: `.flow/scripts/task_ask.sh <question|blocker> <message-file>`
+- Canonical helper: `.flow/shared/scripts/task_ask.sh`
+  - Шаблон: `.flow/shared/scripts/task_ask.sh <question|blocker> <message-file>`
 - Legacy compatibility wrapper: `scripts/codex/task_ask.sh`
   - Шаблон: `scripts/codex/task_ask.sh <question|blocker> <message-file>`
   - Regex mask: `^scripts/codex/task_ask\.sh\s+(?:question|blocker)\s+.+$`
   - UI mask: `scripts/codex/task_ask.sh`
-- Canonical helper: `.flow/scripts/daemon_check_replies.sh`
-  - Шаблон: `.flow/scripts/daemon_check_replies.sh`
+- Canonical helper: `.flow/shared/scripts/daemon_check_replies.sh`
+  - Шаблон: `.flow/shared/scripts/daemon_check_replies.sh`
 - Legacy compatibility wrapper: `scripts/codex/daemon_check_replies.sh`
   - Шаблон: `scripts/codex/daemon_check_replies.sh`
   - Regex mask: `^scripts/codex/daemon_check_replies\.sh$`
@@ -142,4 +142,4 @@
 
 ## Принцип ограничений
 - Для операций удаления, сложных merge/rebase/cherry-pick и потенциально деструктивных действий требуется отдельное подтверждение.
-- Для минимизации confirm-шумов избегаем shell-chain команд (`&&`, `;`, heredoc) и используем только отдельные вызовы `.flow/scripts/run.sh` или legacy wrapper `scripts/codex/run.sh`.
+- Для минимизации confirm-шумов избегаем shell-chain команд (`&&`, `;`, heredoc) и используем только отдельные вызовы `.flow/shared/scripts/run.sh` или legacy wrapper `scripts/codex/run.sh`.

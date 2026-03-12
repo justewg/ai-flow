@@ -25,7 +25,7 @@
   - Сообщение унифицировано: заголовок с `💤/🚨` в первом символе, ссылка на Issue/комментарий, вспомогательный `blockquote + code`.
 
 - Локальные daemon/watchdog-сигналы:
-  - `.flow/scripts/daemon_loop.sh`, `.flow/scripts/watchdog_tick.sh`
+  - `.flow/shared/scripts/daemon_loop.sh`, `.flow/shared/scripts/watchdog_tick.sh`
   - Добавлены мнемоники статусов GitHub/Telegram (`🟢/🟡/🔴/⚪`) и вспомогательный блок в цитате.
   - Watchdog-уведомления переведены на тот же паттерн: `💤/🚨` в заголовке и без отдельного блока `CHECK NOW`.
 

@@ -38,6 +38,9 @@
 - `.flow/shared/scripts/run.sh project_add_task`
 - `.flow/shared/scripts/run.sh project_add_issue`
 - `.flow/shared/scripts/run.sh project_set_status`
+- `.flow/shared/scripts/run.sh log_tail_executor`
+- `.flow/shared/scripts/run.sh log_tail_daemon_executor`
+- `.flow/shared/scripts/run.sh log_tail_all`
 - Для interactive approvals и переменных аргументов:
   - не вызывать `gh ...`, `git ...`, `project_set_status.sh ...` напрямую;
   - записывать входные данные в fixed input files через `run.sh write/copy/clear`;
@@ -65,6 +68,9 @@
 - `.flow/shared/scripts/run.sh watchdog_uninstall [label]` — остановка и удаление `launchd`-watchdog.
 - `.flow/shared/scripts/run.sh watchdog_status [label]` — проверка статуса watchdog.
 - `.flow/shared/scripts/run.sh executor_reset` — сброс состояния автономного executor.
+- `.flow/shared/scripts/run.sh runtime_clear_active` — очистка active-context daemon (`daemon_active_*`).
+- `.flow/shared/scripts/run.sh runtime_clear_waiting` — очистка waiting-context daemon (`daemon_waiting_*`).
+- `.flow/shared/scripts/run.sh runtime_clear_review` — очистка review-context daemon (`daemon_review_*`).
 - `.flow/shared/scripts/run.sh executor_start <task-id> <issue-number>` — запуск автономного executor.
 - `.flow/shared/scripts/run.sh executor_tick <task-id> <issue-number>` — проверка/перезапуск executor, обработка fail-state.
 - `.flow/shared/scripts/run.sh executor_build_prompt <task-id> <issue-number> <output-file>` — сбор prompt для executor из Issue.
@@ -223,6 +229,8 @@ Rollback нового профиля:
 - Не использовать `&&`, `;`, heredoc и цепочки команд для подготовки данных.
 - Делать отдельные вызовы `.flow/shared/scripts/run.sh write/append/clear`.
 - Для `gh/git/project` действий из интерактивной сессии вызывать `.flow/shared/scripts/run.sh dispatch`.
+- Для просмотра runtime-логов автоматики использовать `.flow/shared/scripts/run.sh log_tail_*`, а не прямые `/bin/bash -lc ... tail ...`.
+- Для очистки служебного runtime-state использовать `.flow/shared/scripts/run.sh runtime_clear_*` и `.flow/shared/scripts/run.sh executor_reset`, а не прямые `truncate`.
 - `dispatch_command.txt` должен содержать одно из fixed-input действий (`issue_create`, `issue_view`, `pr_list`, `pr_view`, `pr_create`, `pr_edit`, `pr_merge`, `git_ls_remote_heads`, `git_delete_branch`, `project_add_issue`, `project_set_status`).
 
 ## Важные env-переменные
@@ -330,6 +338,18 @@ Rollback нового профиля:
 - `.flow/shared/scripts/run.sh project_add_issue`
   - добавляет существующий GitHub Issue в Project v2 как issue-backed item через `gh project item-add --url ...`
   - использует fixed-input `issue_number.txt`, чтобы не плодить новые approval-подтверждения на плавающих `gh project item-add ... --url ...`
+- `.flow/shared/scripts/run.sh log_tail_executor`
+  - печатает хвост `executor.log` из runtime log dir
+- `.flow/shared/scripts/run.sh log_tail_daemon_executor`
+  - печатает стандартный двойной хвост `daemon.log + executor.log`
+- `.flow/shared/scripts/run.sh log_tail_all`
+  - печатает стандартный хвост `daemon.log + watchdog.log + executor.log`
+- `.flow/shared/scripts/run.sh runtime_clear_active`
+  - очищает active runtime-context daemon без прямых `truncate`
+- `.flow/shared/scripts/run.sh runtime_clear_waiting`
+  - очищает waiting-context daemon без прямых `truncate`
+- `.flow/shared/scripts/run.sh runtime_clear_review`
+  - очищает review-context daemon без прямых `truncate`
 - `next_task.sh`
   - выводит `NEXT_TASK_ID=...` и `NEXT_TITLE=...` для ближайшей задачи (статус `Planned`)
 - `generate_app_dependencies_mermaid.sh [output-file]`

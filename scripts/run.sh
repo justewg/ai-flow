@@ -38,6 +38,9 @@ Commands:
   project_set_status
   project_status_runtime
   log_summary
+  log_tail_executor
+  log_tail_daemon_executor
+  log_tail_all
   status_snapshot
   next_task
   app_deps_mermaid
@@ -57,6 +60,9 @@ Commands:
   watchdog_uninstall
   watchdog_status
   executor_reset
+  runtime_clear_active
+  runtime_clear_waiting
+  runtime_clear_review
   executor_start
   executor_tick
   executor_build_prompt
@@ -196,6 +202,24 @@ write_temp_body_file() {
   tmp_file="$(mktemp "${RUNNER_INPUT_DIR}/body.XXXXXX.md")"
   cp "$source_file" "$tmp_file"
   printf '%s' "$tmp_file"
+}
+
+tail_runtime_log() {
+  local log_name="$1"
+  local lines="$2"
+  local log_dir log_file
+  log_dir="$(codex_resolve_flow_runtime_log_dir)"
+  log_file="${log_dir}/${log_name}"
+  if [[ ! -f "$log_file" ]]; then
+    echo "Log file not found: $log_file"
+    exit 1
+  fi
+  tail -n "$lines" "$log_file"
+}
+
+clear_runtime_state_file() {
+  local file_name="$1"
+  : > "${CODEX_DIR}/${file_name}"
 }
 
 key_to_file() {
@@ -482,6 +506,26 @@ case "$cmd" in
     "${CODEX_SHARED_SCRIPTS_DIR}/log_summary.sh" "$@"
     ;;
 
+  log_tail_executor)
+    tail_runtime_log "executor.log" "140"
+    ;;
+
+  log_tail_daemon_executor)
+    printf '=== daemon tail ===\n'
+    tail_runtime_log "daemon.log" "80"
+    printf '\n=== executor tail ===\n'
+    tail_runtime_log "executor.log" "120"
+    ;;
+
+  log_tail_all)
+    printf '=== daemon tail ===\n'
+    tail_runtime_log "daemon.log" "80"
+    printf '\n=== watchdog tail ===\n'
+    tail_runtime_log "watchdog.log" "80"
+    printf '\n=== executor tail ===\n'
+    tail_runtime_log "executor.log" "120"
+    ;;
+
   status_snapshot)
     "${CODEX_SHARED_SCRIPTS_DIR}/status_snapshot.sh"
     ;;
@@ -600,6 +644,30 @@ case "$cmd" in
 
   executor_reset)
     "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh"
+    ;;
+
+  runtime_clear_active)
+    clear_runtime_state_file "daemon_active_task.txt"
+    clear_runtime_state_file "daemon_active_item_id.txt"
+    clear_runtime_state_file "daemon_active_issue_number.txt"
+    ;;
+
+  runtime_clear_waiting)
+    clear_runtime_state_file "daemon_waiting_task_id.txt"
+    clear_runtime_state_file "daemon_waiting_issue_number.txt"
+    clear_runtime_state_file "daemon_waiting_kind.txt"
+    clear_runtime_state_file "daemon_waiting_since_utc.txt"
+    clear_runtime_state_file "daemon_waiting_comment_url.txt"
+    clear_runtime_state_file "daemon_waiting_pending_post.txt"
+    clear_runtime_state_file "daemon_waiting_question_comment_id.txt"
+    ;;
+
+  runtime_clear_review)
+    clear_runtime_state_file "daemon_review_task_id.txt"
+    clear_runtime_state_file "daemon_review_item_id.txt"
+    clear_runtime_state_file "daemon_review_issue_number.txt"
+    clear_runtime_state_file "daemon_review_pr_number.txt"
+    clear_runtime_state_file "daemon_review_branch_name.txt"
     ;;
 
   executor_start)

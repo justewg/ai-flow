@@ -110,6 +110,7 @@
   - аргументы записывать по одному в `.flow/tmp/run/dispatch_args.txt`;
   - затем запускать один стабильный entrypoint `scripts/codex/run.sh dispatch` или `.flow/shared/scripts/run.sh dispatch`;
   - прямые вызовы `gh ...`, `git ...`, `.flow/shared/scripts/project_set_status.sh ...` в интерактивном режиме не использовать, если для них уже есть fixed-input команда `run.sh`.
+- Для закрытия Issue использовать fixed-input команду `.flow/shared/scripts/run.sh issue_close` или `scripts/codex/run.sh issue_close` с `issue_number/issue_close_reason/issue_close_comment`, а не прямой `gh issue close ...`.
 - Для просмотра runtime-логов автоматики использовать только `.flow/shared/scripts/run.sh log_tail_*` или `scripts/codex/run.sh log_tail_*`; прямые `/bin/bash -lc ... tail ...` считать fallback и не использовать в штатном interactive flow.
 - Для очистки служебного runtime-state в `.flow/state/*` использовать только `.flow/shared/scripts/run.sh runtime_clear_*` и `.flow/shared/scripts/run.sh executor_reset`; прямые `truncate` по state-файлам не использовать в штатном interactive flow.
 - При необходимости нового типа команды:

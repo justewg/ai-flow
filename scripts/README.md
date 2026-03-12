@@ -36,6 +36,7 @@
 - `.flow/shared/scripts/run.sh git_ls_remote_heads`
 - `.flow/shared/scripts/run.sh git_delete_branch`
 - `.flow/shared/scripts/run.sh project_add_task`
+- `.flow/shared/scripts/run.sh project_add_issue`
 - `.flow/shared/scripts/run.sh project_set_status`
 - Для interactive approvals и переменных аргументов:
   - не вызывать `gh ...`, `git ...`, `project_set_status.sh ...` напрямую;
@@ -222,7 +223,7 @@ Rollback нового профиля:
 - Не использовать `&&`, `;`, heredoc и цепочки команд для подготовки данных.
 - Делать отдельные вызовы `.flow/shared/scripts/run.sh write/append/clear`.
 - Для `gh/git/project` действий из интерактивной сессии вызывать `.flow/shared/scripts/run.sh dispatch`.
-- `dispatch_command.txt` должен содержать одно из fixed-input действий (`issue_create`, `issue_view`, `pr_list`, `pr_view`, `pr_create`, `pr_edit`, `pr_merge`, `git_ls_remote_heads`, `git_delete_branch`, `project_set_status`).
+- `dispatch_command.txt` должен содержать одно из fixed-input действий (`issue_create`, `issue_view`, `pr_list`, `pr_view`, `pr_create`, `pr_edit`, `pr_merge`, `git_ls_remote_heads`, `git_delete_branch`, `project_add_issue`, `project_set_status`).
 
 ## Важные env-переменные
 - `node` (Node.js runtime, рекомендуется LTS >= 18) — обязателен для `gh_app_auth_*`, `ops_bot_*` и сервисов `gh_app_auth_service.js`, `ops_bot_service.js`.
@@ -326,6 +327,9 @@ Rollback нового профиля:
 - `project_add_task.sh <task-id> <title-file> <scope> <priority> [status] [flow]`
   - создание карточки задачи в проекте с заполнением `Task ID`, `Scope`, `Priority`, `Status`, `Flow`
   - после создания делает verify `Status/Flow`; при сетевой деградации возвращает ошибку, чтобы не считать задачу корректно инициализированной
+- `.flow/shared/scripts/run.sh project_add_issue`
+  - добавляет существующий GitHub Issue в Project v2 как issue-backed item через `gh project item-add --url ...`
+  - использует fixed-input `issue_number.txt`, чтобы не плодить новые approval-подтверждения на плавающих `gh project item-add ... --url ...`
 - `next_task.sh`
   - выводит `NEXT_TASK_ID=...` и `NEXT_TITLE=...` для ближайшей задачи (статус `Planned`)
 - `generate_app_dependencies_mermaid.sh [output-file]`

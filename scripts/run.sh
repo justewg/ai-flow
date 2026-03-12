@@ -34,6 +34,7 @@ Commands:
   git_ls_remote_heads
   git_delete_branch
   project_add_task
+  project_add_issue
   project_set_status
   project_status_runtime
   log_summary
@@ -445,6 +446,14 @@ case "$cmd" in
       "$new_priority" \
       "$new_status" \
       "$new_flow"
+    ;;
+
+  project_add_issue)
+    repo="$(require_flow_repo)"
+    codex_resolve_project_config
+    issue_number="$(read_required_file "${CODEX_DIR}/issue_number.txt")"
+    issue_url="https://github.com/${repo}/issues/${issue_number}"
+    gh project item-add "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --url "$issue_url"
     ;;
 
   project_set_status)

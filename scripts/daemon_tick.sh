@@ -742,7 +742,19 @@ query($projectId: ID!, $itemsFirst: Int!) {
       | {
           item_id: (.id // ""),
           content_type: (.content.__typename // ""),
-          issue_number: (.content.number // ""),
+          issue_number: (
+            ((.content.number // "") | tostring) as $content_issue
+            | if $content_issue != "" then $content_issue
+              else (
+                . as $item
+                | (($item.taskId.text // "") | gsub("^\\s+|\\s+$";"")) as $task_field
+                | if ($task_field | test("^ISSUE-[0-9]+$"))
+                  then ($task_field | capture("^ISSUE-(?<n>[0-9]+)$").n)
+                  else ""
+                  end
+              )
+              end
+          ),
           title: (.content.title // ""),
           priority: (.priority.name // "")
         }
@@ -2526,7 +2538,7 @@ matched_json="$(
 )"
 
 matched_count="$(printf '%s' "$matched_json" | jq 'length')"
-queue_json="$(printf '%s' "$matched_json" | jq -c '[.[] | select(.content_type == "Issue")]')"
+queue_json="$(printf '%s' "$matched_json" | jq -c '[.[] | select((.issue_number // "") != "")]')"
 queue_count="$(printf '%s' "$queue_json" | jq 'length')"
 
 if (( matched_count > 0 && queue_count == 0 )); then
@@ -2564,7 +2576,19 @@ if (( queue_count == 0 )); then
         | {
             item_id: .id,
             content_type: (.content.type // ""),
-            issue_number: (.content.number // ""),
+            issue_number: (
+              ((.content.number // "") | tostring) as $content_issue
+              | if $content_issue != "" then $content_issue
+                else (
+                  . as $item
+                  | (($item."task ID" // "") | gsub("^\\s+|\\s+$";"")) as $task_field
+                  | if ($task_field | test("^ISSUE-[0-9]+$"))
+                    then ($task_field | capture("^ISSUE-(?<n>[0-9]+)$").n)
+                    else ""
+                    end
+                )
+                end
+            ),
             title: (.title // .content.title // ""),
             task_id: (
               . as $item
@@ -2599,7 +2623,7 @@ if (( queue_count == 0 )); then
         | .num = ((try (.issue_number | tonumber) catch 999999))
       ]
       | sort_by(.pri_w, .num)
-      | [.[] | select(.content_type == "Issue" and (((.title // "") | test("^DIRTY-GATE:")) | not))]
+      | [.[] | select((.issue_number // "") != "" and (((.title // "") | test("^DIRTY-GATE:")) | not))]
     '
   )"
 

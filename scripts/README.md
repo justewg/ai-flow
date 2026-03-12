@@ -25,6 +25,7 @@
 - `.flow/shared/scripts/run.sh dispatch [command]`
 - `.flow/shared/scripts/run.sh issue_create`
 - `.flow/shared/scripts/run.sh issue_view`
+- `.flow/shared/scripts/run.sh issue_close`
 - `.flow/shared/scripts/run.sh sync_branches`
 - `.flow/shared/scripts/run.sh pr_list`
 - `.flow/shared/scripts/run.sh pr_list_open`
@@ -192,6 +193,8 @@ Rollback нового профиля:
 - `issue_body.txt`
 - `issue_view_json.txt`
 - `issue_view_jq.txt`
+- `issue_close_reason.txt`
+- `issue_close_comment.txt`
 - `pr_state.txt`
 - `pr_base.txt`
 - `pr_head.txt`
@@ -215,7 +218,7 @@ Rollback нового профиля:
 Ключи для `clear/write/append/copy`:
 - `pr_number`, `pr_title`, `pr_body`
 - `commit_message`, `stage_paths`
-- `issue_number`, `issue_title`, `issue_body`, `issue_view_json`, `issue_view_jq`
+- `issue_number`, `issue_title`, `issue_body`, `issue_view_json`, `issue_view_jq`, `issue_close_reason`, `issue_close_comment`
 - `pr_state`, `pr_base`, `pr_head`, `pr_list_json`, `pr_list_jq`, `pr_merge_method`, `pr_delete_branch`
 - `git_remote`, `git_refs`, `branch_name`
 - `project_task_id`, `project_status`, `project_flow`
@@ -231,7 +234,7 @@ Rollback нового профиля:
 - Для `gh/git/project` действий из интерактивной сессии вызывать `.flow/shared/scripts/run.sh dispatch`.
 - Для просмотра runtime-логов автоматики использовать `.flow/shared/scripts/run.sh log_tail_*`, а не прямые `/bin/bash -lc ... tail ...`.
 - Для очистки служебного runtime-state использовать `.flow/shared/scripts/run.sh runtime_clear_*` и `.flow/shared/scripts/run.sh executor_reset`, а не прямые `truncate`.
-- `dispatch_command.txt` должен содержать одно из fixed-input действий (`issue_create`, `issue_view`, `pr_list`, `pr_view`, `pr_create`, `pr_edit`, `pr_merge`, `git_ls_remote_heads`, `git_delete_branch`, `project_add_issue`, `project_set_status`).
+- `dispatch_command.txt` должен содержать одно из fixed-input действий (`issue_create`, `issue_view`, `issue_close`, `pr_list`, `pr_view`, `pr_create`, `pr_edit`, `pr_merge`, `git_ls_remote_heads`, `git_delete_branch`, `project_add_issue`, `project_set_status`).
 
 ## Важные env-переменные
 - `node` (Node.js runtime, рекомендуется LTS >= 18) — обязателен для `gh_app_auth_*`, `ops_bot_*` и сервисов `gh_app_auth_service.js`, `ops_bot_service.js`.
@@ -338,6 +341,10 @@ Rollback нового профиля:
 - `.flow/shared/scripts/run.sh project_add_issue`
   - добавляет существующий GitHub Issue в Project v2 как issue-backed item через `gh project item-add --url ...`
   - использует fixed-input `issue_number.txt`, чтобы не плодить новые approval-подтверждения на плавающих `gh project item-add ... --url ...`
+- `.flow/shared/scripts/run.sh issue_close`
+  - закрывает существующий GitHub Issue через fixed-input `issue_number.txt`
+  - опционально использует `issue_close_reason.txt` и `issue_close_comment.txt`
+  - нужен для no-noise закрытия невалидных smoke/task issue без прямого `gh issue close ...`
 - `.flow/shared/scripts/run.sh log_tail_executor`
   - печатает хвост `executor.log` из runtime log dir
 - `.flow/shared/scripts/run.sh log_tail_daemon_executor`

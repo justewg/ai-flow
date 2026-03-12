@@ -23,6 +23,7 @@ Commands:
   dispatch
   issue_create
   issue_view
+  issue_close
   sync_branches
   pr_list
   pr_list_open
@@ -108,6 +109,8 @@ Fixed input files in state dir
   issue_body.txt
   issue_view_json.txt
   issue_view_jq.txt
+  issue_close_reason.txt
+  issue_close_comment.txt
   pr_state.txt
   pr_base.txt
   pr_head.txt
@@ -235,6 +238,8 @@ key_to_file() {
     issue_body) echo "${CODEX_DIR}/issue_body.txt" ;;
     issue_view_json) echo "${CODEX_DIR}/issue_view_json.txt" ;;
     issue_view_jq) echo "${CODEX_DIR}/issue_view_jq.txt" ;;
+    issue_close_reason) echo "${CODEX_DIR}/issue_close_reason.txt" ;;
+    issue_close_comment) echo "${CODEX_DIR}/issue_close_comment.txt" ;;
     pr_state) echo "${CODEX_DIR}/pr_state.txt" ;;
     pr_base) echo "${CODEX_DIR}/pr_base.txt" ;;
     pr_head) echo "${CODEX_DIR}/pr_head.txt" ;;
@@ -356,6 +361,19 @@ case "$cmd" in
     else
       gh issue view "$issue_number" --repo "$repo"
     fi
+    ;;
+
+  issue_close)
+    repo="$(require_flow_repo)"
+    issue_number="$(read_required_file "${CODEX_DIR}/issue_number.txt")"
+    issue_close_reason="$(read_optional_file "$(key_to_file "issue_close_reason")")"
+    issue_close_comment="$(read_optional_file "$(key_to_file "issue_close_comment")")"
+    issue_cmd=(gh issue close "$issue_number" --repo "$repo")
+    [[ -n "$issue_close_reason" ]] && issue_cmd+=(--reason "$issue_close_reason")
+    if [[ -n "$issue_close_comment" ]]; then
+      issue_cmd+=(--comment "$issue_close_comment")
+    fi
+    "${issue_cmd[@]}"
     ;;
 
   sync_branches)

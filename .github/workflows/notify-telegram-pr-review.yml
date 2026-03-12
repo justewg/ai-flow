@@ -17,6 +17,7 @@ jobs:
     env:
       TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
       TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+      REPOSITORY: ${{ github.repository }}
       PR_ACTION: ${{ github.event.action }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
       PR_TITLE: ${{ github.event.pull_request.title }}
@@ -130,6 +131,7 @@ jobs:
 
           PR_LINK="<a href=\"$(html_escape "${PR_URL}")\">𝐏𝐑#${PR_NUMBER}</a>"
           MESSAGE="<b>${CHECK_ICON} ${HEADER_TITLE}</b>"$'\n'
+          MESSAGE+="📦 <code>$(html_escape "${REPOSITORY}")</code>"$'\n'
           MESSAGE+="🔗 ${PR_LINK} — <b>$(html_escape "${PR_TITLE}")</b>"$'\n'
           MESSAGE+="<b>🪧 Stage:</b> $(html_escape "${STAGE_LABEL}")"$'\n'
           if [[ "${TASK_IDS}" != "none" ]]; then

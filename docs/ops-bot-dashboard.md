@@ -1,7 +1,7 @@
 # Ops Bot + Status Dashboard
 
 ## Что это
-Локальный сервис `.flow/scripts/ops_bot_service.js`, который дает:
+Локальный сервис `.flow/shared/scripts/ops_bot_service.js`, который дает:
 - health endpoint: `GET /health`
 - web dashboard: `GET /ops/status`
 - JSON snapshot: `GET /ops/status.json`
@@ -12,7 +12,7 @@
 
 `/status` в Telegram теперь возвращает не один snapshot, а сводку по всем известным проектам/рантаймам на этом контуре автоматики. Каждый проект выводится отдельным блоком `<blockquote><code>...</code></blockquote>`.
 
-Источник данных статуса: `.flow/scripts/status_snapshot.sh` (только локальные файлы `.flow/state/codex/*`, без обязательного вызова GitHub API).
+Источник данных статуса: `.flow/shared/scripts/status_snapshot.sh` (только локальные файлы `.flow/state/codex/*`, без обязательного вызова GitHub API).
 
 Важно: у ops-bot есть два разных контура, и они могут использоваться одновременно.
 - Local contour: сам процесс `ops_bot_service.js` на текущем хосте (`OPS_BOT_BIND/OPS_BOT_PORT`, PM2, локальный health/status).
@@ -24,18 +24,18 @@
 
 ## Локальный запуск
 ```bash
-.flow/scripts/run.sh status_snapshot
-.flow/scripts/run.sh ops_bot_start
-.flow/scripts/run.sh ops_bot_health
+.flow/shared/scripts/run.sh status_snapshot
+.flow/shared/scripts/run.sh ops_bot_start
+.flow/shared/scripts/run.sh ops_bot_health
 ```
 
 PM2:
 ```bash
-.flow/scripts/run.sh ops_bot_pm2_start
-.flow/scripts/run.sh ops_bot_pm2_health
-.flow/scripts/run.sh ops_bot_pm2_status
-.flow/scripts/run.sh ops_bot_pm2_restart
-.flow/scripts/run.sh ops_bot_pm2_stop
+.flow/shared/scripts/run.sh ops_bot_pm2_start
+.flow/shared/scripts/run.sh ops_bot_pm2_health
+.flow/shared/scripts/run.sh ops_bot_pm2_status
+.flow/shared/scripts/run.sh ops_bot_pm2_restart
+.flow/shared/scripts/run.sh ops_bot_pm2_stop
 ```
 
 ## Рекомендуемые env
@@ -80,8 +80,8 @@ OPS_REMOTE_SUMMARY_PUSH_MIN_INTERVAL_SEC=300
 
 Проверка push вручную:
 ```bash
-.flow/scripts/run.sh ops_remote_status_push
-.flow/scripts/run.sh ops_remote_summary_push
+.flow/shared/scripts/run.sh ops_remote_status_push
+.flow/shared/scripts/run.sh ops_remote_summary_push
 ```
 
 После этого серверный `/ops/status.json` начнет отдавать удаленный snapshot, если локальные серверные state-файлы пустые (`UNKNOWN`), а `/summary` в Telegram будет использовать удаленный summary bundle вместо пустых server-local логов. Если ingest идет от нескольких consumer-project, dashboard покажет их отдельными source-блоками.
@@ -115,12 +115,12 @@ location /telegram/webhook/ {
 ## Регистрация webhook в Telegram
 После публикации URL:
 ```bash
-.flow/scripts/run.sh ops_bot_webhook_register register
+.flow/shared/scripts/run.sh ops_bot_webhook_register register
 ```
 
 Проверка:
 ```bash
-.flow/scripts/run.sh ops_bot_webhook_register info
+.flow/shared/scripts/run.sh ops_bot_webhook_register info
 ```
 
 ## Диагностика
@@ -128,26 +128,26 @@ location /telegram/webhook/ {
   - `<log-dir>/pm2/ops_bot.out.log`
   - `<log-dir>/pm2/ops_bot.err.log`
 - Health:
-  - `.flow/scripts/run.sh ops_bot_pm2_health`
+  - `.flow/shared/scripts/run.sh ops_bot_pm2_health`
 - Snapshot sanity:
-  - `.flow/scripts/run.sh status_snapshot | jq .`
+  - `.flow/shared/scripts/run.sh status_snapshot | jq .`
 
 ## Smoke-checklist rollout (manual)
 1. Проверить prereq: `node -v`, `pm2 -v`, `jq --version`.
 2. Проверить конфиг env (`OPS_BOT_*`) и секреты webhook (`OPS_BOT_WEBHOOK_SECRET`, `OPS_BOT_TG_SECRET_TOKEN`).
-3. Запустить/обновить сервис в PM2: `.flow/scripts/run.sh ops_bot_pm2_start`.
-4. Проверить PM2-статус: `.flow/scripts/run.sh ops_bot_pm2_status` (ожидается `PM2_STATUS=online`, иначе exit code `1`).
-5. Проверить health: `.flow/scripts/run.sh ops_bot_pm2_health` (ожидается exit code `0` и JSON `status=ok`; при неготовности процесса/endpoint — exit code `1`).
+3. Запустить/обновить сервис в PM2: `.flow/shared/scripts/run.sh ops_bot_pm2_start`.
+4. Проверить PM2-статус: `.flow/shared/scripts/run.sh ops_bot_pm2_status` (ожидается `PM2_STATUS=online`, иначе exit code `1`).
+5. Проверить health: `.flow/shared/scripts/run.sh ops_bot_pm2_health` (ожидается exit code `0` и JSON `status=ok`; при неготовности процесса/endpoint — exit code `1`).
 6. Проверить endpoint-ы через nginx/public URL:
    - `GET /health`
    - `GET /ops/status`
    - `GET /ops/status.json`
 7. Проверить устойчивость snapshot/log-summary к неполным локальным данным:
-   - `.flow/scripts/run.sh status_snapshot | jq .overall_status` (команда не падает при отсутствующих `.flow/state/codex/*`, подставляет defaults);
-   - `.flow/scripts/run.sh log_summary --hours 1` (команда не падает при отсутствующих логах, использует пустые snapshot-файлы).
+   - `.flow/shared/scripts/run.sh status_snapshot | jq .overall_status` (команда не падает при отсутствующих `.flow/state/codex/*`, подставляет defaults);
+   - `.flow/shared/scripts/run.sh log_summary --hours 1` (команда не падает при отсутствующих логах, использует пустые snapshot-файлы).
 8. Проверить webhook:
-   - зарегистрировать webhook: `.flow/scripts/run.sh ops_bot_webhook_register register`;
-   - проверить webhook info: `.flow/scripts/run.sh ops_bot_webhook_register info`;
+   - зарегистрировать webhook: `.flow/shared/scripts/run.sh ops_bot_webhook_register register`;
+   - проверить webhook info: `.flow/shared/scripts/run.sh ops_bot_webhook_register info`;
    - `POST /telegram/webhook/<secret>` с валидным `X-Telegram-Bot-Api-Secret-Token`;
    - невалидный JSON в webhook дает `400 BAD_REQUEST`;
    - payload > 1 MiB дает `413 PAYLOAD_TOO_LARGE`;

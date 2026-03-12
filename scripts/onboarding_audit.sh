@@ -749,13 +749,13 @@ else
           if [[ -n "$missing_repo_secrets" ]]; then
             missing_repo_secrets="${missing_repo_secrets%,}"
             report_warn "GH_REPO_ACTIONS_SECRETS" "missing:${missing_repo_secrets}"
-            report_action "GH_REPO_ACTIONS_SECRETS" "Создай недостающие repo Actions secrets в GitHub UI -> Settings -> Secrets and variables -> Actions. Список expected лежит в ${required_repo_actions_secrets_manifest}. Что именно вписывать в каждый secret см. в .flow/docs/github-actions-repo-secrets.md."
+            report_action "GH_REPO_ACTIONS_SECRETS" "Создай недостающие repo Actions secrets в GitHub UI -> Settings -> Secrets and variables -> Actions. Список expected лежит в ${required_repo_actions_secrets_manifest}. Что именно вписывать в каждый secret см. в .flow/shared/docs/github-actions-repo-secrets.md."
           else
             report_ok "GH_REPO_ACTIONS_SECRETS" "all-required-secrets-present:${required_repo_secret_count}"
           fi
         else
           report_warn "GH_REPO_ACTIONS_SECRETS_API" "$(printf '%s' "$repo_actions_secrets_out" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g')"
-          report_action "GH_REPO_ACTIONS_SECRETS_API" "Проверь, что gh auth видит repo secrets API для ${github_repo}, или проверь secrets вручную в GitHub UI -> Settings -> Secrets and variables -> Actions. Что именно вписывать в каждый secret см. в .flow/docs/github-actions-repo-secrets.md."
+          report_action "GH_REPO_ACTIONS_SECRETS_API" "Проверь, что gh auth видит repo secrets API для ${github_repo}, или проверь secrets вручную в GitHub UI -> Settings -> Secrets and variables -> Actions. Что именно вписывать в каждый secret см. в .flow/shared/docs/github-actions-repo-secrets.md."
         fi
       fi
     fi

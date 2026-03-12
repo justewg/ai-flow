@@ -1,9 +1,9 @@
-# .flow/scripts
+# .flow/shared/scripts
 
 Стабильные wrapper-команды для снижения confirm-шума в Codex VSCode.
 
 > Канонический shared-toolkit path: `.flow/shared/{scripts,docs}`.
-> Путь `.flow/scripts/*` в этом файле допустим только как legacy compatibility layer для локальных host-links.
+> Путь `.flow/shared/scripts/*` в этом файле является каноническим entrypoint-слоем toolkit.
 
 ## Рекомендуемый вход (один префикс)
 - `.flow/shared/scripts/run.sh <command>`
@@ -17,75 +17,75 @@
 - `docs/self-hosted-runner-deploy.md` (перевод deploy workflow на self-hosted runner `planka-deploy`).
 
 Команды:
-- `.flow/scripts/run.sh help`
-- `.flow/scripts/run.sh clear <key>`
-- `.flow/scripts/run.sh write <key> <value...>`
-- `.flow/scripts/run.sh append <key> <value...>`
-- `.flow/scripts/run.sh copy <key> <source-file>`
-- `.flow/scripts/run.sh dispatch [command]`
-- `.flow/scripts/run.sh sync_branches`
-- `.flow/scripts/run.sh pr_list_open`
-- `.flow/scripts/run.sh pr_view`
-- `.flow/scripts/run.sh pr_create`
-- `.flow/scripts/run.sh pr_edit`
-- `.flow/scripts/run.sh commit_push`
-- `.flow/scripts/run.sh project_add_task`
-- `.flow/scripts/run.sh project_set_status`
+- `.flow/shared/scripts/run.sh help`
+- `.flow/shared/scripts/run.sh clear <key>`
+- `.flow/shared/scripts/run.sh write <key> <value...>`
+- `.flow/shared/scripts/run.sh append <key> <value...>`
+- `.flow/shared/scripts/run.sh copy <key> <source-file>`
+- `.flow/shared/scripts/run.sh dispatch [command]`
+- `.flow/shared/scripts/run.sh sync_branches`
+- `.flow/shared/scripts/run.sh pr_list_open`
+- `.flow/shared/scripts/run.sh pr_view`
+- `.flow/shared/scripts/run.sh pr_create`
+- `.flow/shared/scripts/run.sh pr_edit`
+- `.flow/shared/scripts/run.sh commit_push`
+- `.flow/shared/scripts/run.sh project_add_task`
+- `.flow/shared/scripts/run.sh project_set_status`
 - Для переменных аргументов:
   - записать имя команды в `.flow/tmp/run/dispatch_command.txt`
   - записать аргументы по одному в `.flow/tmp/run/dispatch_args.txt`
-  - выполнить `.flow/scripts/run.sh dispatch`
-- `.flow/scripts/run.sh project_status_runtime <enqueue|apply|list|clear> ...` — runtime-очередь отложенных обновлений `Project Status/Flow`.
-- `.flow/scripts/run.sh log_summary [--hours N|--from ISO|--to ISO]` — агрегированный отчет по логам daemon/watchdog/runtime/graphql за период (без аргументов берёт весь доступный диапазон логов).
-- `.flow/scripts/run.sh status_snapshot` — нормализованный JSON snapshot состояния автоматики (daemon/watchdog/executor/очереди/blockers).
-- `.flow/scripts/run.sh next_task` — показать следующую задачу со статусом `Planned` (приоритет P0→P1→P2, затем по номеру `PL-xxx`).
-- `.flow/scripts/run.sh app_deps_mermaid [output-file]` — построить Mermaid DAG зависимостей APP-issues из `Flow Meta` (`Depends-On/Blocks`) и записать markdown-файл (по умолчанию `docs/app-issues-dependency-diagram.md`).
-- `.flow/scripts/run.sh backlog_seed_apply` — применить runtime-план создания backlog-задач из `<state-dir>/backlog_seed_plan.json` (по умолчанию 1 задача за запуск).
-- `.flow/scripts/run.sh onboarding_audit [--profile <name>] [--skip-network]` — первичный аудит consumer-project: toolkit-файлы, локальные команды, git/gh, project-scoped flow env, repo и Project v2, repo workflow overlay и наличие обязательных GitHub Actions secrets.
-- `.flow/scripts/run.sh create_migration_kit --project <name> [--source-profile <name>] [--output <path>]` — собрать переносимый `migration_kit.tgz` с toolkit, `.flow/docs`, `.flow/config/flow.sample.env` и repo workflow overlay из текущего `.github/`.
-- `.flow/scripts/run.sh apply_migration_kit [--project <name>]` — после распаковки kit материализовать рабочий `.flow/config/flow.env` из `.flow/config/flow.sample.env` и развернуть `.github/workflows/` overlay. Secrets values после этого всё равно создаются вручную в GitHub UI.
-- `.flow/scripts/run.sh profile_init <init|install|preflight|bootstrap> ...` — полуавтоматический bootstrap нового profile/repo без ручной правки install-скриптов.
-- `.flow/scripts/run.sh daemon_tick` — один цикл демона: проверка `Todo`, подхват задачи, перевод в `In Progress`.
-- `.flow/scripts/run.sh daemon_loop [interval-sec]` — непрерывный polling-цикл демона (по умолчанию 45 сек).
-- `.flow/scripts/run.sh daemon_install [label] [interval-sec]` — установка и запуск `launchd`-агента.
-- `.flow/scripts/run.sh daemon_uninstall [label]` — остановка и удаление `launchd`-агента.
-- `.flow/scripts/run.sh daemon_status [label]` — проверка статуса `launchd`-агента.
-- `.flow/scripts/run.sh watchdog_tick` — один цикл самодиагностики/самовосстановления.
-- `.flow/scripts/run.sh watchdog_loop [interval-sec]` — непрерывный watchdog-цикл.
-- `.flow/scripts/run.sh watchdog_install [label] [interval-sec]` — установка и запуск `launchd`-watchdog.
-- `.flow/scripts/run.sh watchdog_uninstall [label]` — остановка и удаление `launchd`-watchdog.
-- `.flow/scripts/run.sh watchdog_status [label]` — проверка статуса watchdog.
-- `.flow/scripts/run.sh executor_reset` — сброс состояния автономного executor.
-- `.flow/scripts/run.sh executor_start <task-id> <issue-number>` — запуск автономного executor.
-- `.flow/scripts/run.sh executor_tick <task-id> <issue-number>` — проверка/перезапуск executor, обработка fail-state.
-- `.flow/scripts/run.sh executor_build_prompt <task-id> <issue-number> <output-file>` — сбор prompt для executor из Issue.
-- `.flow/scripts/run.sh task_ask <question|blocker> <message-file>` — отправить вопрос/блокер в comment Issue и включить режим ожидания ответа.
-- `.flow/scripts/run.sh daemon_check_replies` — проверить ответы в Issue-комментах для ожидающего вопроса.
-- `.flow/scripts/run.sh task_finalize` — финализация задачи: commit+push, create/update PR, перевод задачи в `Status=Review`, `Flow=In Review`.
-- `.flow/scripts/run.sh gh_retry <command> [args...]` — выполнить GitHub-команду с retry/backoff.
-- `.flow/scripts/run.sh github_health_check` — быстрый preflight GitHub API (`healthy/unstable`).
-- `.flow/scripts/run.sh github_outbox <enqueue_issue_comment|flush|count|list> ...` — управление отложенными GitHub-действиями.
-- `.flow/scripts/run.sh gh_app_auth_start` — запустить локальный GitHub App auth-сервис (`/health`, `/token`).
-- `.flow/scripts/run.sh gh_app_auth_health` — проверить endpoint `/health` auth-сервиса.
-- `.flow/scripts/run.sh gh_app_auth_probe` — проверить `/health` и `/token` (без вывода токена).
-- `.flow/scripts/run.sh gh_app_auth_pm2_start` — зарегистрировать/перезапустить auth-сервис в PM2.
-- `.flow/scripts/run.sh gh_app_auth_pm2_stop` — остановить и удалить auth-сервис из PM2.
-- `.flow/scripts/run.sh gh_app_auth_pm2_restart` — перезапустить auth-сервис в PM2.
-- `.flow/scripts/run.sh gh_app_auth_pm2_status` — показать статус auth-сервиса в PM2.
-- `.flow/scripts/run.sh gh_app_auth_pm2_health` — проверить PM2 status=`online` + endpoint `/health`.
-- `.flow/scripts/run.sh gh_app_auth_pm2_crash_test` — kill процесса auth-сервиса и подтвердить авто-restart PM2.
-- `.flow/scripts/run.sh ops_bot_start` — запустить локальный ops-бот сервис (`/health`, `/ops/status`, `/ops/status.json`, Telegram webhook).
-- `.flow/scripts/run.sh ops_bot_health` — проверить endpoint `/health` ops-бота.
-- `.flow/scripts/run.sh ops_bot_pm2_start` — зарегистрировать/перезапустить ops-бот сервис в PM2.
-- `.flow/scripts/run.sh ops_bot_pm2_stop` — остановить и удалить ops-бот сервис из PM2.
-- `.flow/scripts/run.sh ops_bot_pm2_restart` — перезапустить ops-бот сервис в PM2.
-- `.flow/scripts/run.sh ops_bot_pm2_status` — показать статус ops-бот сервиса в PM2.
-- `.flow/scripts/run.sh ops_bot_pm2_health` — проверить PM2 status=`online` + endpoint `/health` ops-бота.
-- `.flow/scripts/run.sh ops_bot_post_smoke_check` — собрать агрегированный post-smoke отчет по rollout ops-бота.
-- `.flow/scripts/run.sh ops_bot_webhook_register [register|refresh|delete|info]` — управление Telegram webhook по env-переменным.
-- `.flow/scripts/run.sh ops_bot_webhook_refresh` — shortcut для полного refresh webhook (`deleteWebhook + setWebhook + getWebhookInfo`).
-- `.flow/scripts/run.sh ops_remote_status_push` — отправить текущий `status_snapshot` в удаленный ingest endpoint ops-бота (URL/secret берутся из env).
-- `.flow/scripts/run.sh ops_remote_summary_push` — отправить bundle `log_summary` (локальное окно `6h` по умолчанию) в удаленный ingest endpoint ops-бота.
+  - выполнить `.flow/shared/scripts/run.sh dispatch`
+- `.flow/shared/scripts/run.sh project_status_runtime <enqueue|apply|list|clear> ...` — runtime-очередь отложенных обновлений `Project Status/Flow`.
+- `.flow/shared/scripts/run.sh log_summary [--hours N|--from ISO|--to ISO]` — агрегированный отчет по логам daemon/watchdog/runtime/graphql за период (без аргументов берёт весь доступный диапазон логов).
+- `.flow/shared/scripts/run.sh status_snapshot` — нормализованный JSON snapshot состояния автоматики (daemon/watchdog/executor/очереди/blockers).
+- `.flow/shared/scripts/run.sh next_task` — показать следующую задачу со статусом `Planned` (приоритет P0→P1→P2, затем по номеру `PL-xxx`).
+- `.flow/shared/scripts/run.sh app_deps_mermaid [output-file]` — построить Mermaid DAG зависимостей APP-issues из `Flow Meta` (`Depends-On/Blocks`) и записать markdown-файл (по умолчанию `docs/app-issues-dependency-diagram.md`).
+- `.flow/shared/scripts/run.sh backlog_seed_apply` — применить runtime-план создания backlog-задач из `<state-dir>/backlog_seed_plan.json` (по умолчанию 1 задача за запуск).
+- `.flow/shared/scripts/run.sh onboarding_audit [--profile <name>] [--skip-network]` — первичный аудит consumer-project: toolkit-файлы, локальные команды, git/gh, project-scoped flow env, repo и Project v2, repo workflow overlay и наличие обязательных GitHub Actions secrets.
+- `.flow/shared/scripts/run.sh create_migration_kit --project <name> [--source-profile <name>] [--output <path>]` — собрать переносимый `migration_kit.tgz` с toolkit `/.flow/shared`, `.flow/config/flow.sample.env` и repo workflow overlay из текущего `.github/`.
+- `.flow/shared/scripts/run.sh apply_migration_kit [--project <name>]` — после распаковки kit материализовать рабочий `.flow/config/flow.env` из `.flow/config/flow.sample.env` и развернуть `.github/workflows/` overlay. Secrets values после этого всё равно создаются вручную в GitHub UI.
+- `.flow/shared/scripts/run.sh profile_init <init|install|preflight|bootstrap> ...` — полуавтоматический bootstrap нового profile/repo без ручной правки install-скриптов.
+- `.flow/shared/scripts/run.sh daemon_tick` — один цикл демона: проверка `Todo`, подхват задачи, перевод в `In Progress`.
+- `.flow/shared/scripts/run.sh daemon_loop [interval-sec]` — непрерывный polling-цикл демона (по умолчанию 45 сек).
+- `.flow/shared/scripts/run.sh daemon_install [label] [interval-sec]` — установка и запуск `launchd`-агента.
+- `.flow/shared/scripts/run.sh daemon_uninstall [label]` — остановка и удаление `launchd`-агента.
+- `.flow/shared/scripts/run.sh daemon_status [label]` — проверка статуса `launchd`-агента.
+- `.flow/shared/scripts/run.sh watchdog_tick` — один цикл самодиагностики/самовосстановления.
+- `.flow/shared/scripts/run.sh watchdog_loop [interval-sec]` — непрерывный watchdog-цикл.
+- `.flow/shared/scripts/run.sh watchdog_install [label] [interval-sec]` — установка и запуск `launchd`-watchdog.
+- `.flow/shared/scripts/run.sh watchdog_uninstall [label]` — остановка и удаление `launchd`-watchdog.
+- `.flow/shared/scripts/run.sh watchdog_status [label]` — проверка статуса watchdog.
+- `.flow/shared/scripts/run.sh executor_reset` — сброс состояния автономного executor.
+- `.flow/shared/scripts/run.sh executor_start <task-id> <issue-number>` — запуск автономного executor.
+- `.flow/shared/scripts/run.sh executor_tick <task-id> <issue-number>` — проверка/перезапуск executor, обработка fail-state.
+- `.flow/shared/scripts/run.sh executor_build_prompt <task-id> <issue-number> <output-file>` — сбор prompt для executor из Issue.
+- `.flow/shared/scripts/run.sh task_ask <question|blocker> <message-file>` — отправить вопрос/блокер в comment Issue и включить режим ожидания ответа.
+- `.flow/shared/scripts/run.sh daemon_check_replies` — проверить ответы в Issue-комментах для ожидающего вопроса.
+- `.flow/shared/scripts/run.sh task_finalize` — финализация задачи: commit+push, create/update PR, перевод задачи в `Status=Review`, `Flow=In Review`.
+- `.flow/shared/scripts/run.sh gh_retry <command> [args...]` — выполнить GitHub-команду с retry/backoff.
+- `.flow/shared/scripts/run.sh github_health_check` — быстрый preflight GitHub API (`healthy/unstable`).
+- `.flow/shared/scripts/run.sh github_outbox <enqueue_issue_comment|flush|count|list> ...` — управление отложенными GitHub-действиями.
+- `.flow/shared/scripts/run.sh gh_app_auth_start` — запустить локальный GitHub App auth-сервис (`/health`, `/token`).
+- `.flow/shared/scripts/run.sh gh_app_auth_health` — проверить endpoint `/health` auth-сервиса.
+- `.flow/shared/scripts/run.sh gh_app_auth_probe` — проверить `/health` и `/token` (без вывода токена).
+- `.flow/shared/scripts/run.sh gh_app_auth_pm2_start` — зарегистрировать/перезапустить auth-сервис в PM2.
+- `.flow/shared/scripts/run.sh gh_app_auth_pm2_stop` — остановить и удалить auth-сервис из PM2.
+- `.flow/shared/scripts/run.sh gh_app_auth_pm2_restart` — перезапустить auth-сервис в PM2.
+- `.flow/shared/scripts/run.sh gh_app_auth_pm2_status` — показать статус auth-сервиса в PM2.
+- `.flow/shared/scripts/run.sh gh_app_auth_pm2_health` — проверить PM2 status=`online` + endpoint `/health`.
+- `.flow/shared/scripts/run.sh gh_app_auth_pm2_crash_test` — kill процесса auth-сервиса и подтвердить авто-restart PM2.
+- `.flow/shared/scripts/run.sh ops_bot_start` — запустить локальный ops-бот сервис (`/health`, `/ops/status`, `/ops/status.json`, Telegram webhook).
+- `.flow/shared/scripts/run.sh ops_bot_health` — проверить endpoint `/health` ops-бота.
+- `.flow/shared/scripts/run.sh ops_bot_pm2_start` — зарегистрировать/перезапустить ops-бот сервис в PM2.
+- `.flow/shared/scripts/run.sh ops_bot_pm2_stop` — остановить и удалить ops-бот сервис из PM2.
+- `.flow/shared/scripts/run.sh ops_bot_pm2_restart` — перезапустить ops-бот сервис в PM2.
+- `.flow/shared/scripts/run.sh ops_bot_pm2_status` — показать статус ops-бот сервиса в PM2.
+- `.flow/shared/scripts/run.sh ops_bot_pm2_health` — проверить PM2 status=`online` + endpoint `/health` ops-бота.
+- `.flow/shared/scripts/run.sh ops_bot_post_smoke_check` — собрать агрегированный post-smoke отчет по rollout ops-бота.
+- `.flow/shared/scripts/run.sh ops_bot_webhook_register [register|refresh|delete|info]` — управление Telegram webhook по env-переменным.
+- `.flow/shared/scripts/run.sh ops_bot_webhook_refresh` — shortcut для полного refresh webhook (`deleteWebhook + setWebhook + getWebhookInfo`).
+- `.flow/shared/scripts/run.sh ops_remote_status_push` — отправить текущий `status_snapshot` в удаленный ingest endpoint ops-бота (URL/secret берутся из env).
+- `.flow/shared/scripts/run.sh ops_remote_summary_push` — отправить bundle `log_summary` (локальное окно `6h` по умолчанию) в удаленный ingest endpoint ops-бота.
 
 ## State-dir и multi-project
 - Core flow state хранится в `<state-dir>`, где `<state-dir>=${CODEX_STATE_DIR:-${FLOW_STATE_DIR:-${ROOT_DIR}/.flow/state/codex/default}}`.
@@ -93,8 +93,8 @@
 - Override задаётся через `CODEX_STATE_DIR`; если он не задан, используется `FLOW_STATE_DIR`.
 - По умолчанию используется `${ROOT_DIR}/.flow/state/codex/default`.
 - Shared host-level flow root для общих логов по проектам: `${ROOT_DIR}/../.ai-flow`.
-- Shared toolkit surface для consumer-project можно публиковать через `${ROOT_DIR}/../.ai-flow/shared/{scripts,docs}`.
-- Эти host-local `.flow/scripts` / `.flow/docs` links не должны храниться в git consumer-project: их создаёт владелец окружения или onboarding/bootstrap шаг.
+- Shared runtime root для логов по проектам можно держать через `${ROOT_DIR}/../.ai-flow`.
+- Toolkit code для consumer-project должен жить в repo-local `/.flow/shared` (git submodule или snapshot copy).
 - `.tmp/codex/` больше не является runtime-root; если каталог присутствует, это только compatibility-symlink layer к `.flow/`.
 - Для параллельного запуска двух проектов на одном хосте задайте разные `<state-dir>`.
 - Если используете `daemon_install`/`watchdog_install`, задайте ещё и разные `label`, чтобы не столкнулись launchd-агенты.
@@ -117,53 +117,53 @@
 
 Bootstrap нового профиля:
 1. В текущем проекте собрать переносимый kit:
-   `.flow/scripts/run.sh create_migration_kit --project acme`
+   `.flow/shared/scripts/run.sh create_migration_kit --project acme`
 2. Перенести `migration_kit.tgz` в корень нового repo и распаковать его.
 3. В новом проекте выполнить:
-   `.flow/scripts/run.sh apply_migration_kit --project acme`
+   `.flow/shared/scripts/run.sh apply_migration_kit --project acme`
 4. После `apply_migration_kit` должны появиться:
    - `.flow/config/flow.sample.env`
    - `.flow/config/flow.env`
    - `.flow/config/root/github-actions.required-files.txt`
    - `.flow/config/root/github-actions.required-secrets.txt`
    - `.github/workflows/*.yml` и, если был в source overlay, `.github/pull_request_template.md`
-5. `.flow/scripts/run.sh onboarding_audit --profile acme` — проверить toolkit, docs, env и получить список недостающих настроек.
+5. `.flow/shared/scripts/run.sh onboarding_audit --profile acme` — проверить toolkit, docs, env и получить список недостающих настроек.
 6. При необходимости дополнительно использовать:
-   `.flow/scripts/run.sh profile_init preflight --profile acme`
+   `.flow/shared/scripts/run.sh profile_init preflight --profile acme`
 7. `.flow/config/flow.sample.env` использовать только как безопасный шаблон; канонический runtime-config хранить в `.flow/config/flow.env`.
 8. Repo Actions secrets нужно создать вручную в GitHub UI нового repo по списку из `.flow/config/root/github-actions.required-secrets.txt`.
-   Что именно вписывать в каждый secret: `.flow/docs/github-actions-repo-secrets.md`.
+   Что именно вписывать в каждый secret: `.flow/shared/docs/github-actions-repo-secrets.md`.
 9. После заполнения env:
-   `.flow/scripts/run.sh profile_init install --profile acme`
+   `.flow/shared/scripts/run.sh profile_init install --profile acme`
 10. Для безопасной проверки команд без изменений использовать `--dry-run`.
 
 Запуск и остановка профиля:
-1. Первый запуск нового профиля: `.flow/scripts/run.sh profile_init install --profile acme`
-2. Проверка launchd-состояния: `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state FLOW_STATE_DIR=.flow/state .flow/scripts/run.sh daemon_status com.flow.codex-daemon.acme`
-3. Аналогично проверить watchdog: `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state FLOW_STATE_DIR=.flow/state .flow/scripts/run.sh watchdog_status com.flow.codex-watchdog.acme`
-4. Штатная остановка профиля: `.flow/scripts/run.sh daemon_uninstall com.flow.codex-daemon.acme` и `.flow/scripts/run.sh watchdog_uninstall com.flow.codex-watchdog.acme`
-5. Повторный запуск после остановки: `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state FLOW_STATE_DIR=.flow/state .flow/scripts/run.sh daemon_install com.flow.codex-daemon.acme 45`, затем `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state FLOW_STATE_DIR=.flow/state WATCHDOG_DAEMON_LABEL=com.flow.codex-daemon.acme WATCHDOG_DAEMON_INTERVAL_SEC=45 .flow/scripts/run.sh watchdog_install com.flow.codex-watchdog.acme 45`
+1. Первый запуск нового профиля: `.flow/shared/scripts/run.sh profile_init install --profile acme`
+2. Проверка launchd-состояния: `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state FLOW_STATE_DIR=.flow/state .flow/shared/scripts/run.sh daemon_status com.flow.codex-daemon.acme`
+3. Аналогично проверить watchdog: `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state FLOW_STATE_DIR=.flow/state .flow/shared/scripts/run.sh watchdog_status com.flow.codex-watchdog.acme`
+4. Штатная остановка профиля: `.flow/shared/scripts/run.sh daemon_uninstall com.flow.codex-daemon.acme` и `.flow/shared/scripts/run.sh watchdog_uninstall com.flow.codex-watchdog.acme`
+5. Повторный запуск после остановки: `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state FLOW_STATE_DIR=.flow/state .flow/shared/scripts/run.sh daemon_install com.flow.codex-daemon.acme 45`, затем `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state FLOW_STATE_DIR=.flow/state WATCHDOG_DAEMON_LABEL=com.flow.codex-daemon.acme WATCHDOG_DAEMON_INTERVAL_SEC=45 .flow/shared/scripts/run.sh watchdog_install com.flow.codex-watchdog.acme 45`
 
 Smoke-check после bootstrap нового профиля:
-1. `.flow/scripts/run.sh profile_init preflight --profile acme` — ожидается `PREFLIGHT_READY=1`.
-2. `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state FLOW_STATE_DIR=.flow/state .flow/scripts/run.sh github_health_check`
-3. `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state FLOW_STATE_DIR=.flow/state .flow/scripts/run.sh status_snapshot`
-4. `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh gh_app_auth_probe`
+1. `.flow/shared/scripts/run.sh profile_init preflight --profile acme` — ожидается `PREFLIGHT_READY=1`.
+2. `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state FLOW_STATE_DIR=.flow/state .flow/shared/scripts/run.sh github_health_check`
+3. `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state FLOW_STATE_DIR=.flow/state .flow/shared/scripts/run.sh status_snapshot`
+4. `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/shared/scripts/run.sh gh_app_auth_probe`
 5. Для параллельной эксплуатации двух проектов повторить те же проверки для current profile и убедиться, что snapshot/log-файлы лежат в разных `<state-dir>`.
 
 Rollback нового профиля:
-1. Остановить новый профиль: `.flow/scripts/run.sh watchdog_uninstall com.flow.codex-watchdog.acme` и `.flow/scripts/run.sh daemon_uninstall com.flow.codex-daemon.acme`
+1. Остановить новый профиль: `.flow/shared/scripts/run.sh watchdog_uninstall com.flow.codex-watchdog.acme` и `.flow/shared/scripts/run.sh daemon_uninstall com.flow.codex-daemon.acme`
 2. Убедиться, что current profile продолжает работать в своём `<state-dir>` без изменений.
 3. Если проблема в env/config, исправить `.flow/config/flow.env` и повторить `profile_init install --profile acme`.
 4. Если откат полный, сохранить диагностические логи из `<state-dir>` нового профиля и только после этого удалить новый state-dir вручную.
-5. Детальный сценарий миграции и troubleshooting см. в `.flow/docs/flow-portability-runbook.md`.
+5. Детальный сценарий миграции и troubleshooting см. в `.flow/shared/docs/flow-portability-runbook.md`.
 
 Короткий rollout smoke-checklist для ops-бота:
-1. `.flow/scripts/run.sh ops_bot_pm2_start`
-2. `.flow/scripts/run.sh ops_bot_pm2_status` (ожидается `PM2_STATUS=online`)
-3. `.flow/scripts/run.sh ops_bot_pm2_health` (ожидается exit code `0` и JSON `status=ok`)
-4. `.flow/scripts/run.sh status_snapshot | jq .overall_status` и `.flow/scripts/run.sh log_summary --hours 1` (без падений даже при частично отсутствующих `<state-dir>/*`)
-5. `.flow/scripts/run.sh ops_bot_webhook_register register` и `.flow/scripts/run.sh ops_bot_webhook_register info`
+1. `.flow/shared/scripts/run.sh ops_bot_pm2_start`
+2. `.flow/shared/scripts/run.sh ops_bot_pm2_status` (ожидается `PM2_STATUS=online`)
+3. `.flow/shared/scripts/run.sh ops_bot_pm2_health` (ожидается exit code `0` и JSON `status=ok`)
+4. `.flow/shared/scripts/run.sh status_snapshot | jq .overall_status` и `.flow/shared/scripts/run.sh log_summary --hours 1` (без падений даже при частично отсутствующих `<state-dir>/*`)
+5. `.flow/shared/scripts/run.sh ops_bot_webhook_register register` и `.flow/shared/scripts/run.sh ops_bot_webhook_register info`
 6. Проверка Telegram-команд: `/status`, `/summary 6`, `/help`, `/status_page`
 
 `run.sh` читает фиксированные файлы из `<state-dir>/`:
@@ -194,8 +194,8 @@ Rollback нового профиля:
 
 ## Рекомендация по снижению confirm-окон
 - Не использовать `&&`, `;`, heredoc и цепочки команд для подготовки данных.
-- Делать отдельные вызовы `.flow/scripts/run.sh write/append/clear`.
-- Затем отдельно вызывать `.flow/scripts/run.sh <action>`.
+- Делать отдельные вызовы `.flow/shared/scripts/run.sh write/append/clear`.
+- Затем отдельно вызывать `.flow/shared/scripts/run.sh <action>`.
 
 ## Важные env-переменные
 - `node` (Node.js runtime, рекомендуется LTS >= 18) — обязателен для `gh_app_auth_*`, `ops_bot_*` и сервисов `gh_app_auth_service.js`, `ops_bot_service.js`.
@@ -242,8 +242,8 @@ Rollback нового профиля:
     - Минимальные права для текущего flow: `repo`, `read:project`, `project`.
     - После выпуска записать в `.flow/config/flow.env` и перезапустить сервисы.
   - После изменения значения перезапусти сервисы:
-    - `.flow/scripts/run.sh daemon_uninstall && .flow/scripts/run.sh daemon_install`
-    - `.flow/scripts/run.sh watchdog_uninstall && .flow/scripts/run.sh watchdog_install`
+    - `.flow/shared/scripts/run.sh daemon_uninstall && .flow/shared/scripts/run.sh daemon_install`
+    - `.flow/shared/scripts/run.sh watchdog_uninstall && .flow/shared/scripts/run.sh watchdog_install`
 - `CODEX_GIT_AUTHOR_*` / `CODEX_GIT_COMMITTER_*` — отдельная identity только для git-коммитов агента.
 - `GH_APP_ID`, `GH_APP_INSTALLATION_ID`, `GH_APP_PRIVATE_KEY_PATH`, `GH_APP_INTERNAL_SECRET` — обязательные переменные для auth-сервиса GitHub App.
 - `GH_APP_BIND` / `GH_APP_PORT` — bind/port auth-сервиса (bind фиксируется как `127.0.0.1`).
@@ -257,9 +257,9 @@ Rollback нового профиля:
 
 ## Итеративный executor-flow (коммит1 -> вопрос -> ответ -> коммит2 -> финализация)
 1. Сделать первую рабочую дельту и выполнить `commit_push`.
-2. Если нужно подтверждение/уточнение, подготовить файл с вопросом и вызвать `.flow/scripts/run.sh task_ask question <message-file>`.
+2. Если нужно подтверждение/уточнение, подготовить файл с вопросом и вызвать `.flow/shared/scripts/run.sh task_ask question <message-file>`.
 3. После ответа пользователя продолжить реализацию второй дельты.
-4. На финальном шаге заполнить `<state-dir>/commit_message.txt` и `<state-dir>/stage_paths.txt`, при необходимости обновить `pr_title`/`pr_body`, затем вызвать `.flow/scripts/run.sh task_finalize`.
+4. На финальном шаге заполнить `<state-dir>/commit_message.txt` и `<state-dir>/stage_paths.txt`, при необходимости обновить `pr_title`/`pr_body`, затем вызвать `.flow/shared/scripts/run.sh task_finalize`.
 5. Если PR остался draft, перевести его в `ready_for_review`.
 
 ## Команды
@@ -563,15 +563,15 @@ Rollback нового профиля:
 
 Минимальный smoke-checklist для владельца окружения (rollout):
 - `node -v`, `pm2 -v`, `jq --version`
-- `.flow/scripts/run.sh ops_bot_pm2_start`
-- `.flow/scripts/run.sh ops_bot_pm2_status` (ожидается `PM2_STATUS=online`)
-- `.flow/scripts/run.sh ops_bot_pm2_health` (ожидается exit code `0`)
-- `.flow/scripts/run.sh ops_bot_post_smoke_check` (агрегированный post-smoke отчет; exit code `0` при accepted, `2` при инцидентах)
-- `.flow/scripts/run.sh ops_bot_webhook_register register` (ожидается `WEBHOOK_SET_OK=1` и `WEBHOOK_INFO_OK=1`)
-- `.flow/scripts/run.sh ops_bot_webhook_refresh` (ожидается `WEBHOOK_DELETE_OK=1`, `WEBHOOK_SET_OK=1`, `WEBHOOK_INFO_OK=1`)
-- `.flow/scripts/run.sh ops_bot_webhook_register info` (ожидается `WEBHOOK_INFO_OK=1`)
-- `.flow/scripts/run.sh ops_remote_status_push` (ожидается `OPS_REMOTE_PUSH_OK=1` при настроенных `OPS_REMOTE_STATUS_PUSH_*`)
-- `.flow/scripts/run.sh ops_remote_summary_push` (ожидается `OPS_REMOTE_SUMMARY_PUSH_OK=1` при настроенных `OPS_REMOTE_SUMMARY_PUSH_*`)
+- `.flow/shared/scripts/run.sh ops_bot_pm2_start`
+- `.flow/shared/scripts/run.sh ops_bot_pm2_status` (ожидается `PM2_STATUS=online`)
+- `.flow/shared/scripts/run.sh ops_bot_pm2_health` (ожидается exit code `0`)
+- `.flow/shared/scripts/run.sh ops_bot_post_smoke_check` (агрегированный post-smoke отчет; exit code `0` при accepted, `2` при инцидентах)
+- `.flow/shared/scripts/run.sh ops_bot_webhook_register register` (ожидается `WEBHOOK_SET_OK=1` и `WEBHOOK_INFO_OK=1`)
+- `.flow/shared/scripts/run.sh ops_bot_webhook_refresh` (ожидается `WEBHOOK_DELETE_OK=1`, `WEBHOOK_SET_OK=1`, `WEBHOOK_INFO_OK=1`)
+- `.flow/shared/scripts/run.sh ops_bot_webhook_register info` (ожидается `WEBHOOK_INFO_OK=1`)
+- `.flow/shared/scripts/run.sh ops_remote_status_push` (ожидается `OPS_REMOTE_PUSH_OK=1` при настроенных `OPS_REMOTE_STATUS_PUSH_*`)
+- `.flow/shared/scripts/run.sh ops_remote_summary_push` (ожидается `OPS_REMOTE_SUMMARY_PUSH_OK=1` при настроенных `OPS_REMOTE_SUMMARY_PUSH_*`)
 - HTTP-проверки: `GET /health`, `GET /ops/status`, `GET /ops/status.json`
 - webhook negative-checks: невалидный JSON -> `400`, слишком большой payload -> `413`, update без команды -> `200 command_handled=false`
 - Telegram webhook + команды: `/help`, `/status`, `/summary 6`, `/status_page`
@@ -625,7 +625,7 @@ Rollback нового профиля:
   `awk -F'\t' '/EVENT=RATE_LIMIT/ { for(i=1;i<=NF;i++) if($i ~ /^duration_sec=/){ split($i,a,"="); sum+=a[2]; n++ } } END { if(n) printf("avg_duration_sec=%.2f events=%d\n", sum/n, n); else print "no_data" }' <log-dir>/runtime/graphql_rate_stats.log`
 
 Быстрая проверка включения App auth:
-- `.flow/scripts/run.sh gh_app_auth_pm2_health`
+- `.flow/shared/scripts/run.sh gh_app_auth_pm2_health`
 - `cat <state-dir>/daemon_state.txt`
 - `cat <state-dir>/daemon_state_detail.txt`
 - при необходимости: `tail -n 80 <log-dir>/runtime/daemon.log`
@@ -634,7 +634,7 @@ Rollback нового профиля:
 Скрипты должны быть исполняемыми:
 
 ```bash
-chmod +x .flow/scripts/*.sh
+chmod +x .flow/shared/scripts/*.sh
 ```
 
 Опциональные переменные для локальных Telegram-алертов демона:

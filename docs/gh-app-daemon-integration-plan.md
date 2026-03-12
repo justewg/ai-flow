@@ -1,7 +1,6 @@
 # GitHub App + Daemon Integration Plan
 
 > Канонический shared-toolkit path: `.flow/shared/{scripts,docs}`.
-> Старые ссылки на `.flow/scripts` и `.flow/docs` в этом документе следует понимать как временный compatibility layer.
 
 ## Цель
 Перевести daemon/watchdog с пользовательского PAT на GitHub App, чтобы:
@@ -120,11 +119,11 @@
 
 ### Шаг 3. Проверить доступ к Project через App token (локально)
 1. Получить installation token:
-`app_token="$(.flow/scripts/gh_app_auth_token.sh)"`
+`app_token="$(.flow/shared/scripts/gh_app_auth_token.sh)"`
 2. Проверить чтение Project:
 `GH_TOKEN="$app_token" gh api graphql -f query='query($projectId:ID!){ node(id:$projectId){ __typename ... on ProjectV2 { id title number } } }' -f projectId='<PROJECT_ID>'`
 3. Проверить мутацию Project (на тестовом item id):
-`GH_TOKEN="$app_token" .flow/scripts/project_set_status.sh <project-item-id> "Todo" "Ready"`
+`GH_TOKEN="$app_token" .flow/shared/scripts/project_set_status.sh <project-item-id> "Todo" "Ready"`
 
 Ожидаемый результат:
 1. `node` не `null`, без `Resource not accessible by integration`.
@@ -134,7 +133,7 @@
 1. Это известное ограничение GitHub App для user-owned Project API.
 2. Включите hybrid mode через `DAEMON_GH_PROJECT_TOKEN`.
 3. Повторите проверку Project-операций через:
-`GH_TOKEN="$DAEMON_GH_PROJECT_TOKEN" .flow/scripts/project_set_status.sh <project-item-id> "Todo" "Ready"`
+`GH_TOKEN="$DAEMON_GH_PROJECT_TOKEN" .flow/shared/scripts/project_set_status.sh <project-item-id> "Todo" "Ready"`
 
 ### Шаг 4. Повторить smoke daemon-flow по Project
 1. Перевести тестовую карточку в `Status=Todo, Flow=Ready`.
@@ -179,20 +178,20 @@
 3. Для user-owned Project v2 задать hybrid token:
 - `DAEMON_GH_PROJECT_TOKEN=<PAT с repo,read:project,project>`
 4. Запустить auth-сервис:
-- `.flow/scripts/run.sh gh_app_auth_pm2_start`
-- `.flow/scripts/run.sh gh_app_auth_pm2_health`
+- `.flow/shared/scripts/run.sh gh_app_auth_pm2_start`
+- `.flow/shared/scripts/run.sh gh_app_auth_pm2_health`
 5. Перезапустить automation:
-- `.flow/scripts/run.sh daemon_uninstall <daemon-label>`
-- `.flow/scripts/run.sh daemon_install <daemon-label> 90`
-- `.flow/scripts/run.sh watchdog_uninstall <watchdog-label>`
-- `.flow/scripts/run.sh watchdog_install <watchdog-label> 90`
+- `.flow/shared/scripts/run.sh daemon_uninstall <daemon-label>`
+- `.flow/shared/scripts/run.sh daemon_install <daemon-label> 90`
+- `.flow/shared/scripts/run.sh watchdog_uninstall <watchdog-label>`
+- `.flow/shared/scripts/run.sh watchdog_install <watchdog-label> 90`
 6. Проверить state:
 - `cat .flow/state/codex/daemon_state.txt`
 - `cat .flow/state/codex/daemon_state_detail.txt`
 - `cat .flow/state/codex/watchdog_state.txt`
 7. Проверить деградацию/восстановление auth:
-- `.flow/scripts/run.sh gh_app_auth_pm2_stop` -> ожидать `WAIT_AUTH_SERVICE` + Telegram `ENTER_DEGRADED`
-- `.flow/scripts/run.sh gh_app_auth_pm2_start` -> ожидать выход из `WAIT_AUTH_SERVICE` + Telegram `RECOVERED`
+- `.flow/shared/scripts/run.sh gh_app_auth_pm2_stop` -> ожидать `WAIT_AUTH_SERVICE` + Telegram `ENTER_DEGRADED`
+- `.flow/shared/scripts/run.sh gh_app_auth_pm2_start` -> ожидать выход из `WAIT_AUTH_SERVICE` + Telegram `RECOVERED`
 
 ## Разбиение на задачи (для Project)
 1. `APP-01` Создать GitHub App и выдать permissions.
@@ -265,6 +264,6 @@
 
 ## Актуальная Mermaid-диаграмма APP-зависимостей
 Обновление диаграммы перед docs/PR:
-1. Выполнить `.flow/scripts/run.sh app_deps_mermaid`.
+1. Выполнить `.flow/shared/scripts/run.sh app_deps_mermaid`.
 2. Проверить/вставить файл `docs/app-issues-dependency-diagram.md`.
-3. Если нужен другой путь вывода: `.flow/scripts/run.sh app_deps_mermaid <output-file>`.
+3. Если нужен другой путь вывода: `.flow/shared/scripts/run.sh app_deps_mermaid <output-file>`.

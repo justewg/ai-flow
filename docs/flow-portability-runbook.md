@@ -1,7 +1,6 @@
 # Flow Portability Runbook
 
 > Канонический shared-toolkit path: `.flow/shared/{scripts,docs}`.
-> Старые ссылки на `.flow/scripts` и `.flow/docs` в этом документе означают временный compatibility layer.
 
 ## Цель
 Зафиксировать воспроизводимый сценарий переноса flow-комплекта `.flow/` из текущего проекта в новый consumer-project, не ломая рабочий current project на том же хосте.
@@ -46,9 +45,9 @@
 
 ### 1. Зафиксировать рабочую базу current project
 1. Проверить текущий профиль:
-   `.flow/scripts/run.sh daemon_status <daemon-label-current>`
+   `.flow/shared/scripts/run.sh daemon_status <daemon-label-current>`
 2. Снять snapshot текущего состояния:
-   `.flow/scripts/run.sh status_snapshot`
+   `.flow/shared/scripts/run.sh status_snapshot`
 3. Зафиксировать путь текущего state-dir и labels, чтобы не переиспользовать их в новом проекте.
 
 ### 2. Подготовить flow-комплект в new project
@@ -58,9 +57,9 @@
 
 Практический shortcut:
 1. В current project можно собрать `migration_kit.tgz`:
-   `.flow/scripts/run.sh create_migration_kit --project acme`
+   `.flow/shared/scripts/run.sh create_migration_kit --project acme`
 2. В new project после распаковки выполнить:
-   `.flow/scripts/run.sh apply_migration_kit --project acme`
+   `.flow/shared/scripts/run.sh apply_migration_kit --project acme`
 3. Kit должен принести безопасные шаблоны:
    - `.flow/config/flow.sample.env`
    - `.flow/config/flow.env`
@@ -72,7 +71,7 @@
 
 ### 3. Инициализировать новый profile
 1. Выполнить:
-   `.flow/scripts/run.sh profile_init init --profile acme`
+   `.flow/shared/scripts/run.sh profile_init init --profile acme`
 2. Если перед этим уже был выполнен `apply_migration_kit`, шаг `init` можно пропустить.
 3. Открыть `.flow/config/flow.env`.
 4. Заполнить минимум:
@@ -94,27 +93,27 @@
 
 ### 4. Установить automation для new project
 1. Запустить:
-   `.flow/scripts/run.sh profile_init install --profile acme`
+   `.flow/shared/scripts/run.sh profile_init install --profile acme`
 2. Скрипт сам провалидирует env и установит:
    - `daemon_install com.flow.codex-daemon.acme 45`
    - `watchdog_install com.flow.codex-watchdog.acme 45`
 3. Если нужен предварительный просмотр без изменений, использовать:
-   `.flow/scripts/run.sh profile_init bootstrap --profile acme --dry-run`
+   `.flow/shared/scripts/run.sh profile_init bootstrap --profile acme --dry-run`
 
 ### 5. Выполнить smoke нового проекта
 1. Базовый preflight:
-   `.flow/scripts/run.sh profile_init preflight --profile acme`
+   `.flow/shared/scripts/run.sh profile_init preflight --profile acme`
    Ожидается `PREFLIGHT_READY=1`.
 2. Проверка daemon:
-   `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh daemon_status com.flow.codex-daemon.acme`
+   `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/shared/scripts/run.sh daemon_status com.flow.codex-daemon.acme`
 3. Проверка watchdog:
-   `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh watchdog_status com.flow.codex-watchdog.acme`
+   `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/shared/scripts/run.sh watchdog_status com.flow.codex-watchdog.acme`
 4. Проверка GitHub API:
-   `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh github_health_check`
+   `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/shared/scripts/run.sh github_health_check`
 5. Проверка snapshot:
-   `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh status_snapshot`
+   `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/shared/scripts/run.sh status_snapshot`
 6. Проверка App token exchange:
-   `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh gh_app_auth_probe`
+   `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/shared/scripts/run.sh gh_app_auth_probe`
 7. Функциональный smoke:
    - создать тестовую карточку в новом Project v2 со статусом `Todo`;
    - дождаться claim демоном в `In Progress`;
@@ -136,16 +135,16 @@
 ### Запуск
 1. Для current project использовать его существующий profile/env.
 2. Для new project штатный запуск выполняется через:
-   `.flow/scripts/run.sh profile_init install --profile acme`
+   `.flow/shared/scripts/run.sh profile_init install --profile acme`
 3. Если daemon/watchdog уже были удалены, можно поднять их вручную с тем же env:
-   - `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh daemon_install com.flow.codex-daemon.acme 45`
-   - `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme WATCHDOG_DAEMON_LABEL=com.flow.codex-daemon.acme WATCHDOG_DAEMON_INTERVAL_SEC=45 .flow/scripts/run.sh watchdog_install com.flow.codex-watchdog.acme 45`
+   - `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/shared/scripts/run.sh daemon_install com.flow.codex-daemon.acme 45`
+   - `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme WATCHDOG_DAEMON_LABEL=com.flow.codex-daemon.acme WATCHDOG_DAEMON_INTERVAL_SEC=45 .flow/shared/scripts/run.sh watchdog_install com.flow.codex-watchdog.acme 45`
 
 ### Остановка
 1. Остановить watchdog нового профиля:
-   `.flow/scripts/run.sh watchdog_uninstall com.flow.codex-watchdog.acme`
+   `.flow/shared/scripts/run.sh watchdog_uninstall com.flow.codex-watchdog.acme`
 2. Остановить daemon нового профиля:
-   `.flow/scripts/run.sh daemon_uninstall com.flow.codex-daemon.acme`
+   `.flow/shared/scripts/run.sh daemon_uninstall com.flow.codex-daemon.acme`
 3. Убедиться, что current profile не затронут и его labels не удалены.
 
 ### Rollback
@@ -186,7 +185,7 @@
 - используется user-owned Project без hybrid token.
 
 Что делать:
-1. Проверить permissions и installation по `.flow/docs/gh-app-daemon-integration-plan.md`.
+1. Проверить permissions и installation по `.flow/shared/docs/gh-app-daemon-integration-plan.md`.
 2. Для user-owned Project задать `DAEMON_GH_PROJECT_TOKEN`.
 3. Перезапустить профиль и повторить smoke.
 
@@ -206,7 +205,7 @@
 Что делать:
 1. Сверить `CODEX_STATE_DIR/FLOW_STATE_DIR` с `.flow/config/flow.env`.
 2. Повторять команды через явный префикс:
-   `env DAEMON_GH_ENV_FILE=... CODEX_STATE_DIR=... FLOW_STATE_DIR=... .flow/scripts/run.sh ...`
+   `env DAEMON_GH_ENV_FILE=... CODEX_STATE_DIR=... FLOW_STATE_DIR=... .flow/shared/scripts/run.sh ...`
 3. Убедиться, что `commit_message.txt`, `pr_body.txt` и остальные fixed files лежат в нужном `<state-dir>`.
 
 ### Watchdog перезапускает не тот daemon
@@ -224,7 +223,7 @@
 - некорректные `GH_APP_*` параметры.
 
 Что делать:
-1. Проверить `.flow/scripts/run.sh gh_app_auth_pm2_health`.
+1. Проверить `.flow/shared/scripts/run.sh gh_app_auth_pm2_health`.
 2. Проверить `GH_APP_INTERNAL_SECRET` и сетевые параметры.
 3. Для аварийного окна включить fallback-token pair и повторить install/preflight.
 
@@ -248,7 +247,7 @@
 Пока хотя бы одно условие не выполнено, преждевременный extraction только усложнит поддержку.
 
 ### Что должно переехать в toolkit-repo
-1. Портируемые bash-скрипты и Node-сервисы из `.flow/scripts`.
+1. Портируемые bash-скрипты и Node-сервисы из `.flow/shared/scripts`.
 2. Общий env resolver и profile bootstrap.
 3. Runbook, smoke-checklists и шаблоны env/profile.
 4. Минимальный consumer-adapter слой с repo-specific defaults.
@@ -256,7 +255,7 @@
 ### Что должно остаться в consumer-repo
 1. Значения `GITHUB_REPO`, `PROJECT_*`, токены и секреты.
 2. Consumer-specific docs, issue templates и narrative вокруг конкретного продукта.
-3. Локальные thin-wrapper'ы для обратной совместимости, если команда уже использует `.flow/scripts/run.sh`.
+3. Локальные thin-wrapper'ы для обратной совместимости, если команда уже использует `.flow/shared/scripts/run.sh`.
 
 ### Рекомендуемая схема extraction
 1. Сначала внутри PLANKA выделить repo-specific defaults в templates/env-слой.
@@ -269,7 +268,7 @@
 3. В consumer-repo оставить только:
    - pinned toolkit snapshot;
    - env-файлы проекта;
-   - thin-wrapper `.flow/scripts/run.sh`, если нужен совместимый entrypoint.
+   - thin-wrapper `.flow/shared/scripts/run.sh`, если нужен совместимый entrypoint.
 4. После extraction проверить тот же smoke из этого runbook уже на toolkit-based installation.
 
 ### Версионирование toolkit-repo

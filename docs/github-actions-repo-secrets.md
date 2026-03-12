@@ -1,7 +1,6 @@
 # GitHub Actions Repo Secrets
 
 > Канонический shared-toolkit path: `.flow/shared/{scripts,docs}`.
-> Ссылки на `.flow/scripts` и `.flow/docs` ниже допустимы только как временный compatibility layer.
 
 ## Зачем нужен этот документ
 `migration_kit.tgz` может перенести в новый consumer-project snapshot `.github/workflows/`, но не переносит значения GitHub Actions secrets.
@@ -118,14 +117,14 @@ GitHub UI для нового repo:
 
 ## Как использовать вместе с audit
 1. Разверни kit:
-   `.flow/scripts/run.sh apply_migration_kit --project <name>`
+   `.flow/shared/scripts/run.sh apply_migration_kit --project <name>`
 2. Открой:
    `.flow/config/root/github-actions.required-secrets.txt`
 3. Для каждого имени из списка найди описание в этом документе.
 4. Создай secrets в:
    `Settings -> Secrets and variables -> Actions`
 5. Повтори:
-   `.flow/scripts/run.sh onboarding_audit --profile <name>`
+   `.flow/shared/scripts/run.sh onboarding_audit --profile <name>`
 
 Ожидаемый результат:
 - `GH_REPO_ACTIONS_SECRETS=all-required-secrets-present:<n>`

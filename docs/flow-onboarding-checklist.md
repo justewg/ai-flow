@@ -1,7 +1,6 @@
 # Flow Onboarding Checklist
 
 > Канонический shared-toolkit path: `.flow/shared/{scripts,docs}`.
-> Если ниже встречаются `.flow/scripts` или `.flow/docs`, это legacy compatibility-обозначения до полного cutover всех entrypoint-ов.
 
 ## Формат
 Это чеклистовый companion к `.flow/shared/docs/flow-onboarding-quickstart.md`.
@@ -24,18 +23,18 @@
 - [ ] В новый repo уже перенесён automation-комплект.
 
 Минимум, что нужно перенести:
-- [ ] `.flow/scripts/`
-- [ ] `.flow/docs/flow-onboarding-checklist.md`
-- [ ] `.flow/docs/flow-onboarding-quickstart.md`
-- [ ] `.flow/docs/flow-portability-runbook.md`
-- [ ] `.flow/docs/gh-app-daemon-integration-plan.md`
+- [ ] `.flow/shared/scripts/`
+- [ ] `.flow/shared/docs/flow-onboarding-checklist.md`
+- [ ] `.flow/shared/docs/flow-onboarding-quickstart.md`
+- [ ] `.flow/shared/docs/flow-portability-runbook.md`
+- [ ] `.flow/shared/docs/gh-app-daemon-integration-plan.md`
 - [ ] `COMMAND_TEMPLATES.md`
 - [ ] Если нужен полный repo automation overlay, подготовлены `.github/workflows/` и `.github/pull_request_template.md`
 
 Опционально вместо ручного копирования:
-- [ ] В текущем проекте выполнен `.flow/scripts/run.sh create_migration_kit --project acme`
+- [ ] В текущем проекте выполнен `.flow/shared/scripts/run.sh create_migration_kit --project acme`
 - [ ] `migration_kit.tgz` перенесён в новый repo и распакован в корне
-- [ ] После распаковки выполнен `.flow/scripts/run.sh apply_migration_kit --project acme`
+- [ ] После распаковки выполнен `.flow/shared/scripts/run.sh apply_migration_kit --project acme`
 - [ ] Проверено, что после `apply_migration_kit` появились `.flow/config/flow.sample.env` и `.flow/config/flow.env`
 - [ ] Проверено, что после `apply_migration_kit` появились `.flow/config/root/github-actions.required-files.txt` и `.flow/config/root/github-actions.required-secrets.txt`
 - [ ] Проверено, что `apply_migration_kit` развернул `.github/workflows/*.yml` и `.github/pull_request_template.md` из source overlay
@@ -82,7 +81,7 @@
 ### Для repo Actions overlay
 - [ ] Понято, какие workflow из source-project нужны новому consumer-project без изменений, а какие потребуют ручной адаптации.
 - [ ] Подготовлен список required repo secrets из `.flow/config/root/github-actions.required-secrets.txt`.
-- [ ] Для каждого required secret есть понимание значения по `.flow/docs/github-actions-repo-secrets.md`.
+- [ ] Для каждого required secret есть понимание значения по `.flow/shared/docs/github-actions-repo-secrets.md`.
 - [ ] Зафиксировано, что migration kit не переносит значения repo secrets; их нужно создавать вручную в GitHub UI.
 - [ ] Если deploy workflow ждёт `runs-on: [self-hosted, <label>]`, зарегистрирован online self-hosted runner именно для нового repo или на уровне org.
 
@@ -96,13 +95,13 @@ cd /path/to/new-project
 - [ ] Запусти первичный аудит consumer-project.
 
 ```bash
-.flow/scripts/run.sh onboarding_audit
+.flow/shared/scripts/run.sh onboarding_audit
 ```
 
 - [ ] Создай env-template и state-dir.
 
 ```bash
-.flow/scripts/run.sh profile_init init --profile acme
+.flow/shared/scripts/run.sh profile_init init --profile acme
 ```
 
 - [ ] Если уже использован `migration_kit.tgz`, этот шаг можно пропустить: `apply_migration_kit` сам создаёт рабочий `.flow/config/flow.env` из `.flow/config/flow.sample.env`.
@@ -119,7 +118,7 @@ cd /path/to/new-project
 - [ ] Запусти аудит profile/env.
 
 ```bash
-.flow/scripts/run.sh onboarding_audit --profile acme
+.flow/shared/scripts/run.sh onboarding_audit --profile acme
 ```
 
 - [ ] Для repo overlay исправлены `REPO_ACTION_FILE` и `GH_REPO_ACTIONS_SECRETS`, если audit их показал.
@@ -159,7 +158,7 @@ cd /path/to/new-project
 - [ ] Запусти:
 
 ```bash
-.flow/scripts/run.sh profile_init preflight --profile acme
+.flow/shared/scripts/run.sh profile_init preflight --profile acme
 ```
 
 - [ ] Убедись, что есть `PREFLIGHT_READY=1`.
@@ -171,8 +170,8 @@ cd /path/to/new-project
 - [ ] Запусти auth-service:
 
 ```bash
-.flow/scripts/run.sh gh_app_auth_pm2_start
-.flow/scripts/run.sh gh_app_auth_pm2_health
+.flow/shared/scripts/run.sh gh_app_auth_pm2_start
+.flow/shared/scripts/run.sh gh_app_auth_pm2_health
 ```
 
 - [ ] Убедись, что health-check зелёный.
@@ -184,38 +183,38 @@ cd /path/to/new-project
 - [ ] Выполни:
 
 ```bash
-.flow/scripts/run.sh profile_init install --profile acme
+.flow/shared/scripts/run.sh profile_init install --profile acme
 ```
 
 - [ ] Если хочешь сначала только preview — используй:
 
 ```bash
-.flow/scripts/run.sh profile_init bootstrap --profile acme --dry-run
+.flow/shared/scripts/run.sh profile_init bootstrap --profile acme --dry-run
 ```
 
 ## 7. Проверь runtime
 - [ ] Проверка GitHub API:
 
 ```bash
-env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh github_health_check
+env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/shared/scripts/run.sh github_health_check
 ```
 
 - [ ] Проверка snapshot:
 
 ```bash
-env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh status_snapshot
+env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/shared/scripts/run.sh status_snapshot
 ```
 
 - [ ] Проверка daemon:
 
 ```bash
-env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh daemon_status com.flow.codex-daemon.acme
+env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/shared/scripts/run.sh daemon_status com.flow.codex-daemon.acme
 ```
 
 - [ ] Проверка watchdog:
 
 ```bash
-env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/scripts/run.sh watchdog_status com.flow.codex-watchdog.acme
+env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/shared/scripts/run.sh watchdog_status com.flow.codex-watchdog.acme
 ```
 
 ## 8. Сделай smoke на живой карточке
@@ -241,13 +240,13 @@ env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/a
 - [ ] Останови watchdog:
 
 ```bash
-.flow/scripts/run.sh watchdog_uninstall com.flow.codex-watchdog.acme
+.flow/shared/scripts/run.sh watchdog_uninstall com.flow.codex-watchdog.acme
 ```
 
 - [ ] Останови daemon:
 
 ```bash
-.flow/scripts/run.sh daemon_uninstall com.flow.codex-daemon.acme
+.flow/shared/scripts/run.sh daemon_uninstall com.flow.codex-daemon.acme
 ```
 
 - [ ] Сохрани `.flow/state/codex/acme`.
@@ -255,7 +254,7 @@ env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/a
 - [ ] Повтори preflight/install.
 
 ## Куда смотреть дальше
-- `.flow/docs/flow-onboarding-quickstart.md`
-- `.flow/docs/flow-portability-runbook.md`
-- `.flow/docs/gh-app-daemon-integration-plan.md`
-- `.flow/docs/flow-toolkit-packaging.md`
+- `.flow/shared/docs/flow-onboarding-quickstart.md`
+- `.flow/shared/docs/flow-portability-runbook.md`
+- `.flow/shared/docs/gh-app-daemon-integration-plan.md`
+- `.flow/shared/docs/flow-toolkit-packaging.md`

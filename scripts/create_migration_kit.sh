@@ -279,8 +279,7 @@ mkdir -p \
   "${build_dir}/.flow/tmp" \
   "${build_dir}/.flow/templates/github"
 
-cp -R "${ROOT_DIR}/.flow/scripts" "${build_dir}/.flow/"
-cp -R "${ROOT_DIR}/.flow/docs" "${build_dir}/.flow/"
+cp -R "${ROOT_DIR}/.flow/shared" "${build_dir}/.flow/"
 if [[ -f "${ROOT_DIR}/COMMAND_TEMPLATES.md" ]]; then
   cp "${ROOT_DIR}/COMMAND_TEMPLATES.md" "${build_dir}/COMMAND_TEMPLATES.md"
 fi
@@ -314,7 +313,8 @@ MIGRATION_KIT_SOURCE_ENV_FILE=$(basename "${source_env_file:-}")
 MIGRATION_KIT_PROFILE_SAMPLE_ENV=.flow/config/flow.sample.env
 MIGRATION_KIT_PROFILE_ENV_TARGET=.flow/config/flow.env
 MIGRATION_KIT_STATE_DIR=.flow/state
-MIGRATION_KIT_DOC_DIR=.flow/docs
+MIGRATION_KIT_TOOLKIT_DIR=.flow/shared
+MIGRATION_KIT_DOC_DIR=.flow/shared/docs
 MIGRATION_KIT_COMMAND_TEMPLATES=COMMAND_TEMPLATES.md
 MIGRATION_KIT_REPO_ACTIONS_TEMPLATE=.flow/templates/github
 MIGRATION_KIT_REPO_ACTIONS_FILES=.flow/config/root/github-actions.required-files.txt

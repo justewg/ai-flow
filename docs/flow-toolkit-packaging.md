@@ -1,7 +1,6 @@
 # Flow Toolkit Packaging
 
 > Целевой layout для отдельной flow-repo/submodule: `.flow/shared/{scripts,docs}`.
-> Если ниже встречаются `.flow/scripts` и `.flow/docs`, это legacy compatibility layer, а не целевая структура.
 
 ## Зачем нужен этот документ
 Нужно решить две практические задачи:
@@ -41,51 +40,38 @@
 - `.flow/config/root/github-actions.required-secrets.txt`
 
 ### Рекомендуемая стратегия
-Не `submodule` по умолчанию.
-
 Рекомендуемый путь:
-1. сначала стабилизировать toolkit;
-2. вынести его в отдельный repo;
-3. подключать в consumer-repo через `git subtree` или pinned vendor-copy;
-4. оставить thin-wrapper `.flow/scripts/run.sh`, если нужен совместимый entrypoint.
-
-### Transitional host-level shared layout
-До выделения отдельного toolkit-repo допустим промежуточный режим:
-- host-level root: `<sites-root>/.ai-flow`
-- shared toolkit surface: `<sites-root>/.ai-flow/shared/scripts` и `<sites-root>/.ai-flow/shared/docs`
-- source of truth в transitional режиме уже живёт в host-level `.ai-flow/shared/*`, а не в consumer-repo
-- в `PLANKA`, `favs` и других consumer-project эти пути создаются локально вручную или onboarding-скриптом; хранить такие symlink-и в git не нужно
-
-Этот режим нужен только как переходный слой:
-- он даёт одну точку подключения для `favs` и следующих проектов;
-- но не заменяет отдельный git-repo/submodule для самого toolkit.
+1. держать toolkit в отдельном repo;
+2. подключать его в consumer-repo как git-submodule `/.flow/shared`;
+3. вызывать команды только через `/.flow/shared/scripts/run.sh`;
+4. runtime state/logs/launchd оставлять вне git consumer-repo.
 
 ## Что должно считаться toolkit-ядром
 
 ### Обязательное ядро
 Переносится целиком:
-- `.flow/scripts/run.sh`
-- все shell-скрипты из `.flow/scripts/`
-- `.flow/scripts/env/resolve_config.sh`
+- `.flow/shared/scripts/run.sh`
+- все shell-скрипты из `.flow/shared/scripts/`
+- `.flow/shared/scripts/env/resolve_config.sh`
 - `.flow/launchd/` как каноническое место для генерируемых plist
 - `.flow/tmp/` как место для временных toolkit-артефактов
 - Node-сервисы:
-  - `.flow/scripts/gh_app_auth_service.js`
-  - `.flow/scripts/ops_bot_service.js`
+  - `.flow/shared/scripts/gh_app_auth_service.js`
+  - `.flow/shared/scripts/ops_bot_service.js`
 - PM2 ecosystem файлы:
-  - `.flow/scripts/gh_app_auth_pm2_ecosystem.config.cjs`
-  - `.flow/scripts/ops_bot_pm2_ecosystem.config.cjs`
+  - `.flow/shared/scripts/gh_app_auth_pm2_ecosystem.config.cjs`
+  - `.flow/shared/scripts/ops_bot_pm2_ecosystem.config.cjs`
 
-Практически это означает: переносить надо весь каталог `.flow/scripts`, а не выбирать файлы по одному.
+Практически это означает: переносить надо весь каталог `.flow/shared/scripts`, а не выбирать файлы по одному.
 
 ### Документация toolkit
 Должна жить рядом с toolkit:
-- `.flow/docs/flow-onboarding-checklist.md`
-- `.flow/docs/flow-onboarding-quickstart.md`
-- `.flow/docs/flow-portability-runbook.md`
-- `.flow/docs/gh-app-daemon-integration-plan.md`
-- `.flow/docs/github-actions-repo-secrets.md`
-- `.flow/docs/flow-toolkit-packaging.md`
+- `.flow/shared/docs/flow-onboarding-checklist.md`
+- `.flow/shared/docs/flow-onboarding-quickstart.md`
+- `.flow/shared/docs/flow-portability-runbook.md`
+- `.flow/shared/docs/gh-app-daemon-integration-plan.md`
+- `.flow/shared/docs/github-actions-repo-secrets.md`
+- `.flow/shared/docs/flow-toolkit-packaging.md`
 
 ### Опциональные модули
 Подключаются только если нужны:
@@ -125,9 +111,8 @@
 - сложнее rollback toolkit-version.
 
 Когда подходит:
-- пока toolkit ещё нестабилен;
-- пока consumer-проект всего один;
-- пока extraction в отдельный repo ещё не оформлен.
+- для разового bootstrap/миграционного архива;
+- когда submodule по организационным причинам пока нельзя подключить.
 
 ### Вариант 2. `git submodule`
 Как выглядит:
@@ -139,12 +124,10 @@
 
 Минусы:
 - отдельный `git submodule update --init --recursive`;
-- выше шанс забыть инициализировать submodule в CI/на новой машине;
-- больше трения для разработчиков и для automation;
-- хуже ergonomics для “просто открыл repo и работай”.
+- в CI/на новой машине нужен явный шаг инициализации submodule.
 
 Вывод:
-- не рекомендую как дефолт для этого flow.
+- это канонический способ подключения toolkit для consumer-repo.
 
 ### Вариант 3. `git subtree`
 Как выглядит:
@@ -162,7 +145,7 @@
 - требуется дисциплина в update-процедуре.
 
 Вывод:
-- это лучший кандидат для штатного подключения toolkit после стабилизации.
+- допустимый fallback, если submodule недоступен организационно.
 
 ### Вариант 4. package manager
 Как выглядит:
@@ -179,48 +162,22 @@
 ## Рекомендация по этапам
 
 ### Этап A. Сейчас
-Использовать vendor-copy:
-- копировать `.flow/scripts/` целиком;
-- копировать `.flow/docs/`, `.flow/launchd/` и `.flow/tmp/` как часть layout;
-- рядом держать `COMMAND_TEMPLATES.md`;
-- repo/project-binding держать только в env.
+- держать toolkit в отдельном repo;
+- подключать его в consumer-repo как `/.flow/shared` submodule;
+- repo/project-binding держать только в env consumer-проекта.
 
-### Этап B. После 2+ consumer-проектов
-Создать отдельный toolkit-repo, например:
-- `codex-flow-toolkit`
-
-Структура может быть такой:
-- `.flow/scripts/`
-- `docs/`
-- `templates/`
-- `CHANGELOG.md`
-- `README.md`
-
-### Этап C. Подключение consumer-repo
-Подключать toolkit в consumer-repo через `git subtree`.
-
-Рекомендуемый layout в consumer-repo:
-- `vendor/codex-flow-toolkit/` или
-- `toolkit/codex-flow/`
-
-И поверх оставить тонкий совместимый wrapper:
-- `.flow/scripts/run.sh`
-
-Этот wrapper может просто проксировать вызов в vendor-путь.
+### Этап B. Для bootstrap без submodule
+- использовать `migration_kit.tgz` как snapshot toolkit + repo overlay;
+- после bootstrap по возможности переходить на submodule, чтобы обновления toolkit не размазывались по продуктовым PR.
 
 ## Рекомендуемый consumer layout
 
-### Вариант с vendor-path
-- `vendor/codex-flow-toolkit/.flow/scripts/...`
-- `vendor/codex-flow-toolkit/docs/...`
-- `.flow/scripts/run.sh` — thin wrapper
+### Канонический consumer layout
+- `.flow/shared/` — git-submodule toolkit repo
+- `.flow/shared/scripts/...`
+- `.flow/shared/docs/...`
 - `.flow/config/flow.env`
-
-### Зачем thin wrapper
-Потому что тогда:
-- старые команды не меняются;
-- команда продолжает вызывать привычный `.flow/scripts/run.sh`;
-- toolkit можно переносить/обновлять без массовой правки команды.
+- `.flow/state`, `.flow/logs`, `.flow/launchd` — runtime-артефакты проекта
 
 ## Update policy для toolkit
 - toolkit пиновать на tag, не на плавающую ветку;
@@ -243,8 +200,8 @@
 ## Итоговая рекомендация
 Если нужен практический ответ “что делать сейчас”:
 
-1. Сейчас переносить целиком `.flow/scripts/` + 4 ключевых onboarding/reference docs.
+1. Переносить toolkit целиком как `/.flow/shared`.
 2. Не дробить toolkit по отдельным shell-файлам.
-3. Не использовать `submodule` как основной способ подключения.
-4. После стабилизации вынести automation в отдельный repo.
-5. Подключать этот repo в consumer-проекты через `git subtree` + thin wrapper `.flow/scripts/run.sh`.
+3. Подключать consumer-проекты через git-submodule.
+4. Для временного bootstrap использовать `migration_kit.tgz`.
+5. Все команды вызывать только через `/.flow/shared/scripts/run.sh`.

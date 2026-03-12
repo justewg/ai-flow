@@ -16,6 +16,8 @@ jobs:
       PR_NUMBER: ${{ github.event.pull_request.number }}
       PR_TITLE: ${{ github.event.pull_request.title }}
       PR_BODY: ${{ github.event.pull_request.body }}
+      PROJECT_OWNER: justewg
+      PROJECT_NUMBER: 2
 
     steps:
       - name: Validate token
@@ -72,7 +74,7 @@ jobs:
           while IFS= read -r task_id; do
             [[ -z "${task_id}" ]] && continue
             echo "Updating ${task_id} -> Done"
-            if ! scripts/codex/project_set_status.sh "${task_id}" "Done" "Done"; then
+            if ! bash scripts/ci/project_set_status.sh "${task_id}" "Done" "Done"; then
               echo "::error::Failed to update ${task_id} in project"
               failed=1
             fi

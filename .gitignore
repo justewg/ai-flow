@@ -150,7 +150,6 @@ vite.config.ts.timestamp-*
 .flow/config/profiles/*.env
 .flow/scripts
 .flow/docs
-.flow/shared
 .flow/launchd
 .flow/launchd/*
 .flow/logs/

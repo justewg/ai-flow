@@ -1,0 +1,4 @@
+[submodule ".flow/shared"]
+	path = .flow/shared
+	url = ssh://git@github.com/justewg/ai-flow.git
+	branch = main

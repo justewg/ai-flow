@@ -23,18 +23,26 @@
 - `.flow/shared/scripts/run.sh append <key> <value...>`
 - `.flow/shared/scripts/run.sh copy <key> <source-file>`
 - `.flow/shared/scripts/run.sh dispatch [command]`
+- `.flow/shared/scripts/run.sh issue_create`
+- `.flow/shared/scripts/run.sh issue_view`
 - `.flow/shared/scripts/run.sh sync_branches`
+- `.flow/shared/scripts/run.sh pr_list`
 - `.flow/shared/scripts/run.sh pr_list_open`
 - `.flow/shared/scripts/run.sh pr_view`
 - `.flow/shared/scripts/run.sh pr_create`
 - `.flow/shared/scripts/run.sh pr_edit`
+- `.flow/shared/scripts/run.sh pr_merge`
 - `.flow/shared/scripts/run.sh commit_push`
+- `.flow/shared/scripts/run.sh git_ls_remote_heads`
+- `.flow/shared/scripts/run.sh git_delete_branch`
 - `.flow/shared/scripts/run.sh project_add_task`
 - `.flow/shared/scripts/run.sh project_set_status`
-- Для переменных аргументов:
-  - записать имя команды в `.flow/tmp/run/dispatch_command.txt`
-  - записать аргументы по одному в `.flow/tmp/run/dispatch_args.txt`
-  - выполнить `.flow/shared/scripts/run.sh dispatch`
+- Для interactive approvals и переменных аргументов:
+  - не вызывать `gh ...`, `git ...`, `project_set_status.sh ...` напрямую;
+  - записывать входные данные в fixed input files через `run.sh write/copy/clear`;
+  - записывать имя команды в `.flow/tmp/run/dispatch_command.txt`;
+  - при необходимости записывать аргументы по одному в `.flow/tmp/run/dispatch_args.txt`;
+  - выполнять один стабильный entrypoint: `.flow/shared/scripts/run.sh dispatch`.
 - `.flow/shared/scripts/run.sh project_status_runtime <enqueue|apply|list|clear> ...` — runtime-очередь отложенных обновлений `Project Status/Flow`.
 - `.flow/shared/scripts/run.sh log_summary [--hours N|--from ISO|--to ISO]` — агрегированный отчет по логам daemon/watchdog/runtime/graphql за период (без аргументов берёт весь доступный диапазон логов).
 - `.flow/shared/scripts/run.sh status_snapshot` — нормализованный JSON snapshot состояния автоматики (daemon/watchdog/executor/очереди/blockers).
@@ -172,6 +180,21 @@ Rollback нового профиля:
 - `pr_body.txt`
 - `commit_message.txt`
 - `stage_paths.txt`
+- `issue_number.txt`
+- `issue_title.txt`
+- `issue_body.txt`
+- `issue_view_json.txt`
+- `issue_view_jq.txt`
+- `pr_state.txt`
+- `pr_base.txt`
+- `pr_head.txt`
+- `pr_list_json.txt`
+- `pr_list_jq.txt`
+- `pr_merge_method.txt`
+- `pr_delete_branch.txt`
+- `git_remote.txt`
+- `git_refs.txt`
+- `branch_name.txt`
 - `project_task_id.txt`
 - `project_status.txt`
 - `project_flow.txt` (опционально)
@@ -185,6 +208,9 @@ Rollback нового профиля:
 Ключи для `clear/write/append/copy`:
 - `pr_number`, `pr_title`, `pr_body`
 - `commit_message`, `stage_paths`
+- `issue_number`, `issue_title`, `issue_body`, `issue_view_json`, `issue_view_jq`
+- `pr_state`, `pr_base`, `pr_head`, `pr_list_json`, `pr_list_jq`, `pr_merge_method`, `pr_delete_branch`
+- `git_remote`, `git_refs`, `branch_name`
 - `project_task_id`, `project_status`, `project_flow`
 - `project_new_task_id`, `project_new_title`, `project_new_scope`, `project_new_priority`, `project_new_status`, `project_new_flow`
 
@@ -195,7 +221,8 @@ Rollback нового профиля:
 ## Рекомендация по снижению confirm-окон
 - Не использовать `&&`, `;`, heredoc и цепочки команд для подготовки данных.
 - Делать отдельные вызовы `.flow/shared/scripts/run.sh write/append/clear`.
-- Затем отдельно вызывать `.flow/shared/scripts/run.sh <action>`.
+- Для `gh/git/project` действий из интерактивной сессии вызывать `.flow/shared/scripts/run.sh dispatch`.
+- `dispatch_command.txt` должен содержать одно из fixed-input действий (`issue_create`, `issue_view`, `pr_list`, `pr_view`, `pr_create`, `pr_edit`, `pr_merge`, `git_ls_remote_heads`, `git_delete_branch`, `project_set_status`).
 
 ## Важные env-переменные
 - `node` (Node.js runtime, рекомендуется LTS >= 18) — обязателен для `gh_app_auth_*`, `ops_bot_*` и сервисов `gh_app_auth_service.js`, `ops_bot_service.js`.

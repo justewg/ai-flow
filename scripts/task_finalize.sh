@@ -813,7 +813,12 @@ fi
 : > "$active_task_file"
 : > "$active_item_file"
 : > "$active_issue_file"
-"${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
+executor_owner_pid=""
+if [[ -s "${CODEX_DIR}/executor_pid.txt" ]]; then
+  executor_owner_pid="$(<"${CODEX_DIR}/executor_pid.txt")"
+fi
+EXECUTOR_RESET_PRESERVE_CURRENT=1 EXECUTOR_RESET_PRESERVE_PID="$executor_owner_pid" \
+  "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
 
 echo "FINALIZED_TASK_ID=$task_id"
 echo "FINALIZED_STATUS=$FINAL_STATUS"

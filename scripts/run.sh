@@ -21,12 +21,18 @@ Commands:
   append
   copy
   dispatch
+  issue_create
+  issue_view
   sync_branches
+  pr_list
   pr_list_open
   pr_view
   pr_create
   pr_edit
+  pr_merge
   commit_push
+  git_ls_remote_heads
+  git_delete_branch
   project_add_task
   project_set_status
   project_status_runtime
@@ -90,6 +96,21 @@ Fixed input files in state dir
   pr_body.txt
   commit_message.txt
   stage_paths.txt
+  issue_number.txt
+  issue_title.txt
+  issue_body.txt
+  issue_view_json.txt
+  issue_view_jq.txt
+  pr_state.txt
+  pr_base.txt
+  pr_head.txt
+  pr_list_json.txt
+  pr_list_jq.txt
+  pr_merge_method.txt
+  pr_delete_branch.txt
+  git_remote.txt
+  git_refs.txt
+  branch_name.txt
   project_task_id.txt
   project_status.txt
   project_flow.txt (optional; defaults to project_status.txt)
@@ -122,6 +143,13 @@ read_required_file() {
   printf '%s' "$content"
 }
 
+read_optional_file() {
+  local file_path="$1"
+  if [[ -f "$file_path" ]]; then
+    cat "$file_path"
+  fi
+}
+
 read_lines_file_into_array() {
   local file_path="$1"
   local array_name="$2"
@@ -138,6 +166,37 @@ read_lines_file_into_array() {
   done < "$file_path"
 }
 
+is_truthy() {
+  local raw_value="${1:-}"
+  local value
+  value="$(printf '%s' "$raw_value" | tr '[:upper:]' '[:lower:]')"
+  case "$value" in
+    1|true|yes|on)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+require_flow_repo() {
+  codex_resolve_flow_config
+  if [[ -z "${FLOW_GITHUB_REPO:-}" ]]; then
+    echo "FLOW_GITHUB_REPO is not configured"
+    exit 1
+  fi
+  printf '%s' "$FLOW_GITHUB_REPO"
+}
+
+write_temp_body_file() {
+  local source_file="$1"
+  local tmp_file
+  tmp_file="$(mktemp "${RUNNER_INPUT_DIR}/body.XXXXXX.md")"
+  cp "$source_file" "$tmp_file"
+  printf '%s' "$tmp_file"
+}
+
 key_to_file() {
   local key="$1"
   case "$key" in
@@ -146,6 +205,21 @@ key_to_file() {
     pr_body) echo "${CODEX_DIR}/pr_body.txt" ;;
     commit_message) echo "${CODEX_DIR}/commit_message.txt" ;;
     stage_paths) echo "${CODEX_DIR}/stage_paths.txt" ;;
+    issue_number) echo "${CODEX_DIR}/issue_number.txt" ;;
+    issue_title) echo "${CODEX_DIR}/issue_title.txt" ;;
+    issue_body) echo "${CODEX_DIR}/issue_body.txt" ;;
+    issue_view_json) echo "${CODEX_DIR}/issue_view_json.txt" ;;
+    issue_view_jq) echo "${CODEX_DIR}/issue_view_jq.txt" ;;
+    pr_state) echo "${CODEX_DIR}/pr_state.txt" ;;
+    pr_base) echo "${CODEX_DIR}/pr_base.txt" ;;
+    pr_head) echo "${CODEX_DIR}/pr_head.txt" ;;
+    pr_list_json) echo "${CODEX_DIR}/pr_list_json.txt" ;;
+    pr_list_jq) echo "${CODEX_DIR}/pr_list_jq.txt" ;;
+    pr_merge_method) echo "${CODEX_DIR}/pr_merge_method.txt" ;;
+    pr_delete_branch) echo "${CODEX_DIR}/pr_delete_branch.txt" ;;
+    git_remote) echo "${CODEX_DIR}/git_remote.txt" ;;
+    git_refs) echo "${CODEX_DIR}/git_refs.txt" ;;
+    branch_name) echo "${CODEX_DIR}/branch_name.txt" ;;
     project_task_id) echo "${CODEX_DIR}/project_task_id.txt" ;;
     project_status) echo "${CODEX_DIR}/project_status.txt" ;;
     project_flow) echo "${CODEX_DIR}/project_flow.txt" ;;
@@ -230,8 +304,53 @@ case "$cmd" in
     exec "$0" "$dispatch_cmd" "${dispatch_args[@]}"
     ;;
 
+  issue_create)
+    repo="$(require_flow_repo)"
+    issue_title="$(read_required_file "${CODEX_DIR}/issue_title.txt")"
+    issue_body_file="$(key_to_file "issue_body")"
+    if [[ ! -f "$issue_body_file" ]]; then
+      echo "Missing file: $issue_body_file"
+      exit 1
+    fi
+    tmp_body_file="$(write_temp_body_file "$issue_body_file")"
+    trap 'rm -f "$tmp_body_file"' EXIT
+    gh issue create --repo "$repo" --title "$issue_title" --body-file "$tmp_body_file"
+    ;;
+
+  issue_view)
+    repo="$(require_flow_repo)"
+    issue_number="$(read_required_file "${CODEX_DIR}/issue_number.txt")"
+    issue_view_json="$(read_optional_file "$(key_to_file "issue_view_json")")"
+    issue_view_jq="$(read_optional_file "$(key_to_file "issue_view_jq")")"
+    if [[ -n "$issue_view_json" ]]; then
+      if [[ -n "$issue_view_jq" ]]; then
+        gh issue view "$issue_number" --repo "$repo" --json "$issue_view_json" --jq "$issue_view_jq"
+      else
+        gh issue view "$issue_number" --repo "$repo" --json "$issue_view_json"
+      fi
+    else
+      gh issue view "$issue_number" --repo "$repo"
+    fi
+    ;;
+
   sync_branches)
     "${CODEX_SHARED_SCRIPTS_DIR}/sync_branches.sh"
+    ;;
+
+  pr_list)
+    repo="$(require_flow_repo)"
+    pr_state="$(read_optional_file "$(key_to_file "pr_state")")"
+    pr_base="$(read_optional_file "$(key_to_file "pr_base")")"
+    pr_head="$(read_optional_file "$(key_to_file "pr_head")")"
+    pr_list_json="$(read_optional_file "$(key_to_file "pr_list_json")")"
+    pr_list_jq="$(read_optional_file "$(key_to_file "pr_list_jq")")"
+    pr_cmd=(gh pr list --repo "$repo")
+    [[ -n "$pr_state" ]] && pr_cmd+=(--state "$pr_state")
+    [[ -n "$pr_base" ]] && pr_cmd+=(--base "$pr_base")
+    [[ -n "$pr_head" ]] && pr_cmd+=(--head "$pr_head")
+    [[ -n "$pr_list_json" ]] && pr_cmd+=(--json "$pr_list_json")
+    [[ -n "$pr_list_jq" ]] && pr_cmd+=(--jq "$pr_list_jq")
+    "${pr_cmd[@]}"
     ;;
 
   pr_list_open)
@@ -257,6 +376,33 @@ case "$cmd" in
       "${CODEX_DIR}/pr_body.txt"
     ;;
 
+  pr_merge)
+    repo="$(require_flow_repo)"
+    pr_number="$(read_required_file "${CODEX_DIR}/pr_number.txt")"
+    pr_merge_method="$(read_optional_file "$(key_to_file "pr_merge_method")")"
+    pr_delete_branch_raw="$(read_optional_file "$(key_to_file "pr_delete_branch")")"
+    pr_merge_cmd=(gh pr merge "$pr_number" --repo "$repo")
+    case "${pr_merge_method:-merge}" in
+      ""|merge)
+        pr_merge_cmd+=(--merge)
+        ;;
+      squash)
+        pr_merge_cmd+=(--squash)
+        ;;
+      rebase)
+        pr_merge_cmd+=(--rebase)
+        ;;
+      *)
+        echo "Unsupported pr_merge_method: ${pr_merge_method}"
+        exit 1
+        ;;
+    esac
+    if is_truthy "${pr_delete_branch_raw:-0}"; then
+      pr_merge_cmd+=(--delete-branch)
+    fi
+    "${pr_merge_cmd[@]}"
+    ;;
+
   commit_push)
     commit_message="$(read_required_file "${CODEX_DIR}/commit_message.txt")"
     stage_paths=()
@@ -269,6 +415,19 @@ case "$cmd" in
       exit 1
     fi
     "${CODEX_SHARED_SCRIPTS_DIR}/dev_commit_push.sh" "$commit_message" "${stage_paths[@]}"
+    ;;
+
+  git_ls_remote_heads)
+    git_remote="$(read_optional_file "$(key_to_file "git_remote")")"
+    [[ -z "$git_remote" ]] && git_remote="origin"
+    git_refs=()
+    read_lines_file_into_array "$(key_to_file "git_refs")" git_refs
+    git ls-remote --heads "$git_remote" "${git_refs[@]}"
+    ;;
+
+  git_delete_branch)
+    branch_name="$(read_required_file "$(key_to_file "branch_name")")"
+    git branch -D "$branch_name"
     ;;
 
   project_add_task)

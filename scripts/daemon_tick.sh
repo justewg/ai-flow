@@ -955,6 +955,9 @@ maybe_release_active_task_on_status_mismatch() {
   local active_task active_item active_issue_number status_name status_norm target_norm rc
   local waiting_task review_task review_issue
   local status_mismatch_grace_sec claim_epoch now_epoch grace_age grace_left
+  local executor_state_file="${CODEX_DIR}/executor_state.txt"
+  local executor_pid_file="${CODEX_DIR}/executor_pid.txt"
+  local executor_state="" executor_pid="" executor_alive="0"
 
   [[ -s "$active_task_file" ]] || return 0
   active_task="$(<"$active_task_file")"
@@ -1076,6 +1079,24 @@ maybe_release_active_task_on_status_mismatch() {
   status_norm="$(normalize_status_name "$status_name")"
   target_norm="$(normalize_status_name "$target_status")"
   if [[ "$status_norm" == "$target_norm" ]]; then
+    return 0
+  fi
+
+  if [[ -s "$executor_state_file" ]]; then
+    executor_state="$(tr -d '\r\n' < "$executor_state_file" 2>/dev/null || true)"
+  fi
+  if [[ -s "$executor_pid_file" ]]; then
+    executor_pid="$(tr -d '\r\n' < "$executor_pid_file" 2>/dev/null || true)"
+  fi
+  if [[ "$executor_pid" =~ ^[0-9]+$ ]] && kill -0 "$executor_pid" 2>/dev/null; then
+    executor_alive="1"
+  fi
+
+  if [[ "$executor_state" == "RUNNING" && "$executor_alive" == "1" ]]; then
+    echo "ACTIVE_TASK_STATUS_MISMATCH_EXECUTOR_STILL_RUNNING=1"
+    echo "ACTIVE_TASK_STATUS=${status_name}"
+    echo "ACTIVE_TASK_EXPECTED_STATUS=${target_status}"
+    echo "ACTIVE_TASK_EXECUTOR_PID=${executor_pid}"
     return 0
   fi
 

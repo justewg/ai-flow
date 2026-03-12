@@ -43,7 +43,7 @@ Execution-Mode: daemon
 5. После подхвата:
    - реализую изменения в рабочем цикле.
 6. По готовности:
-   - запускаю `.flow/shared/scripts/run.sh task_finalize` (commit+push, create/update PR, перевод в `Status=Review`, `Flow=In Review`);
+   - запускаю `.flow/shared/scripts/run.sh task_finalize` (commit+push, при task-ветке сначала merge в `development`, затем create/update PR `development -> main`, перевод в `Status=Review`, `Flow=In Review`);
    - перевожу PR в финальный сигнал ревью (`ready_for_review`);
    - отправляю ссылку на PR для ревью;
    - после merge цикл повторяется.
@@ -98,7 +98,8 @@ Execution-Mode: daemon
    - поменять `Flow` на `In Progress`;
    - продолжить разработку по стандартному flow.
 6. При завершении разработки:
-   - выполнить `task_finalize` для commit/push и create/update PR;
+   - выполнить `task_finalize` для commit/push; если работа велась в task-ветке, daemon сначала подтягивает `development` в неё и затем fast-forward вливает task-ветку обратно в `development`;
+   - создать/обновить только PR `development -> main`;
    - перевести карточку в `Status=Review`, `Flow=In Review`.
 7. Логировать heartbeat и действия в `<state-dir>/daemon.log`.
 8. Корректно обрабатывать ошибки (retry/backoff, без дублирования действий).

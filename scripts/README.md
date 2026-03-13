@@ -57,7 +57,7 @@
 - `.flow/shared/scripts/run.sh onboarding_audit [--profile <name>] [--skip-network]` — первичный аудит consumer-project: toolkit-файлы, локальные команды, git/gh, project-scoped flow env, repo и Project v2, repo workflow overlay и наличие обязательных GitHub Actions secrets.
 - `.flow/shared/scripts/run.sh create_migration_kit --project <name> [--source-profile <name>] [--output <path>]` — собрать переносимый `migration_kit.tgz` с toolkit `/.flow/shared`, `.flow/config/flow.sample.env` и repo workflow overlay из текущего `.github/`.
 - `.flow/shared/scripts/run.sh apply_migration_kit [--project <name>]` — после распаковки kit материализовать рабочий `.flow/config/flow.env` из `.flow/config/flow.sample.env` и развернуть `.github/workflows/` overlay. Secrets values после этого всё равно создаются вручную в GitHub UI.
-- `.flow/shared/scripts/run.sh profile_init <init|install|preflight|bootstrap> ...` — полуавтоматический bootstrap нового profile/repo без ручной правки install-скриптов.
+- `.flow/shared/scripts/run.sh profile_init <init|install|preflight|bootstrap|orchestrate> ...` — bootstrap и финальная orchestration нового profile/repo без ручной сборки install/smoke-команд.
 - `.flow/shared/scripts/run.sh daemon_tick` — один цикл демона: проверка `Todo`, подхват задачи, перевод в `In Progress`.
 - `.flow/shared/scripts/run.sh daemon_loop [interval-sec]` — непрерывный polling-цикл демона (по умолчанию 45 сек).
 - `.flow/shared/scripts/run.sh daemon_install [label] [interval-sec]` — установка и запуск `launchd`-агента.
@@ -144,33 +144,34 @@ Bootstrap нового профиля:
    - `.flow/config/root/github-actions.required-secrets.txt`
    - `.github/workflows/*.yml` и, если был в source overlay, `.github/pull_request_template.md`
 5. `.flow/shared/scripts/run.sh onboarding_audit --profile acme` — проверить toolkit, docs, env и получить список недостающих настроек.
-6. При необходимости дополнительно использовать:
+6. Для read-only baseline можно дополнительно использовать:
    `.flow/shared/scripts/run.sh profile_init preflight --profile acme`
 7. `.flow/config/flow.sample.env` использовать только как безопасный шаблон; канонический runtime-config хранить в `.flow/config/flow.env`.
 8. Repo Actions secrets нужно создать вручную в GitHub UI нового repo по списку из `.flow/config/root/github-actions.required-secrets.txt`.
    Что именно вписывать в каждый secret: `.flow/shared/docs/github-actions-repo-secrets.md`.
-9. После заполнения env:
-   `.flow/shared/scripts/run.sh profile_init install --profile acme`
+9. После заполнения env канонический финальный шаг:
+   `.flow/shared/scripts/run.sh profile_init orchestrate --profile acme`
 10. Для безопасной проверки команд без изменений использовать `--dry-run`.
 
 Запуск и остановка профиля:
-1. Первый запуск нового профиля: `.flow/shared/scripts/run.sh profile_init install --profile acme`
+1. Первый запуск нового профиля: `.flow/shared/scripts/run.sh profile_init orchestrate --profile acme`
 2. Проверка launchd-состояния: `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state FLOW_STATE_DIR=.flow/state .flow/shared/scripts/run.sh daemon_status com.flow.codex-daemon.acme`
 3. Аналогично проверить watchdog: `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state FLOW_STATE_DIR=.flow/state .flow/shared/scripts/run.sh watchdog_status com.flow.codex-watchdog.acme`
 4. Штатная остановка профиля: `.flow/shared/scripts/run.sh daemon_uninstall com.flow.codex-daemon.acme` и `.flow/shared/scripts/run.sh watchdog_uninstall com.flow.codex-watchdog.acme`
 5. Повторный запуск после остановки: `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state FLOW_STATE_DIR=.flow/state .flow/shared/scripts/run.sh daemon_install com.flow.codex-daemon.acme 45`, затем `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state FLOW_STATE_DIR=.flow/state WATCHDOG_DAEMON_LABEL=com.flow.codex-daemon.acme WATCHDOG_DAEMON_INTERVAL_SEC=45 .flow/shared/scripts/run.sh watchdog_install com.flow.codex-watchdog.acme 45`
 
 Smoke-check после bootstrap нового профиля:
-1. `.flow/shared/scripts/run.sh profile_init preflight --profile acme` — ожидается `PREFLIGHT_READY=1`.
-2. `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state FLOW_STATE_DIR=.flow/state .flow/shared/scripts/run.sh github_health_check`
-3. `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state FLOW_STATE_DIR=.flow/state .flow/shared/scripts/run.sh status_snapshot`
-4. `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/shared/scripts/run.sh gh_app_auth_probe`
-5. Для параллельной эксплуатации двух проектов повторить те же проверки для current profile и убедиться, что snapshot/log-файлы лежат в разных `<state-dir>`.
+1. `.flow/shared/scripts/run.sh profile_init orchestrate --profile acme` — ожидается `FINAL_SUMMARY result=success`.
+2. Если нужен повторный read-only smoke без reinstall: `.flow/shared/scripts/run.sh profile_init preflight --profile acme` — ожидается `PREFLIGHT_READY=1` только когда env валиден и daemon/watchdog реально в `RUNNING`.
+3. `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state FLOW_STATE_DIR=.flow/state .flow/shared/scripts/run.sh github_health_check`
+4. `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state FLOW_STATE_DIR=.flow/state .flow/shared/scripts/run.sh status_snapshot`
+5. `env DAEMON_GH_ENV_FILE=.flow/config/flow.env CODEX_STATE_DIR=.flow/state/codex/acme FLOW_STATE_DIR=.flow/state/codex/acme .flow/shared/scripts/run.sh gh_app_auth_probe`
+6. Для параллельной эксплуатации двух проектов повторить те же проверки для current profile и убедиться, что snapshot/log-файлы лежат в разных `<state-dir>`.
 
 Rollback нового профиля:
 1. Остановить новый профиль: `.flow/shared/scripts/run.sh watchdog_uninstall com.flow.codex-watchdog.acme` и `.flow/shared/scripts/run.sh daemon_uninstall com.flow.codex-daemon.acme`
 2. Убедиться, что current profile продолжает работать в своём `<state-dir>` без изменений.
-3. Если проблема в env/config, исправить `.flow/config/flow.env` и повторить `profile_init install --profile acme`.
+3. Если orchestration завершился `blocked` или `partial`, исправить env/prerequisites и повторить `profile_init orchestrate --profile acme`; report c шагами и recovery hints сохраняется в `.flow/tmp/wizard/profile-init-orchestrate-<profile>.report.txt`.
 4. Если откат полный, сохранить диагностические логи из `<state-dir>` нового профиля и только после этого удалить новый state-dir вручную.
 5. Детальный сценарий миграции и troubleshooting см. в `.flow/shared/docs/flow-portability-runbook.md`.
 

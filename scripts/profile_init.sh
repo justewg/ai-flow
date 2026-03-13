@@ -7,13 +7,14 @@ source "${SCRIPT_DIR}/env/bootstrap.sh"
 
 usage() {
   cat <<'EOF'
-Usage: .flow/shared/scripts/profile_init.sh <init|install|preflight|bootstrap> [options]
+Usage: .flow/shared/scripts/profile_init.sh <init|install|preflight|bootstrap|orchestrate> [options]
 
 Modes:
   init        Создать env template, state-dir и расчетные launchd labels.
   install     Провалидировать env и установить daemon/watchdog для профиля.
   preflight   Вывести health/smoke checklist для профиля.
   bootstrap   Последовательно выполнить init -> install -> preflight.
+  orchestrate Запустить финальный wizard pipeline: audit -> install -> smoke -> preflight.
 
 Options:
   --profile <name>             Имя project profile (обязательно).
@@ -24,6 +25,7 @@ Options:
   --watchdog-label <label>     Launchd label watchdog.
   --daemon-interval <sec>      Интервал daemon (по умолчанию 45).
   --watchdog-interval <sec>    Интервал watchdog (по умолчанию 45).
+  --skip-network               Только для orchestrate: пропустить network-checks в onboarding_audit.
   --force                      Перезаписать env template при init.
   --dry-run                    Ничего не менять, только показать действия.
 
@@ -32,6 +34,7 @@ Examples:
   .flow/shared/scripts/profile_init.sh install --profile acme
   .flow/shared/scripts/profile_init.sh preflight --profile acme
   .flow/shared/scripts/profile_init.sh bootstrap --profile acme --dry-run
+  .flow/shared/scripts/profile_init.sh orchestrate --profile acme
 EOF
 }
 
@@ -56,6 +59,7 @@ daemon_label=""
 watchdog_label=""
 daemon_interval="45"
 watchdog_interval="45"
+skip_network="0"
 force="0"
 dry_run="0"
 
@@ -108,6 +112,10 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || { echo "Missing value for --watchdog-interval" >&2; exit 1; }
       watchdog_interval="$2"
       shift 2
+      ;;
+    --skip-network)
+      skip_network="1"
+      shift
       ;;
     --force)
       force="1"
@@ -850,13 +858,48 @@ status_summary() {
   return 1
 }
 
+run_logged_command() {
+  local output_file="$1"
+  shift
+  if "$@" >"$output_file" 2>&1; then
+    cat "$output_file"
+    return 0
+  fi
+  local rc=$?
+  cat "$output_file"
+  return "$rc"
+}
+
+first_status_token() {
+  local summary="$1"
+  summary="${summary#"${summary%%[![:space:]]*}"}"
+  printf '%s' "${summary%% *}"
+}
+
+emit_prefixed_entries() {
+  local output_file="$1"
+  local marker="$2"
+  local prefix="$3"
+  local line payload
+  while IFS= read -r line; do
+    case "$line" in
+      *"${marker} "*)
+        payload="${line#*"${marker} "}"
+        printf '%s %s\n' "$prefix" "$payload"
+        ;;
+    esac
+  done < "$output_file"
+}
+
 install_profile() {
   emit_profile_summary
   if [[ "$dry_run" == "1" && ! -f "$env_file" ]]; then
     echo "CHECK_WARN ENV_FILE=missing:${env_file}"
     ensure_dir "$state_dir"
+    echo "INSTALL_STEP daemon_install=DRY_RUN"
     printf 'DRY_RUN env DAEMON_GH_ENV_FILE=%s CODEX_STATE_DIR=%s FLOW_STATE_DIR=%s %s %s %s\n' \
       "$env_file" "$state_dir" "$state_dir" "${CODEX_SHARED_SCRIPTS_DIR}/daemon_install.sh" "$daemon_label" "$daemon_interval"
+    echo "INSTALL_STEP watchdog_install=DRY_RUN"
     printf 'DRY_RUN env DAEMON_GH_ENV_FILE=%s CODEX_STATE_DIR=%s FLOW_STATE_DIR=%s WATCHDOG_DAEMON_LABEL=%s WATCHDOG_DAEMON_INTERVAL_SEC=%s %s %s %s\n' \
       "$env_file" "$state_dir" "$state_dir" "$daemon_label" "$daemon_interval" "${CODEX_SHARED_SCRIPTS_DIR}/watchdog_install.sh" "$watchdog_label" "$watchdog_interval"
     echo "INSTALL_DRY_RUN_ONLY=1"
@@ -883,18 +926,24 @@ install_profile() {
   local watchdog_cmd=("${CODEX_SHARED_SCRIPTS_DIR}/watchdog_install.sh" "$watchdog_label" "$watchdog_interval")
 
   if [[ "$dry_run" == "1" ]]; then
+    echo "INSTALL_STEP daemon_install=DRY_RUN"
     printf 'DRY_RUN env DAEMON_GH_ENV_FILE=%s CODEX_STATE_DIR=%s FLOW_STATE_DIR=%s %s %s %s\n' \
       "$env_file" "$state_dir" "$state_dir" "${daemon_cmd[0]}" "${daemon_cmd[1]}" "${daemon_cmd[2]}"
+    echo "INSTALL_STEP watchdog_install=DRY_RUN"
     printf 'DRY_RUN env DAEMON_GH_ENV_FILE=%s CODEX_STATE_DIR=%s FLOW_STATE_DIR=%s WATCHDOG_DAEMON_LABEL=%s WATCHDOG_DAEMON_INTERVAL_SEC=%s %s %s %s\n' \
       "$env_file" "$state_dir" "$state_dir" "$daemon_label" "$daemon_interval" "${watchdog_cmd[0]}" "${watchdog_cmd[1]}" "${watchdog_cmd[2]}"
     return 0
   fi
 
+  echo "INSTALL_STEP daemon_install=STARTED"
   DAEMON_GH_ENV_FILE="$env_file" CODEX_STATE_DIR="$state_dir" FLOW_STATE_DIR="$state_dir" \
     "${daemon_cmd[@]}"
+  echo "INSTALL_STEP daemon_install=COMPLETED"
+  echo "INSTALL_STEP watchdog_install=STARTED"
   DAEMON_GH_ENV_FILE="$env_file" CODEX_STATE_DIR="$state_dir" FLOW_STATE_DIR="$state_dir" \
     WATCHDOG_DAEMON_LABEL="$daemon_label" WATCHDOG_DAEMON_INTERVAL_SEC="$daemon_interval" \
     "${watchdog_cmd[@]}"
+  echo "INSTALL_STEP watchdog_install=COMPLETED"
 }
 
 preflight_profile() {
@@ -918,9 +967,12 @@ EOF
 
   validate_required_env || true
 
-  local daemon_status watchdog_status
+  local daemon_status watchdog_status daemon_status_head watchdog_status_head runtime_ready
   daemon_status="$(status_summary "$daemon_label" "${CODEX_SHARED_SCRIPTS_DIR}/daemon_status.sh")"
   watchdog_status="$(status_summary "$watchdog_label" "${CODEX_SHARED_SCRIPTS_DIR}/watchdog_status.sh")"
+  daemon_status_head="$(first_status_token "$daemon_status")"
+  watchdog_status_head="$(first_status_token "$watchdog_status")"
+  runtime_ready="1"
 
   echo "CHECKLIST daemon_status=${daemon_status}"
   echo "CHECKLIST watchdog_status=${watchdog_status}"
@@ -943,12 +995,265 @@ SMOKE_STEP 4 env DAEMON_GH_ENV_FILE=${env_file} CODEX_STATE_DIR=${state_dir} FLO
 SMOKE_STEP 5 env DAEMON_GH_ENV_FILE=${env_file} CODEX_STATE_DIR=${state_dir} FLOW_STATE_DIR=${state_dir} .flow/shared/scripts/gh_app_auth_token.sh >/dev/null
 EOF
 
-  if [[ "$validation_failed" != "0" ]]; then
+  if [[ "$daemon_status_head" != "RUNNING" ]]; then
+    report_fail "DAEMON_STATUS" "${daemon_status}"
+    runtime_ready="0"
+  else
+    report_ok "DAEMON_STATUS" "${daemon_status}"
+  fi
+
+  if [[ "$watchdog_status_head" != "RUNNING" ]]; then
+    report_fail "WATCHDOG_STATUS" "${watchdog_status}"
+    runtime_ready="0"
+  else
+    report_ok "WATCHDOG_STATUS" "${watchdog_status}"
+  fi
+
+  if [[ "$validation_failed" != "0" || "$runtime_ready" != "1" ]]; then
     echo "PREFLIGHT_READY=0"
     return 1
   fi
 
   echo "PREFLIGHT_READY=1"
+}
+
+orchestrate_profile() {
+  local tmp_root report_file retry_hint rollback_hint
+  local audit_output install_output health_output snapshot_output preflight_output
+  local audit_rc install_rc health_rc snapshot_rc preflight_rc
+  local audit_ok audit_warn audit_fail audit_action audit_ready
+  local daemon_status daemon_status_head watchdog_status watchdog_status_head
+  local github_health snapshot_overall snapshot_headline preflight_ready
+  local orchestrate_result audit_summary_line step_count completed_steps
+  local manual_action_count blocker_count
+
+  tmp_root="$(codex_resolve_flow_tmp_dir)/wizard"
+  report_file="${tmp_root}/profile-init-orchestrate-${profile_slug}.report.txt"
+  retry_hint="env DAEMON_GH_ENV_FILE=${env_file} CODEX_STATE_DIR=${state_dir} FLOW_STATE_DIR=${state_dir} .flow/shared/scripts/run.sh profile_init orchestrate --profile ${profile}"
+  rollback_hint=".flow/shared/scripts/run.sh watchdog_uninstall ${watchdog_label} && .flow/shared/scripts/run.sh daemon_uninstall ${daemon_label}"
+
+  audit_output="$(mktemp)"
+  install_output="$(mktemp)"
+  health_output="$(mktemp)"
+  snapshot_output="$(mktemp)"
+  preflight_output="$(mktemp)"
+
+  echo "ORCHESTRATION_STEP audit=STARTED"
+  if run_logged_command "$audit_output" \
+    "${CODEX_SHARED_SCRIPTS_DIR}/onboarding_audit.sh" \
+    --profile "$profile" \
+    --env-file "$env_file" \
+    --state-dir "$state_dir" \
+    $([[ "$skip_network" == "1" ]] && printf '%s' "--skip-network"); then
+    audit_rc=0
+  else
+    audit_rc=$?
+  fi
+  echo "ORCHESTRATION_STEP audit=$([[ "$audit_rc" -eq 0 ]] && printf '%s' COMPLETED || printf '%s' FAILED)"
+
+  audit_summary_line="$(grep -E '^SUMMARY ok=[0-9]+ warn=[0-9]+ fail=[0-9]+ action=[0-9]+$' "$audit_output" | tail -n1 || true)"
+  audit_ok="$(printf '%s' "$audit_summary_line" | sed -nE 's/^SUMMARY ok=([0-9]+) warn=([0-9]+) fail=([0-9]+) action=([0-9]+)$/\1/p')"
+  audit_warn="$(printf '%s' "$audit_summary_line" | sed -nE 's/^SUMMARY ok=([0-9]+) warn=([0-9]+) fail=([0-9]+) action=([0-9]+)$/\2/p')"
+  audit_fail="$(printf '%s' "$audit_summary_line" | sed -nE 's/^SUMMARY ok=([0-9]+) warn=([0-9]+) fail=([0-9]+) action=([0-9]+)$/\3/p')"
+  audit_action="$(printf '%s' "$audit_summary_line" | sed -nE 's/^SUMMARY ok=([0-9]+) warn=([0-9]+) fail=([0-9]+) action=([0-9]+)$/\4/p')"
+  audit_ready="$(grep -E '^READY_FOR_AUTOMATION=' "$audit_output" | tail -n1 | cut -d'=' -f2 || true)"
+  [[ -n "$audit_ok" ]] || audit_ok="0"
+  [[ -n "$audit_warn" ]] || audit_warn="0"
+  [[ -n "$audit_fail" ]] || audit_fail="0"
+  [[ -n "$audit_action" ]] || audit_action="0"
+  [[ -n "$audit_ready" ]] || audit_ready="0"
+
+  echo "AUDIT_SUMMARY ok=${audit_ok} warn=${audit_warn} fail=${audit_fail} action=${audit_action} ready=${audit_ready}"
+  emit_prefixed_entries "$audit_output" "CHECK_OK" "AUDIT_READY"
+  emit_prefixed_entries "$audit_output" "CHECK_WARN" "AUDIT_WARN"
+  emit_prefixed_entries "$audit_output" "CHECK_FAIL" "AUDIT_BLOCKER"
+  emit_prefixed_entries "$audit_output" "ACTION" "AUDIT_ACTION"
+
+  if [[ "$audit_rc" -ne 0 || "$audit_ready" != "1" ]]; then
+    daemon_status="$(status_summary "$daemon_label" "${CODEX_SHARED_SCRIPTS_DIR}/daemon_status.sh")"
+    watchdog_status="$(status_summary "$watchdog_label" "${CODEX_SHARED_SCRIPTS_DIR}/watchdog_status.sh")"
+    orchestrate_result="blocked"
+    manual_action_count="$(grep -c 'ACTION ' "$audit_output" || true)"
+    blocker_count="$(grep -c 'CHECK_FAIL ' "$audit_output" || true)"
+    echo "FINAL_SUMMARY result=${orchestrate_result}"
+    echo "FINAL_SUMMARY daemon_status=${daemon_status}"
+    echo "FINAL_SUMMARY watchdog_status=${watchdog_status}"
+    echo "FINAL_SUMMARY blocked_by_audit=${blocker_count}"
+    echo "FINAL_SUMMARY remaining_manual_actions=${manual_action_count}"
+    echo "RECOVERY_RETRY ${retry_hint}"
+    echo "RECOVERY_ROLLBACK ${rollback_hint}"
+    if [[ "$dry_run" != "1" ]]; then
+      mkdir -p "$tmp_root"
+      {
+        echo "PROFILE=${profile}"
+        echo "RESULT=${orchestrate_result}"
+        echo "AUDIT_OK=${audit_ok}"
+        echo "AUDIT_WARN=${audit_warn}"
+        echo "AUDIT_FAIL=${audit_fail}"
+        echo "AUDIT_ACTION=${audit_action}"
+        echo "DAEMON_STATUS=${daemon_status}"
+        echo "WATCHDOG_STATUS=${watchdog_status}"
+        echo "RETRY_HINT=${retry_hint}"
+        echo "ROLLBACK_HINT=${rollback_hint}"
+        emit_prefixed_entries "$audit_output" "CHECK_FAIL" "BLOCKER"
+        emit_prefixed_entries "$audit_output" "ACTION" "MANUAL_ACTION"
+      } >"$report_file"
+      echo "ORCHESTRATION_REPORT=${report_file}"
+    fi
+    rm -f "$audit_output" "$install_output" "$health_output" "$snapshot_output" "$preflight_output"
+    return 1
+  fi
+
+  echo "ORCHESTRATION_STEP install=STARTED"
+  if install_profile >"$install_output" 2>&1; then
+    install_rc=0
+  else
+    install_rc=$?
+  fi
+  cat "$install_output"
+  echo "ORCHESTRATION_STEP install=$([[ "$install_rc" -eq 0 ]] && printf '%s' COMPLETED || printf '%s' FAILED)"
+
+  daemon_status="$(status_summary "$daemon_label" "${CODEX_SHARED_SCRIPTS_DIR}/daemon_status.sh")"
+  watchdog_status="$(status_summary "$watchdog_label" "${CODEX_SHARED_SCRIPTS_DIR}/watchdog_status.sh")"
+  daemon_status_head="$(first_status_token "$daemon_status")"
+  watchdog_status_head="$(first_status_token "$watchdog_status")"
+
+  if [[ "$dry_run" == "1" ]]; then
+    health_rc=0
+    snapshot_rc=0
+    preflight_rc=0
+    github_health="SKIPPED_DRY_RUN"
+    snapshot_overall="SKIPPED_DRY_RUN"
+    snapshot_headline="dry-run"
+    preflight_ready="0"
+    echo "ORCHESTRATION_STEP github_health_check=SKIPPED_DRY_RUN"
+    echo "ORCHESTRATION_STEP status_snapshot=SKIPPED_DRY_RUN"
+    echo "ORCHESTRATION_STEP preflight=SKIPPED_DRY_RUN"
+    if preflight_profile >"$preflight_output" 2>&1; then
+      :
+    else
+      :
+    fi
+    cat "$preflight_output"
+  else
+    echo "ORCHESTRATION_STEP github_health_check=STARTED"
+    if run_logged_command "$health_output" env \
+      DAEMON_GH_ENV_FILE="$env_file" \
+      CODEX_STATE_DIR="$state_dir" \
+      FLOW_STATE_DIR="$state_dir" \
+      "${CODEX_SHARED_SCRIPTS_DIR}/github_health_check.sh"; then
+      health_rc=0
+    else
+      health_rc=$?
+    fi
+    github_health="$(grep -E '^GITHUB_HEALTHY=' "$health_output" | tail -n1 | cut -d'=' -f2 || true)"
+    [[ -n "$github_health" ]] || github_health="0"
+    echo "ORCHESTRATION_STEP github_health_check=$([[ "$health_rc" -eq 0 ]] && printf '%s' COMPLETED || printf '%s' FAILED)"
+
+    echo "ORCHESTRATION_STEP status_snapshot=STARTED"
+    if run_logged_command "$snapshot_output" env \
+      DAEMON_GH_ENV_FILE="$env_file" \
+      CODEX_STATE_DIR="$state_dir" \
+      FLOW_STATE_DIR="$state_dir" \
+      "${CODEX_SHARED_SCRIPTS_DIR}/status_snapshot.sh"; then
+      snapshot_rc=0
+    else
+      snapshot_rc=$?
+    fi
+    if jq -e . >/dev/null 2>&1 <"$snapshot_output"; then
+      snapshot_overall="$(jq -r '.overall_status // "UNKNOWN"' "$snapshot_output")"
+      snapshot_headline="$(jq -r '.headline // ""' "$snapshot_output")"
+    else
+      snapshot_overall="INVALID_JSON"
+      snapshot_headline=""
+    fi
+    echo "ORCHESTRATION_STEP status_snapshot=$([[ "$snapshot_rc" -eq 0 ]] && printf '%s' COMPLETED || printf '%s' FAILED)"
+
+    echo "ORCHESTRATION_STEP preflight=STARTED"
+    if preflight_profile >"$preflight_output" 2>&1; then
+      preflight_rc=0
+    else
+      preflight_rc=$?
+    fi
+    cat "$preflight_output"
+    preflight_ready="$(grep -E '^PREFLIGHT_READY=' "$preflight_output" | tail -n1 | cut -d'=' -f2 || true)"
+    [[ -n "$preflight_ready" ]] || preflight_ready="0"
+    echo "ORCHESTRATION_STEP preflight=$([[ "$preflight_rc" -eq 0 ]] && printf '%s' COMPLETED || printf '%s' FAILED)"
+  fi
+
+  completed_steps="audit"
+  [[ "$install_rc" -eq 0 ]] && completed_steps="${completed_steps},install"
+  [[ "${health_rc:-1}" -eq 0 ]] && completed_steps="${completed_steps},github_health_check"
+  [[ "${snapshot_rc:-1}" -eq 0 ]] && completed_steps="${completed_steps},status_snapshot"
+  [[ "${preflight_rc:-1}" -eq 0 ]] && completed_steps="${completed_steps},preflight"
+
+  if [[ "$dry_run" == "1" ]]; then
+    orchestrate_result="dry-run"
+  elif [[ "$install_rc" -eq 0 && "$health_rc" -eq 0 && "$snapshot_rc" -eq 0 && "$preflight_ready" == "1" && "$daemon_status_head" == "RUNNING" && "$watchdog_status_head" == "RUNNING" ]]; then
+    orchestrate_result="success"
+  elif [[ "$daemon_status_head" == "RUNNING" || "$watchdog_status_head" == "RUNNING" || "$daemon_status_head" == "INSTALLED_NOT_LOADED" || "$watchdog_status_head" == "INSTALLED_NOT_LOADED" ]]; then
+    orchestrate_result="partial"
+  else
+    orchestrate_result="failed"
+  fi
+
+  step_count="$(printf '%s' "$completed_steps" | awk -F',' '{print NF}')"
+  manual_action_count="$(grep -c 'ACTION ' "$audit_output" || true)"
+
+  echo "FINAL_SUMMARY result=${orchestrate_result}"
+  echo "FINAL_SUMMARY completed_steps=${completed_steps}"
+  echo "FINAL_SUMMARY completed_steps_count=${step_count}"
+  echo "FINAL_SUMMARY daemon_status=${daemon_status}"
+  echo "FINAL_SUMMARY watchdog_status=${watchdog_status}"
+  echo "FINAL_SUMMARY github_health=${github_health}"
+  echo "FINAL_SUMMARY snapshot_overall=${snapshot_overall}"
+  [[ -n "$snapshot_headline" ]] && echo "FINAL_SUMMARY snapshot_headline=${snapshot_headline}"
+  echo "FINAL_SUMMARY preflight_ready=${preflight_ready}"
+  echo "FINAL_SUMMARY remaining_manual_actions=${manual_action_count}"
+  emit_prefixed_entries "$preflight_output" "CHECKLIST" "SMOKE_CHECKLIST"
+  emit_prefixed_entries "$preflight_output" "SMOKE_STEP" "SMOKE_STEP"
+  echo "RECOVERY_RETRY ${retry_hint}"
+  echo "RECOVERY_ROLLBACK ${rollback_hint}"
+
+  if [[ "$dry_run" != "1" ]]; then
+    mkdir -p "$tmp_root"
+    {
+      echo "PROFILE=${profile}"
+      echo "RESULT=${orchestrate_result}"
+      echo "AUDIT_OK=${audit_ok}"
+      echo "AUDIT_WARN=${audit_warn}"
+      echo "AUDIT_FAIL=${audit_fail}"
+      echo "AUDIT_ACTION=${audit_action}"
+      echo "INSTALL_RC=${install_rc}"
+      echo "HEALTH_RC=${health_rc}"
+      echo "SNAPSHOT_RC=${snapshot_rc}"
+      echo "PREFLIGHT_RC=${preflight_rc}"
+      echo "PREFLIGHT_READY=${preflight_ready}"
+      echo "COMPLETED_STEPS=${completed_steps}"
+      echo "DAEMON_STATUS=${daemon_status}"
+      echo "WATCHDOG_STATUS=${watchdog_status}"
+      echo "GITHUB_HEALTH=${github_health}"
+      echo "SNAPSHOT_OVERALL=${snapshot_overall}"
+      echo "SNAPSHOT_HEADLINE=${snapshot_headline}"
+      echo "RETRY_HINT=${retry_hint}"
+      echo "ROLLBACK_HINT=${rollback_hint}"
+      emit_prefixed_entries "$audit_output" "ACTION" "MANUAL_ACTION"
+      emit_prefixed_entries "$audit_output" "CHECK_FAIL" "BLOCKER"
+      emit_prefixed_entries "$preflight_output" "CHECKLIST" "CHECKLIST"
+    } >"$report_file"
+    echo "ORCHESTRATION_REPORT=${report_file}"
+  fi
+
+  rm -f "$audit_output" "$install_output" "$health_output" "$snapshot_output" "$preflight_output"
+
+  case "$orchestrate_result" in
+    success|dry-run)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 case "$mode" in
@@ -965,6 +1270,9 @@ case "$mode" in
     init_profile
     install_profile
     preflight_profile
+    ;;
+  orchestrate)
+    orchestrate_profile
     ;;
   *)
     echo "Unknown mode: ${mode}" >&2

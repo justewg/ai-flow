@@ -209,6 +209,7 @@ write_profile_env_from_source() {
   local value=""
   local source_label=""
   local secret_notice=""
+  local ai_flow_logs_root_dir=""
   local -a sensitive_keys=(
     DAEMON_GH_PROJECT_TOKEN
     CODEX_GH_PROJECT_TOKEN
@@ -233,6 +234,7 @@ write_profile_env_from_source() {
   else
     secret_notice="# This file intentionally contains no live secrets from the source project."
   fi
+  ai_flow_logs_root_dir="$(codex_resolve_ai_flow_logs_root_dir)"
 
   {
     cat <<EOF
@@ -258,6 +260,15 @@ EOF
             ;;
           CODEX_STATE_DIR|FLOW_STATE_DIR)
             value=".flow/state"
+            ;;
+          FLOW_LOGS_DIR)
+            value="${ai_flow_logs_root_dir}/${target_profile}"
+            ;;
+          FLOW_RUNTIME_LOG_DIR)
+            value="${ai_flow_logs_root_dir}/${target_profile}/runtime"
+            ;;
+          FLOW_PM2_LOG_DIR)
+            value="${ai_flow_logs_root_dir}/${target_profile}/pm2"
             ;;
           WATCHDOG_DAEMON_LABEL)
             value="${launchd_namespace}.codex-daemon.${target_profile}"
@@ -295,6 +306,9 @@ EOF
   rewrite_env_key "$destination" "PROJECT_PROFILE" "$target_profile"
   rewrite_env_key "$destination" "CODEX_STATE_DIR" ".flow/state"
   rewrite_env_key "$destination" "FLOW_STATE_DIR" ".flow/state"
+  rewrite_env_key "$destination" "FLOW_LOGS_DIR" "${ai_flow_logs_root_dir}/${target_profile}"
+  rewrite_env_key "$destination" "FLOW_RUNTIME_LOG_DIR" "${ai_flow_logs_root_dir}/${target_profile}/runtime"
+  rewrite_env_key "$destination" "FLOW_PM2_LOG_DIR" "${ai_flow_logs_root_dir}/${target_profile}/pm2"
   rewrite_env_key "$destination" "WATCHDOG_DAEMON_LABEL" "${launchd_namespace}.codex-daemon.${target_profile}"
   rewrite_env_key "$destination" "WATCHDOG_DAEMON_INTERVAL_SEC" "${watchdog_interval}"
   rewrite_env_key "$destination" "GH_APP_PM2_APP_NAME" "${target_profile}-gh-app-auth"

@@ -30,29 +30,24 @@ jobs:
       - name: Extract task ids from PR title/body
         id: extract
         run: |
-          PR_TEXT="$(printf '%s\n%s\n' "${PR_TITLE}" "${PR_BODY}")"
-          RAW_TASK_IDS="$(
-            printf '%s\n' "${PR_TEXT}" \
-              | grep -Eo 'PL-[0-9]{3}|ISSUE-[0-9]+' || true
+          PRIMARY_TASK_ID="$(
+            printf '%s\n' "${PR_TITLE}" \
+              | grep -Eo 'PL-[0-9]{3}|ISSUE-[0-9]+' \
+              | head -n1 || true
           )"
-          REF_ISSUE_NUMBERS="$(
+          EXPLICIT_TASK_IDS="$(
             {
-              printf '%s\n' "${PR_TEXT}" | grep -Eo '#[0-9]+' | tr -d '#' || true
-              printf '%s\n' "${PR_TEXT}" | grep -Eo '/issues/[0-9]+' | grep -Eo '[0-9]+' || true
-            } | sort -u
+              printf '%s\n' "${PR_BODY}" | sed -nE 's/^CODEX_TASK:[[:space:]]*(PL-[0-9]{3}|ISSUE-[0-9]+).*$/\1/p'
+              printf '%s\n' "${PR_BODY}" | sed -nE 's/^- Task ID:[[:space:]]*(PL-[0-9]{3}|ISSUE-[0-9]+).*$/\1/p'
+              printf '%s\n' "${PR_BODY}" | sed -nE 's/^Task ID:[[:space:]]*(PL-[0-9]{3}|ISSUE-[0-9]+).*$/\1/p'
+              printf '%s\n' "${PR_BODY}" | sed -nE 's/^(Fixes|Closes|Resolves)[[:space:]]+(PL-[0-9]{3}|ISSUE-[0-9]+).*$/\2/pI'
+              printf '%s\n' "${PR_BODY}" | sed -nE 's/^(Fixes|Closes|Resolves)[[:space:]]+#([0-9]+).*$/ISSUE-\2/pI'
+            } | sed '/^$/d' | sort -u
           )"
-          NORMALIZED_REF_IDS=""
-          while IFS= read -r issue_number; do
-            [[ -z "${issue_number}" ]] && continue
-            if [[ "${issue_number}" == "${PR_NUMBER}" ]]; then
-              continue
-            fi
-            NORMALIZED_REF_IDS+=$'ISSUE-'"${issue_number}"$'\n'
-          done <<< "${REF_ISSUE_NUMBERS}"
           TASK_IDS="$(
             {
-              printf '%s\n' "${RAW_TASK_IDS}"
-              printf '%s' "${NORMALIZED_REF_IDS}"
+              printf '%s\n' "${PRIMARY_TASK_ID}"
+              printf '%s\n' "${EXPLICIT_TASK_IDS}"
             } | sed '/^$/d' | sort -u
           )"
           if [[ -z "${TASK_IDS}" ]]; then

@@ -58,6 +58,7 @@
 - `.flow/shared/scripts/run.sh bootstrap_repo --target-repo <path> [--profile <name>] [--migration-kit <path>]` — materialize/prepare нового repo: создать базовый `.flow`, подключить `/.flow/shared` как git-submodule, repair-нуть snapshot/submodule drift и затем переиспользовать `apply_migration_kit` и `profile_init init`.
 - `.flow/shared/scripts/run.sh create_migration_kit --project <name> [--source-profile <name>] [--output <path>]` — собрать переносимый `migration_kit.tgz` с toolkit `/.flow/shared`, `.flow/config/flow.sample.env` и repo workflow overlay из текущего `.github/`.
 - `.flow/shared/scripts/run.sh apply_migration_kit [--project <name>]` — после распаковки kit материализовать рабочий `.flow/config/flow.env` из `.flow/config/flow.sample.env` и развернуть `.github/workflows/` overlay. Secrets values после этого всё равно создаются вручную в GitHub UI.
+- `.flow/shared/scripts/run.sh flow_configurator [questionnaire] --profile <name>` — интерактивный wizard для `.flow/config/flow.env`: задаёт вопросы по repo/project/token/auth/Telegram/launchd/ops/remotes, показывает defaults и preview diff, пишет файл только после явного confirm.
 - `.flow/shared/scripts/run.sh profile_init <init|install|preflight|bootstrap> ...` — полуавтоматический bootstrap нового profile/repo без ручной правки install-скриптов.
 - `.flow/shared/scripts/run.sh daemon_tick` — один цикл демона: проверка `Todo`, подхват задачи, перевод в `In Progress`.
 - `.flow/shared/scripts/run.sh daemon_loop [interval-sec]` — непрерывный polling-цикл демона (по умолчанию 45 сек).

@@ -129,8 +129,14 @@ cd /path/to/new-project
 - [ ] Для deploy overlay исправлен `GH_REPO_SELF_HOSTED_RUNNER`, если audit показал отсутствие online runner.
 
 ## 3. Заполни env-файл
-- [ ] Открой `.flow/config/flow.env`.
-- [ ] Пропиши:
+- [ ] Запусти интерактивный wizard:
+
+```bash
+.flow/shared/scripts/run.sh flow_configurator questionnaire --profile acme
+```
+
+- [ ] Проверь preview diff и подтверди запись только если wizard показывает ожидаемые изменения.
+- [ ] При необходимости открой `.flow/config/flow.env` вручную и проверь, что минимум заполнен:
   - [ ] `PROJECT_PROFILE=acme`
   - [ ] `GITHUB_REPO=<owner>/<repo>`
   - [ ] `FLOW_BASE_BRANCH=main`

@@ -55,6 +55,7 @@
 - `.flow/shared/scripts/run.sh app_deps_mermaid [output-file]` — построить Mermaid DAG зависимостей APP-issues из `Flow Meta` (`Depends-On/Blocks`) и записать markdown-файл (по умолчанию `docs/app-issues-dependency-diagram.md`).
 - `.flow/shared/scripts/run.sh backlog_seed_apply` — применить runtime-план создания backlog-задач из `<state-dir>/backlog_seed_plan.json` (по умолчанию 1 задача за запуск).
 - `.flow/shared/scripts/run.sh onboarding_audit [--profile <name>] [--skip-network]` — первичный аудит consumer-project: toolkit-файлы, локальные команды, git/gh, project-scoped flow env, repo и Project v2, repo workflow overlay и наличие обязательных GitHub Actions secrets.
+- `.flow/shared/scripts/run.sh bootstrap_repo --target-repo <path> [--profile <name>] [--migration-kit <path>]` — materialize/prepare нового repo: создать базовый `.flow`, подключить `/.flow/shared` как git-submodule, repair-нуть snapshot/submodule drift и затем переиспользовать `apply_migration_kit` и `profile_init init`.
 - `.flow/shared/scripts/run.sh create_migration_kit --project <name> [--source-profile <name>] [--output <path>]` — собрать переносимый `migration_kit.tgz` с toolkit `/.flow/shared`, `.flow/config/flow.sample.env` и repo workflow overlay из текущего `.github/`.
 - `.flow/shared/scripts/run.sh apply_migration_kit [--project <name>]` — после распаковки kit материализовать рабочий `.flow/config/flow.env` из `.flow/config/flow.sample.env` и развернуть `.github/workflows/` overlay. Secrets values после этого всё равно создаются вручную в GitHub UI.
 - `.flow/shared/scripts/run.sh profile_init <init|install|preflight|bootstrap> ...` — полуавтоматический bootstrap нового profile/repo без ручной правки install-скриптов.
@@ -132,26 +133,34 @@
 | `FLOW_LAUNCHD_NAMESPACE` | `com.flow` | `com.flow` или свой namespace | Позволяет централизованно переопределить prefix labels без правки shell-скриптов. |
 
 Bootstrap нового профиля:
-1. В текущем проекте собрать переносимый kit:
+1. Из текущего toolkit checkout выполнить bootstrap:
+   `.flow/shared/scripts/run.sh bootstrap_repo --target-repo <HOME>/sites/acme-app --profile acme`
+2. Если нужен repo overlay из migration kit, сначала собери его в текущем проекте:
    `.flow/shared/scripts/run.sh create_migration_kit --project acme`
-2. Перенести `migration_kit.tgz` в корень нового repo и распаковать его.
-3. В новом проекте выполнить:
-   `.flow/shared/scripts/run.sh apply_migration_kit --project acme`
-4. После `apply_migration_kit` должны появиться:
+3. Затем перезапусти bootstrap с архивом:
+   `.flow/shared/scripts/run.sh bootstrap_repo --target-repo <HOME>/sites/acme-app --profile acme --migration-kit ./migration_kit.tgz`
+4. Bootstrap:
+   - создаст `.flow/config`, `.flow/tmp`, `.flow/tmp/wizard`, `.flow/config/profiles/.gitkeep` и пустые manifests в `.flow/config/root/`;
+   - подключит или repair-нет `/.flow/shared` как git-submodule;
+   - при наличии migration kit вызовет `apply_migration_kit`;
+   - в любом случае вызовет `profile_init init`, чтобы подготовить `flow.env`, `.flow/state`, `.flow/logs`, `.flow/launchd`.
+5. После bootstrap должны появиться:
    - `.flow/config/flow.sample.env`
    - `.flow/config/flow.env`
    - `.flow/config/root/github-actions.required-files.txt`
    - `.flow/config/root/github-actions.required-secrets.txt`
+   - `.flow/tmp/wizard`
+   - `.flow/state`, `.flow/logs`, `.flow/launchd`
    - `.github/workflows/*.yml` и, если был в source overlay, `.github/pull_request_template.md`
-5. `.flow/shared/scripts/run.sh onboarding_audit --profile acme` — проверить toolkit, docs, env и получить список недостающих настроек.
-6. При необходимости дополнительно использовать:
+6. `.flow/shared/scripts/run.sh onboarding_audit --profile acme` — проверить toolkit, docs, env и получить список недостающих настроек.
+7. При необходимости дополнительно использовать:
    `.flow/shared/scripts/run.sh profile_init preflight --profile acme`
-7. `.flow/config/flow.sample.env` использовать только как безопасный шаблон; канонический runtime-config хранить в `.flow/config/flow.env`.
-8. Repo Actions secrets нужно создать вручную в GitHub UI нового repo по списку из `.flow/config/root/github-actions.required-secrets.txt`.
+8. `.flow/config/flow.sample.env` использовать только как безопасный шаблон; канонический runtime-config хранить в `.flow/config/flow.env`.
+9. Repo Actions secrets нужно создать вручную в GitHub UI нового repo по списку из `.flow/config/root/github-actions.required-secrets.txt`.
    Что именно вписывать в каждый secret: `.flow/shared/docs/github-actions-repo-secrets.md`.
-9. После заполнения env:
+10. После заполнения env:
    `.flow/shared/scripts/run.sh profile_init install --profile acme`
-10. Для безопасной проверки команд без изменений использовать `--dry-run`.
+11. Для безопасной проверки команд без изменений использовать `--dry-run`.
 
 Запуск и остановка профиля:
 1. Первый запуск нового профиля: `.flow/shared/scripts/run.sh profile_init install --profile acme`

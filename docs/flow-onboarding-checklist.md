@@ -33,11 +33,13 @@
 
 Опционально вместо ручного копирования:
 - [ ] В текущем проекте выполнен `.flow/shared/scripts/run.sh create_migration_kit --project acme`
-- [ ] `migration_kit.tgz` перенесён в новый repo и распакован в корне
-- [ ] После распаковки выполнен `.flow/shared/scripts/run.sh apply_migration_kit --project acme`
-- [ ] Проверено, что после `apply_migration_kit` появились `.flow/config/flow.sample.env` и `.flow/config/flow.env`
-- [ ] Проверено, что после `apply_migration_kit` появились `.flow/config/root/github-actions.required-files.txt` и `.flow/config/root/github-actions.required-secrets.txt`
-- [ ] Проверено, что `apply_migration_kit` развернул `.github/workflows/*.yml` и `.github/pull_request_template.md` из source overlay
+- [ ] Выполнен `.flow/shared/scripts/run.sh bootstrap_repo --target-repo /path/to/new-project --profile acme`
+- [ ] Если нужен repo overlay, bootstrap перезапущен с `--migration-kit ./migration_kit.tgz`
+- [ ] Проверено, что bootstrap подключил `/.flow/shared` как submodule и подготовил `.flow/tmp/wizard`
+- [ ] Проверено, что после bootstrap появились `.flow/config/flow.sample.env` и `.flow/config/flow.env`
+- [ ] Проверено, что после bootstrap появились `.flow/config/root/github-actions.required-files.txt` и `.flow/config/root/github-actions.required-secrets.txt`
+- [ ] Проверено, что bootstrap создал `.flow/state`, `.flow/logs`, `.flow/launchd`
+- [ ] Если был migration kit, проверено, что bootstrap развернул `.github/workflows/*.yml` и `.github/pull_request_template.md` из source overlay
 - [ ] Понимание зафиксировано: `.tmp/codex/` больше не runtime-источник, а только legacy compatibility layer.
 
 ## 1. Собери входные значения
@@ -92,24 +94,26 @@
 cd /path/to/new-project
 ```
 
-- [ ] Запусти первичный аудит consumer-project.
+- [ ] Запусти первичный audit consumer-project после bootstrap.
 
 ```bash
 .flow/shared/scripts/run.sh onboarding_audit
 ```
 
-- [ ] Создай env-template и state-dir.
+- [ ] При необходимости повторно выполни `profile_init init` для idempotent-rerun layout.
 
 ```bash
 .flow/shared/scripts/run.sh profile_init init --profile acme
 ```
 
-- [ ] Если уже использован `migration_kit.tgz`, этот шаг можно пропустить: `apply_migration_kit` сам создаёт рабочий `.flow/config/flow.env` из `.flow/config/flow.sample.env`.
+- [ ] Если уже выполнен `bootstrap_repo`, этот шаг обычно можно пропустить: bootstrap сам вызывает `profile_init init`.
 
 - [ ] Убедись, что появились:
   - [ ] `.flow/config/flow.sample.env`
   - [ ] `.flow/config/flow.env`
-  - [ ] `.flow/state/codex/acme`
+  - [ ] `.flow/state`
+  - [ ] `.flow/logs`
+  - [ ] `.flow/launchd`
   - [ ] `<sites-root>/.ai-flow/logs/acme` или явный `FLOW_LOGS_DIR`
   - [ ] `.flow/config/root/github-actions.required-files.txt`
   - [ ] `.flow/config/root/github-actions.required-secrets.txt`

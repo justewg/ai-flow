@@ -427,6 +427,50 @@ ensure_launchd_symlink_target() {
   ln -s "$host_launchd_dir_path" "$launchd_link_path"
 }
 
+ensure_logs_symlink_target() {
+  local logs_link_path="$1"
+  local host_logs_dir_path="$2"
+
+  ensure_dir "$host_logs_dir_path"
+
+  if [[ "$logs_link_path" == "$host_logs_dir_path" ]]; then
+    return 0
+  fi
+
+  ensure_dir "$(dirname "$logs_link_path")"
+
+  if [[ -L "$logs_link_path" ]]; then
+    if [[ "$dry_run" == "1" ]]; then
+      printf 'DRY_RUN ln -sfn %s %s\n' "$host_logs_dir_path" "$logs_link_path"
+      return 0
+    fi
+    ln -sfn "$host_logs_dir_path" "$logs_link_path"
+    return 0
+  fi
+
+  if [[ -d "$logs_link_path" && ! -L "$logs_link_path" ]]; then
+    if [[ "$dry_run" == "1" ]]; then
+      printf 'DRY_RUN preserve-existing-logs-dir %s\n' "$logs_link_path"
+      return 0
+    fi
+    return 0
+  fi
+
+  if [[ -e "$logs_link_path" && ! -L "$logs_link_path" ]]; then
+    if [[ "$dry_run" == "1" ]]; then
+      printf 'DRY_RUN preserve-existing-logs-path %s\n' "$logs_link_path"
+      return 0
+    fi
+    return 0
+  fi
+
+  if [[ "$dry_run" == "1" ]]; then
+    printf 'DRY_RUN ln -s %s %s\n' "$host_logs_dir_path" "$logs_link_path"
+    return 0
+  fi
+  ln -s "$host_logs_dir_path" "$logs_link_path"
+}
+
 ensure_runtime_log_layout() {
   local runtime_log_dir_path="$1"
   local log_name log_path alias_name alias_path target_name target_path
@@ -723,14 +767,17 @@ migrate_state_temp_artifacts() {
 }
 
 init_profile() {
-  local host_state_dir host_launchd_dir
+  local host_state_dir host_launchd_dir host_logs_dir
   emit_profile_summary
   ensure_dir "$(dirname "$env_file")"
   host_state_dir="$(resolve_ai_flow_state_dir_for_profile)"
   host_launchd_dir="$(resolve_ai_flow_launchd_dir_for_profile)"
+  host_logs_dir="$(resolve_flow_logs_dir_for_profile)"
   ensure_state_symlink_target "$state_dir" "$host_state_dir"
   ensure_launchd_symlink_target "${ROOT_DIR}/.flow/launchd" "$host_launchd_dir"
+  ensure_logs_symlink_target "${ROOT_DIR}/.flow/logs" "$host_logs_dir"
   ensure_dir "$host_state_dir"
+  ensure_dir "$host_logs_dir"
   ensure_state_namespace_layout "$host_state_dir"
   migrate_state_temp_artifacts "$host_state_dir"
   ensure_legacy_state_log_links "$host_state_dir" "$(resolve_runtime_log_dir_for_profile)"
@@ -869,12 +916,15 @@ install_profile() {
     return 1
   fi
 
-  local host_state_dir host_launchd_dir
+  local host_state_dir host_launchd_dir host_logs_dir
   host_state_dir="$(resolve_ai_flow_state_dir_for_profile)"
   host_launchd_dir="$(resolve_ai_flow_launchd_dir_for_profile)"
+  host_logs_dir="$(resolve_flow_logs_dir_for_profile)"
   ensure_state_symlink_target "$state_dir" "$host_state_dir"
   ensure_launchd_symlink_target "${ROOT_DIR}/.flow/launchd" "$host_launchd_dir"
+  ensure_logs_symlink_target "${ROOT_DIR}/.flow/logs" "$host_logs_dir"
   ensure_dir "$host_state_dir"
+  ensure_dir "$host_logs_dir"
   ensure_state_namespace_layout "$host_state_dir"
   migrate_state_temp_artifacts "$host_state_dir"
   ensure_legacy_state_log_links "$host_state_dir" "$(resolve_runtime_log_dir_for_profile)"

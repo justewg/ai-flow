@@ -166,9 +166,10 @@
 - подключать его в consumer-repo как `/.flow/shared` submodule;
 - repo/project-binding держать только в env consumer-проекта.
 
-### Этап B. Для bootstrap без submodule
-- использовать `migration_kit.tgz` как snapshot toolkit + repo overlay;
-- после bootstrap по возможности переходить на submodule, чтобы обновления toolkit не размазывались по продуктовым PR.
+### Этап B. Для bootstrap без ручной раскладки
+- использовать `.flow/shared/scripts/run.sh bootstrap_repo --target-repo <path>` как materialize/prepare step;
+- при наличии `migration_kit.tgz` передавать его через `--migration-kit`, чтобы bootstrap сам вызвал `apply_migration_kit`;
+- bootstrap должен доводить repo до submodule-схемы сразу: `/.flow/shared` init/update/repair + `profile_init init`, без ручного `git submodule add` и без ручного создания `.flow/*`.
 
 ## Рекомендуемый consumer layout
 

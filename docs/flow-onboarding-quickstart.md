@@ -129,10 +129,10 @@ gh project view <PROJECT_NUMBER> --owner <PROJECT_OWNER> --format json --jq '.id
 
 Если нужно перенести комплект без ручной выборки файлов, можно собрать архив:
 - в текущем проекте: `.flow/shared/scripts/run.sh create_migration_kit --project acme`
-- в новом проекте после распаковки: `.flow/shared/scripts/run.sh apply_migration_kit --project acme`
+- затем из текущего toolkit checkout: `.flow/shared/scripts/run.sh bootstrap_repo --target-repo <HOME>/sites/acme-app --profile acme --migration-kit ./migration_kit.tgz`
 - archive положит безопасный шаблон `.flow/config/flow.sample.env` без копирования живых токенов из исходного проекта
 - archive также положит `.flow/templates/github/` как source overlay для `.github/workflows/` и `.github/pull_request_template.md`
-- `apply_migration_kit` развернёт этот overlay в новый repo и оставит manifest required secrets в `.flow/config/root/github-actions.required-secrets.txt`
+- `bootstrap_repo` сам подключит `/.flow/shared` как git-submodule, repair-нет snapshot/submodule drift, вызовет `apply_migration_kit` и затем `profile_init init`
 
 ## Bootstrap в локальной папке проекта
 
@@ -141,13 +141,23 @@ gh project view <PROJECT_NUMBER> --owner <PROJECT_OWNER> --format json --jq '.id
 - repo: `acme/acme-app`
 - profile: `acme`
 
-### Шаг 1. Открыть корень нового проекта
+### Шаг 1. Выполнить bootstrap `.flow`
 ```bash
-cd <HOME>/sites/acme-app
+.flow/shared/scripts/run.sh bootstrap_repo --target-repo <HOME>/sites/acme-app --profile acme
 ```
+
+Если нужен repo overlay из исходного проекта, добавь migration kit:
+
+```bash
+.flow/shared/scripts/run.sh create_migration_kit --project acme
+.flow/shared/scripts/run.sh bootstrap_repo --target-repo <HOME>/sites/acme-app --profile acme --migration-kit ./migration_kit.tgz
+```
+
+Bootstrap создаст базовые каталоги `.flow/config`, `.flow/tmp`, `.flow/tmp/wizard`, manifests в `.flow/config/root/`, подключит `/.flow/shared` как submodule и подготовит `.flow/state`, `.flow/logs`, `.flow/launchd`.
 
 ### Шаг 2. Выполнить первичный аудит consumer-project
 ```bash
+cd <HOME>/sites/acme-app
 .flow/shared/scripts/run.sh onboarding_audit
 ```
 
@@ -159,20 +169,15 @@ cd <HOME>/sites/acme-app
 
 Если дальше нужен полный audit profile/env, запуск повторяется с `--profile`.
 
-Если toolkit переносился через `migration_kit.tgz`, перед audit сначала выполни:
-```bash
-.flow/shared/scripts/run.sh apply_migration_kit --project acme
-```
-
 После этого ожидается:
 - создан `.flow/config/flow.sample.env`
 - создан `.flow/config/flow.env`
 - созданы `.flow/config/root/github-actions.required-files.txt` и `.flow/config/root/github-actions.required-secrets.txt`
 - развернуты `.github/workflows/*.yml` и, если он был в source-kit, `.github/pull_request_template.md`
-- создан `.flow/state/codex/acme`
-- подготовлен log-dir проекта: по умолчанию `<sites-root>/.ai-flow/logs/acme`
+- созданы `.flow/state`, `.flow/logs`, `.flow/launchd`
+- внутри host-level runtime layout подготовлены state/log директории проекта: по умолчанию `<sites-root>/.ai-flow/state/acme` и `<sites-root>/.ai-flow/logs/acme`
 
-### Шаг 3. Создать flow env и state-dir
+### Шаг 3. Дозапустить `profile_init init`, если нужен явный rerun
 ```bash
 .flow/shared/scripts/run.sh profile_init init --profile acme
 ```
@@ -182,7 +187,7 @@ cd <HOME>/sites/acme-app
 - создан `.flow/state/codex/acme`
 - log-dir по умолчанию будет вычислен как `<sites-root>/.ai-flow/logs/acme`
 
-Если перед этим уже был выполнен `apply_migration_kit`, шаг можно пропустить: рабочий `.flow/config/flow.env` уже материализован из `.flow/config/flow.sample.env`.
+Если перед этим уже был выполнен `bootstrap_repo`, шаг обычно можно пропустить: bootstrap уже вызывает `profile_init init` и создаёт рабочий `.flow/config/flow.env`.
 
 ### Шаг 4. Проверить, что именно осталось настроить в flow env
 ```bash

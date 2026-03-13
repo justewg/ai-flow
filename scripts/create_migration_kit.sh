@@ -259,6 +259,13 @@ if [[ -z "$fallback_enabled" ]]; then
   fallback_enabled="$(resolve_value "CODEX_GH_TOKEN_FALLBACK_ENABLED" "0")"
 fi
 launchd_namespace="$(resolve_value "FLOW_LAUNCHD_NAMESPACE" "com.flow")"
+shared_toolkit_url="$(git -C "${ROOT_DIR}/.flow/shared" config --get remote.origin.url 2>/dev/null || true)"
+shared_toolkit_branch="$(git -C "${ROOT_DIR}/.flow/shared" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+shared_toolkit_branch="${shared_toolkit_branch#origin/}"
+if [[ -z "$shared_toolkit_branch" || "$shared_toolkit_branch" == "HEAD" ]]; then
+  shared_toolkit_branch="main"
+fi
+shared_toolkit_revision="$(git -C "${ROOT_DIR}/.flow/shared" rev-parse HEAD 2>/dev/null || true)"
 
 watchdog_interval="45"
 if [[ -n "$source_env_file" && -f "$source_env_file" ]]; then
@@ -319,6 +326,9 @@ MIGRATION_KIT_COMMAND_TEMPLATES=COMMAND_TEMPLATES.md
 MIGRATION_KIT_REPO_ACTIONS_TEMPLATE=.flow/templates/github
 MIGRATION_KIT_REPO_ACTIONS_FILES=.flow/config/root/github-actions.required-files.txt
 MIGRATION_KIT_REPO_ACTIONS_SECRETS=.flow/config/root/github-actions.required-secrets.txt
+MIGRATION_KIT_SHARED_URL=${shared_toolkit_url}
+MIGRATION_KIT_SHARED_BRANCH=${shared_toolkit_branch}
+MIGRATION_KIT_SHARED_REVISION=${shared_toolkit_revision}
 EOF
 
 mkdir -p "$(dirname "$output_path")"
@@ -334,3 +344,9 @@ echo "MIGRATION_KIT_PROFILE_SAMPLE=.flow/config/flow.sample.env"
 echo "MIGRATION_KIT_FLOW_ENV=.flow/config/flow.env"
 echo "MIGRATION_KIT_REPO_ACTIONS=.flow/templates/github"
 echo "MIGRATION_KIT_REPO_ACTIONS_SECRETS=.flow/config/root/github-actions.required-secrets.txt"
+if [[ -n "$shared_toolkit_url" ]]; then
+  echo "MIGRATION_KIT_SHARED_URL=${shared_toolkit_url}"
+fi
+if [[ -n "$shared_toolkit_revision" ]]; then
+  echo "MIGRATION_KIT_SHARED_REVISION=${shared_toolkit_revision}"
+fi

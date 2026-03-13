@@ -47,6 +47,7 @@ Commands:
   app_deps_mermaid
   backlog_seed_apply
   onboarding_audit
+  bootstrap_repo
   create_migration_kit
   apply_migration_kit
   profile_init
@@ -567,6 +568,11 @@ case "$cmd" in
   onboarding_audit)
     shift 1
     "${CODEX_SHARED_SCRIPTS_DIR}/onboarding_audit.sh" "$@"
+    ;;
+
+  bootstrap_repo)
+    shift 1
+    "${CODEX_SHARED_SCRIPTS_DIR}/bootstrap_repo.sh" "$@"
     ;;
 
   create_migration_kit)

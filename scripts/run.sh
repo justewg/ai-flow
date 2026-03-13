@@ -49,6 +49,7 @@ Commands:
   onboarding_audit
   create_migration_kit
   apply_migration_kit
+  flow_configurator
   profile_init
   daemon_tick
   daemon_loop
@@ -577,6 +578,11 @@ case "$cmd" in
   apply_migration_kit)
     shift 1
     "${CODEX_SHARED_SCRIPTS_DIR}/apply_migration_kit.sh" "$@"
+    ;;
+
+  flow_configurator)
+    shift 1
+    "${CODEX_SHARED_SCRIPTS_DIR}/flow_configurator.js" "$@"
     ;;
 
   profile_init)

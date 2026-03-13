@@ -184,13 +184,24 @@ cd <HOME>/sites/acme-app
 
 Если перед этим уже был выполнен `apply_migration_kit`, шаг можно пропустить: рабочий `.flow/config/flow.env` уже материализован из `.flow/config/flow.sample.env`.
 
-### Шаг 4. Проверить, что именно осталось настроить в flow env
+### Шаг 4. Пройти интерактивный wizard для `flow.env`
+```bash
+.flow/shared/scripts/run.sh flow_configurator questionnaire --profile acme
+```
+
+Wizard:
+- задаст вопросы по `GITHUB_REPO`, `PROJECT_*`, project token, auth-service, Telegram, launchd/watchdog, optional ops-бот и remote push;
+- покажет default и подскажет, где брать значение в GitHub UI или локальном окружении;
+- перед записью покажет preview diff и запросит явное подтверждение;
+- при rerun автоматически переиспользует уже подтверждённые non-secret значения, а секреты оставит sticky, пока ты явно их не заменишь.
+
+### Шаг 5. Проверить, что именно осталось настроить в flow env
 ```bash
 .flow/shared/scripts/run.sh onboarding_audit --profile acme
 ```
 
-### Шаг 5. Заполнить env-файл
-Открыть `.flow/config/flow.env` и задать минимум:
+### Шаг 6. Если нужно, дозаполнить env-файл вручную
+Обычно wizard покрывает основной путь, но `.flow/config/flow.env` всё ещё можно открыть и поправить вручную. Минимальный набор:
 
 ```dotenv
 PROJECT_PROFILE=acme

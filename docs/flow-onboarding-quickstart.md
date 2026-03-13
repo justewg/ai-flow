@@ -132,13 +132,11 @@ gh project view <PROJECT_NUMBER> --owner <PROJECT_OWNER> --format json --jq '.id
 - archive по умолчанию появится как `.flow/migration/acme-migration-kit.tgz`
 - если нужен prefilled `flow.env` с текущими секретами:
   `.flow/shared/scripts/run.sh create_migration_kit --project acme --defaults-from current --include-secrets --target-repo <HOME>/sites/acme-app`
-- в target repo появятся `.flow/migration/do_migration.sh`, `.flow/migration/flow.conf`, `.flow/migration/README.md`, локальный kit-archive и optional payload-файлы
+- в target repo появятся `.flow/migration/do_migration.sh`, `.flow/migration/migration.conf`, `.flow/migration/README.md` и локальный payload archive без toolkit
 - в новом проекте достаточно запустить: `.flow/migration/do_migration.sh`
-- archive положит безопасный шаблон `.flow/config/flow.sample.env` без копирования живых токенов из исходного проекта
-- archive положит clean `.flow/config/flow.env`; current-specific значения и секреты, если нужны, попадут в optional `flow.payload.env`
-- repo automation overlay при необходимости пойдёт отдельным payload-файлом `repo-overlay.tgz`
-- `apply_migration_kit` сохранит локальный `.flow/config/flow.conf`, наложит payload-ы и оставит manifest required secrets в `.flow/templates/github/required-secrets.txt`
-- если target уже git-repo, `apply_migration_kit` best-effort materialize-ит `/.flow/shared` как submodule по URL/revision из kit manifest
+- archive положит project payload: `.flow/config/flow.sample.env`, `.flow/config/flow.env`, `.flow/github/*` и `.flow/templates/github/*`
+- `do_migration.sh` сам bootstrap-ит `.flow/shared` из `ai-flow` по repo/ref из `migration.conf`
+- `apply_migration_kit` сохранит локальный `.flow/config/migration.conf`, разложит payload и оставит manifest required secrets в `.flow/templates/github/required-secrets.txt`
 
 ## Bootstrap в локальной папке проекта
 
@@ -173,6 +171,7 @@ cd <HOME>/sites/acme-app
 После этого ожидается:
 - создан `.flow/config/flow.sample.env`
 - создан `.flow/config/flow.env`
+- создан `.flow/config/migration.conf`
 - созданы `.flow/templates/github/required-files.txt` и `.flow/templates/github/required-secrets.txt`
 - развернуты `.github/workflows/*.yml` и, если он был в source-kit, `.github/pull_request_template.md`
 - создан `.flow/state/codex/acme`

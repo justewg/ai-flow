@@ -61,18 +61,18 @@
    Archive по умолчанию появится как `.flow/migration/acme-migration-kit.tgz`.
    Если target находится в том же trust-контуре и нужен prefilled `flow.env` с текущими секретами:
    `.flow/shared/scripts/run.sh create_migration_kit --project acme --defaults-from current --include-secrets --target-repo <HOME>/sites/acme-app`
-2. В new project после распаковки выполнить:
+2. В new project выполнить:
    `.flow/migration/do_migration.sh`
-   Launcher сам возьмёт локальный archive из `.flow/migration/`, распакует bootstrap kit и при наличии подключит payload-файлы из `flow.conf`.
+   Launcher сам поднимет toolkit из `ai-flow` по repo/ref из `.flow/migration/migration.conf` и передаст локальный payload archive в `apply_migration_kit`.
 3. Kit должен принести безопасные шаблоны:
    - `.flow/config/flow.sample.env`
-   - `.flow/config/flow.env` (clean bootstrap env)
-   - `.flow/config/flow.conf`
+   - `.flow/config/flow.env`
+   - `.flow/config/migration.conf`
    - `.flow/templates/github/required-files.txt`
    - `.flow/templates/github/required-secrets.txt`
-4. Если kit собирался c `--defaults-from current`, optional `flow.payload.env` наложит current-specific значения поверх clean `flow.env`; при `--include-secrets` в payload попадут и секреты.
-5. Если в source-project использовался repo automation overlay, `repo-overlay.tgz` развернет `.github/workflows/`, `.github/pull_request_template.md` и `.flow/templates/github/*`.
-6. Если target repo уже git-репозиторий, `apply_migration_kit` best-effort материализует `/.flow/shared` как submodule по URL/revision из manifest; при недоступной сети оставляет snapshot и пишет `MIGRATION_KIT_TOOLKIT_SUBMODULE_STATUS=*`.
+4. Payload archive несёт только project-specific содержимое: `.flow/config/flow.env`, `.flow/config/flow.sample.env`, `.flow/github/*` и `.flow/templates/github/*`. Toolkit внутри archive не хранится.
+5. Если kit собирался c `--defaults-from current --include-secrets`, payload `flow.env` уже содержит текущие секреты source-project.
+6. `do_migration.sh` сначала bootstrap-ит `/.flow/shared`, а затем запускает toolkit `apply_migration_kit`.
 7. Если kit собран без `--include-secrets`, repo Actions secrets и runtime secrets нужно создать вручную в GitHub UI нового repo (`Settings -> Secrets and variables -> Actions`) по списку из `.flow/templates/github/required-secrets.txt`.
 8. `.tmp/codex/` в consumer-project больше не нужен как runtime-root; если он присутствует, это только compatibility-symlink layer.
 

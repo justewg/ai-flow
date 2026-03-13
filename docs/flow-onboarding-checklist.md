@@ -34,15 +34,13 @@
 Опционально вместо ручного копирования:
 - [ ] В текущем проекте выполнен `.flow/shared/scripts/run.sh create_migration_kit --project acme --target-repo <HOME>/sites/acme-app`
 - [ ] Archive лежит в source repo: `.flow/migration/acme-migration-kit.tgz`
-- [ ] В target repo появились `.flow/migration/do_migration.sh`, `.flow/migration/flow.conf`, `.flow/migration/README.md` и локальный kit-archive
-- [ ] Если нужны current-specific env-значения, в target repo появился optional `.flow/migration/flow.payload.env`
-- [ ] Если нужен repo automation overlay, в target repo появился optional `.flow/migration/repo-overlay.tgz`
+- [ ] В target repo появились `.flow/migration/do_migration.sh`, `.flow/migration/migration.conf`, `.flow/migration/README.md` и локальный payload archive
 - [ ] Выполнен `.flow/migration/do_migration.sh`
 - [ ] Проверено, что после `apply_migration_kit` появились `.flow/config/flow.sample.env` и `.flow/config/flow.env`
-- [ ] Проверено, что после `apply_migration_kit` появился `.flow/config/flow.conf`
+- [ ] Проверено, что после `apply_migration_kit` появился `.flow/config/migration.conf`
 - [ ] Проверено, что после `apply_migration_kit` появились `.flow/templates/github/required-files.txt` и `.flow/templates/github/required-secrets.txt`
 - [ ] Проверено, что `apply_migration_kit` развернул `.github/workflows/*.yml` и `.github/pull_request_template.md` из source overlay
-- [ ] Если target repo уже git-репозиторий, проверено, что `apply_migration_kit` попытался materialize-ить `/.flow/shared` как submodule
+- [ ] Проверено, что `do_migration.sh` bootstrap-ит `/.flow/shared` из `ai-flow`
 - [ ] Понимание зафиксировано: `.tmp/codex/` больше не runtime-источник, а только legacy compatibility layer.
 
 ## 1. Собери входные значения
@@ -110,12 +108,12 @@ cd /path/to/new-project
 .flow/shared/scripts/run.sh profile_init init --profile acme
 ```
 
-- [ ] Если уже использован `migration_kit.tgz`, этот шаг можно пропустить: `.flow/migration/do_migration.sh` сам распакует kit и вызовет `apply_migration_kit`, который создаёт рабочий `.flow/config/flow.env` из `.flow/config/flow.sample.env`.
+- [ ] Если уже использован `migration_kit.tgz`, этот шаг можно пропустить: `.flow/migration/do_migration.sh` сам bootstrap-ит toolkit и вызывает `apply_migration_kit`, который создаёт рабочий `.flow/config/flow.env` из `.flow/config/flow.sample.env`.
 
 - [ ] Убедись, что появились:
   - [ ] `.flow/config/flow.sample.env`
   - [ ] `.flow/config/flow.env`
-  - [ ] `.flow/config/flow.conf`
+  - [ ] `.flow/config/migration.conf`
   - [ ] `.flow/state/codex/acme`
   - [ ] `<sites-root>/.ai-flow/logs/acme` или явный `FLOW_LOGS_DIR`
   - [ ] `.flow/templates/github/required-files.txt`

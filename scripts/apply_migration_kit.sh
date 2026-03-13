@@ -8,23 +8,21 @@ source "${SCRIPT_DIR}/env/bootstrap.sh"
 project=""
 force="0"
 migration_config=""
-flow_tmp_dir="$(codex_resolve_flow_tmp_dir)"
+payload_archive=""
 
 usage() {
   cat <<'EOF'
 Usage: .flow/shared/scripts/apply_migration_kit.sh [options]
 
 Options:
-  --project <name>        Целевое имя profile после распаковки kit.
-  --migration-config <path>
-                          Локальный migration config из .flow/migration/flow.conf.
-  --force                 Разрешить перезапись target env/template.
-  -h, --help              Показать справку.
+  --project <name>          Целевое имя profile после распаковки payload.
+  --migration-config <path> Локальный migration config из .flow/migration/migration.conf.
+  --payload-archive <path>  Путь к payload archive проекта.
+  --force                   Разрешить перезапись target env/template.
+  -h, --help                Показать справку.
 
 Examples:
-  .flow/shared/scripts/apply_migration_kit.sh
-  .flow/shared/scripts/apply_migration_kit.sh --project acme
-  .flow/shared/scripts/apply_migration_kit.sh --project acme --migration-config .flow/migration/flow.conf
+  .flow/shared/scripts/apply_migration_kit.sh --project acme --migration-config .flow/migration/migration.conf --payload-archive .flow/migration/acme-migration-kit.tgz
 EOF
 }
 
@@ -34,18 +32,6 @@ slugify() {
   value="$(printf '%s' "$value" | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-{2,}/-/g')"
   [[ -n "$value" ]] || value="profile"
   printf '%s' "$value"
-}
-
-read_manifest_key() {
-  local key="$1"
-  local manifest_path="${flow_tmp_dir}/migration_kit_manifest.env"
-  local legacy_manifest_path="${ROOT_DIR}/.flow/migration_kit_manifest.env"
-  if [[ -f "$manifest_path" ]]; then
-    codex_read_key_from_env_file "$manifest_path" "$key"
-    return 0
-  fi
-  [[ -f "$legacy_manifest_path" ]] || return 1
-  codex_read_key_from_env_file "$legacy_manifest_path" "$key"
 }
 
 rewrite_env_key() {
@@ -73,10 +59,23 @@ rewrite_env_key() {
   mv "$temp_file" "$file_path"
 }
 
+copy_file_if_present() {
+  local source_path="$1"
+  local target_path="$2"
+  [[ -f "$source_path" ]] || return 0
+  mkdir -p "$(dirname "$target_path")"
+  if [[ -e "$target_path" && "$force" != "1" ]]; then
+    echo "PAYLOAD_COPY_SKIPPED=${target_path}"
+    echo "Use --force to overwrite existing file."
+    return 0
+  fi
+  cp "$source_path" "$target_path"
+  echo "PAYLOAD_COPY_WRITTEN=${target_path}"
+}
+
 copy_repo_overlay_file() {
   local source_path="$1"
   local target_path="$2"
-
   mkdir -p "$(dirname "$target_path")"
   if [[ -e "$target_path" && "$force" != "1" ]]; then
     echo "GITHUB_OVERLAY_SKIPPED=${target_path}"
@@ -87,114 +86,20 @@ copy_repo_overlay_file() {
   echo "GITHUB_OVERLAY_WRITTEN=${target_path}"
 }
 
-materialize_shared_submodule() {
-  local submodule_url submodule_revision current_url backup_dir timestamp backup_path
-  local add_out sync_out fetch_out checkout_out
-
-  submodule_url="$(read_manifest_key "MIGRATION_KIT_TOOLKIT_SUBMODULE_URL" || true)"
-  submodule_revision="$(read_manifest_key "MIGRATION_KIT_TOOLKIT_SUBMODULE_REVISION" || true)"
-  if [[ -z "$submodule_url" || -z "$submodule_revision" ]]; then
-    echo "MIGRATION_KIT_TOOLKIT_SUBMODULE_STATUS=SKIPPED_NO_MANIFEST"
-    return 0
-  fi
-
-  if ! git -C "${ROOT_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    echo "MIGRATION_KIT_TOOLKIT_SUBMODULE_STATUS=SKIPPED_NOT_GIT_REPO"
-    return 0
-  fi
-
-  if git -C "${ROOT_DIR}" config -f .gitmodules --get submodule..flow/shared.url >/dev/null 2>&1; then
-    current_url="$(git -C "${ROOT_DIR}" config -f .gitmodules --get submodule..flow/shared.url || true)"
-    if [[ "$current_url" != "$submodule_url" ]]; then
-      git -C "${ROOT_DIR}" config -f .gitmodules submodule..flow/shared.url "$submodule_url"
-    fi
-    if sync_out="$(git -C "${ROOT_DIR}" submodule sync -- .flow/shared 2>&1)"; then
-      [[ -n "$sync_out" ]] && echo "$sync_out"
-    else
-      [[ -n "$sync_out" ]] && echo "$sync_out"
-      echo "MIGRATION_KIT_TOOLKIT_SUBMODULE_STATUS=FAILED_SYNC"
-      return 0
-    fi
-  else
-    if [[ -e "${ROOT_DIR}/.flow/shared" ]]; then
-      timestamp="$(date -u '+%Y%m%d-%H%M%S')"
-      backup_dir="${ROOT_DIR}/.flow/tmp/bootstrap/backups"
-      backup_path="${backup_dir}/shared-pre-submodule-${timestamp}"
-      mkdir -p "$backup_dir"
-      mv "${ROOT_DIR}/.flow/shared" "$backup_path"
-      echo "MIGRATION_KIT_TOOLKIT_SNAPSHOT_BACKUP=${backup_path}"
-    fi
-
-    if add_out="$(git -C "${ROOT_DIR}" submodule add "$submodule_url" .flow/shared 2>&1)"; then
-      [[ -n "$add_out" ]] && echo "$add_out"
-    else
-      [[ -n "$add_out" ]] && echo "$add_out"
-      rm -rf "${ROOT_DIR}/.flow/shared"
-      if [[ -n "${backup_path:-}" && -e "$backup_path" ]]; then
-        mv "$backup_path" "${ROOT_DIR}/.flow/shared"
-      fi
-      echo "MIGRATION_KIT_TOOLKIT_SUBMODULE_STATUS=FAILED_ADD"
-      return 0
-    fi
-  fi
-
-  if fetch_out="$(git -C "${ROOT_DIR}/.flow/shared" fetch origin "$submodule_revision" 2>&1)"; then
-    [[ -n "$fetch_out" ]] && echo "$fetch_out"
-  else
-    [[ -n "$fetch_out" ]] && echo "$fetch_out"
-    echo "MIGRATION_KIT_TOOLKIT_SUBMODULE_STATUS=FAILED_FETCH"
-    return 0
-  fi
-
-  if checkout_out="$(git -C "${ROOT_DIR}/.flow/shared" checkout "$submodule_revision" 2>&1)"; then
-    [[ -n "$checkout_out" ]] && echo "$checkout_out"
-    echo "MIGRATION_KIT_TOOLKIT_SUBMODULE_STATUS=OK"
-  else
-    [[ -n "$checkout_out" ]] && echo "$checkout_out"
-    echo "MIGRATION_KIT_TOOLKIT_SUBMODULE_STATUS=FAILED_CHECKOUT"
-  fi
-}
-
-detect_source_profile() {
-  read_manifest_key "MIGRATION_KIT_PROJECT" || true
-}
-
 read_migration_config_key() {
   local key="$1"
   [[ -n "$migration_config" && -f "$migration_config" ]] || return 1
   codex_read_key_from_env_file "$migration_config" "$key"
 }
 
-resolve_migration_artifact_path() {
+resolve_repo_relative_path() {
   local value="$1"
   [[ -n "$value" ]] || return 1
   if [[ "$value" = /* ]]; then
     printf '%s' "$value"
-    return 0
+  else
+    printf '%s/%s' "${ROOT_DIR}" "${value#./}"
   fi
-  printf '%s/%s' "${ROOT_DIR}" "${value#./}"
-}
-
-apply_flow_payload() {
-  local payload_path="$1"
-  local line key value
-
-  [[ -f "$payload_path" ]] || return 0
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    if [[ "$line" =~ ^[A-Z][A-Z0-9_]*= ]]; then
-      key="${line%%=*}"
-      value="${line#*=}"
-      rewrite_env_key "$target_env_file" "$key" "$value"
-    fi
-  done < "$payload_path"
-  echo "MIGRATION_KIT_FLOW_PAYLOAD_APPLIED=${payload_path}"
-}
-
-apply_repo_overlay_payload() {
-  local overlay_path="$1"
-  [[ -f "$overlay_path" ]] || return 0
-  tar -xzf "$overlay_path" -C "$ROOT_DIR"
-  echo "MIGRATION_KIT_REPO_OVERLAY_APPLIED=${overlay_path}"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -207,6 +112,11 @@ while [[ $# -gt 0 ]]; do
     --migration-config)
       [[ $# -ge 2 ]] || { echo "Missing value for --migration-config" >&2; exit 1; }
       migration_config="$2"
+      shift 2
+      ;;
+    --payload-archive)
+      [[ $# -ge 2 ]] || { echo "Missing value for --payload-archive" >&2; exit 1; }
+      payload_archive="$2"
       shift 2
       ;;
     --force)
@@ -230,50 +140,66 @@ if [[ -n "$migration_config" && ! -f "$migration_config" ]]; then
   exit 1
 fi
 
-source_profile="$(detect_source_profile || true)"
-if [[ -z "$source_profile" ]]; then
-  echo "Could not detect migration kit project in .flow/tmp/migration_kit_manifest.env." >&2
-  echo "Unpack migration_kit.tgz in repo root first." >&2
+if [[ -z "$project" ]]; then
+  if config_project="$(read_migration_config_key "MIGRATION_PROJECT" || true)"; [[ -n "$config_project" ]]; then
+    project="$config_project"
+  fi
+fi
+
+if [[ -z "$project" ]]; then
+  echo "Could not resolve target project. Pass --project or set MIGRATION_PROJECT in migration.conf." >&2
   exit 1
 fi
 
-target_profile="$source_profile"
-if [[ -n "$project" ]]; then
-  target_profile="$(slugify "$project")"
-elif config_profile="$(read_migration_config_key "MIGRATION_KIT_PROJECT" || true)"; [[ -n "$config_profile" ]]; then
-  target_profile="$(slugify "$config_profile")"
+if [[ -z "$payload_archive" ]]; then
+  if payload_rel="$(read_migration_config_key "MIGRATION_PAYLOAD_ARCHIVE_REL" || true)"; [[ -n "$payload_rel" ]]; then
+    payload_archive="$(resolve_repo_relative_path "$payload_rel")"
+  fi
 fi
 
+if [[ -z "$payload_archive" || ! -f "$payload_archive" ]]; then
+  echo "Payload archive not found: ${payload_archive}" >&2
+  exit 1
+fi
+
+target_profile="$(slugify "$project")"
 flow_state_root_dir="$(codex_resolve_flow_state_root_dir)"
 flow_config_dir="$(codex_resolve_flow_config_dir)"
 target_env_file="$(codex_resolve_flow_env_file)"
 target_sample_env="$(codex_resolve_flow_sample_env_file)"
-target_flow_conf="${flow_config_dir}/flow.conf"
+target_migration_conf="${flow_config_dir}/migration.conf"
 launchd_namespace="$(codex_resolve_flow_launchd_namespace)"
-
-source_sample_env="${flow_config_dir}/flow.sample.env"
-source_env_file="${flow_config_dir}/flow.env"
-source_actions_template_dir="${ROOT_DIR}/.flow/templates/github"
-source_actions_files_manifest="${source_actions_template_dir}/required-files.txt"
-source_actions_secrets_manifest="${source_actions_template_dir}/required-secrets.txt"
 target_state_dir="${flow_state_root_dir}"
 target_relative_state_dir=".flow/state"
-flow_payload_path=""
-repo_overlay_path=""
+
+payload_tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/codex_payload_unpack.XXXXXX")"
+cleanup() {
+  rm -rf "$payload_tmp_dir"
+}
+trap cleanup EXIT
+
+tar -xzf "$payload_archive" -C "$payload_tmp_dir"
+
+source_sample_env="${payload_tmp_dir}/.flow/config/flow.sample.env"
+source_env_file="${payload_tmp_dir}/.flow/config/flow.env"
+source_actions_template_dir="${payload_tmp_dir}/.flow/templates/github"
+source_actions_files_manifest="${source_actions_template_dir}/required-files.txt"
+source_actions_secrets_manifest="${source_actions_template_dir}/required-secrets.txt"
+source_github_overlay_dir="${payload_tmp_dir}/.flow/github"
 
 if [[ ! -f "$source_sample_env" && ! -f "$source_env_file" ]]; then
-  echo "flow.sample.env / flow.env not found in unpacked migration kit." >&2
+  echo "flow.sample.env / flow.env not found in payload archive." >&2
   exit 1
 fi
 
-if [[ -e "$target_env_file" && "$target_env_file" != "$source_env_file" && "$force" != "1" ]]; then
+if [[ -e "$target_env_file" && "$force" != "1" ]]; then
   echo "Target flow env already exists: ${target_env_file}" >&2
   echo "Use --force to overwrite it." >&2
   exit 1
 fi
 
-if [[ -e "$target_sample_env" && "$target_sample_env" != "$source_sample_env" && "$force" != "1" ]]; then
-  echo "Target profile sample already exists: ${target_sample_env}" >&2
+if [[ -e "$target_sample_env" && "$force" != "1" ]]; then
+  echo "Target flow sample already exists: ${target_sample_env}" >&2
   echo "Use --force to overwrite it." >&2
   exit 1
 fi
@@ -281,96 +207,76 @@ fi
 mkdir -p "$flow_config_dir" "$target_state_dir"
 
 if [[ -n "$migration_config" ]]; then
-  if [[ -e "$target_flow_conf" && "$target_flow_conf" != "$migration_config" && "$force" != "1" ]]; then
-    echo "Target flow config already exists: ${target_flow_conf}" >&2
+  if [[ -e "$target_migration_conf" && "$target_migration_conf" != "$migration_config" && "$force" != "1" ]]; then
+    echo "Target migration config already exists: ${target_migration_conf}" >&2
     echo "Use --force to overwrite it." >&2
     exit 1
   fi
-  if [[ "$migration_config" != "$target_flow_conf" ]]; then
-    cp "$migration_config" "$target_flow_conf"
+  if [[ "$migration_config" != "$target_migration_conf" ]]; then
+    cp "$migration_config" "$target_migration_conf"
   fi
-fi
-
-if flow_payload_rel="$(read_migration_config_key "MIGRATION_KIT_FLOW_PAYLOAD_REL" || true)"; [[ -n "$flow_payload_rel" ]]; then
-  flow_payload_path="$(resolve_migration_artifact_path "$flow_payload_rel")"
-fi
-if repo_overlay_rel="$(read_migration_config_key "MIGRATION_KIT_REPO_OVERLAY_REL" || true)"; [[ -n "$repo_overlay_rel" ]]; then
-  repo_overlay_path="$(resolve_migration_artifact_path "$repo_overlay_rel")"
 fi
 
 if [[ -f "$source_sample_env" ]]; then
-  if [[ "$source_sample_env" != "$target_sample_env" ]]; then
-    cp "$source_sample_env" "$target_sample_env"
-  fi
+  cp "$source_sample_env" "$target_sample_env"
   rewrite_env_key "$target_sample_env" "PROJECT_PROFILE" "$target_profile"
   rewrite_env_key "$target_sample_env" "CODEX_STATE_DIR" "$target_relative_state_dir"
   rewrite_env_key "$target_sample_env" "FLOW_STATE_DIR" "$target_relative_state_dir"
   rewrite_env_key "$target_sample_env" "WATCHDOG_DAEMON_LABEL" "${launchd_namespace}.codex-daemon.${target_profile}"
 fi
 
-if [[ -f "$target_sample_env" ]]; then
-  cp "$target_sample_env" "$target_env_file"
-elif [[ -f "$source_env_file" ]]; then
+if [[ -f "$source_env_file" ]]; then
   cp "$source_env_file" "$target_env_file"
+elif [[ -f "$target_sample_env" ]]; then
+  cp "$target_sample_env" "$target_env_file"
 fi
 
 rewrite_env_key "$target_env_file" "PROJECT_PROFILE" "$target_profile"
-rewrite_env_key "$target_env_file" "CODEX_STATE_DIR" "$target_state_dir"
-rewrite_env_key "$target_env_file" "FLOW_STATE_DIR" "$target_state_dir"
+rewrite_env_key "$target_env_file" "CODEX_STATE_DIR" "$target_relative_state_dir"
+rewrite_env_key "$target_env_file" "FLOW_STATE_DIR" "$target_relative_state_dir"
 rewrite_env_key "$target_env_file" "WATCHDOG_DAEMON_LABEL" "${launchd_namespace}.codex-daemon.${target_profile}"
 
-if [[ -n "$flow_payload_path" ]]; then
-  apply_flow_payload "$flow_payload_path"
-  rewrite_env_key "$target_env_file" "PROJECT_PROFILE" "$target_profile"
-  rewrite_env_key "$target_env_file" "CODEX_STATE_DIR" "$target_state_dir"
-  rewrite_env_key "$target_env_file" "FLOW_STATE_DIR" "$target_state_dir"
-  rewrite_env_key "$target_env_file" "WATCHDOG_DAEMON_LABEL" "${launchd_namespace}.codex-daemon.${target_profile}"
-fi
+copy_file_if_present "$source_actions_files_manifest" "${ROOT_DIR}/.flow/templates/github/required-files.txt"
+copy_file_if_present "$source_actions_secrets_manifest" "${ROOT_DIR}/.flow/templates/github/required-secrets.txt"
 
 repo_actions_applied="0"
-if [[ -n "$repo_overlay_path" ]]; then
-  apply_repo_overlay_payload "$repo_overlay_path"
-fi
-
-if [[ -d "${source_actions_template_dir}/workflows" ]]; then
+if [[ -d "${source_github_overlay_dir}/workflows" ]]; then
   while IFS= read -r source_workflow; do
     [[ -n "$source_workflow" ]] || continue
     workflow_name="$(basename "$source_workflow")"
     copy_repo_overlay_file "$source_workflow" "${ROOT_DIR}/.github/workflows/${workflow_name}"
     repo_actions_applied=$((repo_actions_applied + 1))
   done <<EOF
-$(find "${source_actions_template_dir}/workflows" -maxdepth 1 -type f -name '*.yml' | sort)
+$(find "${source_github_overlay_dir}/workflows" -maxdepth 1 -type f -name '*.yml' | sort)
 EOF
 fi
 
-if [[ -f "${source_actions_template_dir}/pull_request_template.md" ]]; then
+if [[ -f "${source_github_overlay_dir}/pull_request_template.md" ]]; then
   copy_repo_overlay_file \
-    "${source_actions_template_dir}/pull_request_template.md" \
+    "${source_github_overlay_dir}/pull_request_template.md" \
     "${ROOT_DIR}/.github/pull_request_template.md"
 fi
 
-materialize_shared_submodule
+if [[ -d "${ROOT_DIR}/.flow/shared" ]]; then
+  echo "MIGRATION_KIT_TOOLKIT_SUBMODULE_STATUS=BOOTSTRAPPED_EXTERNALLY"
+else
+  echo "MIGRATION_KIT_TOOLKIT_SUBMODULE_STATUS=NOT_PRESENT"
+fi
 
 echo "MIGRATION_KIT_APPLIED=1"
 echo "MIGRATION_KIT_PROFILE=${target_profile}"
 echo "MIGRATION_KIT_PROFILE_SAMPLE=${target_sample_env}"
 echo "MIGRATION_KIT_ENV=${target_env_file}"
 if [[ -n "$migration_config" ]]; then
-  echo "MIGRATION_KIT_FLOW_CONFIG=${target_flow_conf}"
+  echo "MIGRATION_KIT_FLOW_CONFIG=${target_migration_conf}"
 fi
 echo "MIGRATION_KIT_STATE_DIR=${target_state_dir}"
 echo "MIGRATION_KIT_REPO_ACTIONS_APPLIED=${repo_actions_applied}"
-if toolkit_submodule_url="$(read_manifest_key "MIGRATION_KIT_TOOLKIT_SUBMODULE_URL" || true)"; [[ -n "${toolkit_submodule_url}" ]]; then
-  echo "MIGRATION_KIT_TOOLKIT_SUBMODULE_URL=${toolkit_submodule_url}"
+if [[ -f "${ROOT_DIR}/.flow/templates/github/required-files.txt" ]]; then
+  echo "MIGRATION_KIT_REPO_ACTIONS_FILES=${ROOT_DIR}/.flow/templates/github/required-files.txt"
 fi
-if toolkit_submodule_revision="$(read_manifest_key "MIGRATION_KIT_TOOLKIT_SUBMODULE_REVISION" || true)"; [[ -n "${toolkit_submodule_revision}" ]]; then
-  echo "MIGRATION_KIT_TOOLKIT_SUBMODULE_REVISION=${toolkit_submodule_revision}"
-fi
-if [[ -f "$source_actions_files_manifest" ]]; then
-  echo "MIGRATION_KIT_REPO_ACTIONS_FILES=${source_actions_files_manifest}"
-fi
-if [[ -f "$source_actions_secrets_manifest" ]]; then
-  echo "MIGRATION_KIT_REPO_ACTIONS_SECRETS=${source_actions_secrets_manifest}"
+if [[ -f "${ROOT_DIR}/.flow/templates/github/required-secrets.txt" ]]; then
+  echo "MIGRATION_KIT_REPO_ACTIONS_SECRETS=${ROOT_DIR}/.flow/templates/github/required-secrets.txt"
   echo "NEXT_REPO_SECRETS_STEP=Create repo Actions secrets manually in GitHub UI -> Settings -> Secrets and variables -> Actions"
 fi
 echo "NEXT_STEP=.flow/shared/scripts/run.sh onboarding_audit --profile ${target_profile}"

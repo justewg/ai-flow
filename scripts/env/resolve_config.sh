@@ -2,19 +2,25 @@
 
 # Shared config resolver for flow automation scripts.
 # shellcheck disable=SC2034
-CODEX_CONFIG_ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+CODEX_CONFIG_ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
+
+codex_normalize_existing_dir() {
+  local candidate="${1:-}"
+  [[ -n "$candidate" && -d "$candidate" ]] || return 1
+  cd "$candidate" && pwd -P
+}
 
 codex_discover_root_dir_from_pwd() {
   local current_dir parent_dir
-  current_dir="${PWD:-}"
+  current_dir="$(codex_normalize_existing_dir "${PWD:-}" 2>/dev/null || true)"
   [[ -n "$current_dir" ]] || return 1
 
   while [[ -n "$current_dir" ]]; do
-    if [[ -d "${current_dir}/.git" || -d "${current_dir}/.flow/config" || -L "${current_dir}/.flow/shared" ]]; then
+    if [[ -d "${current_dir}/.git" || -d "${current_dir}/.flow/config" || -L "${current_dir}/.flow/shared" || -d "${current_dir}/.flow/shared" ]]; then
       printf '%s' "$current_dir"
       return 0
     fi
-    parent_dir="$(cd "${current_dir}/.." && pwd)"
+    parent_dir="$(codex_normalize_existing_dir "${current_dir}/.." 2>/dev/null || true)"
     [[ "$parent_dir" != "$current_dir" ]] || break
     current_dir="$parent_dir"
   done

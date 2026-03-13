@@ -71,16 +71,22 @@ sudo systemctl status planka-flow-docs.service
 
 ## Nginx reverse proxy
 
-Пример для публикации docs на `https://planka.ewg40.ru/flow/`:
+Пример для публикации docs на отдельном домене `https://aiflow.ewg40.ru/`:
 
 ```nginx
-location /flow/ {
-    proxy_pass http://127.0.0.1:4410/;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
+server {
+    listen 80;
+    listen [::]:80;
+    server_name aiflow.ewg40.ru;
+
+    location / {
+        proxy_pass http://127.0.0.1:4410/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 }
 ```
 
@@ -89,7 +95,7 @@ location /flow/ {
 ```bash
 sudo nginx -t
 sudo systemctl reload nginx
-curl -I https://planka.ewg40.ru/flow/
+curl -I http://aiflow.ewg40.ru/
 ```
 
 ## Ручной smoke-check
@@ -99,7 +105,7 @@ curl -I https://planka.ewg40.ru/flow/
 3. На сервере проверить:
    - `/var/sites/planka-flow-docs/current/redocly.yaml`
    - `systemctl status planka-flow-docs.service`
-4. В браузере открыть `https://planka.ewg40.ru/flow/`
+4. В браузере открыть `https://aiflow.ewg40.ru/`
 
 ## Troubleshooting
 

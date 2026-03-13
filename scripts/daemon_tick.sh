@@ -865,6 +865,17 @@ clear_dirty_gate_local_state() {
   : > "$dirty_gate_finalize_pending_file"
 }
 
+has_dirty_gate_local_state() {
+  [[ -s "$dirty_gate_issue_file" ]] ||
+    [[ -s "$dirty_gate_issue_url_file" ]] ||
+    [[ -s "$dirty_gate_signature_file" ]] ||
+    [[ -s "$dirty_gate_comment_signature_file" ]] ||
+    [[ -s "$dirty_gate_blocked_issue_file" ]] ||
+    [[ -s "$dirty_gate_blocked_title_file" ]] ||
+    [[ -s "$dirty_gate_override_signature_file" ]] ||
+    [[ -s "$dirty_gate_last_reply_id_file" ]]
+}
+
 clear_dirty_gate_waiting_state_if_any() {
   local waiting_task=""
   [[ -s "${CODEX_DIR}/daemon_waiting_task_id.txt" ]] && waiting_task="$(<"${CODEX_DIR}/daemon_waiting_task_id.txt")"
@@ -2264,6 +2275,10 @@ if ! git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- ||
   fi
 else
   clear_dirty_gate_waiting_state_if_any
+  if [[ ! -s "$dirty_gate_finalize_pending_file" ]] && has_dirty_gate_local_state; then
+    clear_dirty_gate_local_state
+    echo "WAIT_DIRTY_WORKTREE_CLEAN_LOCAL_STATE_CLEARED=1"
+  fi
 fi
 
 # Сначала пытаемся доставить отложенные действия в GitHub (outbox).

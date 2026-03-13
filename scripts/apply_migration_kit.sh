@@ -7,6 +7,7 @@ source "${SCRIPT_DIR}/env/bootstrap.sh"
 
 project=""
 force="0"
+migration_config=""
 flow_tmp_dir="$(codex_resolve_flow_tmp_dir)"
 
 usage() {
@@ -15,12 +16,15 @@ Usage: .flow/shared/scripts/apply_migration_kit.sh [options]
 
 Options:
   --project <name>        Целевое имя profile после распаковки kit.
+  --migration-config <path>
+                          Локальный migration config из .flow/migration/flow.conf.
   --force                 Разрешить перезапись target env/template.
   -h, --help              Показать справку.
 
 Examples:
   .flow/shared/scripts/apply_migration_kit.sh
   .flow/shared/scripts/apply_migration_kit.sh --project acme
+  .flow/shared/scripts/apply_migration_kit.sh --project acme --migration-config .flow/migration/flow.conf
 EOF
 }
 
@@ -155,11 +159,22 @@ detect_source_profile() {
   read_manifest_key "MIGRATION_KIT_PROJECT" || true
 }
 
+read_migration_config_key() {
+  local key="$1"
+  [[ -n "$migration_config" && -f "$migration_config" ]] || return 1
+  codex_read_key_from_env_file "$migration_config" "$key"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --project)
       [[ $# -ge 2 ]] || { echo "Missing value for --project" >&2; exit 1; }
       project="$2"
+      shift 2
+      ;;
+    --migration-config)
+      [[ $# -ge 2 ]] || { echo "Missing value for --migration-config" >&2; exit 1; }
+      migration_config="$2"
       shift 2
       ;;
     --force)
@@ -178,6 +193,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -n "$migration_config" && ! -f "$migration_config" ]]; then
+  echo "Migration config not found: ${migration_config}" >&2
+  exit 1
+fi
+
 source_profile="$(detect_source_profile || true)"
 if [[ -z "$source_profile" ]]; then
   echo "Could not detect migration kit project in .flow/tmp/migration_kit_manifest.env." >&2
@@ -188,12 +208,15 @@ fi
 target_profile="$source_profile"
 if [[ -n "$project" ]]; then
   target_profile="$(slugify "$project")"
+elif config_profile="$(read_migration_config_key "MIGRATION_KIT_PROJECT" || true)"; [[ -n "$config_profile" ]]; then
+  target_profile="$(slugify "$config_profile")"
 fi
 
 flow_state_root_dir="$(codex_resolve_flow_state_root_dir)"
 flow_config_dir="$(codex_resolve_flow_config_dir)"
 target_env_file="$(codex_resolve_flow_env_file)"
 target_sample_env="$(codex_resolve_flow_sample_env_file)"
+target_flow_conf="${flow_config_dir}/flow.conf"
 launchd_namespace="$(codex_resolve_flow_launchd_namespace)"
 
 source_sample_env="${flow_config_dir}/flow.sample.env"
@@ -222,6 +245,17 @@ if [[ -e "$target_sample_env" && "$target_sample_env" != "$source_sample_env" &&
 fi
 
 mkdir -p "$flow_config_dir" "$target_state_dir"
+
+if [[ -n "$migration_config" ]]; then
+  if [[ -e "$target_flow_conf" && "$target_flow_conf" != "$migration_config" && "$force" != "1" ]]; then
+    echo "Target flow config already exists: ${target_flow_conf}" >&2
+    echo "Use --force to overwrite it." >&2
+    exit 1
+  fi
+  if [[ "$migration_config" != "$target_flow_conf" ]]; then
+    cp "$migration_config" "$target_flow_conf"
+  fi
+fi
 
 if [[ -f "$source_sample_env" ]]; then
   if [[ "$source_sample_env" != "$target_sample_env" ]]; then
@@ -268,6 +302,9 @@ echo "MIGRATION_KIT_APPLIED=1"
 echo "MIGRATION_KIT_PROFILE=${target_profile}"
 echo "MIGRATION_KIT_PROFILE_SAMPLE=${target_sample_env}"
 echo "MIGRATION_KIT_ENV=${target_env_file}"
+if [[ -n "$migration_config" ]]; then
+  echo "MIGRATION_KIT_FLOW_CONFIG=${target_flow_conf}"
+fi
 echo "MIGRATION_KIT_STATE_DIR=${target_state_dir}"
 echo "MIGRATION_KIT_REPO_ACTIONS_APPLIED=${repo_actions_applied}"
 if toolkit_submodule_url="$(read_manifest_key "MIGRATION_KIT_TOOLKIT_SUBMODULE_URL" || true)"; [[ -n "${toolkit_submodule_url}" ]]; then

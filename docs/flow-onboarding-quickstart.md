@@ -128,18 +128,16 @@ gh project view <PROJECT_NUMBER> --owner <PROJECT_OWNER> --format json --jq '.id
 - repo-level GitHub workflows не являются ядром toolkit, но migration kit может переносить их как overlay исходного consumer-project вместе с manifest required secrets.
 
 Если нужно перенести комплект без ручной выборки файлов, можно собрать архив:
-- в текущем проекте: `.flow/shared/scripts/run.sh create_migration_kit --project acme`
+- в текущем проекте: `.flow/shared/scripts/run.sh create_migration_kit --project acme --target-repo <HOME>/sites/acme-app`
 - archive по умолчанию появится как `.flow/migration/acme-migration-kit.tgz`
-- если уже известна папка нового repo:
-  `.flow/shared/scripts/run.sh create_migration_kit --project acme --target-repo <HOME>/sites/acme-app`
 - если нужен prefilled `flow.env` с текущими секретами:
-  `.flow/shared/scripts/run.sh create_migration_kit --project acme --defaults-from current --include-secrets`
-- в новом проекте после распаковки: `./apply_migration_kit.sh --project acme`
-- при необходимости можно вызвать и напрямую: `.flow/shared/scripts/run.sh apply_migration_kit --project acme`
+  `.flow/shared/scripts/run.sh create_migration_kit --project acme --defaults-from current --include-secrets --target-repo <HOME>/sites/acme-app`
+- в target repo появятся `.flow/migration/do_migration.sh`, `.flow/migration/flow.conf` и `.flow/migration/README.md`
+- в новом проекте достаточно запустить: `.flow/migration/do_migration.sh`
 - archive положит безопасный шаблон `.flow/config/flow.sample.env` без копирования живых токенов из исходного проекта
 - archive также положит prefilled `.flow/config/flow.env`; при `--include-secrets` в него попадут и текущие секреты
 - archive также положит `.flow/templates/github/` как source overlay для `.github/workflows/` и `.github/pull_request_template.md`
-- `apply_migration_kit` развернёт этот overlay в новый repo и оставит manifest required secrets в `.flow/templates/github/required-secrets.txt`
+- `apply_migration_kit` развернёт этот overlay в новый repo, сохранит локальный `.flow/config/flow.conf` и оставит manifest required secrets в `.flow/templates/github/required-secrets.txt`
 - если target уже git-repo, `apply_migration_kit` best-effort materialize-ит `/.flow/shared` как submodule по URL/revision из kit manifest
 
 ## Bootstrap в локальной папке проекта
@@ -169,7 +167,7 @@ cd <HOME>/sites/acme-app
 
 Если toolkit переносился через `migration_kit.tgz`, перед audit сначала выполни:
 ```bash
-./apply_migration_kit.sh --project acme
+.flow/migration/do_migration.sh
 ```
 
 После этого ожидается:

@@ -57,19 +57,17 @@
 
 Практический shortcut:
 1. В current project можно собрать `migration_kit.tgz`:
-   `.flow/shared/scripts/run.sh create_migration_kit --project acme`
-   Archive по умолчанию появится как `.flow/migration/acme-migration-kit.tgz`.
-   Если уже известна папка target repo:
    `.flow/shared/scripts/run.sh create_migration_kit --project acme --target-repo <HOME>/sites/acme-app`
+   Archive по умолчанию появится как `.flow/migration/acme-migration-kit.tgz`.
    Если target находится в том же trust-контуре и нужен prefilled `flow.env` с текущими секретами:
-   `.flow/shared/scripts/run.sh create_migration_kit --project acme --defaults-from current --include-secrets`
+   `.flow/shared/scripts/run.sh create_migration_kit --project acme --defaults-from current --include-secrets --target-repo <HOME>/sites/acme-app`
 2. В new project после распаковки выполнить:
-   `./apply_migration_kit.sh --project acme`
-   При необходимости можно вызвать и напрямую:
-   `.flow/shared/scripts/run.sh apply_migration_kit --project acme`
+   `.flow/migration/do_migration.sh`
+   Launcher сам возьмёт source archive по пути из `.flow/migration/flow.conf`, распакует kit и вызовет `apply_migration_kit`.
 3. Kit должен принести безопасные шаблоны:
    - `.flow/config/flow.sample.env`
    - `.flow/config/flow.env` (prefilled; при `--defaults-from current --include-secrets` может уже содержать текущие секреты)
+   - `.flow/config/flow.conf`
    - `.flow/templates/github/required-files.txt`
    - `.flow/templates/github/required-secrets.txt`
 4. Если target repo уже git-репозиторий, `apply_migration_kit` best-effort материализует `/.flow/shared` как submodule по URL/revision из manifest; при недоступной сети оставляет snapshot и пишет `MIGRATION_KIT_TOOLKIT_SUBMODULE_STATUS=*`.

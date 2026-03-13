@@ -32,11 +32,12 @@
 - [ ] Если нужен полный repo automation overlay, подготовлены `.github/workflows/` и `.github/pull_request_template.md`
 
 Опционально вместо ручного копирования:
-- [ ] В текущем проекте выполнен `.flow/shared/scripts/run.sh create_migration_kit --project acme`
-- [ ] Archive лежит в `.flow/migration/acme-migration-kit.tgz` или уже автоматически скопирован в `<target-repo>/.flow/migration/acme-migration-kit.tgz`
-- [ ] Archive перенесён в новый repo и распакован в корне
-- [ ] После распаковки выполнен `.flow/shared/scripts/run.sh apply_migration_kit --project acme`
+- [ ] В текущем проекте выполнен `.flow/shared/scripts/run.sh create_migration_kit --project acme --target-repo <HOME>/sites/acme-app`
+- [ ] Archive лежит в source repo: `.flow/migration/acme-migration-kit.tgz`
+- [ ] В target repo появились `.flow/migration/do_migration.sh`, `.flow/migration/flow.conf` и `.flow/migration/README.md`
+- [ ] Выполнен `.flow/migration/do_migration.sh`
 - [ ] Проверено, что после `apply_migration_kit` появились `.flow/config/flow.sample.env` и `.flow/config/flow.env`
+- [ ] Проверено, что после `apply_migration_kit` появился `.flow/config/flow.conf`
 - [ ] Проверено, что после `apply_migration_kit` появились `.flow/templates/github/required-files.txt` и `.flow/templates/github/required-secrets.txt`
 - [ ] Проверено, что `apply_migration_kit` развернул `.github/workflows/*.yml` и `.github/pull_request_template.md` из source overlay
 - [ ] Если target repo уже git-репозиторий, проверено, что `apply_migration_kit` попытался materialize-ить `/.flow/shared` как submodule
@@ -107,11 +108,12 @@ cd /path/to/new-project
 .flow/shared/scripts/run.sh profile_init init --profile acme
 ```
 
-- [ ] Если уже использован `migration_kit.tgz`, этот шаг можно пропустить: `apply_migration_kit` сам создаёт рабочий `.flow/config/flow.env` из `.flow/config/flow.sample.env`.
+- [ ] Если уже использован `migration_kit.tgz`, этот шаг можно пропустить: `.flow/migration/do_migration.sh` сам распакует kit и вызовет `apply_migration_kit`, который создаёт рабочий `.flow/config/flow.env` из `.flow/config/flow.sample.env`.
 
 - [ ] Убедись, что появились:
   - [ ] `.flow/config/flow.sample.env`
   - [ ] `.flow/config/flow.env`
+  - [ ] `.flow/config/flow.conf`
   - [ ] `.flow/state/codex/acme`
   - [ ] `<sites-root>/.ai-flow/logs/acme` или явный `FLOW_LOGS_DIR`
   - [ ] `.flow/templates/github/required-files.txt`

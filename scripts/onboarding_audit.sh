@@ -772,7 +772,7 @@ else
                   [
                     .runners[]
                     | select(.status == "online")
-                    | select(any((.labels // []); .name == $label))
+                    | select(any((.labels // [])[]; .name == $label))
                   ] | length
                 ' 2>/dev/null || printf '0'
           )"

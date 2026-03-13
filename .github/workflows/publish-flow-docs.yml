@@ -1,0 +1,75 @@
+name: Publish Flow Web Docs
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: publish-flow-docs
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build_bundle:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+
+      - name: Build and validate flow docs bundle
+        run: |
+          bash scripts/flow_docs/publish_flow_docs.sh \
+            --output-dir dist/flow-docs \
+            --bundle-file dist/flow-web-docs-bundle.tgz
+
+      - name: Upload flow docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flow-web-docs-bundle
+          if-no-files-found: error
+          path: |
+            dist/flow-docs
+            dist/flow-web-docs-bundle.tgz
+
+  publish_redocly:
+    needs: build_bundle
+    if: ${{ secrets.REDOCLY_AUTHORIZATION != '' && secrets.REDOCLY_ORGANIZATION != '' && secrets.REDOCLY_PROJECT != '' }}
+    runs-on: ubuntu-latest
+    env:
+      REDOCLY_AUTHORIZATION: ${{ secrets.REDOCLY_AUTHORIZATION }}
+      REDOCLY_ORGANIZATION: ${{ secrets.REDOCLY_ORGANIZATION }}
+      REDOCLY_PROJECT: ${{ secrets.REDOCLY_PROJECT }}
+      REDOCLY_MOUNT_PATH: ${{ secrets.REDOCLY_MOUNT_PATH }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+
+      - name: Download flow docs artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: flow-web-docs-bundle
+          path: dist
+
+      - name: Publish flow docs to Readocly
+        run: |
+          bash scripts/flow_docs/publish_flow_docs.sh \
+            --skip-build \
+            --output-dir dist/flow-docs \
+            --bundle-file dist/flow-web-docs-bundle.tgz \
+            --publish

@@ -7,6 +7,8 @@
 ## [Unreleased]
 
 ### Added
+- `[ISSUE-387]` Добавлен source layout `docs/flow/web-source/` и generator `scripts/flow_docs/build_flow_docs.py` для канонической web-документации flow на базе Readocly.
+- `[ISSUE-387]` Добавлен publish pipeline `.github/workflows/publish-flow-docs.yml` и shell entrypoint `scripts/flow_docs/publish_flow_docs.sh`: после push в `main` он собирает `flow-web-docs-bundle`, а при наличии `REDOCLY_*` secrets публикует bundle в Readocly Reunite.
 - `[PL-000]` Добавлены артефакты управления разработкой: `TODO.md` и `CHANGELOG.md`.
 - `[PL-000]` Зафиксировано правило синхронизации: задача считается завершенной только после отражения результата в changelog.
 - `[PL-013]` Создан GitHub Project `PLANKA Roadmap`: `https://github.com/users/justewg/projects/2`.

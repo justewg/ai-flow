@@ -1,0 +1,212 @@
+{
+  "site": {
+    "title": "PLANKA Flow Docs",
+    "description": "Каноническая web-документация по flow, собираемая из исходников репозитория PLANKA.",
+    "artifact_name": "flow-web-docs",
+    "mount_path": "/flow"
+  },
+  "sidebar": [
+    {
+      "page": "index.md",
+      "label": "Главная"
+    },
+    {
+      "group": "Платформа",
+      "items": [
+        {
+          "page": "platform/overview.md",
+          "label": "Цели и рамки"
+        },
+        {
+          "page": "platform/architecture.md",
+          "label": "Архитектура"
+        }
+      ]
+    },
+    {
+      "group": "Runtime",
+      "items": [
+        {
+          "page": "runtime/components.md",
+          "label": "Компоненты"
+        },
+        {
+          "page": "runtime/processes.md",
+          "label": "Процессы и диаграммы"
+        }
+      ]
+    },
+    {
+      "group": "Adoption",
+      "items": [
+        {
+          "page": "adoption/onboarding.md",
+          "label": "Онбординг"
+        },
+        {
+          "page": "adoption/configurator.md",
+          "label": "Конфигуратор и entrypoint-команды"
+        },
+        {
+          "page": "adoption/migration.md",
+          "label": "Migration и init"
+        }
+      ]
+    },
+    {
+      "group": "Operations",
+      "items": [
+        {
+          "page": "operations/troubleshooting.md",
+          "label": "Ops и troubleshooting"
+        }
+      ]
+    },
+    {
+      "group": "Reference",
+      "items": [
+        {
+          "page": "reference/policies.md",
+          "label": "Политики и supported scenarios"
+        },
+        {
+          "page": "reference/source-mapping.md",
+          "label": "Source mapping"
+        }
+      ]
+    },
+    {
+      "group": "Releases",
+      "items": [
+        {
+          "page": "releases/index.md",
+          "label": "Последние изменения"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "index",
+      "output": "index.md",
+      "source": "docs/flow/web-source/pages/index.md",
+      "sources": [
+        "README.md",
+        "TASKFLOW.md",
+        "CHANGELOG.md",
+        "docs/flow/issue-330-flow-diagram.md"
+      ]
+    },
+    {
+      "id": "platform-overview",
+      "output": "platform/overview.md",
+      "source": "docs/flow/web-source/pages/platform-overview.md",
+      "sources": [
+        "README.md",
+        "TASKFLOW.md",
+        "docs/flow/issue-330-flow-diagram.md"
+      ]
+    },
+    {
+      "id": "platform-architecture",
+      "output": "platform/architecture.md",
+      "source": "docs/flow/web-source/pages/platform-architecture.md",
+      "sources": [
+        "TASKFLOW.md",
+        "docs/flow/issue-330-flow-diagram.md",
+        ".flow/shared/docs/gh-app-daemon-integration-plan.md",
+        ".flow/shared/docs/ops-bot-dashboard.md",
+        "docs/self-hosted-runner-deploy.md"
+      ]
+    },
+    {
+      "id": "runtime-components",
+      "output": "runtime/components.md",
+      "source": "docs/flow/web-source/pages/runtime-components.md",
+      "sources": [
+        "TASKFLOW.md",
+        ".flow/shared/scripts/README.md",
+        ".flow/shared/docs/gh-app-daemon-integration-plan.md",
+        ".flow/shared/docs/ops-bot-dashboard.md"
+      ]
+    },
+    {
+      "id": "runtime-processes",
+      "output": "runtime/processes.md",
+      "source": "docs/flow/web-source/pages/runtime-processes.md",
+      "sources": [
+        "TASKFLOW.md",
+        "docs/flow/issue-330-flow-diagram.md",
+        "docs/flow/flow-diagram.mmd",
+        "docs/flow/state-diagram.mmd",
+        "docs/app-issues-dependency-diagram.md"
+      ]
+    },
+    {
+      "id": "adoption-onboarding",
+      "output": "adoption/onboarding.md",
+      "source": "docs/flow/web-source/pages/adoption-onboarding.md",
+      "sources": [
+        ".flow/shared/docs/flow-onboarding-quickstart.md",
+        ".flow/shared/docs/flow-onboarding-checklist.md",
+        "docs/issue-388-flow-initializer.md",
+        ".flow/shared/scripts/README.md"
+      ]
+    },
+    {
+      "id": "adoption-configurator",
+      "output": "adoption/configurator.md",
+      "source": "docs/flow/web-source/pages/adoption-configurator.md",
+      "sources": [
+        "docs/issue-376-flow-configurator-backlog-plan.md",
+        "docs/issue-377-flow-configurator-contract.md",
+        "docs/issue-378-flow-bootstrap.md",
+        "docs/issue-388-flow-initializer.md",
+        ".flow/shared/scripts/README.md"
+      ]
+    },
+    {
+      "id": "adoption-migration",
+      "output": "adoption/migration.md",
+      "source": "docs/flow/web-source/pages/adoption-migration.md",
+      "sources": [
+        ".flow/shared/docs/flow-portability-runbook.md",
+        ".flow/shared/docs/flow-toolkit-packaging.md",
+        "docs/issue-378-flow-bootstrap.md",
+        "docs/issue-388-flow-initializer.md",
+        ".flow/shared/scripts/README.md"
+      ]
+    },
+    {
+      "id": "operations-troubleshooting",
+      "output": "operations/troubleshooting.md",
+      "source": "docs/flow/web-source/pages/operations-troubleshooting.md",
+      "sources": [
+        ".flow/shared/scripts/README.md",
+        ".flow/shared/docs/ops-bot-dashboard.md",
+        ".flow/shared/docs/gh-app-daemon-integration-plan.md",
+        "docs/self-hosted-runner-deploy.md",
+        "TASKFLOW.md"
+      ]
+    },
+    {
+      "id": "reference-policies",
+      "output": "reference/policies.md",
+      "source": "docs/flow/web-source/pages/reference-policies.md",
+      "sources": [
+        "TASKFLOW.md",
+        ".flow/shared/scripts/README.md",
+        ".flow/shared/docs/flow-onboarding-quickstart.md",
+        ".flow/shared/docs/flow-portability-runbook.md",
+        "CHANGELOG.md"
+      ]
+    }
+  ],
+  "diagram_assets": [
+    "docs/flow/flow-diagram.mmd",
+    "docs/flow/state-diagram.mmd",
+    "docs/flow/flow-diagram.pdf",
+    "docs/flow/state-diagram.pdf",
+    "docs/app-issues-dependency-diagram.md"
+  ]
+}

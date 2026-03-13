@@ -33,6 +33,7 @@
 
 Опционально вместо ручного копирования:
 - [ ] В текущем проекте выполнен `.flow/shared/scripts/run.sh create_migration_kit --project acme --target-repo <HOME>/sites/acme-app`
+- [ ] Если target должен сохранить source binding `GITHUB_REPO` и `PROJECT_*`, kit создавался с явным `--keep-project-binding`
 - [ ] Archive лежит в source repo: `.flow/migration/acme-migration-kit.tgz`
 - [ ] В target repo появились `.flow/migration/do_migration.sh`, `.flow/migration/migration.conf`, `.flow/migration/README.md` и локальный payload archive
 - [ ] Выполнен `.flow/migration/do_migration.sh`
@@ -41,6 +42,7 @@
 - [ ] Проверено, что после `apply_migration_kit` появились `.flow/templates/github/required-files.txt` и `.flow/templates/github/required-secrets.txt`
 - [ ] Проверено, что `apply_migration_kit` развернул `.github/workflows/*.yml` и `.github/pull_request_template.md` из source overlay
 - [ ] Проверено, что `do_migration.sh` bootstrap-ит `/.flow/shared` из `ai-flow`
+- [ ] Если `--keep-project-binding` не использовался, ожидаемо пустые `GITHUB_REPO` и `PROJECT_*` будут заполнены позже через wizard под target repo/project
 - [ ] Понимание зафиксировано: `.tmp/codex/` больше не runtime-источник, а только legacy compatibility layer.
 
 ## 1. Собери входные значения

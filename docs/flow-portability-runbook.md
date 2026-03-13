@@ -61,6 +61,8 @@
    Archive по умолчанию появится как `.flow/migration/acme-migration-kit.tgz`.
    Если target находится в том же trust-контуре и нужен prefilled `flow.env` с текущими секретами:
    `.flow/shared/scripts/run.sh create_migration_kit --project acme --defaults-from current --include-secrets --target-repo <HOME>/sites/acme-app`
+   Если target должен сохранить source binding для `GITHUB_REPO` и `PROJECT_*`, это нужно указать явно:
+   `.flow/shared/scripts/run.sh create_migration_kit --project acme --defaults-from current --keep-project-binding --target-repo <HOME>/sites/acme-app`
 2. В new project выполнить:
    `.flow/migration/do_migration.sh`
    Launcher сам поднимет toolkit из `ai-flow` по repo/ref из `.flow/migration/migration.conf` и передаст локальный payload archive в `apply_migration_kit`.
@@ -72,9 +74,10 @@
    - `.flow/templates/github/required-secrets.txt`
 4. Payload archive несёт только project-specific содержимое: `.flow/config/flow.env`, `.flow/config/flow.sample.env`, `.flow/github/*` и `.flow/templates/github/*`. Toolkit внутри archive не хранится.
 5. Если kit собирался c `--defaults-from current --include-secrets`, payload `flow.env` уже содержит текущие секреты source-project.
-6. `do_migration.sh` сначала bootstrap-ит `/.flow/shared`, а затем запускает toolkit `apply_migration_kit`.
-7. Если kit собран без `--include-secrets`, repo Actions secrets и runtime secrets нужно создать вручную в GitHub UI нового repo (`Settings -> Secrets and variables -> Actions`) по списку из `.flow/templates/github/required-secrets.txt`.
-8. `.tmp/codex/` в consumer-project больше не нужен как runtime-root; если он присутствует, это только compatibility-symlink layer.
+6. По умолчанию migration kit очищает `GITHUB_REPO` и `PROJECT_*` в target `flow.env`, чтобы новый repo/project был перенастроен отдельно. Сохранение source binding допускается только через `--keep-project-binding`.
+7. `do_migration.sh` сначала bootstrap-ит `/.flow/shared`, а затем запускает toolkit `apply_migration_kit`.
+8. Если kit собран без `--include-secrets`, repo Actions secrets и runtime secrets нужно создать вручную в GitHub UI нового repo (`Settings -> Secrets and variables -> Actions`) по списку из `.flow/templates/github/required-secrets.txt`.
+9. `.tmp/codex/` в consumer-project больше не нужен как runtime-root; если он присутствует, это только compatibility-symlink layer.
 
 ### 3. Инициализировать новый profile
 1. Выполнить:

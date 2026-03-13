@@ -55,7 +55,7 @@
 - `.flow/shared/scripts/run.sh app_deps_mermaid [output-file]` — построить Mermaid DAG зависимостей APP-issues из `Flow Meta` (`Depends-On/Blocks`) и записать markdown-файл (по умолчанию `docs/app-issues-dependency-diagram.md`).
 - `.flow/shared/scripts/run.sh backlog_seed_apply` — применить runtime-план создания backlog-задач из `<state-dir>/backlog_seed_plan.json` (по умолчанию 1 задача за запуск).
 - `.flow/shared/scripts/run.sh onboarding_audit [--profile <name>] [--skip-network]` — первичный аудит consumer-project: toolkit-файлы, локальные команды, git/gh, project-scoped flow env, repo и Project v2, repo workflow overlay и наличие обязательных GitHub Actions secrets.
-- `.flow/shared/scripts/run.sh create_migration_kit --project <name> [--defaults-from <current|sample>] [--include-secrets] [--source-profile <name>] --target-repo <path> [--output <path>]` — собрать payload-only `migration_kit.tgz` без toolkit: `.flow/config/flow.env`, `.flow/config/flow.sample.env`, `.flow/github/*`, `.flow/templates/github/*`; в target repo записать `.flow/migration/do_migration.sh`, `.flow/migration/migration.conf`, `.flow/migration/README.md` и локальную копию payload archive.
+- `.flow/shared/scripts/run.sh create_migration_kit --project <name> [--defaults-from <current|sample>] [--include-secrets] [--source-profile <name>] [--keep-project-binding] --target-repo <path> [--output <path>]` — собрать payload-only `migration_kit.tgz` без toolkit: `.flow/config/flow.env`, `.flow/config/flow.sample.env`, `.flow/github/*`, `.flow/templates/github/*`; в target repo записать `.flow/migration/do_migration.sh`, `.flow/migration/migration.conf`, `.flow/migration/README.md` и локальную копию payload archive. По умолчанию migration kit очищает `GITHUB_REPO` и `PROJECT_*`; сохранить source binding можно только явным `--keep-project-binding`.
 - `.flow/migration/do_migration.sh` — launcher в target repo: bootstrap-ит `/.flow/shared` из `ai-flow` по repo/ref из `.flow/migration/migration.conf` и затем запускает toolkit `apply_migration_kit` с локальным payload archive.
 - `.flow/shared/scripts/run.sh apply_migration_kit [--project <name>] [--migration-config <path>] [--payload-archive <path>]` — применить payload archive проекта: материализовать `.flow/config/flow.sample.env`, `.flow/config/flow.env`, сохранить `.flow/config/migration.conf`, развернуть `.flow/templates/github/*` и repo overlay `.github/*`.
 - `.flow/shared/scripts/run.sh flow_configurator [questionnaire] --profile <name>` — интерактивный wizard для `.flow/config/flow.env`: задаёт вопросы по repo/project/token/auth/Telegram/launchd/ops/remotes, показывает defaults и preview diff, пишет файл только после явного confirm. Если repo уже настроен и `flow.env` существует, wizard подставляет текущие значения как defaults: non-secret поля можно просто подтверждать Enter, а секреты остаются sticky, пока их не заменить явно.
@@ -139,6 +139,8 @@ Bootstrap нового профиля:
    По умолчанию архив появится как `.flow/migration/acme-migration-kit.tgz`.
    Если нужен prefilled `flow.env` c текущими секретами:
    `.flow/shared/scripts/run.sh create_migration_kit --project acme --defaults-from current --include-secrets --target-repo <HOME>/sites/acme-app`
+   Если target должен сохранить source binding для `GITHUB_REPO` и `PROJECT_*`, это нужно указать явно:
+   `.flow/shared/scripts/run.sh create_migration_kit --project acme --defaults-from current --keep-project-binding --target-repo <HOME>/sites/acme-app`
 2. В новом проекте перейти в `.flow/migration/`.
 3. Выполнить:
    `./do_migration.sh`
@@ -150,15 +152,16 @@ Bootstrap нового профиля:
    - `.flow/templates/github/required-files.txt`
    - `.flow/templates/github/required-secrets.txt`
    - `.github/workflows/*.yml` и, если был в source overlay, `.github/pull_request_template.md`
-5. `.flow/shared/scripts/run.sh onboarding_audit --profile acme` — проверить toolkit, docs, env и получить список недостающих настроек.
-6. При необходимости дополнительно использовать:
+5. Если kit создавался без `--keep-project-binding`, в target `flow.env` поля `GITHUB_REPO` и `PROJECT_*` будут пустыми intentionally; их нужно заполнить через `flow_configurator questionnaire`.
+6. `.flow/shared/scripts/run.sh onboarding_audit --profile acme` — проверить toolkit, docs, env и получить список недостающих настроек.
+7. При необходимости дополнительно использовать:
    `.flow/shared/scripts/run.sh profile_init preflight --profile acme`
-7. `.flow/config/flow.sample.env` использовать только как безопасный шаблон; канонический runtime-config хранить в `.flow/config/flow.env`.
-8. Если kit собран без `--include-secrets`, repo Actions secrets и runtime secrets нужно создать вручную в GitHub UI нового repo по списку из `.flow/templates/github/required-secrets.txt`.
+8. `.flow/config/flow.sample.env` использовать только как безопасный шаблон; канонический runtime-config хранить в `.flow/config/flow.env`.
+9. Если kit собран без `--include-secrets`, repo Actions secrets и runtime secrets нужно создать вручную в GitHub UI нового repo по списку из `.flow/templates/github/required-secrets.txt`.
    Что именно вписывать в каждый secret: `.flow/shared/docs/github-actions-repo-secrets.md`.
-9. После заполнения env:
+10. После заполнения env:
    `.flow/shared/scripts/run.sh profile_init install --profile acme`
-10. Для безопасной проверки команд без изменений использовать `--dry-run`.
+11. Для безопасной проверки команд без изменений использовать `--dry-run`.
 
 Запуск и остановка профиля:
 1. Первый запуск нового профиля: `.flow/shared/scripts/run.sh profile_init install --profile acme`

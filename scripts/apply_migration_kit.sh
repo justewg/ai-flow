@@ -92,6 +92,16 @@ read_migration_config_key() {
   codex_read_key_from_env_file "$migration_config" "$key"
 }
 
+emit_binding_post_apply_hint() {
+  local binding_mode=""
+  binding_mode="$(read_migration_config_key "MIGRATION_PROJECT_BINDING_MODE" || true)"
+  if [[ "$binding_mode" == "keep" ]]; then
+    echo "NEXT_BINDING_STEP=Verify GITHUB_REPO and PROJECT_* in .flow/config/flow.env still point to the intended target project."
+  else
+    echo "NEXT_BINDING_STEP=Run .flow/shared/scripts/run.sh flow_configurator questionnaire --profile ${target_profile} and fill GITHUB_REPO plus PROJECT_* for this target repo."
+  fi
+}
+
 resolve_repo_relative_path() {
   local value="$1"
   [[ -n "$value" ]] || return 1
@@ -279,4 +289,5 @@ if [[ -f "${ROOT_DIR}/.flow/templates/github/required-secrets.txt" ]]; then
   echo "MIGRATION_KIT_REPO_ACTIONS_SECRETS=${ROOT_DIR}/.flow/templates/github/required-secrets.txt"
   echo "NEXT_REPO_SECRETS_STEP=Create repo Actions secrets manually in GitHub UI -> Settings -> Secrets and variables -> Actions"
 fi
+emit_binding_post_apply_hint
 echo "NEXT_STEP=.flow/shared/scripts/run.sh onboarding_audit --profile ${target_profile}"

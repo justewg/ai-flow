@@ -132,11 +132,14 @@ gh project view <PROJECT_NUMBER> --owner <PROJECT_OWNER> --format json --jq '.id
 - archive по умолчанию появится как `.flow/migration/acme-migration-kit.tgz`
 - если нужен prefilled `flow.env` с текущими секретами:
   `.flow/shared/scripts/run.sh create_migration_kit --project acme --defaults-from current --include-secrets --target-repo <HOME>/sites/acme-app`
+- если target должен сохранить source binding для `GITHUB_REPO` и `PROJECT_*`, это нужно указать явно:
+  `.flow/shared/scripts/run.sh create_migration_kit --project acme --defaults-from current --keep-project-binding --target-repo <HOME>/sites/acme-app`
 - в target repo появятся `.flow/migration/do_migration.sh`, `.flow/migration/migration.conf`, `.flow/migration/README.md` и локальный payload archive без toolkit
 - в новом проекте достаточно запустить: `.flow/migration/do_migration.sh`
 - archive положит project payload: `.flow/config/flow.sample.env`, `.flow/config/flow.env`, `.flow/github/*` и `.flow/templates/github/*`
 - `do_migration.sh` сам bootstrap-ит `.flow/shared` из `ai-flow` по repo/ref из `migration.conf`
 - `apply_migration_kit` сохранит локальный `.flow/config/migration.conf`, разложит payload и оставит manifest required secrets в `.flow/templates/github/required-secrets.txt`
+- по умолчанию migration kit очищает `GITHUB_REPO` и `PROJECT_*` в target `flow.env`; это нужно затем заполнить под новый repo/project через wizard
 
 ## Bootstrap в локальной папке проекта
 

@@ -1,75 +1,49 @@
 # Flow Web Docs Through Nginx
 
-Этот runbook описывает практичный способ публиковать flow web-docs на своём сервере.
+Этот runbook описывает текущий канонический способ публиковать flow web-docs на своём сервере.
 
-Важно: текущий output `scripts/flow_docs/build_flow_docs.py` — это **Redocly Realm project bundle**, а не статический HTML export. Поэтому канонический серверный контур такой:
+Важно: публичный контур больше не использует `redocly preview`. Workflow собирает два артефакта:
 
-1. GitHub Actions собирает bundle.
-2. Self-hosted runner выкладывает bundle в server path.
-3. На сервере локально работает `redocly preview --product=realm`.
-4. `nginx` проксирует публичный URL в этот локальный preview process.
+- `dist/flow-docs/` — Readocly bundle для Reunite publish;
+- `dist/flow-docs-static/` — статический HTML export для self-hosted `nginx`.
 
 ## Что добавить в GitHub Actions variables
 
 - `FLOW_DOCS_DEPLOY_PATH` — абсолютный путь на сервере, например `/var/sites/planka-flow-docs`
-- `FLOW_DOCS_DEPLOY_POST_COMMAND` — опциональная команда после выкладки, например:
-  `sudo systemctl restart planka-flow-docs.service && sudo systemctl reload nginx`
 
-Дополнительно можно использовать server-side env для preview service:
-
-- `FLOW_DOCS_PROJECT_DIR=/var/sites/planka-flow-docs/current`
-- `FLOW_DOCS_PREVIEW_HOST=127.0.0.1`
-- `FLOW_DOCS_PREVIEW_PORT=4410`
-- `FLOW_DOCS_PREVIEW_PRODUCT=realm`
+Больше ничего не нужно: `FLOW_DOCS_DEPLOY_POST_COMMAND` для статического контура не используется.
 
 ## Что делает workflow
 
 Workflow `.github/workflows/publish-flow-docs.yml` после push в `main`:
 
-1. собирает `dist/flow-docs`;
+1. собирает `dist/flow-docs` и `dist/flow-docs-static`;
 2. сохраняет artifact `flow-web-docs-bundle`;
-3. при наличии `FLOW_DOCS_DEPLOY_PATH` выкладывает bundle на self-hosted runner с label `planka-deploy`;
+3. при наличии `FLOW_DOCS_DEPLOY_PATH` выкладывает `dist/flow-docs-static` на self-hosted runner с label `planka-deploy`;
 4. материализует на сервере:
    - `<deploy-root>/releases/<sha>/`
    - `<deploy-root>/current -> releases/<sha>`
-   - `<deploy-root>/bin/serve_flow_docs.sh`
 
-## Установка preview service на сервере
+## Layout на сервере
 
-Ниже пример `systemd` unit-а:
+После первого успешного deploy на сервере должен быть такой layout:
 
-```ini
-[Unit]
-Description=PLANKA Flow Docs Preview
-After=network.target
-
-[Service]
-User=gha-runner
-WorkingDirectory=/var/sites/planka-flow-docs
-Environment=FLOW_DOCS_PROJECT_DIR=/var/sites/planka-flow-docs/current
-Environment=FLOW_DOCS_PREVIEW_HOST=127.0.0.1
-Environment=FLOW_DOCS_PREVIEW_PORT=4410
-Environment=FLOW_DOCS_PREVIEW_PRODUCT=realm
-ExecStart=/usr/bin/env bash /var/sites/planka-flow-docs/bin/serve_flow_docs.sh
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
+```text
+/var/sites/planka-flow-docs/
+  current -> releases/<sha>
+  releases/
+    <sha>/
+      index.html
+      platform/...
+      runtime/...
+      adoption/...
+      operations/...
+      reference/...
+      releases/...
+      assets/
 ```
 
-После создания unit:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable planka-flow-docs.service
-sudo systemctl start planka-flow-docs.service
-sudo systemctl status planka-flow-docs.service
-```
-
-Если на сервере нет глобально установленного `redocly`, wrapper использует `npx -y @redocly/cli preview ...`. Для более предсказуемого cold start лучше заранее установить Node.js и `@redocly/cli`.
-
-## Nginx reverse proxy
+## Nginx static hosting
 
 Пример для публикации docs на отдельном домене `https://aiflow.ewg40.ru/`:
 
@@ -79,13 +53,11 @@ server {
     listen [::]:80;
     server_name aiflow.ewg40.ru;
 
+    root /var/sites/planka-flow-docs/current;
+    index index.html;
+
     location / {
-        proxy_pass http://127.0.0.1:4410/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        try_files $uri $uri/ /index.html;
     }
 }
 ```
@@ -103,19 +75,36 @@ curl -I http://aiflow.ewg40.ru/
 1. Merge в `main`.
 2. Проверить workflow `Publish Flow Web Docs`.
 3. На сервере проверить:
-   - `/var/sites/planka-flow-docs/current/redocly.yaml`
-   - `systemctl status planka-flow-docs.service`
+   - `/var/sites/planka-flow-docs/current/index.html`
+   - `/var/sites/planka-flow-docs/releases/`
 4. В браузере открыть `https://aiflow.ewg40.ru/`
+
+## Локальная ручная выкладка
+
+Если нужно проверить контур до merge:
+
+```bash
+cd /private/var/sites/PLANKA
+python3 scripts/flow_docs/build_flow_docs.py \
+  --output-dir .tmp/flow-docs/site \
+  --static-output-dir .tmp/flow-docs/static
+
+bash scripts/flow_docs/deploy_flow_docs.sh \
+  --site-dir .tmp/flow-docs/static \
+  --deploy-root /var/sites/planka-flow-docs \
+  --release-id manual-smoke
+```
+
+После этого достаточно `nginx` с `root /var/sites/planka-flow-docs/current;`.
 
 ## Troubleshooting
 
 - Если workflow собирает bundle, но не делает server deploy:
   - не задан `FLOW_DOCS_DEPLOY_PATH`
   - нет online self-hosted runner с label `planka-deploy`
-- Если `nginx` отвечает 502:
-  - preview service не поднялся
-  - неверный `FLOW_DOCS_PREVIEW_PORT`
-- Если preview service падает:
-  - проверь `journalctl -u planka-flow-docs.service -n 100 --no-pager`
-  - проверь, что `current/redocly.yaml` существует
-  - проверь наличие `node`, `npx` или глобального `redocly`
+- Если на сервере нет `current/index.html`:
+  - deploy job не отработал или указал не тот `FLOW_DOCS_DEPLOY_PATH`
+- Если домен отвечает 404/403:
+  - проверь `root` в `nginx`
+  - проверь права на `/var/sites/planka-flow-docs/current`
+  - проверь, что `index.html` реально лежит в `current`

@@ -40,8 +40,8 @@ if [[ -z "${SITE_DIR}" || -z "${DEPLOY_ROOT}" ]]; then
   exit 1
 fi
 
-if [[ ! -f "${SITE_DIR}/redocly.yaml" ]]; then
-  echo "Missing redocly.yaml in ${SITE_DIR}" >&2
+if [[ ! -f "${SITE_DIR}/index.html" ]]; then
+  echo "Missing index.html in ${SITE_DIR}" >&2
   exit 1
 fi
 
@@ -53,15 +53,12 @@ DEPLOY_ROOT="${DEPLOY_ROOT%/}"
 RELEASES_DIR="${DEPLOY_ROOT}/releases"
 RELEASE_DIR="${RELEASES_DIR}/${RELEASE_ID}"
 CURRENT_LINK="${DEPLOY_ROOT}/current"
-BIN_DIR="${DEPLOY_ROOT}/bin"
 
-mkdir -p "${RELEASE_DIR}" "${BIN_DIR}"
+mkdir -p "${RELEASE_DIR}"
 rsync -az --delete "${SITE_DIR}/" "${RELEASE_DIR}/"
-install -m 755 "${SCRIPT_DIR}/serve_flow_docs.sh" "${BIN_DIR}/serve_flow_docs.sh"
 ln -sfn "${RELEASE_DIR}" "${CURRENT_LINK}"
 
 echo "FLOW_DOCS_DEPLOY_ROOT=${DEPLOY_ROOT}"
 echo "FLOW_DOCS_RELEASE_ID=${RELEASE_ID}"
 echo "FLOW_DOCS_RELEASE_DIR=${RELEASE_DIR}"
 echo "FLOW_DOCS_CURRENT_LINK=${CURRENT_LINK}"
-echo "FLOW_DOCS_SERVE_SCRIPT=${BIN_DIR}/serve_flow_docs.sh"

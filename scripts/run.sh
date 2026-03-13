@@ -49,6 +49,7 @@ Commands:
   bootstrap_repo
   onboarding_audit
   update_toolkit
+  review_context_recover
   create_migration_kit
   apply_migration_kit
   flow_configurator
@@ -580,6 +581,11 @@ case "$cmd" in
   update_toolkit)
     shift 1
     "${CODEX_SHARED_SCRIPTS_DIR}/update_toolkit.sh" "$@"
+    ;;
+
+  review_context_recover)
+    shift 1
+    "${CODEX_SHARED_SCRIPTS_DIR}/review_context_recover.sh" "$@"
     ;;
 
   create_migration_kit)

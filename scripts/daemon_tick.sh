@@ -2474,6 +2474,35 @@ echo "FLOW_OPEN_PR_CHECK_BASE=${flow_base_branch}"
 echo "FLOW_OPEN_PR_CHECK_HEAD=${flow_head_branch}"
 open_pr_count="$(printf '%s' "$open_prs_json" | jq 'length')"
 if (( open_pr_count > 0 )); then
+  if (( open_pr_count == 1 )) && [[ ! -s "$review_pr_file" ]]; then
+    active_issue_number_for_review=""
+    active_task_for_review=""
+    active_item_for_review=""
+    [[ -s "${CODEX_DIR}/daemon_active_issue_number.txt" ]] && active_issue_number_for_review="$(<"${CODEX_DIR}/daemon_active_issue_number.txt")"
+    [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]] && active_task_for_review="$(<"${CODEX_DIR}/daemon_active_task.txt")"
+    [[ -s "${CODEX_DIR}/daemon_active_item_id.txt" ]] && active_item_for_review="$(<"${CODEX_DIR}/daemon_active_item_id.txt")"
+    if [[ -n "$active_issue_number_for_review" || -n "$active_task_for_review" ]]; then
+      open_pr_number_for_review="$(printf '%s' "$open_prs_json" | jq -r '.[0].number // empty')"
+      open_pr_url_for_review="$(printf '%s' "$open_prs_json" | jq -r '.[0].html_url // .[0].url // empty')"
+      open_pr_title_for_review="$(printf '%s' "$open_prs_json" | jq -r '.[0].title // empty')"
+      recover_out="$(
+        "${CODEX_SHARED_SCRIPTS_DIR}/review_context_recover.sh" \
+          --task-id "$active_task_for_review" \
+          --issue-number "$active_issue_number_for_review" \
+          --item-id "$active_item_for_review" \
+          --pr-number "$open_pr_number_for_review" \
+          --pr-url "$open_pr_url_for_review" \
+          --pr-title "$open_pr_title_for_review" 2>&1
+      )"
+      recover_rc=$?
+      emit_lines "$recover_out"
+      if [[ "$recover_rc" -eq 0 ]] && printf '%s\n' "$recover_out" | grep -q '^WAIT_REVIEW_FEEDBACK=1$'; then
+        exit 0
+      fi
+      echo "REVIEW_CONTEXT_RECOVER_AUTO_FAILED=1"
+      echo "REVIEW_CONTEXT_RECOVER_AUTO_RC=${recover_rc}"
+    fi
+  fi
   echo "WAIT_OPEN_PR_COUNT=$open_pr_count"
   printf '%s' "$open_prs_json" | jq -r '.[] | "OPEN_PR=#\(.number) \(.title // "") \(.html_url // "")"'
   exit 0

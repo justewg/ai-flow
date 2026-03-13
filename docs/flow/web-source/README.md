@@ -35,7 +35,8 @@ Workflow `.github/workflows/publish-flow-docs.yml`:
 1. собирает bundle через `python3 scripts/flow_docs/build_flow_docs.py`;
 2. валидирует `redocly.yaml`;
 3. сохраняет `flow-web-docs-bundle` как GitHub artifact;
-4. при наличии `REDOCLY_*` secrets публикует bundle в Readocly Reunite после push в `main`.
+4. при наличии `FLOW_DOCS_DEPLOY_PATH` выкладывает bundle на self-hosted runner и готовит server-side preview contour за `nginx`;
+5. при наличии `REDOCLY_*` secrets публикует bundle в Readocly Reunite после push в `main`.
 
 ## Secrets для publish job
 
@@ -43,3 +44,11 @@ Workflow `.github/workflows/publish-flow-docs.yml`:
 - `REDOCLY_ORGANIZATION`
 - `REDOCLY_PROJECT`
 - `REDOCLY_MOUNT_PATH` (опционально, по умолчанию `/flow`)
+
+## Nginx / self-hosted deploy
+
+Для выкладки на свой сервер через self-hosted runner + `nginx`:
+
+- repo variable `FLOW_DOCS_DEPLOY_PATH` — абсолютный deploy-root на сервере;
+- repo variable `FLOW_DOCS_DEPLOY_POST_COMMAND` — опциональный restart/reload command после выкладки;
+- runbook: `docs/flow-web-docs-nginx-deploy.md`.

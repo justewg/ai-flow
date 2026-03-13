@@ -135,19 +135,29 @@ source_actions_files_manifest="${flow_config_dir}/root/github-actions.required-f
 source_actions_secrets_manifest="${flow_config_dir}/root/github-actions.required-secrets.txt"
 target_state_dir="${flow_state_root_dir}"
 target_relative_state_dir=".flow/state"
+sample_env_in_place="0"
+env_file_in_place="0"
+
+if [[ "$source_sample_env" == "$target_sample_env" ]]; then
+  sample_env_in_place="1"
+fi
+
+if [[ "$source_env_file" == "$target_env_file" ]]; then
+  env_file_in_place="1"
+fi
 
 if [[ ! -f "$source_sample_env" && ! -f "$source_env_file" ]]; then
   echo "flow.sample.env / flow.env not found in unpacked migration kit." >&2
   exit 1
 fi
 
-if [[ -e "$target_env_file" && "$force" != "1" ]]; then
+if [[ -e "$target_env_file" && "$force" != "1" && "$env_file_in_place" != "1" ]]; then
   echo "Target flow env already exists: ${target_env_file}" >&2
   echo "Use --force to overwrite it." >&2
   exit 1
 fi
 
-if [[ -e "$target_sample_env" && "$force" != "1" ]]; then
+if [[ -e "$target_sample_env" && "$force" != "1" && "$sample_env_in_place" != "1" ]]; then
   echo "Target profile sample already exists: ${target_sample_env}" >&2
   echo "Use --force to overwrite it." >&2
   exit 1
@@ -156,7 +166,9 @@ fi
 mkdir -p "$flow_config_dir" "$target_state_dir"
 
 if [[ -f "$source_sample_env" ]]; then
-  cp "$source_sample_env" "$target_sample_env"
+  if [[ "$sample_env_in_place" != "1" ]]; then
+    cp "$source_sample_env" "$target_sample_env"
+  fi
   rewrite_env_key "$target_sample_env" "PROJECT_PROFILE" "$target_profile"
   rewrite_env_key "$target_sample_env" "CODEX_STATE_DIR" "$target_relative_state_dir"
   rewrite_env_key "$target_sample_env" "FLOW_STATE_DIR" "$target_relative_state_dir"
@@ -166,7 +178,9 @@ fi
 if [[ -f "$target_sample_env" ]]; then
   cp "$target_sample_env" "$target_env_file"
 elif [[ -f "$source_env_file" ]]; then
-  cp "$source_env_file" "$target_env_file"
+  if [[ "$env_file_in_place" != "1" ]]; then
+    cp "$source_env_file" "$target_env_file"
+  fi
 fi
 
 rewrite_env_key "$target_env_file" "PROJECT_PROFILE" "$target_profile"

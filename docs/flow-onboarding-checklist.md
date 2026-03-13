@@ -39,6 +39,7 @@
 - [ ] Проверено, что после `apply_migration_kit` появились `.flow/config/flow.sample.env` и `.flow/config/flow.env`
 - [ ] Проверено, что после `apply_migration_kit` появились `.flow/templates/github/required-files.txt` и `.flow/templates/github/required-secrets.txt`
 - [ ] Проверено, что `apply_migration_kit` развернул `.github/workflows/*.yml` и `.github/pull_request_template.md` из source overlay
+- [ ] Если target repo уже git-репозиторий, проверено, что `apply_migration_kit` попытался materialize-ить `/.flow/shared` как submodule
 - [ ] Понимание зафиксировано: `.tmp/codex/` больше не runtime-источник, а только legacy compatibility layer.
 
 ## 1. Собери входные значения
@@ -84,6 +85,7 @@
 - [ ] Подготовлен список required repo secrets из `.flow/templates/github/required-secrets.txt`.
 - [ ] Для каждого required secret есть понимание значения по `.flow/shared/docs/github-actions-repo-secrets.md`.
 - [ ] Зафиксировано, что migration kit не переносит значения repo secrets; их нужно создавать вручную в GitHub UI.
+- [ ] Если kit собирался с `--include-secrets`, это решение было осознанным и допустимым для текущего trust-контра.
 - [ ] Если deploy workflow ждёт `runs-on: [self-hosted, <label>]`, зарегистрирован online self-hosted runner именно для нового repo или на уровне org.
 
 ## 2. Создай profile-файлы

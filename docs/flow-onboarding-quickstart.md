@@ -132,10 +132,14 @@ gh project view <PROJECT_NUMBER> --owner <PROJECT_OWNER> --format json --jq '.id
 - archive по умолчанию появится как `.flow/migration/acme-migration-kit.tgz`
 - если уже известна папка нового repo:
   `.flow/shared/scripts/run.sh create_migration_kit --project acme --target-repo <HOME>/sites/acme-app`
+- если нужен prefilled `flow.env` с текущими секретами:
+  `.flow/shared/scripts/run.sh create_migration_kit --project acme --defaults-from current --include-secrets`
 - в новом проекте после распаковки: `.flow/shared/scripts/run.sh apply_migration_kit --project acme`
 - archive положит безопасный шаблон `.flow/config/flow.sample.env` без копирования живых токенов из исходного проекта
+- archive также положит prefilled `.flow/config/flow.env`; при `--include-secrets` в него попадут и текущие секреты
 - archive также положит `.flow/templates/github/` как source overlay для `.github/workflows/` и `.github/pull_request_template.md`
 - `apply_migration_kit` развернёт этот overlay в новый repo и оставит manifest required secrets в `.flow/templates/github/required-secrets.txt`
+- если target уже git-repo, `apply_migration_kit` best-effort materialize-ит `/.flow/shared` как submodule по URL/revision из kit manifest
 
 ## Bootstrap в локальной папке проекта
 

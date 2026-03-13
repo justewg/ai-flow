@@ -61,16 +61,19 @@
    Archive по умолчанию появится как `.flow/migration/acme-migration-kit.tgz`.
    Если уже известна папка target repo:
    `.flow/shared/scripts/run.sh create_migration_kit --project acme --target-repo <HOME>/sites/acme-app`
+   Если target находится в том же trust-контуре и нужен prefilled `flow.env` с текущими секретами:
+   `.flow/shared/scripts/run.sh create_migration_kit --project acme --defaults-from current --include-secrets`
 2. В new project после распаковки выполнить:
    `.flow/shared/scripts/run.sh apply_migration_kit --project acme`
 3. Kit должен принести безопасные шаблоны:
    - `.flow/config/flow.sample.env`
-   - `.flow/config/flow.env`
+   - `.flow/config/flow.env` (prefilled; при `--defaults-from current --include-secrets` может уже содержать текущие секреты)
    - `.flow/templates/github/required-files.txt`
    - `.flow/templates/github/required-secrets.txt`
-4. Если в source-project использовался repo automation overlay, `apply_migration_kit` также развернет snapshot `.github/workflows/` и `.github/pull_request_template.md`.
-5. Repo Actions secrets kit не переносит: их нужно создать вручную в GitHub UI нового repo (`Settings -> Secrets and variables -> Actions`) по списку из `.flow/templates/github/required-secrets.txt`.
-6. `.tmp/codex/` в consumer-project больше не нужен как runtime-root; если он присутствует, это только compatibility-symlink layer.
+4. Если target repo уже git-репозиторий, `apply_migration_kit` best-effort материализует `/.flow/shared` как submodule по URL/revision из manifest; при недоступной сети оставляет snapshot и пишет `MIGRATION_KIT_TOOLKIT_SUBMODULE_STATUS=*`.
+5. Если в source-project использовался repo automation overlay, `apply_migration_kit` также развернет snapshot `.github/workflows/` и `.github/pull_request_template.md`.
+6. Если kit собран без `--include-secrets`, repo Actions secrets и runtime secrets нужно создать вручную в GitHub UI нового repo (`Settings -> Secrets and variables -> Actions`) по списку из `.flow/templates/github/required-secrets.txt`.
+7. `.tmp/codex/` в consumer-project больше не нужен как runtime-root; если он присутствует, это только compatibility-symlink layer.
 
 ### 3. Инициализировать новый profile
 1. Выполнить:

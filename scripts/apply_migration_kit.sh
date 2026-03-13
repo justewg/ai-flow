@@ -83,6 +83,74 @@ copy_repo_overlay_file() {
   echo "GITHUB_OVERLAY_WRITTEN=${target_path}"
 }
 
+materialize_shared_submodule() {
+  local submodule_url submodule_revision current_url backup_dir timestamp backup_path
+  local add_out sync_out fetch_out checkout_out
+
+  submodule_url="$(read_manifest_key "MIGRATION_KIT_TOOLKIT_SUBMODULE_URL" || true)"
+  submodule_revision="$(read_manifest_key "MIGRATION_KIT_TOOLKIT_SUBMODULE_REVISION" || true)"
+  if [[ -z "$submodule_url" || -z "$submodule_revision" ]]; then
+    echo "MIGRATION_KIT_TOOLKIT_SUBMODULE_STATUS=SKIPPED_NO_MANIFEST"
+    return 0
+  fi
+
+  if ! git -C "${ROOT_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "MIGRATION_KIT_TOOLKIT_SUBMODULE_STATUS=SKIPPED_NOT_GIT_REPO"
+    return 0
+  fi
+
+  if git -C "${ROOT_DIR}" config -f .gitmodules --get submodule..flow/shared.url >/dev/null 2>&1; then
+    current_url="$(git -C "${ROOT_DIR}" config -f .gitmodules --get submodule..flow/shared.url || true)"
+    if [[ "$current_url" != "$submodule_url" ]]; then
+      git -C "${ROOT_DIR}" config -f .gitmodules submodule..flow/shared.url "$submodule_url"
+    fi
+    if sync_out="$(git -C "${ROOT_DIR}" submodule sync -- .flow/shared 2>&1)"; then
+      [[ -n "$sync_out" ]] && echo "$sync_out"
+    else
+      [[ -n "$sync_out" ]] && echo "$sync_out"
+      echo "MIGRATION_KIT_TOOLKIT_SUBMODULE_STATUS=FAILED_SYNC"
+      return 0
+    fi
+  else
+    if [[ -e "${ROOT_DIR}/.flow/shared" ]]; then
+      timestamp="$(date -u '+%Y%m%d-%H%M%S')"
+      backup_dir="${ROOT_DIR}/.flow/tmp/bootstrap/backups"
+      backup_path="${backup_dir}/shared-pre-submodule-${timestamp}"
+      mkdir -p "$backup_dir"
+      mv "${ROOT_DIR}/.flow/shared" "$backup_path"
+      echo "MIGRATION_KIT_TOOLKIT_SNAPSHOT_BACKUP=${backup_path}"
+    fi
+
+    if add_out="$(git -C "${ROOT_DIR}" submodule add "$submodule_url" .flow/shared 2>&1)"; then
+      [[ -n "$add_out" ]] && echo "$add_out"
+    else
+      [[ -n "$add_out" ]] && echo "$add_out"
+      rm -rf "${ROOT_DIR}/.flow/shared"
+      if [[ -n "${backup_path:-}" && -e "$backup_path" ]]; then
+        mv "$backup_path" "${ROOT_DIR}/.flow/shared"
+      fi
+      echo "MIGRATION_KIT_TOOLKIT_SUBMODULE_STATUS=FAILED_ADD"
+      return 0
+    fi
+  fi
+
+  if fetch_out="$(git -C "${ROOT_DIR}/.flow/shared" fetch origin "$submodule_revision" 2>&1)"; then
+    [[ -n "$fetch_out" ]] && echo "$fetch_out"
+  else
+    [[ -n "$fetch_out" ]] && echo "$fetch_out"
+    echo "MIGRATION_KIT_TOOLKIT_SUBMODULE_STATUS=FAILED_FETCH"
+    return 0
+  fi
+
+  if checkout_out="$(git -C "${ROOT_DIR}/.flow/shared" checkout "$submodule_revision" 2>&1)"; then
+    [[ -n "$checkout_out" ]] && echo "$checkout_out"
+    echo "MIGRATION_KIT_TOOLKIT_SUBMODULE_STATUS=OK"
+  else
+    [[ -n "$checkout_out" ]] && echo "$checkout_out"
+    echo "MIGRATION_KIT_TOOLKIT_SUBMODULE_STATUS=FAILED_CHECKOUT"
+  fi
+}
+
 detect_source_profile() {
   read_manifest_key "MIGRATION_KIT_PROJECT" || true
 }
@@ -141,13 +209,13 @@ if [[ ! -f "$source_sample_env" && ! -f "$source_env_file" ]]; then
   exit 1
 fi
 
-if [[ -e "$target_env_file" && "$force" != "1" ]]; then
+if [[ -e "$target_env_file" && "$target_env_file" != "$source_env_file" && "$force" != "1" ]]; then
   echo "Target flow env already exists: ${target_env_file}" >&2
   echo "Use --force to overwrite it." >&2
   exit 1
 fi
 
-if [[ -e "$target_sample_env" && "$force" != "1" ]]; then
+if [[ -e "$target_sample_env" && "$target_sample_env" != "$source_sample_env" && "$force" != "1" ]]; then
   echo "Target profile sample already exists: ${target_sample_env}" >&2
   echo "Use --force to overwrite it." >&2
   exit 1
@@ -193,6 +261,8 @@ if [[ -f "${source_actions_template_dir}/pull_request_template.md" ]]; then
     "${source_actions_template_dir}/pull_request_template.md" \
     "${ROOT_DIR}/.github/pull_request_template.md"
 fi
+
+materialize_shared_submodule
 
 echo "MIGRATION_KIT_APPLIED=1"
 echo "MIGRATION_KIT_PROFILE=${target_profile}"

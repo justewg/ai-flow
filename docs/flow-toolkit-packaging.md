@@ -36,8 +36,8 @@
 - безопасный шаблон `.flow/config/flow.sample.env` без живых секретов
 - `.flow/tmp/migration_kit_manifest.env` как временный descriptor распакованного kit
 - `.flow/templates/github/` как source overlay для `.github/workflows/` и `.github/pull_request_template.md`
-- `.flow/config/root/github-actions.required-files.txt`
-- `.flow/config/root/github-actions.required-secrets.txt`
+- `.flow/templates/github/required-files.txt`
+- `.flow/templates/github/required-secrets.txt`
 
 ### Рекомендуемая стратегия
 Рекомендуемый путь:
@@ -91,7 +91,7 @@
 - `.flow/config/flow.sample.env` как единый безопасный шаблон flow-конфига consumer-project
 - `.flow/tmp/migration_kit_manifest.env` как временный descriptor применяемого kit
 - `.flow/templates/github/` для repo workflow overlay
-- `.flow/config/root/github-actions.required-files.txt` и `.flow/config/root/github-actions.required-secrets.txt` как manifests
+- `.flow/templates/github/required-files.txt` и `.flow/templates/github/required-secrets.txt` как manifests
 
 ## Варианты подключения toolkit
 

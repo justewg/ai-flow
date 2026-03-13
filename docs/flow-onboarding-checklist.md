@@ -33,10 +33,11 @@
 
 Опционально вместо ручного копирования:
 - [ ] В текущем проекте выполнен `.flow/shared/scripts/run.sh create_migration_kit --project acme`
-- [ ] `migration_kit.tgz` перенесён в новый repo и распакован в корне
+- [ ] Archive лежит в `.flow/migration/acme-migration-kit.tgz` или уже автоматически скопирован в `<target-repo>/.flow/migration/acme-migration-kit.tgz`
+- [ ] Archive перенесён в новый repo и распакован в корне
 - [ ] После распаковки выполнен `.flow/shared/scripts/run.sh apply_migration_kit --project acme`
 - [ ] Проверено, что после `apply_migration_kit` появились `.flow/config/flow.sample.env` и `.flow/config/flow.env`
-- [ ] Проверено, что после `apply_migration_kit` появились `.flow/config/root/github-actions.required-files.txt` и `.flow/config/root/github-actions.required-secrets.txt`
+- [ ] Проверено, что после `apply_migration_kit` появились `.flow/templates/github/required-files.txt` и `.flow/templates/github/required-secrets.txt`
 - [ ] Проверено, что `apply_migration_kit` развернул `.github/workflows/*.yml` и `.github/pull_request_template.md` из source overlay
 - [ ] Понимание зафиксировано: `.tmp/codex/` больше не runtime-источник, а только legacy compatibility layer.
 
@@ -80,7 +81,7 @@
 
 ### Для repo Actions overlay
 - [ ] Понято, какие workflow из source-project нужны новому consumer-project без изменений, а какие потребуют ручной адаптации.
-- [ ] Подготовлен список required repo secrets из `.flow/config/root/github-actions.required-secrets.txt`.
+- [ ] Подготовлен список required repo secrets из `.flow/templates/github/required-secrets.txt`.
 - [ ] Для каждого required secret есть понимание значения по `.flow/shared/docs/github-actions-repo-secrets.md`.
 - [ ] Зафиксировано, что migration kit не переносит значения repo secrets; их нужно создавать вручную в GitHub UI.
 - [ ] Если deploy workflow ждёт `runs-on: [self-hosted, <label>]`, зарегистрирован online self-hosted runner именно для нового repo или на уровне org.
@@ -111,8 +112,8 @@ cd /path/to/new-project
   - [ ] `.flow/config/flow.env`
   - [ ] `.flow/state/codex/acme`
   - [ ] `<sites-root>/.ai-flow/logs/acme` или явный `FLOW_LOGS_DIR`
-  - [ ] `.flow/config/root/github-actions.required-files.txt`
-  - [ ] `.flow/config/root/github-actions.required-secrets.txt`
+  - [ ] `.flow/templates/github/required-files.txt`
+  - [ ] `.flow/templates/github/required-secrets.txt`
   - [ ] `.github/workflows/*.yml`
 
 - [ ] Запусти аудит profile/env.
@@ -158,7 +159,7 @@ cd /path/to/new-project
   - [ ] `GH_APP_TOKEN_SKEW_SEC`
   - [ ] `DAEMON_GH_AUTH_TIMEOUT_SEC`
   - [ ] `DAEMON_GH_AUTH_TOKEN_URL`
-- [ ] Если в repo используются workflow из migration kit, вручную созданы все secrets из `.flow/config/root/github-actions.required-secrets.txt` через `Settings -> Secrets and variables -> Actions`.
+- [ ] Если в repo используются workflow из migration kit, вручную созданы все secrets из `.flow/templates/github/required-secrets.txt` через `Settings -> Secrets and variables -> Actions`.
 
 ## 4. Проверь preflight
 - [ ] Запусти:

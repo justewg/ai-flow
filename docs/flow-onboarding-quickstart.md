@@ -25,7 +25,7 @@
 - установленный daemon/watchdog для нового profile;
 - канонические `launchd` plist в `.flow/launchd/` и install-links в `~/Library/LaunchAgents/`;
 - временные toolkit-артефакты в `.flow/tmp/`;
-- manifest обязательных repo Actions secrets в `.flow/config/root/github-actions.required-secrets.txt`;
+- manifest обязательных repo Actions secrets в `.flow/templates/github/required-secrets.txt`;
 - успешный smoke: `Todo -> In Progress -> Review/Done` на тестовой карточке.
 
 ## Что нужно подготовить заранее
@@ -129,10 +129,13 @@ gh project view <PROJECT_NUMBER> --owner <PROJECT_OWNER> --format json --jq '.id
 
 Если нужно перенести комплект без ручной выборки файлов, можно собрать архив:
 - в текущем проекте: `.flow/shared/scripts/run.sh create_migration_kit --project acme`
+- archive по умолчанию появится как `.flow/migration/acme-migration-kit.tgz`
+- если уже известна папка нового repo:
+  `.flow/shared/scripts/run.sh create_migration_kit --project acme --target-repo <HOME>/sites/acme-app`
 - в новом проекте после распаковки: `.flow/shared/scripts/run.sh apply_migration_kit --project acme`
 - archive положит безопасный шаблон `.flow/config/flow.sample.env` без копирования живых токенов из исходного проекта
 - archive также положит `.flow/templates/github/` как source overlay для `.github/workflows/` и `.github/pull_request_template.md`
-- `apply_migration_kit` развернёт этот overlay в новый repo и оставит manifest required secrets в `.flow/config/root/github-actions.required-secrets.txt`
+- `apply_migration_kit` развернёт этот overlay в новый repo и оставит manifest required secrets в `.flow/templates/github/required-secrets.txt`
 
 ## Bootstrap в локальной папке проекта
 
@@ -167,7 +170,7 @@ cd <HOME>/sites/acme-app
 После этого ожидается:
 - создан `.flow/config/flow.sample.env`
 - создан `.flow/config/flow.env`
-- созданы `.flow/config/root/github-actions.required-files.txt` и `.flow/config/root/github-actions.required-secrets.txt`
+- созданы `.flow/templates/github/required-files.txt` и `.flow/templates/github/required-secrets.txt`
 - развернуты `.github/workflows/*.yml` и, если он был в source-kit, `.github/pull_request_template.md`
 - создан `.flow/state/codex/acme`
 - подготовлен log-dir проекта: по умолчанию `<sites-root>/.ai-flow/logs/acme`
@@ -259,7 +262,7 @@ DAEMON_GH_TOKEN=<fallback-pat>
 - `DAEMON_GH_AUTH_TOKEN_URL`
 
 Отдельно по repo Actions:
-- открыть `.flow/config/root/github-actions.required-secrets.txt`
+- открыть `.flow/templates/github/required-secrets.txt`
 - при необходимости свериться с `.flow/shared/docs/github-actions-repo-secrets.md`, чтобы понять, что вписывать в каждый secret
 - в GitHub UI нового repo перейти `Settings -> Secrets and variables -> Actions`
 - вручную создать все secrets из списка

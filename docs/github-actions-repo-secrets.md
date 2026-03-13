@@ -119,7 +119,7 @@ GitHub UI для нового repo:
 1. Разверни kit:
    `.flow/shared/scripts/run.sh apply_migration_kit --project <name>`
 2. Открой:
-   `.flow/config/root/github-actions.required-secrets.txt`
+   `.flow/templates/github/required-secrets.txt`
 3. Для каждого имени из списка найди описание в этом документе.
 4. Создай secrets в:
    `Settings -> Secrets and variables -> Actions`

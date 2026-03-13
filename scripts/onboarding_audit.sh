@@ -208,8 +208,8 @@ read_global_key() {
   codex_try_config_value "$key" || true
 }
 
-required_repo_actions_files_manifest="${ROOT_DIR}/.flow/config/root/github-actions.required-files.txt"
-required_repo_actions_secrets_manifest="${ROOT_DIR}/.flow/config/root/github-actions.required-secrets.txt"
+required_repo_actions_files_manifest="${ROOT_DIR}/.flow/templates/github/required-files.txt"
+required_repo_actions_secrets_manifest="${ROOT_DIR}/.flow/templates/github/required-secrets.txt"
 self_hosted_runner_labels="$(collect_self_hosted_runner_labels || true)"
 
 missing_profile_action() {
@@ -332,8 +332,8 @@ check_required_file ".flow/shared/docs/flow-onboarding-quickstart.md" "DOC_ONBOA
 check_required_file ".flow/shared/docs/flow-portability-runbook.md" "DOC_FLOW_PORTABILITY" "Подключи shared toolkit docs в .flow/shared/docs/."
 check_required_file ".flow/shared/docs/gh-app-daemon-integration-plan.md" "DOC_GH_APP_PLAN" "Подключи shared toolkit docs в .flow/shared/docs/."
 check_required_file ".flow/shared/docs/ops-bot-dashboard.md" "DOC_OPS_BOT_DASHBOARD" "Подключи shared toolkit docs в .flow/shared/docs/."
-check_optional_file ".flow/config/root/github-actions.required-files.txt" "REPO_ACTIONS_FILES_MANIFEST" "Если переносишь repo-level workflows через migration kit, manifest должен лежать в .flow/config/root/github-actions.required-files.txt."
-check_optional_file ".flow/config/root/github-actions.required-secrets.txt" "REPO_ACTIONS_SECRETS_MANIFEST" "Если переносишь repo-level workflows через migration kit, manifest обязательных Actions secrets должен лежать в .flow/config/root/github-actions.required-secrets.txt."
+check_optional_file ".flow/templates/github/required-files.txt" "REPO_ACTIONS_FILES_MANIFEST" "Если переносишь repo-level workflows через migration kit, manifest должен лежать в .flow/templates/github/required-files.txt."
+check_optional_file ".flow/templates/github/required-secrets.txt" "REPO_ACTIONS_SECRETS_MANIFEST" "Если переносишь repo-level workflows через migration kit, manifest обязательных Actions secrets должен лежать в .flow/templates/github/required-secrets.txt."
 
 section "Repo Automation Overlay"
 if [[ -f "$required_repo_actions_files_manifest" ]]; then

@@ -58,15 +58,18 @@
 Практический shortcut:
 1. В current project можно собрать `migration_kit.tgz`:
    `.flow/shared/scripts/run.sh create_migration_kit --project acme`
+   Archive по умолчанию появится как `.flow/migration/acme-migration-kit.tgz`.
+   Если уже известна папка target repo:
+   `.flow/shared/scripts/run.sh create_migration_kit --project acme --target-repo <HOME>/sites/acme-app`
 2. В new project после распаковки выполнить:
    `.flow/shared/scripts/run.sh apply_migration_kit --project acme`
 3. Kit должен принести безопасные шаблоны:
    - `.flow/config/flow.sample.env`
    - `.flow/config/flow.env`
-   - `.flow/config/root/github-actions.required-files.txt`
-   - `.flow/config/root/github-actions.required-secrets.txt`
+   - `.flow/templates/github/required-files.txt`
+   - `.flow/templates/github/required-secrets.txt`
 4. Если в source-project использовался repo automation overlay, `apply_migration_kit` также развернет snapshot `.github/workflows/` и `.github/pull_request_template.md`.
-5. Repo Actions secrets kit не переносит: их нужно создать вручную в GitHub UI нового repo (`Settings -> Secrets and variables -> Actions`) по списку из `.flow/config/root/github-actions.required-secrets.txt`.
+5. Repo Actions secrets kit не переносит: их нужно создать вручную в GitHub UI нового repo (`Settings -> Secrets and variables -> Actions`) по списку из `.flow/templates/github/required-secrets.txt`.
 6. `.tmp/codex/` в consumer-project больше не нужен как runtime-root; если он присутствует, это только compatibility-symlink layer.
 
 ### 3. Инициализировать новый profile

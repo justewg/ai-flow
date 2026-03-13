@@ -131,8 +131,8 @@ launchd_namespace="$(codex_resolve_flow_launchd_namespace)"
 source_sample_env="${flow_config_dir}/flow.sample.env"
 source_env_file="${flow_config_dir}/flow.env"
 source_actions_template_dir="${ROOT_DIR}/.flow/templates/github"
-source_actions_files_manifest="${flow_config_dir}/root/github-actions.required-files.txt"
-source_actions_secrets_manifest="${flow_config_dir}/root/github-actions.required-secrets.txt"
+source_actions_files_manifest="${source_actions_template_dir}/required-files.txt"
+source_actions_secrets_manifest="${source_actions_template_dir}/required-secrets.txt"
 target_state_dir="${flow_state_root_dir}"
 target_relative_state_dir=".flow/state"
 
@@ -156,7 +156,9 @@ fi
 mkdir -p "$flow_config_dir" "$target_state_dir"
 
 if [[ -f "$source_sample_env" ]]; then
-  cp "$source_sample_env" "$target_sample_env"
+  if [[ "$source_sample_env" != "$target_sample_env" ]]; then
+    cp "$source_sample_env" "$target_sample_env"
+  fi
   rewrite_env_key "$target_sample_env" "PROJECT_PROFILE" "$target_profile"
   rewrite_env_key "$target_sample_env" "CODEX_STATE_DIR" "$target_relative_state_dir"
   rewrite_env_key "$target_sample_env" "FLOW_STATE_DIR" "$target_relative_state_dir"
@@ -198,6 +200,12 @@ echo "MIGRATION_KIT_PROFILE_SAMPLE=${target_sample_env}"
 echo "MIGRATION_KIT_ENV=${target_env_file}"
 echo "MIGRATION_KIT_STATE_DIR=${target_state_dir}"
 echo "MIGRATION_KIT_REPO_ACTIONS_APPLIED=${repo_actions_applied}"
+if toolkit_submodule_url="$(read_manifest_key "MIGRATION_KIT_TOOLKIT_SUBMODULE_URL" || true)"; [[ -n "${toolkit_submodule_url}" ]]; then
+  echo "MIGRATION_KIT_TOOLKIT_SUBMODULE_URL=${toolkit_submodule_url}"
+fi
+if toolkit_submodule_revision="$(read_manifest_key "MIGRATION_KIT_TOOLKIT_SUBMODULE_REVISION" || true)"; [[ -n "${toolkit_submodule_revision}" ]]; then
+  echo "MIGRATION_KIT_TOOLKIT_SUBMODULE_REVISION=${toolkit_submodule_revision}"
+fi
 if [[ -f "$source_actions_files_manifest" ]]; then
   echo "MIGRATION_KIT_REPO_ACTIONS_FILES=${source_actions_files_manifest}"
 fi

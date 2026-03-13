@@ -47,6 +47,7 @@ Commands:
   app_deps_mermaid
   backlog_seed_apply
   onboarding_audit
+  update_toolkit
   create_migration_kit
   apply_migration_kit
   flow_configurator
@@ -568,6 +569,11 @@ case "$cmd" in
   onboarding_audit)
     shift 1
     "${CODEX_SHARED_SCRIPTS_DIR}/onboarding_audit.sh" "$@"
+    ;;
+
+  update_toolkit)
+    shift 1
+    "${CODEX_SHARED_SCRIPTS_DIR}/update_toolkit.sh" "$@"
     ;;
 
   create_migration_kit)

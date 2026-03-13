@@ -308,6 +308,25 @@ ensure_dir() {
   mkdir -p "$dir_path"
 }
 
+dir_is_placeholder_only() {
+  local dir_path="$1"
+  local entry_path entry_name has_entries="0"
+  [[ -d "$dir_path" ]] || return 1
+
+  while IFS= read -r entry_path; do
+    has_entries="1"
+    entry_name="$(basename "$entry_path")"
+    case "$entry_name" in
+      .keep|.gitkeep) ;;
+      *)
+        return 1
+        ;;
+    esac
+  done < <(find "$dir_path" -mindepth 1 -maxdepth 1 -print 2>/dev/null)
+
+  [[ "$has_entries" == "1" ]]
+}
+
 resolve_flow_logs_dir_for_profile() {
   local configured_logs_dir ai_flow_logs_root_dir
   configured_logs_dir="$(codex_read_key_from_env_file "$env_file" "FLOW_LOGS_DIR" || true)"
@@ -369,11 +388,19 @@ ensure_state_symlink_target() {
   fi
 
   if [[ -e "$state_link_path" && ! -L "$state_link_path" ]]; then
-    if [[ "$dry_run" == "1" ]]; then
-      printf 'DRY_RUN preserve-existing-state-dir %s\n' "$state_link_path"
+    if [[ -d "$state_link_path" ]] && dir_is_placeholder_only "$state_link_path"; then
+      if [[ "$dry_run" == "1" ]]; then
+        printf 'DRY_RUN rm -rf %s\n' "$state_link_path"
+      else
+        rm -rf "$state_link_path"
+      fi
+    else
+      if [[ "$dry_run" == "1" ]]; then
+        printf 'DRY_RUN preserve-existing-state-dir %s\n' "$state_link_path"
+        return 0
+      fi
       return 0
     fi
-    return 0
   fi
 
   if [[ "$dry_run" == "1" ]]; then
@@ -405,11 +432,19 @@ ensure_launchd_symlink_target() {
   fi
 
   if [[ -d "$launchd_link_path" && ! -L "$launchd_link_path" ]]; then
-    if [[ "$dry_run" == "1" ]]; then
-      printf 'DRY_RUN preserve-existing-launchd-dir %s\n' "$launchd_link_path"
+    if dir_is_placeholder_only "$launchd_link_path"; then
+      if [[ "$dry_run" == "1" ]]; then
+        printf 'DRY_RUN rm -rf %s\n' "$launchd_link_path"
+      else
+        rm -rf "$launchd_link_path"
+      fi
+    else
+      if [[ "$dry_run" == "1" ]]; then
+        printf 'DRY_RUN preserve-existing-launchd-dir %s\n' "$launchd_link_path"
+        return 0
+      fi
       return 0
     fi
-    return 0
   fi
 
   if [[ -e "$launchd_link_path" && ! -L "$launchd_link_path" ]]; then
@@ -449,11 +484,19 @@ ensure_logs_symlink_target() {
   fi
 
   if [[ -d "$logs_link_path" && ! -L "$logs_link_path" ]]; then
-    if [[ "$dry_run" == "1" ]]; then
-      printf 'DRY_RUN preserve-existing-logs-dir %s\n' "$logs_link_path"
+    if dir_is_placeholder_only "$logs_link_path"; then
+      if [[ "$dry_run" == "1" ]]; then
+        printf 'DRY_RUN rm -rf %s\n' "$logs_link_path"
+      else
+        rm -rf "$logs_link_path"
+      fi
+    else
+      if [[ "$dry_run" == "1" ]]; then
+        printf 'DRY_RUN preserve-existing-logs-dir %s\n' "$logs_link_path"
+        return 0
+      fi
       return 0
     fi
-    return 0
   fi
 
   if [[ -e "$logs_link_path" && ! -L "$logs_link_path" ]]; then

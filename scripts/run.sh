@@ -46,6 +46,7 @@ Commands:
   next_task
   app_deps_mermaid
   backlog_seed_apply
+  bootstrap_repo
   onboarding_audit
   update_toolkit
   create_migration_kit
@@ -564,6 +565,11 @@ case "$cmd" in
 
   backlog_seed_apply)
     "${CODEX_SHARED_SCRIPTS_DIR}/backlog_seed_apply.sh"
+    ;;
+
+  bootstrap_repo)
+    shift 1
+    "${CODEX_SHARED_SCRIPTS_DIR}/bootstrap_repo.sh" "$@"
     ;;
 
   onboarding_audit)

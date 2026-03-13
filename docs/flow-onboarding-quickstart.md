@@ -28,6 +28,27 @@
 - manifest обязательных repo Actions secrets в `.flow/templates/github/required-secrets.txt`;
 - успешный smoke: `Todo -> In Progress -> Review/Done` на тестовой карточке.
 
+## Канонический entrypoint
+
+Для нового проекта без существующего source-project используй именно initializer:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/justewg/ai-flow/main/flow-init.sh) --profile acme
+```
+
+Что делает initializer:
+- bootstrap-ит `/.flow/shared` из `ai-flow` в текущем repo;
+- materialize-ит минимальный `.flow` layout и root template `COMMAND_TEMPLATES.md`;
+- пишет безопасные `.flow/config/flow.sample.env` и `.flow/config/flow.env` через `profile_init init`;
+- запускает `flow_configurator questionnaire` или печатает один точный следующий шаг, если interactive tty недоступен.
+
+Граница ответственности:
+- `initializer` — первичное подключение flow в новый repo без migration kit;
+- `migration kit` — перенос уже существующего flow-контура из source-project;
+- `flow_configurator questionnaire` — заполнение/уточнение `flow.env`;
+- `onboarding_audit` — проверка repo/env/GitHub readiness после конфигурации;
+- `profile_init orchestrate` — финальный apply/install/preflight pipeline.
+
 ## Что нужно подготовить заранее
 
 ### 1. Локальный контур
@@ -153,46 +174,20 @@ gh project view <PROJECT_NUMBER> --owner <PROJECT_OWNER> --format json --jq '.id
 cd <HOME>/sites/acme-app
 ```
 
-### Шаг 2. Выполнить первичный аудит consumer-project
+### Шаг 2. Выполнить initializer
 ```bash
-.flow/shared/scripts/run.sh onboarding_audit
-```
-
-Скрипт проверит:
-- перенесён ли toolkit;
-- хватает ли локальных команд (`git`, `gh`, `jq`, `node`, ...);
-- есть ли git-репозиторий, `origin`, ветки `main` и `development`;
-- авторизован ли `gh`.
-
-Если дальше нужен полный audit profile/env, запуск повторяется с `--profile`.
-
-Если toolkit переносился через `migration_kit.tgz`, перед audit сначала выполни:
-```bash
-.flow/migration/do_migration.sh
+bash <(curl -fsSL https://raw.githubusercontent.com/justewg/ai-flow/main/flow-init.sh) --profile acme
 ```
 
 После этого ожидается:
+- создан или переиспользован `/.flow/shared`;
 - создан `.flow/config/flow.sample.env`
 - создан `.flow/config/flow.env`
-- создан `.flow/config/migration.conf`
-- созданы `.flow/templates/github/required-files.txt` и `.flow/templates/github/required-secrets.txt`
-- развернуты `.github/workflows/*.yml` и, если он был в source-kit, `.github/pull_request_template.md`
+- создан `COMMAND_TEMPLATES.md`
 - создан `.flow/state/codex/acme`
 - подготовлен log-dir проекта: по умолчанию `<sites-root>/.ai-flow/logs/acme`
 
-### Шаг 3. Создать flow env и state-dir
-```bash
-.flow/shared/scripts/run.sh profile_init init --profile acme
-```
-
-Ожидаемый результат:
-- создан `.flow/config/flow.env`
-- создан `.flow/state/codex/acme`
-- log-dir по умолчанию будет вычислен как `<sites-root>/.ai-flow/logs/acme`
-
-Если перед этим уже был выполнен `apply_migration_kit`, шаг можно пропустить: рабочий `.flow/config/flow.env` уже материализован из `.flow/config/flow.sample.env`.
-
-### Шаг 4. Пройти интерактивный wizard для `flow.env`
+### Шаг 3. Если configurator не стартовал автоматически, запусти его вручную
 ```bash
 .flow/shared/scripts/run.sh flow_configurator questionnaire --profile acme
 ```
@@ -203,10 +198,21 @@ Wizard:
 - перед записью покажет preview diff и запросит явное подтверждение;
 - при rerun автоматически переиспользует уже подтверждённые non-secret значения, а секреты оставит sticky, пока ты явно их не заменишь.
 
-### Шаг 5. Проверить, что именно осталось настроить в flow env
+### Шаг 4. Проверить, что именно осталось настроить в flow env
 ```bash
 .flow/shared/scripts/run.sh onboarding_audit --profile acme
 ```
+
+### Шаг 5. Завершить onboarding orchestration
+```bash
+.flow/shared/scripts/run.sh profile_init orchestrate --profile acme
+```
+
+Команда сама последовательно запустит:
+- `onboarding_audit`
+- `profile_init install`
+- `github_health_check/status_snapshot`
+- `profile_init preflight`
 
 ### Шаг 6. Если нужно, дозаполнить env-файл вручную
 Обычно wizard покрывает основной путь, но `.flow/config/flow.env` всё ещё можно открыть и поправить вручную. Минимальный набор:

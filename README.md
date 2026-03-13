@@ -10,6 +10,7 @@
 - `.flow/shared/` — git-submodule с общим flow-toolkit (`justewg/ai-flow`).
 - `.flow/shared/docs/gh-app-daemon-integration-plan.md` — план и runbook по включению GitHub App auth-сервиса (permissions, installation, smoke, onboarding).
 - `.flow/shared/docs/ops-bot-dashboard.md` — запуск ops-дашборда и Telegram webhook-бота (`/ops/status`, `/ops/status.json`, `/telegram/webhook/...`).
+- `docs/flow/web-source/` — source layout канонической web-документации flow и mapping для Readocly publish.
 
 ## Текущий прототип
 - `prototype/web/` — MVP UI-прототип экрана 50/50 (задача `PL-003`).

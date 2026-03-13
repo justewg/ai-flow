@@ -8,6 +8,7 @@ on:
       - Deploy Main to Hosting
       - Deploy PR Preview to Dev Hosting
       - Project Auto Close Tasks
+      - Publish Flow Web Docs
 
 jobs:
   notify_telegram:

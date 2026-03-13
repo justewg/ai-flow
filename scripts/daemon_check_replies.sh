@@ -39,6 +39,7 @@ detect_reply_mode() {
   local kind="$1"
   local body="$2"
   local explicit_mode=""
+  local first_line=""
   explicit_mode="$(
     printf '%s\n' "$body" |
       sed -n 's/^CODEX_MODE:[[:space:]]*//p' |
@@ -51,6 +52,23 @@ detect_reply_mode() {
   fi
 
   if is_blocker_kind "$kind"; then
+    first_line="$(printf '%s\n' "$body" | head -n1 | tr -d '\r')"
+
+    # Short option replies like "1", "1.", "п.1", "2)" should resume blocker flow
+    # even if locale-sensitive word matching misses Cyrillic imperatives.
+    if printf '%s\n' "$first_line" | grep -Eq '^[[:space:]]*([PpПп]\.?[[:space:]]*)?1([.)][[:space:]]*.*)?$'; then
+      printf 'REWORK'
+      return 0
+    fi
+    if printf '%s\n' "$first_line" | grep -Eq '^[[:space:]]*([PpПп]\.?[[:space:]]*)?2([.)][[:space:]]*.*)?$'; then
+      printf 'REWORK'
+      return 0
+    fi
+    if printf '%s\n' "$first_line" | grep -Eq '^[[:space:]]*([PpПп]\.?[[:space:]]*)?3([.)][[:space:]]*.*)?$'; then
+      printf 'QUESTION'
+      return 0
+    fi
+
     # Explicit dirty-gate commands should resume blocker flow, not stay in QUESTION.
     if printf '%s' "$body" | grep -Eiq '(^|[[:space:]])(COMMIT|STASH|REVERT|IGNORE|IGNOR|ИГНОР|ПРОПУСТИ|ПРОДОЛЖАЙ С DIRTY)($|[[:space:]])'; then
       printf 'REWORK'

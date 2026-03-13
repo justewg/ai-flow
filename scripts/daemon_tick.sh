@@ -288,6 +288,11 @@ sanitize_for_log() {
   printf '%s' "$value" | tr '\n' ' ' | tr '\t' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//'
 }
 
+json_payload_is_valid() {
+  local payload="$1"
+  printf '%s' "$payload" | jq -e . >/dev/null 2>&1
+}
+
 graphql_payload_has_rate_limit() {
   local payload="$1"
   printf '%s' "$payload" | jq -e '
@@ -2622,8 +2627,7 @@ fi
     run_project_item_list_fallback \
       "$project_owner" \
       --limit "$project_items_limit" \
-      --format json \
-      --jq '.'
+      --format json
   )"; then
     :
   else
@@ -2634,6 +2638,20 @@ fi
       exit 0
     fi
     exit "$rc"
+  fi
+
+  if ! json_payload_is_valid "$fallback_items_json"; then
+    if printf '%s' "$fallback_items_json" | grep -Eiq 'api rate limit already exceeded|graphql_rate_limit|rate limit'; then
+      echo "WAIT_GITHUB_RATE_LIMIT=1"
+      echo "WAIT_GITHUB_RATE_LIMIT_STAGE=PROJECT_ITEM_LIST_FALLBACK"
+      echo "WAIT_GITHUB_RATE_LIMIT_MSG=$(sanitize_for_log "$fallback_items_json")"
+      exit 0
+    fi
+
+    echo "WAIT_GITHUB_API_UNSTABLE=1"
+    echo "WAIT_GITHUB_STAGE=PROJECT_ITEM_LIST_FALLBACK_NON_JSON"
+    echo "WAIT_GITHUB_STAGE_DETAIL=$(sanitize_for_log "$fallback_items_json")"
+    exit 0
   fi
 
   fallback_queue_json="$(

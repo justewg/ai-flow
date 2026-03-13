@@ -31,6 +31,7 @@ jobs:
         run: |
           bash scripts/flow_docs/publish_flow_docs.sh \
             --output-dir dist/flow-docs \
+            --static-output-dir dist/flow-docs-static \
             --bundle-file dist/flow-web-docs-bundle.tgz
 
       - name: Upload flow docs artifact
@@ -40,6 +41,7 @@ jobs:
           if-no-files-found: error
           path: |
             dist/flow-docs
+            dist/flow-docs-static
             dist/flow-web-docs-bundle.tgz
 
   preflight_deploy_runner:
@@ -109,7 +111,6 @@ jobs:
     runs-on: [self-hosted, planka-deploy]
     env:
       FLOW_DOCS_DEPLOY_PATH: ${{ vars.FLOW_DOCS_DEPLOY_PATH }}
-      FLOW_DOCS_DEPLOY_POST_COMMAND: ${{ vars.FLOW_DOCS_DEPLOY_POST_COMMAND }}
 
     steps:
       - name: Checkout
@@ -124,19 +125,14 @@ jobs:
       - name: Validate required settings
         run: |
           : "${FLOW_DOCS_DEPLOY_PATH:?FLOW_DOCS_DEPLOY_PATH repository variable is required}"
-          test -f dist/flow-docs/redocly.yaml
+          test -f dist/flow-docs-static/index.html
 
-      - name: Deploy flow docs bundle to hosting path
+      - name: Deploy flow docs static site to hosting path
         run: |
           bash scripts/flow_docs/deploy_flow_docs.sh \
-            --site-dir dist/flow-docs \
+            --site-dir dist/flow-docs-static \
             --deploy-root "${FLOW_DOCS_DEPLOY_PATH}" \
             --release-id "${GITHUB_SHA}"
-
-      - name: Optional post-deploy command
-        if: ${{ env.FLOW_DOCS_DEPLOY_POST_COMMAND != '' }}
-        run: |
-          bash -lc "$FLOW_DOCS_DEPLOY_POST_COMMAND"
 
   fail_missing_deploy_runner:
     needs: preflight_deploy_runner

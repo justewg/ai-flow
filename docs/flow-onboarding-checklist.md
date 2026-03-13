@@ -34,7 +34,9 @@
 Опционально вместо ручного копирования:
 - [ ] В текущем проекте выполнен `.flow/shared/scripts/run.sh create_migration_kit --project acme --target-repo <HOME>/sites/acme-app`
 - [ ] Archive лежит в source repo: `.flow/migration/acme-migration-kit.tgz`
-- [ ] В target repo появились `.flow/migration/do_migration.sh`, `.flow/migration/flow.conf` и `.flow/migration/README.md`
+- [ ] В target repo появились `.flow/migration/do_migration.sh`, `.flow/migration/flow.conf`, `.flow/migration/README.md` и локальный kit-archive
+- [ ] Если нужны current-specific env-значения, в target repo появился optional `.flow/migration/flow.payload.env`
+- [ ] Если нужен repo automation overlay, в target repo появился optional `.flow/migration/repo-overlay.tgz`
 - [ ] Выполнен `.flow/migration/do_migration.sh`
 - [ ] Проверено, что после `apply_migration_kit` появились `.flow/config/flow.sample.env` и `.flow/config/flow.env`
 - [ ] Проверено, что после `apply_migration_kit` появился `.flow/config/flow.conf`

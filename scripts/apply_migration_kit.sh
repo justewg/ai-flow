@@ -165,6 +165,38 @@ read_migration_config_key() {
   codex_read_key_from_env_file "$migration_config" "$key"
 }
 
+resolve_migration_artifact_path() {
+  local value="$1"
+  [[ -n "$value" ]] || return 1
+  if [[ "$value" = /* ]]; then
+    printf '%s' "$value"
+    return 0
+  fi
+  printf '%s/%s' "${ROOT_DIR}" "${value#./}"
+}
+
+apply_flow_payload() {
+  local payload_path="$1"
+  local line key value
+
+  [[ -f "$payload_path" ]] || return 0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ ^[A-Z][A-Z0-9_]*= ]]; then
+      key="${line%%=*}"
+      value="${line#*=}"
+      rewrite_env_key "$target_env_file" "$key" "$value"
+    fi
+  done < "$payload_path"
+  echo "MIGRATION_KIT_FLOW_PAYLOAD_APPLIED=${payload_path}"
+}
+
+apply_repo_overlay_payload() {
+  local overlay_path="$1"
+  [[ -f "$overlay_path" ]] || return 0
+  tar -xzf "$overlay_path" -C "$ROOT_DIR"
+  echo "MIGRATION_KIT_REPO_OVERLAY_APPLIED=${overlay_path}"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --project)
@@ -226,6 +258,8 @@ source_actions_files_manifest="${source_actions_template_dir}/required-files.txt
 source_actions_secrets_manifest="${source_actions_template_dir}/required-secrets.txt"
 target_state_dir="${flow_state_root_dir}"
 target_relative_state_dir=".flow/state"
+flow_payload_path=""
+repo_overlay_path=""
 
 if [[ ! -f "$source_sample_env" && ! -f "$source_env_file" ]]; then
   echo "flow.sample.env / flow.env not found in unpacked migration kit." >&2
@@ -257,6 +291,13 @@ if [[ -n "$migration_config" ]]; then
   fi
 fi
 
+if flow_payload_rel="$(read_migration_config_key "MIGRATION_KIT_FLOW_PAYLOAD_REL" || true)"; [[ -n "$flow_payload_rel" ]]; then
+  flow_payload_path="$(resolve_migration_artifact_path "$flow_payload_rel")"
+fi
+if repo_overlay_rel="$(read_migration_config_key "MIGRATION_KIT_REPO_OVERLAY_REL" || true)"; [[ -n "$repo_overlay_rel" ]]; then
+  repo_overlay_path="$(resolve_migration_artifact_path "$repo_overlay_rel")"
+fi
+
 if [[ -f "$source_sample_env" ]]; then
   if [[ "$source_sample_env" != "$target_sample_env" ]]; then
     cp "$source_sample_env" "$target_sample_env"
@@ -278,7 +319,19 @@ rewrite_env_key "$target_env_file" "CODEX_STATE_DIR" "$target_state_dir"
 rewrite_env_key "$target_env_file" "FLOW_STATE_DIR" "$target_state_dir"
 rewrite_env_key "$target_env_file" "WATCHDOG_DAEMON_LABEL" "${launchd_namespace}.codex-daemon.${target_profile}"
 
+if [[ -n "$flow_payload_path" ]]; then
+  apply_flow_payload "$flow_payload_path"
+  rewrite_env_key "$target_env_file" "PROJECT_PROFILE" "$target_profile"
+  rewrite_env_key "$target_env_file" "CODEX_STATE_DIR" "$target_state_dir"
+  rewrite_env_key "$target_env_file" "FLOW_STATE_DIR" "$target_state_dir"
+  rewrite_env_key "$target_env_file" "WATCHDOG_DAEMON_LABEL" "${launchd_namespace}.codex-daemon.${target_profile}"
+fi
+
 repo_actions_applied="0"
+if [[ -n "$repo_overlay_path" ]]; then
+  apply_repo_overlay_payload "$repo_overlay_path"
+fi
+
 if [[ -d "${source_actions_template_dir}/workflows" ]]; then
   while IFS= read -r source_workflow; do
     [[ -n "$source_workflow" ]] || continue

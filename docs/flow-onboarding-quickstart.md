@@ -132,12 +132,12 @@ gh project view <PROJECT_NUMBER> --owner <PROJECT_OWNER> --format json --jq '.id
 - archive по умолчанию появится как `.flow/migration/acme-migration-kit.tgz`
 - если нужен prefilled `flow.env` с текущими секретами:
   `.flow/shared/scripts/run.sh create_migration_kit --project acme --defaults-from current --include-secrets --target-repo <HOME>/sites/acme-app`
-- в target repo появятся `.flow/migration/do_migration.sh`, `.flow/migration/flow.conf` и `.flow/migration/README.md`
+- в target repo появятся `.flow/migration/do_migration.sh`, `.flow/migration/flow.conf`, `.flow/migration/README.md`, локальный kit-archive и optional payload-файлы
 - в новом проекте достаточно запустить: `.flow/migration/do_migration.sh`
 - archive положит безопасный шаблон `.flow/config/flow.sample.env` без копирования живых токенов из исходного проекта
-- archive также положит prefilled `.flow/config/flow.env`; при `--include-secrets` в него попадут и текущие секреты
-- archive также положит `.flow/templates/github/` как source overlay для `.github/workflows/` и `.github/pull_request_template.md`
-- `apply_migration_kit` развернёт этот overlay в новый repo, сохранит локальный `.flow/config/flow.conf` и оставит manifest required secrets в `.flow/templates/github/required-secrets.txt`
+- archive положит clean `.flow/config/flow.env`; current-specific значения и секреты, если нужны, попадут в optional `flow.payload.env`
+- repo automation overlay при необходимости пойдёт отдельным payload-файлом `repo-overlay.tgz`
+- `apply_migration_kit` сохранит локальный `.flow/config/flow.conf`, наложит payload-ы и оставит manifest required secrets в `.flow/templates/github/required-secrets.txt`
 - если target уже git-repo, `apply_migration_kit` best-effort materialize-ит `/.flow/shared` как submodule по URL/revision из kit manifest
 
 ## Bootstrap в локальной папке проекта

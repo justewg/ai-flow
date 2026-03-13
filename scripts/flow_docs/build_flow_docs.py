@@ -5,6 +5,7 @@ import argparse
 import datetime as dt
 import html
 import json
+import posixpath
 import re
 import shutil
 import subprocess
@@ -272,13 +273,24 @@ def write_metadata(output_dir: Path) -> None:
 def markdown_link_to_html(target: str) -> str:
     if target.startswith(("http://", "https://", "mailto:", "#")):
         return target
+    query = ""
     anchor = ""
+    if "?" in target:
+        target, query = target.split("?", 1)
+        query = f"?{query}"
     if "#" in target:
         target, anchor = target.split("#", 1)
         anchor = f"#{anchor}"
+    normalized = posixpath.normpath(target.lstrip("/"))
+    if normalized == ".":
+        normalized = ""
+    while normalized.startswith("../"):
+        normalized = normalized[3:]
     if target.endswith(".md"):
-        return f"{target[:-3]}.html{anchor}"
-    return f"{target}{anchor}"
+        normalized = f"{normalized[:-3]}.html"
+    if not normalized:
+        return f"/{query}{anchor}" if (query or anchor) else "/"
+    return f"/{normalized}{query}{anchor}"
 
 
 def render_inline(markdown: str) -> str:
@@ -474,6 +486,7 @@ def markdown_title(markdown: str, fallback: str) -> str:
 def static_css() -> str:
     return """
 :root {
+  color-scheme: light;
   --bg: #f5f1e8;
   --surface: rgba(255, 252, 245, 0.92);
   --surface-strong: #fffaf1;
@@ -483,6 +496,22 @@ def static_css() -> str:
   --accent: #0d5f52;
   --accent-soft: rgba(13, 95, 82, 0.08);
   --code: #f3eee4;
+  --overlay: rgba(18, 20, 24, 0.82);
+  --shadow: rgba(31, 27, 23, 0.08);
+}
+body[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121416;
+  --surface: rgba(23, 28, 32, 0.9);
+  --surface-strong: #1a2126;
+  --ink: #f3efe7;
+  --muted: #b6ada1;
+  --line: rgba(243, 239, 231, 0.12);
+  --accent: #72cbb9;
+  --accent-soft: rgba(114, 203, 185, 0.12);
+  --code: #20262c;
+  --overlay: rgba(3, 6, 10, 0.9);
+  --shadow: rgba(0, 0, 0, 0.3);
 }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
@@ -505,12 +534,26 @@ a:hover { text-decoration: underline; }
   grid-template-columns: 300px minmax(0, 1fr);
   gap: 24px;
 }
+.theme-toggle {
+  position: fixed;
+  right: 20px;
+  top: 18px;
+  z-index: 40;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 10px 14px;
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 0 16px 40px var(--shadow);
+}
 .site-nav, .content-shell {
   background: var(--surface);
   backdrop-filter: blur(10px);
   border: 1px solid var(--line);
   border-radius: 20px;
-  box-shadow: 0 16px 40px rgba(31, 27, 23, 0.08);
+  box-shadow: 0 16px 40px var(--shadow);
 }
 .site-nav {
   position: sticky;
@@ -628,6 +671,38 @@ a:hover { text-decoration: underline; }
   background: var(--surface-strong);
 }
 .content-body img { max-width: 100%; }
+.content-body img,
+.content-body .mermaid {
+  cursor: zoom-in;
+}
+.diagram-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  background: var(--overlay);
+}
+.diagram-overlay.open {
+  display: flex;
+}
+.diagram-overlay-panel {
+  max-width: min(96vw, 1400px);
+  max-height: 92vh;
+  overflow: auto;
+  padding: 20px;
+  background: var(--surface-strong);
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  box-shadow: 0 24px 60px var(--shadow);
+}
+.diagram-overlay-panel img,
+.diagram-overlay-panel svg {
+  max-width: 100%;
+  height: auto;
+}
 @media (max-width: 980px) {
   .layout {
     grid-template-columns: 1fr;
@@ -642,6 +717,84 @@ a:hover { text-decoration: underline; }
     padding-right: 22px;
   }
 }
+""".strip()
+
+
+def static_js() -> str:
+    return """
+(function () {
+  const storageKey = 'flow-docs-theme';
+  const body = document.body;
+
+  function preferredTheme() {
+    const stored = window.localStorage.getItem(storageKey);
+    if (stored === 'light' || stored === 'dark') return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  function applyTheme(theme) {
+    body.setAttribute('data-theme', theme);
+    const toggle = document.querySelector('[data-role=\"theme-toggle\"]');
+    if (toggle) toggle.textContent = theme === 'dark' ? 'Light mode' : 'Dark mode';
+  }
+
+  function toggleTheme() {
+    const next = body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    window.localStorage.setItem(storageKey, next);
+    applyTheme(next);
+  }
+
+  function buildThemeToggle() {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'theme-toggle';
+    button.setAttribute('data-role', 'theme-toggle');
+    button.addEventListener('click', toggleTheme);
+    document.body.appendChild(button);
+    applyTheme(preferredTheme());
+  }
+
+  function buildOverlay() {
+    const overlay = document.createElement('div');
+    overlay.className = 'diagram-overlay';
+    overlay.innerHTML = '<div class=\"diagram-overlay-panel\" data-role=\"overlay-panel\"></div>';
+    overlay.addEventListener('click', function (event) {
+      if (event.target === overlay) overlay.classList.remove('open');
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') overlay.classList.remove('open');
+    });
+    document.body.appendChild(overlay);
+    return overlay;
+  }
+
+  function openOverlay(overlay, node) {
+    const panel = overlay.querySelector('[data-role=\"overlay-panel\"]');
+    panel.innerHTML = '';
+    panel.appendChild(node.cloneNode(true));
+    overlay.classList.add('open');
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    buildThemeToggle();
+    const overlay = buildOverlay();
+
+    document.addEventListener('click', function (event) {
+      const image = event.target.closest('.content-body img');
+      if (image) {
+        event.preventDefault();
+        openOverlay(overlay, image);
+        return;
+      }
+
+      const mermaid = event.target.closest('.content-body .mermaid');
+      if (mermaid) {
+        event.preventDefault();
+        openOverlay(overlay, mermaid);
+      }
+    });
+  });
+})();
 """.strip()
 
 
@@ -672,6 +825,7 @@ def build_static_site(config: dict[str, object], bundle_dir: Path, static_output
                     '  <link rel="stylesheet" href="/assets/site.css">',
                     '  <script type="module" src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs"></script>',
                     "  <script>window.addEventListener('DOMContentLoaded', function () { if (window.mermaid) { window.mermaid.initialize({ startOnLoad: true, securityLevel: 'loose' }); } });</script>",
+                    '  <script defer src="/assets/site.js"></script>',
                     "</head>",
                     "<body>",
                     '  <div class="layout">',
@@ -696,6 +850,7 @@ def build_static_site(config: dict[str, object], bundle_dir: Path, static_output
         shutil.copy2(source, target)
 
     write_text(static_output_dir / "assets/site.css", static_css() + "\n")
+    write_text(static_output_dir / "assets/site.js", static_js() + "\n")
 
 
 def parse_args() -> argparse.Namespace:

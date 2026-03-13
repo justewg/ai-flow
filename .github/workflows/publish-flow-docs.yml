@@ -43,7 +43,6 @@ jobs:
 
   publish_redocly:
     needs: build_bundle
-    if: ${{ secrets.REDOCLY_AUTHORIZATION != '' && secrets.REDOCLY_ORGANIZATION != '' && secrets.REDOCLY_PROJECT != '' }}
     runs-on: ubuntu-latest
     env:
       REDOCLY_AUTHORIZATION: ${{ secrets.REDOCLY_AUTHORIZATION }}
@@ -52,21 +51,36 @@ jobs:
       REDOCLY_MOUNT_PATH: ${{ secrets.REDOCLY_MOUNT_PATH }}
 
     steps:
+      - name: Check Readocly publish secrets
+        id: publish_gate
+        run: |
+          if [[ -z "${REDOCLY_AUTHORIZATION}" || -z "${REDOCLY_ORGANIZATION}" || -z "${REDOCLY_PROJECT}" ]]; then
+            echo "should_publish=false" >> "${GITHUB_OUTPUT}"
+            echo "Readocly publish skipped: required REDOCLY_* secrets are missing."
+            exit 0
+          fi
+
+          echo "should_publish=true" >> "${GITHUB_OUTPUT}"
+
       - name: Checkout
+        if: ${{ steps.publish_gate.outputs.should_publish == 'true' }}
         uses: actions/checkout@v4
 
       - name: Setup Node.js
+        if: ${{ steps.publish_gate.outputs.should_publish == 'true' }}
         uses: actions/setup-node@v4
         with:
           node-version: 22.12.0
 
       - name: Download flow docs artifact
+        if: ${{ steps.publish_gate.outputs.should_publish == 'true' }}
         uses: actions/download-artifact@v4
         with:
           name: flow-web-docs-bundle
           path: dist
 
       - name: Publish flow docs to Readocly
+        if: ${{ steps.publish_gate.outputs.should_publish == 'true' }}
         run: |
           bash scripts/flow_docs/publish_flow_docs.sh \
             --skip-build \

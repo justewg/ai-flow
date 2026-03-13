@@ -40,7 +40,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 toolkit_dir="$(codex_resolve_repo_flow_shared_dir)"
-if [[ ! -d "${toolkit_dir}/.git" ]]; then
+if ! git -C "$toolkit_dir" rev-parse --git-dir >/dev/null 2>&1; then
   echo "Toolkit submodule is not initialized: ${toolkit_dir}"
   exit 1
 fi

@@ -86,3 +86,4 @@ Bootstrap создаёт или переиспользует:
 - `clean repo`: bootstrap создаёт `.flow/config`, `.flow/tmp/wizard`, submodule `/.flow/shared`, `flow.env`, `flow.sample.env`, symlink-и `.flow/state`, `.flow/logs`, `.flow/launchd`.
 - `rerun`: повторный запуск остаётся idempotent и возвращает `SHARED_SUBMODULE_ACTION=reused`.
 - `migration kit -> repair`: bootstrap переносит snapshot `.flow/shared` в backup, переключает repo на submodule path, применяет overlay и materialize-ит canonical runtime links.
+- `tracked diff guard`: при изменённом tracked-контенте внутри уже materialized `.flow` bootstrap останавливается с `BOOTSTRAP_BLOCKED_DIRTY=*` и требует явный `--allow-dirty-tracked` для destructive path.

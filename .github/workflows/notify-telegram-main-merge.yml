@@ -49,6 +49,11 @@ jobs:
             jq -rn --arg v "${1:-}" '$v|@html'
           }
 
+          if [[ "${WF_NAME}" == "Deploy PR Preview to Dev Hosting" && "${WF_EVENT}" == "push" && "${WF_BRANCH}" == "development" ]]; then
+            echo "Skip Telegram notify for development push deploy preview"
+            exit 0
+          fi
+
           CHECK_ICON="💤"
           HEADER_STATUS_ICON="✅"
           if [[ "${WF_CONCLUSION}" != "success" ]]; then

@@ -18,7 +18,6 @@
 Дополнительно можно использовать server-side env для preview service:
 
 - `FLOW_DOCS_PROJECT_DIR=/var/sites/planka-flow-docs/current`
-- `FLOW_DOCS_PREVIEW_HOST=127.0.0.1`
 - `FLOW_DOCS_PREVIEW_PORT=4410`
 - `FLOW_DOCS_PREVIEW_PRODUCT=realm`
 
@@ -47,7 +46,6 @@ After=network.target
 User=gha-runner
 WorkingDirectory=/var/sites/planka-flow-docs
 Environment=FLOW_DOCS_PROJECT_DIR=/var/sites/planka-flow-docs/current
-Environment=FLOW_DOCS_PREVIEW_HOST=127.0.0.1
 Environment=FLOW_DOCS_PREVIEW_PORT=4410
 Environment=FLOW_DOCS_PREVIEW_PRODUCT=realm
 ExecStart=/usr/bin/env bash /var/sites/planka-flow-docs/bin/serve_flow_docs.sh

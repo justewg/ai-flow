@@ -64,6 +64,8 @@
    Если target находится в том же trust-контуре и нужен prefilled `flow.env` с текущими секретами:
    `.flow/shared/scripts/run.sh create_migration_kit --project acme --defaults-from current --include-secrets`
 2. В new project после распаковки выполнить:
+   `./apply_migration_kit.sh --project acme`
+   При необходимости можно вызвать и напрямую:
    `.flow/shared/scripts/run.sh apply_migration_kit --project acme`
 3. Kit должен принести безопасные шаблоны:
    - `.flow/config/flow.sample.env`

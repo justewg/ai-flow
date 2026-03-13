@@ -39,6 +39,26 @@ Examples:
 EOF
 }
 
+write_apply_launcher() {
+  local destination="$1"
+  cat > "$destination" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TOOLKIT_RUNNER="${SCRIPT_DIR}/.flow/shared/scripts/run.sh"
+
+if [[ ! -x "$TOOLKIT_RUNNER" ]]; then
+  echo "Toolkit runner not found: ${TOOLKIT_RUNNER}" >&2
+  echo "Unpack migration kit in repo root first." >&2
+  exit 1
+fi
+
+exec "$TOOLKIT_RUNNER" apply_migration_kit "$@"
+EOF
+  chmod +x "$destination"
+}
+
 slugify() {
   local value="$1"
   value="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
@@ -427,6 +447,7 @@ fi
 if [[ -f "${ROOT_DIR}/.github/pull_request_template.md" ]]; then
   cp "${ROOT_DIR}/.github/pull_request_template.md" "${build_dir}/.flow/templates/github/pull_request_template.md"
 fi
+write_apply_launcher "${build_dir}/apply_migration_kit.sh"
 
 touch "${build_dir}/.flow/state/.keep"
 write_profile_env_from_source \
@@ -463,6 +484,7 @@ MIGRATION_KIT_STATE_DIR=.flow/state
 MIGRATION_KIT_TOOLKIT_DIR=.flow/shared
 MIGRATION_KIT_DOC_DIR=.flow/shared/docs
 MIGRATION_KIT_COMMAND_TEMPLATES=COMMAND_TEMPLATES.md
+MIGRATION_KIT_BOOTSTRAP_APPLY=apply_migration_kit.sh
 MIGRATION_KIT_TOOLKIT_MODE=submodule_snapshot
 MIGRATION_KIT_TOOLKIT_SUBMODULE_URL=${toolkit_remote_url}
 MIGRATION_KIT_TOOLKIT_SUBMODULE_REVISION=${toolkit_revision}

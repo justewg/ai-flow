@@ -69,7 +69,23 @@ expand_path() {
 }
 
 preferred_github_git_protocol() {
-  gh config get git_protocol -h github.com 2>/dev/null || true
+  if [[ -n "${AI_FLOW_GIT_PROTOCOL:-}" ]]; then
+    printf '%s' "${AI_FLOW_GIT_PROTOCOL}"
+    return
+  fi
+
+  if command -v gh >/dev/null 2>&1; then
+    gh config get git_protocol -h github.com 2>/dev/null || true
+    return
+  fi
+
+  if GIT_SSH_COMMAND='ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new' \
+    git ls-remote git@github.com:justewg/ai-flow.git HEAD >/dev/null 2>&1; then
+    printf 'ssh'
+    return
+  fi
+
+  printf 'https'
 }
 
 normalize_repo_url() {

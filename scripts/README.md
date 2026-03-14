@@ -16,6 +16,12 @@
 - `.flow/shared/docs/flow-portability-runbook.md` (миграция `current -> new project`, multi-project smoke, rollback, extraction strategy).
 - `docs/self-hosted-runner-deploy.md` (перевод deploy workflow на self-hosted runner `planka-deploy`).
 
+Linux-hosted bootstrap launchers:
+- host-native:
+  - `bash <(curl -fsSL https://raw.githubusercontent.com/justewg/ai-flow/main/flow-host-init.sh)`
+- docker-hosted:
+  - `bash <(curl -fsSL https://raw.githubusercontent.com/justewg/ai-flow/main/flow-docker-init.sh)`
+
 Команды:
 - `.flow/shared/scripts/run.sh help`
 - `.flow/shared/scripts/run.sh clear <key>`
@@ -42,6 +48,8 @@
 - `.flow/shared/scripts/run.sh log_tail_executor`
 - `.flow/shared/scripts/run.sh log_tail_daemon_executor`
 - `.flow/shared/scripts/run.sh log_tail_all`
+- `.flow/shared/scripts/run.sh host_bootstrap`
+- `.flow/shared/scripts/run.sh docker_bootstrap`
 - Для interactive approvals и переменных аргументов:
   - не вызывать `gh ...`, `git ...`, `project_set_status.sh ...` напрямую;
   - записывать входные данные в fixed input files через `run.sh write/copy/clear`;

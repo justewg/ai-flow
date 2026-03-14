@@ -48,6 +48,7 @@ Commands:
   backlog_seed_apply
   bootstrap_repo
   host_bootstrap
+  docker_bootstrap
   onboarding_audit
   update_toolkit
   review_context_recover
@@ -607,6 +608,11 @@ case "$cmd" in
   host_bootstrap)
     shift 1
     "${CODEX_SHARED_SCRIPTS_DIR}/host_bootstrap.sh" "$@"
+    ;;
+
+  docker_bootstrap)
+    shift 1
+    "${CODEX_SHARED_SCRIPTS_DIR}/docker_bootstrap.sh" "$@"
     ;;
 
   onboarding_audit)

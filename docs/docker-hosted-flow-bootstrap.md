@@ -47,10 +47,12 @@
 
 ## Контейнерная схема
 
-Первый рабочий срез содержит 3 сервиса:
+Текущий рабочий срез содержит 4 сервиса:
 
 - `runtime`
   - long-lived shell container для `codex`, `gh`, ручных smoke-команд и интерактивной отладки;
+- `gh-app-auth`
+  - поднимает `gh_app_auth_service.js` внутри compose и даёт `daemon/watchdog` штатный auth contour на `127.0.0.1:8787`;
 - `daemon`
   - запускает `./.flow/shared/scripts/daemon_loop.sh <interval>`;
 - `watchdog`
@@ -62,6 +64,7 @@
 - монтируют один и тот же authoritative workspace;
 - видят host-level `AI_FLOW_ROOT` по тому же абсолютному пути;
 - используют один и тот же runtime `HOME` и `CODEX_HOME`.
+- `daemon` и `watchdog` стартуют только после healthy `gh-app-auth`.
 
 ## Ключевое предположение
 
@@ -105,7 +108,7 @@ network_mode: host
 
 Отдельно потом можно добирать:
 
-- `ops_bot` и `gh_app_auth` как отдельные сервисы compose;
+- `ops_bot` как отдельный сервис compose;
 - container-native healthchecks;
 - docker-based runbook для cutover и rollback;
 - `tmux`/operator shell вокруг compose-контейнеров.

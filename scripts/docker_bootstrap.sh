@@ -7,7 +7,7 @@ source "${SCRIPT_DIR}/env/bootstrap.sh"
 
 profile=""
 runtime_user="${USER:-$(id -un)}"
-ai_flow_root="/var/sites/.ai-flow"
+ai_flow_root=""
 workspace_repo_url=""
 workspace_ref="development"
 workspace_path=""
@@ -41,7 +41,7 @@ Bootstrap docker-based ai-flow runtime on a Linux host:
 Options:
   --profile <name>             First managed project profile (example: planka).
   --runtime-user <user>        Linux user owning automation runtime. Default: current user.
-  --ai-flow-root <path>        Host root for config/state/logs/workspaces. Default: /var/sites/.ai-flow
+  --ai-flow-root <path>        Host root for config/state/logs/workspaces. Default: /var/sites/.ai-flow if writable, otherwise $HOME/.ai-flow
   --workspace-repo <url>       Consumer repo URL or path for authoritative workspace.
   --workspace-ref <ref>        Git ref for workspace checkout. Default: development
   --workspace-path <path>      Workspace path. Default: <ai-flow-root>/workspaces/<profile>
@@ -59,6 +59,20 @@ Options:
   --up <ask|yes|no>            Run `docker compose up -d --build`. Default: ask
   -h, --help                   Show help.
 EOF
+}
+
+default_ai_flow_root() {
+  if [[ -n "${AI_FLOW_ROOT_DIR:-}" ]]; then
+    printf '%s' "${AI_FLOW_ROOT_DIR}"
+    return
+  fi
+
+  if [[ -d "/var/sites" && -w "/var/sites" ]]; then
+    printf '%s' "/var/sites/.ai-flow"
+    return
+  fi
+
+  printf '%s/.ai-flow' "$HOME"
 }
 
 slugify() {
@@ -157,11 +171,22 @@ runtime_gid() {
   id -g "$runtime_user"
 }
 
+default_runtime_home() {
+  if [[ "$runtime_user" == "$(current_user)" && -n "${HOME:-}" ]]; then
+    printf '%s' "$HOME"
+    return
+  fi
+
+  printf '/home/%s' "$runtime_user"
+}
+
 run_as_runtime_user() {
   if [[ "$(current_user)" == "$runtime_user" ]]; then
     "$@"
   else
-    sudo -u "$runtime_user" -- "$@"
+    echo "Runtime user mismatch: current user is $(current_user), requested runtime user is ${runtime_user}." >&2
+    echo "Run bootstrap as ${runtime_user} or set --runtime-user to the current user." >&2
+    exit 1
   fi
 }
 
@@ -169,7 +194,9 @@ run_env_as_runtime_user() {
   if [[ "$(current_user)" == "$runtime_user" ]]; then
     env "$@"
   else
-    sudo -u "$runtime_user" -- env "$@"
+    echo "Runtime user mismatch: current user is $(current_user), requested runtime user is ${runtime_user}." >&2
+    echo "Run bootstrap as ${runtime_user} or set --runtime-user to the current user." >&2
+    exit 1
   fi
 }
 
@@ -181,18 +208,18 @@ ensure_dir_owned() {
   if mkdir -p "$dir_path" 2>/dev/null; then
     :
   else
-    sudo mkdir -p "$dir_path"
+    echo "Cannot create directory without write access: ${dir_path}" >&2
+    echo "Choose a writable root (for example \$HOME/.ai-flow) or pre-create it with correct ownership." >&2
+    exit 1
   fi
 
   if chown "$runtime_user:$owner_group" "$dir_path" 2>/dev/null; then
     :
   else
-    if ! has_tty && ! sudo -n true >/dev/null 2>&1; then
-      echo "Host bootstrap needs root-owned path prep: ${dir_path}" >&2
-      echo "Run as root once: mkdir -p '${dir_path}' && chown '${runtime_user}:${owner_group}' '${dir_path}'" >&2
-      exit 1
-    fi
-    sudo chown "$runtime_user:$owner_group" "$dir_path"
+    echo "Directory exists but is not writable by ${runtime_user}: ${dir_path}" >&2
+    echo "Fix ownership manually or rerun with a user-writable root." >&2
+    echo "Suggested manual fix: chown '${runtime_user}:${owner_group}' '${dir_path}'" >&2
+    exit 1
   fi
 }
 
@@ -412,7 +439,10 @@ normalize_host_env() {
 
   remove_env_key "$host_env_file" "FLOW_LAUNCHAGENTS_DIR"
   remove_env_key "$host_env_file" "FLOW_LAUNCHD_DIR"
-  chown "$runtime_user:$(runtime_group)" "$host_env_file" 2>/dev/null || sudo chown "$runtime_user:$(runtime_group)" "$host_env_file"
+  if ! chown "$runtime_user:$(runtime_group)" "$host_env_file" 2>/dev/null; then
+    echo "Cannot assign ownership for ${host_env_file}; ensure it is user-writable and owned by ${runtime_user}." >&2
+    exit 1
+  fi
 }
 
 ensure_workspace_env_symlink() {
@@ -447,7 +477,10 @@ COMPOSE_PROJECT_NAME=${compose_project_name}
 DAEMON_INTERVAL=${daemon_interval}
 WATCHDOG_INTERVAL=${watchdog_interval}
 EOF
-  chown "$runtime_user:$(runtime_group)" "${compose_root}/.env" 2>/dev/null || sudo chown "$runtime_user:$(runtime_group)" "${compose_root}/.env"
+  if ! chown "$runtime_user:$(runtime_group)" "${compose_root}/.env" 2>/dev/null; then
+    echo "Cannot assign ownership for ${compose_root}/.env; ensure compose root is writable by ${runtime_user}." >&2
+    exit 1
+  fi
 }
 
 render_container_env() {
@@ -464,7 +497,10 @@ CODEX_HOME=${codex_home}
 TERM=xterm-256color
 GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=accept-new
 EOF
-  chown "$runtime_user:$(runtime_group)" "${compose_root}/container.env" 2>/dev/null || sudo chown "$runtime_user:$(runtime_group)" "${compose_root}/container.env"
+  if ! chown "$runtime_user:$(runtime_group)" "${compose_root}/container.env" 2>/dev/null; then
+    echo "Cannot assign ownership for ${compose_root}/container.env; ensure compose root is writable by ${runtime_user}." >&2
+    exit 1
+  fi
 }
 
 render_dockerfile() {
@@ -496,7 +532,10 @@ RUN apt-get update \
 
 CMD ["sleep", "infinity"]
 EOF
-  chown "$runtime_user:$(runtime_group)" "${compose_root}/Dockerfile" 2>/dev/null || sudo chown "$runtime_user:$(runtime_group)" "${compose_root}/Dockerfile"
+  if ! chown "$runtime_user:$(runtime_group)" "${compose_root}/Dockerfile" 2>/dev/null; then
+    echo "Cannot assign ownership for ${compose_root}/Dockerfile; ensure compose root is writable by ${runtime_user}." >&2
+    exit 1
+  fi
 }
 
 render_compose_file() {
@@ -607,7 +646,10 @@ services:
       retries: 5
       start_period: 10s
 EOF
-  chown "$runtime_user:$(runtime_group)" "${compose_root}/docker-compose.yml" 2>/dev/null || sudo chown "$runtime_user:$(runtime_group)" "${compose_root}/docker-compose.yml"
+  if ! chown "$runtime_user:$(runtime_group)" "${compose_root}/docker-compose.yml" 2>/dev/null; then
+    echo "Cannot assign ownership for ${compose_root}/docker-compose.yml; ensure compose root is writable by ${runtime_user}." >&2
+    exit 1
+  fi
 }
 
 render_helper_scripts() {
@@ -637,7 +679,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 docker compose --env-file "${SCRIPT_DIR}/.env" -f "${SCRIPT_DIR}/docker-compose.yml" exec runtime bash
 EOF
   chmod +x "${compose_root}/up.sh" "${compose_root}/down.sh" "${compose_root}/logs.sh" "${compose_root}/exec-runtime.sh"
-  chown "$runtime_user:$(runtime_group)" "${compose_root}/up.sh" "${compose_root}/down.sh" "${compose_root}/logs.sh" "${compose_root}/exec-runtime.sh" 2>/dev/null || sudo chown "$runtime_user:$(runtime_group)" "${compose_root}/up.sh" "${compose_root}/down.sh" "${compose_root}/logs.sh" "${compose_root}/exec-runtime.sh"
+  if ! chown "$runtime_user:$(runtime_group)" "${compose_root}/up.sh" "${compose_root}/down.sh" "${compose_root}/logs.sh" "${compose_root}/exec-runtime.sh" 2>/dev/null; then
+    echo "Cannot assign ownership for helper scripts in ${compose_root}; ensure compose root is writable by ${runtime_user}." >&2
+    exit 1
+  fi
 }
 
 compose_cmd() {
@@ -767,7 +812,7 @@ else
   step "Interactive input detected: $(if has_tty; then echo yes; else echo no; fi)"
 fi
 runtime_user="$(prompt_value "Runtime user" "$runtime_user")"
-ai_flow_root="$(expand_path "$(prompt_value "AI flow root" "$ai_flow_root")")"
+ai_flow_root="$(expand_path "$(prompt_value "AI flow root" "${ai_flow_root:-$(default_ai_flow_root)}")")"
 workspace_repo_url="$(normalize_repo_url "$(prompt_value "Workspace repo URL" "${workspace_repo_url:-justewg/planka}")")"
 workspace_ref="$(prompt_value "Workspace git ref" "$workspace_ref")"
 workspace_path="$(expand_path "$(prompt_value "Workspace path" "${workspace_path:-${ai_flow_root}/workspaces/${profile}}")")"
@@ -776,7 +821,7 @@ source_flow_env="$(expand_path "$(prompt_value "Existing flow.env to copy (optio
 toolkit_repo_url="$(normalize_repo_url "$(prompt_value "Toolkit repo URL" "${toolkit_repo_url:-$(current_toolkit_origin)}")")"
 toolkit_ref="$(prompt_value "Toolkit git ref" "$toolkit_ref")"
 compose_root="$(expand_path "$(prompt_value "Docker compose root" "${compose_root:-${ai_flow_root}/docker/${profile}}")")"
-runtime_home="$(expand_path "$(prompt_value "Runtime HOME path" "${runtime_home:-/home/${runtime_user}}")")"
+runtime_home="$(expand_path "$(prompt_value "Runtime HOME path" "${runtime_home:-$(default_runtime_home)}")")"
 codex_home="$(expand_path "$(prompt_value "CODEX_HOME path" "${codex_home:-${runtime_home}/.codex-server-api}")")"
 openai_env_file="$(expand_path "$(prompt_value "OpenAI env file" "${openai_env_file:-${runtime_home}/.config/planka-automation/openai.env}")")"
 daemon_interval="$(prompt_value "Daemon interval (seconds)" "$daemon_interval")"

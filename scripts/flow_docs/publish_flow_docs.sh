@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUTPUT_DIR="${ROOT_DIR}/.tmp/flow-docs/site"
 STATIC_OUTPUT_DIR="${ROOT_DIR}/.tmp/flow-docs/static"
+SCALAR_OUTPUT_DIR="${ROOT_DIR}/.tmp/flow-docs/scalar"
 BUNDLE_FILE="${ROOT_DIR}/.tmp/flow-docs/flow-web-docs-bundle.tgz"
 SKIP_BUILD=0
 SKIP_VALIDATION=0
@@ -22,6 +23,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --static-output-dir)
       STATIC_OUTPUT_DIR="$2"
+      shift 2
+      ;;
+    --scalar-output-dir)
+      SCALAR_OUTPUT_DIR="$2"
       shift 2
       ;;
     --skip-build)
@@ -46,7 +51,8 @@ done
 if (( SKIP_BUILD == 0 )); then
   python3 "${ROOT_DIR}/scripts/flow_docs/build_flow_docs.py" \
     --output-dir "${OUTPUT_DIR}" \
-    --static-output-dir "${STATIC_OUTPUT_DIR}"
+    --static-output-dir "${STATIC_OUTPUT_DIR}" \
+    --scalar-output-dir "${SCALAR_OUTPUT_DIR}"
 fi
 
 if [[ ! -f "${OUTPUT_DIR}/redocly.yaml" ]]; then
@@ -56,6 +62,16 @@ fi
 
 if [[ ! -f "${STATIC_OUTPUT_DIR}/index.html" ]]; then
   echo "Missing generated static index.html in ${STATIC_OUTPUT_DIR}" >&2
+  exit 1
+fi
+
+if [[ ! -f "${SCALAR_OUTPUT_DIR}/index.html" ]]; then
+  echo "Missing generated Scalar index.html in ${SCALAR_OUTPUT_DIR}" >&2
+  exit 1
+fi
+
+if [[ ! -f "${SCALAR_OUTPUT_DIR}/openapi.json" ]]; then
+  echo "Missing generated Scalar openapi.json in ${SCALAR_OUTPUT_DIR}" >&2
   exit 1
 fi
 

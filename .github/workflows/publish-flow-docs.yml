@@ -32,6 +32,7 @@ jobs:
           bash scripts/flow_docs/publish_flow_docs.sh \
             --output-dir dist/flow-docs \
             --static-output-dir dist/flow-docs-static \
+            --scalar-output-dir dist/flow-docs-scalar \
             --bundle-file dist/flow-web-docs-bundle.tgz
 
       - name: Upload flow docs artifact
@@ -42,10 +43,11 @@ jobs:
           path: |
             dist/flow-docs
             dist/flow-docs-static
+            dist/flow-docs-scalar
             dist/flow-web-docs-bundle.tgz
 
   preflight_deploy_runner:
-    if: ${{ vars.FLOW_DOCS_DEPLOY_PATH != '' }}
+    if: ${{ vars.FLOW_DOCS_DEPLOY_PATH != '' || vars.FLOW_DOCS_SCALAR_DEPLOY_PATH != '' }}
     runs-on: ubuntu-latest
     outputs:
       runner_available: ${{ steps.check.outputs.runner_available }}
@@ -134,9 +136,48 @@ jobs:
             --deploy-root "${FLOW_DOCS_DEPLOY_PATH}" \
             --release-id "${GITHUB_SHA}"
 
+  deploy_scalar_reference:
+    needs:
+      - build_bundle
+      - preflight_deploy_runner
+    if: ${{ vars.FLOW_DOCS_SCALAR_DEPLOY_PATH != '' && needs.preflight_deploy_runner.outputs.runner_available != 'false' }}
+    runs-on: [self-hosted, planka-deploy]
+    env:
+      FLOW_DOCS_SCALAR_DEPLOY_PATH: ${{ vars.FLOW_DOCS_SCALAR_DEPLOY_PATH }}
+      FLOW_DOCS_SCALAR_DEPLOY_POST_COMMAND: ${{ vars.FLOW_DOCS_SCALAR_DEPLOY_POST_COMMAND }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download flow docs artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: flow-web-docs-bundle
+          path: dist
+
+      - name: Validate Scalar deploy inputs
+        run: |
+          : "${FLOW_DOCS_SCALAR_DEPLOY_PATH:?FLOW_DOCS_SCALAR_DEPLOY_PATH repository variable is required}"
+          test -f dist/flow-docs-scalar/index.html
+          test -f dist/flow-docs-scalar/openapi.json
+          test -f dist/flow-docs-scalar/server.mjs
+
+      - name: Deploy Scalar API Reference site to hosting path
+        run: |
+          bash scripts/flow_docs/deploy_flow_docs.sh \
+            --site-dir dist/flow-docs-scalar \
+            --deploy-root "${FLOW_DOCS_SCALAR_DEPLOY_PATH}" \
+            --release-id "${GITHUB_SHA}"
+
+      - name: Run Scalar post-deploy command
+        if: ${{ env.FLOW_DOCS_SCALAR_DEPLOY_POST_COMMAND != '' }}
+        run: |
+          bash -lc "${FLOW_DOCS_SCALAR_DEPLOY_POST_COMMAND}"
+
   fail_missing_deploy_runner:
     needs: preflight_deploy_runner
-    if: ${{ vars.FLOW_DOCS_DEPLOY_PATH != '' && needs.preflight_deploy_runner.outputs.runner_available == 'false' }}
+    if: ${{ (vars.FLOW_DOCS_DEPLOY_PATH != '' || vars.FLOW_DOCS_SCALAR_DEPLOY_PATH != '') && needs.preflight_deploy_runner.outputs.runner_available == 'false' }}
     runs-on: ubuntu-latest
 
     steps:

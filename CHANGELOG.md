@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### Added
+- `[ISSUE-397]` Добавлен self-hosted `Scalar API Reference` visualizer для flow runtime: OpenAPI source `docs/flow/scalar-api-reference.openapi.json`, generator/output `dist/flow-docs-scalar`, upstream-server `scripts/flow_docs/scalar_reference_server.mjs` и отдельный nginx/PM2 runbook с rollback/fallback на канонический static publish.
 - `[ISSUE-387]` Добавлен source layout `docs/flow/web-source/` и generator `scripts/flow_docs/build_flow_docs.py` для канонической web-документации flow на базе Readocly.
 - `[ISSUE-387]` Добавлен publish pipeline `.github/workflows/publish-flow-docs.yml` и shell entrypoint `scripts/flow_docs/publish_flow_docs.sh`: после push в `main` он собирает `flow-web-docs-bundle`, а при наличии `REDOCLY_*` secrets публикует bundle в Readocly Reunite.
 - `[PL-000]` Добавлены артефакты управления разработкой: `TODO.md` и `CHANGELOG.md`.

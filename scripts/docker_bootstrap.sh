@@ -351,31 +351,23 @@ clone_or_update_workspace() {
   ensure_dir_owned "$(dirname "$workspace_path")"
 
   if [[ -d "${workspace_path}/.git" ]]; then
-    step "Workspace update: fetch origin"
     run_git_as_runtime_user git -C "$workspace_path" fetch origin
-    step "Workspace update: checkout ${workspace_ref}"
     run_git_as_runtime_user git -C "$workspace_path" checkout "$workspace_ref"
-    step "Workspace update: pull --ff-only origin ${workspace_ref}"
     run_git_as_runtime_user git -C "$workspace_path" pull --ff-only origin "$workspace_ref"
   else
-    step "Workspace clone: ${workspace_repo_url} @ ${workspace_ref}"
     run_git_as_runtime_user git clone --branch "$workspace_ref" "$workspace_repo_url" "$workspace_path"
   fi
 
-  step "Workspace submodule: sync"
   run_git_as_runtime_user git -C "$workspace_path" submodule sync --recursive
   if [[ -n "$toolkit_repo_url" ]] && run_git_as_runtime_user git -C "$workspace_path" config -f .gitmodules --get "submodule..flow/shared.url" >/dev/null 2>&1; then
     # Keep the authoritative workspace clean: override submodule URL in local git config,
     # not in tracked .gitmodules.
-    step "Workspace submodule: set local toolkit url ${toolkit_repo_url}"
     run_git_as_runtime_user git -C "$workspace_path" config submodule..flow/shared.url "$toolkit_repo_url"
     cleanup_bootstrap_gitmodules_override
   fi
   if [[ "$toolkit_repo_url" == /* || "$toolkit_repo_url" == ./* || "$toolkit_repo_url" == ../* ]]; then
-    step "Workspace submodule: update --init --recursive (file protocol)"
     run_git_as_runtime_user git -C "$workspace_path" -c protocol.file.allow=always submodule update --init --recursive
   else
-    step "Workspace submodule: update --init --recursive"
     run_git_as_runtime_user git -C "$workspace_path" submodule update --init --recursive
   fi
 }
@@ -829,7 +821,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-step "Resolving bootstrap defaults (assume-defaults=${assume_defaults}, tty=$(if has_tty; then echo yes; else echo no; fi))"
 profile="$(slugify "$(prompt_value "First managed project profile" "${profile:-planka}")")"
 if [[ "$assume_defaults" == "1" ]]; then
   step "Interactive input detected: no (assume-defaults)"

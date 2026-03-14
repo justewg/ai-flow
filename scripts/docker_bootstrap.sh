@@ -200,6 +200,22 @@ run_env_as_runtime_user() {
   fi
 }
 
+git_noninteractive_env() {
+  env \
+    GIT_TERMINAL_PROMPT=0 \
+    GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new'
+}
+
+run_git_as_runtime_user() {
+  if [[ "$(current_user)" == "$runtime_user" ]]; then
+    git_noninteractive_env "$@"
+  else
+    echo "Runtime user mismatch: current user is $(current_user), requested runtime user is ${runtime_user}." >&2
+    echo "Run bootstrap as ${runtime_user} or set --runtime-user to the current user." >&2
+    exit 1
+  fi
+}
+
 ensure_dir_owned() {
   local dir_path="$1"
   local owner_group
@@ -335,35 +351,43 @@ clone_or_update_workspace() {
   ensure_dir_owned "$(dirname "$workspace_path")"
 
   if [[ -d "${workspace_path}/.git" ]]; then
-    run_as_runtime_user git -C "$workspace_path" fetch origin
-    run_as_runtime_user git -C "$workspace_path" checkout "$workspace_ref"
-    run_as_runtime_user git -C "$workspace_path" pull --ff-only origin "$workspace_ref"
+    step "Workspace update: fetch origin"
+    run_git_as_runtime_user git -C "$workspace_path" fetch origin
+    step "Workspace update: checkout ${workspace_ref}"
+    run_git_as_runtime_user git -C "$workspace_path" checkout "$workspace_ref"
+    step "Workspace update: pull --ff-only origin ${workspace_ref}"
+    run_git_as_runtime_user git -C "$workspace_path" pull --ff-only origin "$workspace_ref"
   else
-    run_as_runtime_user git clone --branch "$workspace_ref" "$workspace_repo_url" "$workspace_path"
+    step "Workspace clone: ${workspace_repo_url} @ ${workspace_ref}"
+    run_git_as_runtime_user git clone --branch "$workspace_ref" "$workspace_repo_url" "$workspace_path"
   fi
 
-  run_as_runtime_user git -C "$workspace_path" submodule sync --recursive
-  if [[ -n "$toolkit_repo_url" ]] && run_as_runtime_user git -C "$workspace_path" config -f .gitmodules --get "submodule..flow/shared.url" >/dev/null 2>&1; then
+  step "Workspace submodule: sync"
+  run_git_as_runtime_user git -C "$workspace_path" submodule sync --recursive
+  if [[ -n "$toolkit_repo_url" ]] && run_git_as_runtime_user git -C "$workspace_path" config -f .gitmodules --get "submodule..flow/shared.url" >/dev/null 2>&1; then
     # Keep the authoritative workspace clean: override submodule URL in local git config,
     # not in tracked .gitmodules.
-    run_as_runtime_user git -C "$workspace_path" config submodule..flow/shared.url "$toolkit_repo_url"
+    step "Workspace submodule: set local toolkit url ${toolkit_repo_url}"
+    run_git_as_runtime_user git -C "$workspace_path" config submodule..flow/shared.url "$toolkit_repo_url"
     cleanup_bootstrap_gitmodules_override
   fi
   if [[ "$toolkit_repo_url" == /* || "$toolkit_repo_url" == ./* || "$toolkit_repo_url" == ../* ]]; then
-    run_as_runtime_user git -C "$workspace_path" -c protocol.file.allow=always submodule update --init --recursive
+    step "Workspace submodule: update --init --recursive (file protocol)"
+    run_git_as_runtime_user git -C "$workspace_path" -c protocol.file.allow=always submodule update --init --recursive
   else
-    run_as_runtime_user git -C "$workspace_path" submodule update --init --recursive
+    step "Workspace submodule: update --init --recursive"
+    run_git_as_runtime_user git -C "$workspace_path" submodule update --init --recursive
   fi
 }
 
 cleanup_bootstrap_gitmodules_override() {
   local gitmodules_status other_status
-  gitmodules_status="$(run_as_runtime_user git -C "$workspace_path" status --porcelain --untracked-files=no -- .gitmodules || true)"
+  gitmodules_status="$(run_git_as_runtime_user git -C "$workspace_path" status --porcelain --untracked-files=no -- .gitmodules || true)"
   [[ -n "$gitmodules_status" ]] || return 0
 
-  other_status="$(run_as_runtime_user git -C "$workspace_path" status --porcelain --untracked-files=no | awk 'NF { if ($2 != ".gitmodules") print }' || true)"
+  other_status="$(run_git_as_runtime_user git -C "$workspace_path" status --porcelain --untracked-files=no | awk 'NF { if ($2 != ".gitmodules") print }' || true)"
   if [[ -z "$other_status" ]]; then
-    run_as_runtime_user git -C "$workspace_path" checkout -- .gitmodules || true
+    run_git_as_runtime_user git -C "$workspace_path" checkout -- .gitmodules || true
   fi
 }
 

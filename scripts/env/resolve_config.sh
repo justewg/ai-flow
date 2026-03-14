@@ -178,6 +178,12 @@ codex_resolve_ai_flow_launchd_root_dir() {
   codex_resolve_bootstrap_value "AI_FLOW_LAUNCHD_ROOT_DIR" "${ai_flow_root_dir}/launchd"
 }
 
+codex_resolve_ai_flow_systemd_root_dir() {
+  local ai_flow_root_dir
+  ai_flow_root_dir="$(codex_resolve_ai_flow_root_dir)"
+  codex_resolve_bootstrap_value "AI_FLOW_SYSTEMD_ROOT_DIR" "${ai_flow_root_dir}/systemd"
+}
+
 codex_slugify_value() {
   local value="${1:-}"
   value="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
@@ -232,6 +238,21 @@ codex_resolve_flow_tmp_dir() {
   codex_resolve_bootstrap_value "FLOW_TMP_DIR" "${flow_root_dir}/tmp"
 }
 
+codex_resolve_flow_service_manager() {
+  local value=""
+  value="$(codex_try_config_value "FLOW_SERVICE_MANAGER" || true)"
+  if [[ -n "$value" ]]; then
+    printf '%s' "$value"
+    return 0
+  fi
+
+  case "$(uname -s)" in
+    Darwin) printf '%s' "launchd" ;;
+    Linux) printf '%s' "systemd" ;;
+    *) printf '%s' "launchd" ;;
+  esac
+}
+
 codex_resolve_flow_launchd_dir() {
   local value="" ai_flow_launchd_root_dir project_namespace_slug
   value="$(codex_try_config_value "FLOW_LAUNCHD_DIR" || true)"
@@ -247,6 +268,44 @@ codex_resolve_flow_launchd_dir() {
 
 codex_resolve_flow_launchagents_dir() {
   codex_resolve_bootstrap_value "FLOW_LAUNCHAGENTS_DIR" "${HOME}/Library/LaunchAgents"
+}
+
+codex_resolve_flow_systemd_dir() {
+  local value="" ai_flow_systemd_root_dir project_namespace_slug
+  value="$(codex_try_config_value "FLOW_SYSTEMD_DIR" || true)"
+  if [[ -n "$value" ]]; then
+    printf '%s' "$value"
+    return 0
+  fi
+
+  ai_flow_systemd_root_dir="$(codex_resolve_ai_flow_systemd_root_dir)"
+  project_namespace_slug="$(codex_resolve_project_namespace_slug)"
+  printf '%s/%s' "$ai_flow_systemd_root_dir" "$project_namespace_slug"
+}
+
+codex_resolve_flow_systemd_scope() {
+  codex_resolve_bootstrap_value "FLOW_SYSTEMD_SCOPE" "user"
+}
+
+codex_resolve_flow_systemd_user_dir() {
+  codex_resolve_bootstrap_value "FLOW_SYSTEMD_USER_DIR" "${HOME}/.config/systemd/user"
+}
+
+codex_resolve_flow_systemd_system_dir() {
+  codex_resolve_bootstrap_value "FLOW_SYSTEMD_SYSTEM_DIR" "/etc/systemd/system"
+}
+
+codex_resolve_flow_systemd_unit_dir() {
+  local scope
+  scope="$(codex_resolve_flow_systemd_scope)"
+  case "$scope" in
+    user) codex_resolve_flow_systemd_user_dir ;;
+    system) codex_resolve_flow_systemd_system_dir ;;
+    *)
+      printf 'Unsupported FLOW_SYSTEMD_SCOPE=%s\n' "$scope" >&2
+      return 1
+      ;;
+  esac
 }
 
 codex_resolve_flow_launchd_namespace() {

@@ -8,8 +8,12 @@ CODEX_DIR="$(codex_export_state_dir)"
 RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
 watchdog_state_dir="$(codex_resolve_state_watchdog_dir "$CODEX_DIR")"
 lock_dir="${watchdog_state_dir}/lock"
+service_manager="$(codex_resolve_flow_service_manager)"
 launchd_dir="$(codex_resolve_flow_launchd_dir)"
 launchagents_dir="$(codex_resolve_flow_launchagents_dir)"
+systemd_dir="$(codex_resolve_flow_systemd_dir)"
+systemd_scope="$(codex_resolve_flow_systemd_scope)"
+systemd_unit_dir="$(codex_resolve_flow_systemd_unit_dir)"
 default_watchdog_label="$(codex_resolve_default_watchdog_label)"
 default_daemon_label="$(codex_resolve_default_daemon_label)"
 
@@ -17,6 +21,8 @@ label="${1:-$default_watchdog_label}"
 interval="${2:-45}"
 canonical_plist_path="${launchd_dir}/${label}.plist"
 plist_path="${launchagents_dir}/${label}.plist"
+canonical_unit_path="${systemd_dir}/${label}.service"
+unit_path="${systemd_unit_dir}/${label}.service"
 profile_env_file="${DAEMON_GH_ENV_FILE:-}"
 daemon_label="${WATCHDOG_DAEMON_LABEL:-$default_daemon_label}"
 daemon_interval="${WATCHDOG_DAEMON_INTERVAL_SEC:-45}"
@@ -26,7 +32,7 @@ if ! [[ "$interval" =~ ^[0-9]+$ ]] || (( interval < 10 )); then
   exit 1
 fi
 
-mkdir -p "${launchagents_dir}" "${launchd_dir}" "${CODEX_DIR}" "${RUNTIME_LOG_DIR}" "${watchdog_state_dir}"
+mkdir -p "${CODEX_DIR}" "${RUNTIME_LOG_DIR}" "${watchdog_state_dir}"
 
 optional_env_block=""
 if [[ -n "$profile_env_file" ]]; then
@@ -37,7 +43,10 @@ EOF
 )"
 fi
 
-cat > "${canonical_plist_path}" <<EOF
+if [[ "$service_manager" == "launchd" ]]; then
+  mkdir -p "${launchagents_dir}" "${launchd_dir}"
+
+  cat > "${canonical_plist_path}" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -85,16 +94,67 @@ ${optional_env_block}
 </plist>
 EOF
 
-ln -sfn "${canonical_plist_path}" "${plist_path}"
+  ln -sfn "${canonical_plist_path}" "${plist_path}"
 
-launchctl bootout "gui/${UID}" "${plist_path}" >/dev/null 2>&1 || true
-rmdir "${lock_dir}" >/dev/null 2>&1 || true
-launchctl bootstrap "gui/${UID}" "${plist_path}"
-launchctl kickstart -k "gui/${UID}/${label}"
+  launchctl bootout "gui/${UID}" "${plist_path}" >/dev/null 2>&1 || true
+  rmdir "${lock_dir}" >/dev/null 2>&1 || true
+  launchctl bootstrap "gui/${UID}" "${plist_path}"
+  launchctl kickstart -k "gui/${UID}/${label}"
 
-echo "Installed launchd watchdog: ${label}"
-echo "Canonical plist: ${canonical_plist_path}"
-echo "LaunchAgents plist: ${plist_path}"
+  echo "SERVICE_MANAGER=launchd"
+  echo "Installed launchd watchdog: ${label}"
+  echo "Canonical plist: ${canonical_plist_path}"
+  echo "LaunchAgents plist: ${plist_path}"
+elif [[ "$service_manager" == "systemd" ]]; then
+  local_systemctl=(systemctl)
+  if [[ "$systemd_scope" == "user" ]]; then
+    local_systemctl+=(--user)
+  fi
+
+  mkdir -p "${systemd_dir}" "${systemd_unit_dir}"
+
+  cat > "${canonical_unit_path}" <<EOF
+[Unit]
+Description=Codex flow watchdog (${label})
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=${ROOT_DIR}
+Environment=PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+Environment=CODEX_STATE_DIR=${CODEX_DIR}
+Environment=FLOW_STATE_DIR=${CODEX_DIR}
+Environment=WATCHDOG_DAEMON_LABEL=${daemon_label}
+Environment=WATCHDOG_DAEMON_INTERVAL_SEC=${daemon_interval}
+$(if [[ -n "$profile_env_file" ]]; then printf 'Environment=DAEMON_GH_ENV_FILE=%s\n' "$profile_env_file"; fi)
+ExecStart=/bin/bash ${CODEX_SHARED_SCRIPTS_DIR}/watchdog_loop.sh ${interval}
+Restart=always
+RestartSec=5
+StandardOutput=append:${RUNTIME_LOG_DIR}/watchdog.log
+StandardError=append:${RUNTIME_LOG_DIR}/watchdog.log
+
+[Install]
+WantedBy=default.target
+EOF
+
+  ln -sfn "${canonical_unit_path}" "${unit_path}"
+
+  rmdir "${lock_dir}" >/dev/null 2>&1 || true
+  "${local_systemctl[@]}" daemon-reload
+  "${local_systemctl[@]}" enable --now "${label}.service"
+  "${local_systemctl[@]}" restart "${label}.service"
+
+  echo "SERVICE_MANAGER=systemd"
+  echo "SYSTEMD_SCOPE=${systemd_scope}"
+  echo "Installed systemd watchdog: ${label}.service"
+  echo "Canonical unit: ${canonical_unit_path}"
+  echo "Systemd unit: ${unit_path}"
+else
+  echo "Unsupported FLOW_SERVICE_MANAGER=${service_manager}" >&2
+  exit 1
+fi
+
 echo "Interval: ${interval}s"
 echo "State dir: ${CODEX_DIR}"
 echo "Runtime log dir: ${RUNTIME_LOG_DIR}"

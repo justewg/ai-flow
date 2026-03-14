@@ -499,12 +499,37 @@ case "$cmd" in
     codex_resolve_project_config
     issue_number="$(read_required_file "${CODEX_DIR}/issue_number.txt")"
     issue_url="https://github.com/${repo}/issues/${issue_number}"
+    issue_label_url="repos/${repo}/issues/${issue_number}/labels?per_page=100"
     issue_status="Backlog"
     issue_flow="Backlog"
+    issue_task_id="ISSUE-${issue_number}"
+    auto_ignore_label="auto:ignore"
+    had_auto_ignore_label=0
+    added_auto_ignore_label=0
     [[ -f "${CODEX_DIR}/project_new_status.txt" ]] && issue_status="$(read_required_file "${CODEX_DIR}/project_new_status.txt")"
     [[ -f "${CODEX_DIR}/project_new_flow.txt" ]] && issue_flow="$(read_required_file "${CODEX_DIR}/project_new_flow.txt")"
+    if gh api "$issue_label_url" --jq '.[].name' 2>/dev/null | grep -Fxq "$auto_ignore_label"; then
+      had_auto_ignore_label=1
+    else
+      gh issue edit "$issue_number" --repo "$repo" --add-label "$auto_ignore_label" >/dev/null
+      added_auto_ignore_label=1
+    fi
     gh project item-add "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --url "$issue_url"
-    "${CODEX_SHARED_SCRIPTS_DIR}/project_set_status.sh" "ISSUE-${issue_number}" "$issue_status" "$issue_flow"
+    project_add_issue_synced=0
+    for _ in {1..10}; do
+      if "${CODEX_SHARED_SCRIPTS_DIR}/project_set_status.sh" "$issue_task_id" "$issue_status" "$issue_flow"; then
+        project_add_issue_synced=1
+        break
+      fi
+      sleep 1
+    done
+    if [[ "$project_add_issue_synced" != "1" ]]; then
+      echo "Failed to verify issue-backed project item status after add: ${issue_task_id}"
+      exit 2
+    fi
+    if [[ "$added_auto_ignore_label" == "1" && "$had_auto_ignore_label" != "1" ]]; then
+      gh issue edit "$issue_number" --repo "$repo" --remove-label "$auto_ignore_label" >/dev/null
+    fi
     ;;
 
   project_set_status)

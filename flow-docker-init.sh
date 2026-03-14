@@ -101,6 +101,16 @@ resolve_local_origin() {
   git -C "$checkout_dir" remote get-url origin 2>/dev/null || true
 }
 
+toolkit_head_commit() {
+  local checkout_dir="$1"
+  git -C "$checkout_dir" rev-parse HEAD 2>/dev/null || true
+}
+
+toolkit_head_short_commit() {
+  local checkout_dir="$1"
+  git -C "$checkout_dir" rev-parse --short HEAD 2>/dev/null || true
+}
+
 should_assume_defaults() {
   [[ "${assume_defaults}" == "1" ]] && return 0
   [[ ${#forwarded_args[@]} -eq 0 ]] || return 1
@@ -155,6 +165,14 @@ if [[ -z "$toolkit_repo_url" ]]; then
   toolkit_repo_url="https://github.com/justewg/ai-flow.git"
 fi
 
+toolkit_commit="$(toolkit_head_commit "$bootstrap_checkout")"
+toolkit_short_commit="$(toolkit_head_short_commit "$bootstrap_checkout")"
+
+if [[ -n "$toolkit_short_commit" ]]; then
+  echo "Using ai-flow toolkit commit ${toolkit_short_commit} (${toolkit_commit}) from ${bootstrap_checkout}" >&2
+else
+  echo "Using ai-flow toolkit checkout ${bootstrap_checkout}" >&2
+fi
 echo "Launching docker bootstrap wizard..." >&2
 
 bootstrap_cmd=(

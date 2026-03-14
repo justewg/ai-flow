@@ -59,6 +59,30 @@ slugify() {
   printf '%s' "$value"
 }
 
+expand_path() {
+  local value="${1:-}"
+  case "$value" in
+    "~") printf '%s' "$HOME" ;;
+    "~/"*) printf '%s/%s' "$HOME" "${value#~/}" ;;
+    *) printf '%s' "$value" ;;
+  esac
+}
+
+normalize_repo_url() {
+  local value="${1:-}"
+  case "$value" in
+    https://*|http://*|ssh://*|git@*|/*|./*|../*)
+      printf '%s' "$value"
+      ;;
+    */*)
+      printf 'https://github.com/%s.git' "$value"
+      ;;
+    *)
+      printf '%s' "$value"
+      ;;
+  esac
+}
+
 current_toolkit_origin() {
   git -C "$(cd "${SCRIPT_DIR}/.." && pwd)" remote get-url origin 2>/dev/null || true
 }
@@ -428,18 +452,18 @@ fi
 profile="$(slugify "$profile")"
 
 runtime_user="$(prompt_value "Runtime user" "$runtime_user" "0")"
-ai_flow_root="$(prompt_value "AI flow root" "$ai_flow_root" "0")"
-workspace_repo_url="$(prompt_value "Workspace repo URL" "$workspace_repo_url" "0")"
+ai_flow_root="$(expand_path "$(prompt_value "AI flow root" "$ai_flow_root" "0")")"
+workspace_repo_url="$(normalize_repo_url "$(prompt_value "Workspace repo URL" "$workspace_repo_url" "0")")"
 workspace_ref="$(prompt_value "Workspace git ref" "$workspace_ref" "0")"
 if [[ -z "$workspace_path" ]]; then
   workspace_path="${ai_flow_root}/workspaces/${profile}"
 fi
-workspace_path="$(prompt_value "Workspace path" "$workspace_path" "0")"
+workspace_path="$(expand_path "$(prompt_value "Workspace path" "$workspace_path" "0")")"
 if [[ -z "$host_env_file" ]]; then
   host_env_file="${ai_flow_root}/config/${profile}.flow.env"
 fi
-host_env_file="$(prompt_value "Host flow env path" "$host_env_file" "0")"
-source_flow_env="$(prompt_value "Existing flow.env to copy (optional)" "$source_flow_env" "1")"
+host_env_file="$(expand_path "$(prompt_value "Host flow env path" "$host_env_file" "0")")"
+source_flow_env="$(expand_path "$(prompt_value "Existing flow.env to copy (optional)" "$source_flow_env" "1")")"
 run_questionnaire="$(prompt_choice "Questionnaire mode (ask/yes/no)" "$run_questionnaire")"
 run_audit="$(prompt_choice "Audit mode (ask/yes/no)" "$run_audit")"
 run_install="$(prompt_choice "Install mode (ask/yes/no)" "$run_install")"

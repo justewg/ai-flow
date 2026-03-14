@@ -6,6 +6,7 @@
 
 - Workflow `deploy-dev-pr.yml` и `deploy-main.yml` теперь запускаются на `runs-on: [self-hosted, planka-deploy]`.
 - Перед выкладкой workflow делает `actions/checkout` с `submodules: recursive`, поэтому `/.flow/shared` materialize-ится в workspace как обычные файлы toolkit snapshot.
+- Для deploy-path submodule `ai-flow` должен быть доступен по public `https`, чтобы runner не зависел от SSH host keys и deploy-ключей.
 - Деплой выполняется локально на сервере через `rsync` из workspace runner в `DEPLOY_DEV_PATH`/`DEPLOY_PATH`.
 - SSH-секреты для деплоя больше не используются.
 

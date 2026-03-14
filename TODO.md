@@ -7,6 +7,7 @@
 - `TODO.md` хранит план и статус задач.
 - `CHANGELOG.md` фиксирует только выполненные изменения.
 - При переводе задачи в `Done` сразу добавляем запись в `CHANGELOG.md` с ID задачи.
+- Для инициативы переноса автоматики на Linux-host используется отдельный roadmap: `docs/pl-048-linux-hosted-flow-roadmap.md`.
 
 ### Статусы
 - `Planned` - согласовано, но не начато.
@@ -43,6 +44,13 @@
 | PL-045 | Зачистить stale reply/waiting runtime между соседними flow-задачами | MVP | P0 | Planned | После завершения одной Issue-задачи daemon/executor не переносят `daemon_user_reply*`, `daemon_waiting_*` и смежный waiting-context в следующую задачу; повторный smoke не требует ручной очистки runtime-state для выхода из ложного `WAIT_USER_REPLY` |
 | PL-046 | Зафиксировать каноническую привязку `FLOW_HEAD_BRANCH` к активной task-ветке во всех flow-этапах | MVP | P0 | Planned | `executor`, `task_finalize`, `dev_commit_push`, daemon-launch env и branch-mismatch checks используют один и тот же актуальный head branch задачи и не ломаются из-за stale exported env или предыдущего smoke-прогона |
 | PL-047 | Убрать ручной recovery-reset после executor fail в smoke-цикле | MVP | P1 | Planned | После падения executor daemon/watchdog штатно восстанавливают прогон до нового `executor_start` или корректного blocker/review-состояния без ручной очистки state-файлов и без локального доталкивания из терминала |
+| PL-048 | Добавить Linux service-layer для daemon/watchdog с сохранением `launchd`-совместимости | MVP | P0 | Planned | `ai-flow` умеет ставить daemon/watchdog как `systemd`-services на Linux и как `launchd`-агенты на macOS; status/install/uninstall path симметричны, reboot-safe и не ломают текущий MacBook runtime |
+| PL-049 | Ввести host runtime mode (`macos-local` / `linux-hosted`) в onboarding и `profile_init` | MVP | P0 | Planned | `profile_init init/install/orchestrate` и `onboarding_audit` знают про Linux-hosted режим, выбирают нужный service backend и не требуют ручной правки shell-логики при переносе на VPS |
+| PL-050 | Добавить Linux-host bootstrap/preflight для executor, VPN и OpenAI contour | MVP | P0 | Planned | Для VPS есть проверяемый preflight на `codex` CLI, VPN service и доступ к OpenAI; проблемы выражаются явными wait-state/health-check сигналами, а не неявными падениями executor |
+| PL-051 | Зафиксировать single-runtime ownership, чтобы local и remote daemon не конкурировали за один profile | MVP | P0 | Planned | Для одного profile одновременно существует только один authoritative runtime; локальный checkout может оставаться interactive-only, не мешая server-side automation и не забирая те же задачи |
+| PL-052 | Оформить `gh_app_auth` и `ops_bot` как штатный Linux-host runtime contour | MVP | P1 | Planned | Auth-service и ops/status/webhook stack поднимаются на VPS предсказуемо, переживают reboot и работают с тем же toolkit без выпадения из текущего split-runtime/snapshot контракта |
+| PL-053 | Перевести `planka` на reg.ru VPS как authoritative automation runtime и прогнать полный smoke | MVP | P0 | Planned | `planka` выполняет end-to-end flow на VPS без ручного доталкивания, а локальная интерактивная разработка в отдельном checkout не конфликтует с background automation |
+| PL-054 | Документировать rollout, rollback и эксплуатационный режим Linux-hosted automation | MVP | P1 | Planned | Есть runbook переключения между MacBook и VPS, диагностики, rollback и правил ownership; новый инженер может повторить сценарий без reverse-engineering |
 | PL-034 | Narrative patch stage 1: Intro без бренда и без kicker | MVP | P1 | Planned | SECTION 0 содержит только фото + 2 строки (`Андрюша уже умеет говорить.` / `Просто не голосом.`), без `PLANKA` и без `ИНЖЕНЕРНЫЙ МАНИФЕСТ` |
 | PL-035 | Narrative patch stage 2: Эволюция без wireframe в SECTION 1 | MVP | P1 | Planned | В SECTION 1 5-й шаг заменен на TV/Поиск или placeholder (`TODO_TV.png`), wireframe полностью убран из эволюции |
 | PL-036 | Narrative patch stage 3: Связанные тезисы в SECTION 2 | MVP | P1 | Planned | SECTION 2 переписан на 5 связанных тезисов (PECS/пластилин/эрудит/TV/бумага), без абстрактных формулировок |

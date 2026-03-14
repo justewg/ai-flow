@@ -125,6 +125,12 @@ Acceptance:
 - runbook и/или helper для host bootstrap;
 - диагностические состояния вида `WAIT_OPENAI_UNREACHABLE`, `WAIT_VPN_DOWN`.
 
+Опорный runbook:
+- `docs/linux-hosted-codex-api-bootstrap.md`
+  - содержит реестр того, что должно быть на сервере;
+  - содержит блок `Dependencies install`;
+  - фиксирует канонический API-key auth path для Linux-hosted `codex`.
+
 Что уже подтверждено руками на reg.ru VPS:
 - `codex` на сервере успешно установлен и запускается под обычным пользователем;
 - схема с перенесённым ChatGPT `auth.json` не является надёжной для VPS/VPN-path и дала `403` на `chatgpt.com/backend-api/codex/responses`;

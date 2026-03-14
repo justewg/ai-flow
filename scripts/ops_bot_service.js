@@ -7,7 +7,7 @@ const https = require("https");
 const path = require("path");
 const { execFile } = require("child_process");
 
-const ROOT_DIR = path.resolve(__dirname, "../..");
+const ROOT_DIR = path.resolve(__dirname, "../../..");
 const FLOW_ROOT_DIR = path.join(ROOT_DIR, ".flow");
 const DEFAULT_CODEX_DIR = path.join(FLOW_ROOT_DIR, "state", "codex", "default");
 const DEFAULT_OPS_REMOTE_STATE_DIR = path.join(FLOW_ROOT_DIR, "state", "ops-bot", "remote");

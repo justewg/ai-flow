@@ -503,11 +503,35 @@ services:
     stdin_open: true
     tty: true
 
+  gh-app-auth:
+    <<: *ai_flow_base
+    container_name: ai-flow-${PROFILE}-gh-app-auth
+    stdin_open: false
+    tty: false
+    command:
+      - bash
+      - -lc
+      - |
+        mkdir -p "${RUNTIME_HOME}" "${CODEX_HOME}"
+        cd "${WORKSPACE_PATH}"
+        exec ./.flow/shared/scripts/gh_app_auth_start.sh
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS "http://127.0.0.1:${GH_APP_PORT:-8787}/health" >/dev/null || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   daemon:
     <<: *ai_flow_base
     container_name: ai-flow-${PROFILE}-daemon
     stdin_open: false
     tty: false
+    depends_on:
+      gh-app-auth:
+        condition: service_healthy
     command:
       - bash
       - -lc
@@ -521,6 +545,9 @@ services:
     container_name: ai-flow-${PROFILE}-watchdog
     stdin_open: false
     tty: false
+    depends_on:
+      gh-app-auth:
+        condition: service_healthy
     command:
       - bash
       - -lc

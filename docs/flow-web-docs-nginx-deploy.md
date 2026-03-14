@@ -2,6 +2,9 @@
 
 Этот runbook описывает текущий канонический способ публиковать flow web-docs на своём сервере.
 
+Альтернативный self-hosted visualizer на `Scalar API Reference` описан отдельно в `docs/flow-web-docs-scalar-nginx-deploy.md`.
+Текущий static-контур остаётся каноническим fallback и не меняется.
+
 Важно: публичный контур больше не использует `redocly preview`. Workflow собирает два артефакта:
 
 - `dist/flow-docs/` — Readocly bundle для Reunite publish;

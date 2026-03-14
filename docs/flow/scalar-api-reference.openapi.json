@@ -1,0 +1,780 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "PLANKA Flow Runtime HTTP Reference",
+    "version": "2026-03-14",
+    "description": "Self-hosted OpenAPI schema for the HTTP surfaces that are already present in the PLANKA flow runtime: GitHub App auth-service and automation ops-bot."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8787",
+      "description": "GitHub App auth-service"
+    },
+    {
+      "url": "http://127.0.0.1:8788",
+      "description": "Automation ops-bot"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Auth Service",
+      "description": "Local GitHub App token broker used by daemon/watchdog/runtime clients."
+    },
+    {
+      "name": "Ops Bot",
+      "description": "Automation ops dashboard, ingest endpoints and Telegram webhook service."
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Auth Service",
+          "Ops Bot"
+        ],
+        "summary": "Health-check for local service",
+        "description": "The response shape depends on the selected server. Auth-service returns token cache state, ops-bot returns enabled runtime features and endpoint paths.",
+        "operationId": "getServiceHealth",
+        "responses": {
+          "200": {
+            "description": "Service health payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AuthHealthResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/OpsHealthResponse"
+                    }
+                  ]
+                },
+                "examples": {
+                  "authService": {
+                    "summary": "Auth-service response",
+                    "value": {
+                      "status": "ok",
+                      "token_cached": false,
+                      "token_expires_at": null
+                    }
+                  },
+                  "opsBot": {
+                    "summary": "Ops-bot response",
+                    "value": {
+                      "status": "ok",
+                      "service": "ops-bot",
+                      "webhook_path": "/telegram/webhook",
+                      "ingest_path": "/ops/ingest/status",
+                      "summary_ingest_path": "/ops/ingest/log-summary",
+                      "ingest_enabled": true,
+                      "telegram_enabled": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/token": {
+      "get": {
+        "tags": [
+          "Auth Service"
+        ],
+        "summary": "Get installation token from local auth-service",
+        "description": "Requires `X-Internal-Secret`. Auth-service refreshes the GitHub App installation token on demand and caches it until the skew window expires.",
+        "operationId": "getAuthToken",
+        "security": [
+          {
+            "InternalSecretHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Installation token payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthTokenResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid internal secret",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "GitHub API returned invalid response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "GitHub API unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ops/status.json": {
+      "get": {
+        "tags": [
+          "Ops Bot"
+        ],
+        "summary": "Get effective runtime snapshot",
+        "description": "Returns the effective status snapshot used by the public ops dashboard. If remote ingest is fresher than local runtime, the payload may contain remote source metadata.",
+        "operationId": "getOpsStatusJson",
+        "responses": {
+          "200": {
+            "description": "Effective snapshot payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsStatusSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ops/status": {
+      "get": {
+        "tags": [
+          "Ops Bot"
+        ],
+        "summary": "Render HTML ops dashboard",
+        "description": "Human-readable HTML dashboard backed by the same data as `/ops/status.json`.",
+        "operationId": "getOpsStatusHtml",
+        "responses": {
+          "200": {
+            "description": "HTML dashboard",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ops/ingest/status": {
+      "post": {
+        "tags": [
+          "Ops Bot"
+        ],
+        "summary": "Push remote runtime snapshot into ops-bot",
+        "description": "Used by remote automation runtimes to publish their current `status_snapshot`. Header `X-Ops-Status-Secret` is required only when ingest secret is configured.",
+        "operationId": "postOpsStatusIngest",
+        "security": [
+          {
+            "OpsStatusSecretHeader": []
+          },
+          {}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpsStatusIngestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Snapshot stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestStoredResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad or incomplete payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid ingest secret",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ops/ingest/log-summary": {
+      "post": {
+        "tags": [
+          "Ops Bot"
+        ],
+        "summary": "Push remote log-summary bundle into ops-bot",
+        "description": "Publishes text bundles for one or more summary windows. Uses the same header name `X-Ops-Status-Secret`, but the configured secret may differ from runtime snapshot ingest.",
+        "operationId": "postOpsSummaryIngest",
+        "security": [
+          {
+            "OpsStatusSecretHeader": []
+          },
+          {}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpsSummaryIngestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Summary stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestStoredResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad or incomplete payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid summary ingest secret",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/telegram/webhook": {
+      "post": {
+        "tags": [
+          "Ops Bot"
+        ],
+        "summary": "Receive Telegram webhook update",
+        "description": "Processes Telegram updates for automation commands. Header `X-Telegram-Bot-Api-Secret-Token` is required only when Telegram secret token protection is enabled.",
+        "operationId": "postTelegramWebhook",
+        "security": [
+          {
+            "TelegramSecretTokenHeader": []
+          },
+          {}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TelegramUpdatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Webhook update accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelegramWebhookResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid Telegram secret token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "InternalSecretHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Internal-Secret",
+        "description": "Shared secret for local daemon/watchdog clients of auth-service."
+      },
+      "OpsStatusSecretHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Ops-Status-Secret",
+        "description": "Optional secret for remote ingest endpoints."
+      },
+      "TelegramSecretTokenHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Telegram-Bot-Api-Secret-Token",
+        "description": "Optional Telegram webhook secret token."
+      }
+    },
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "error",
+          "message"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuthHealthResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "token_cached",
+          "token_expires_at"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "token_cached": {
+            "type": "boolean"
+          },
+          "token_expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuthTokenResponse": {
+        "type": "object",
+        "required": [
+          "token",
+          "expires_at",
+          "source"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "cache",
+              "refreshed"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "OpsHealthResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "service",
+          "webhook_path",
+          "ingest_path",
+          "summary_ingest_path",
+          "ingest_enabled",
+          "telegram_enabled"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "service": {
+            "type": "string",
+            "const": "ops-bot"
+          },
+          "webhook_path": {
+            "type": "string"
+          },
+          "ingest_path": {
+            "type": "string"
+          },
+          "summary_ingest_path": {
+            "type": "string"
+          },
+          "ingest_enabled": {
+            "type": "boolean"
+          },
+          "telegram_enabled": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProjectRef": {
+        "type": "object",
+        "properties": {
+          "profile": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "RuntimeState": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "RemoteSourceInfo": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "profile": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "received_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "pushed_at": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "OpsStatusSnapshot": {
+        "type": "object",
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "overall_status": {
+            "type": "string"
+          },
+          "headline": {
+            "type": "string"
+          },
+          "action_required": {
+            "type": "string"
+          },
+          "snapshot_source": {
+            "type": "string"
+          },
+          "remote_source": {
+            "type": "string"
+          },
+          "remote_label": {
+            "type": "string"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectRef"
+          },
+          "daemon": {
+            "$ref": "#/components/schemas/RuntimeState"
+          },
+          "watchdog": {
+            "$ref": "#/components/schemas/RuntimeState"
+          },
+          "executor": {
+            "$ref": "#/components/schemas/RuntimeState"
+          },
+          "remote_sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RemoteSourceInfo"
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "OpsStatusIngestRequest": {
+        "type": "object",
+        "required": [
+          "snapshot"
+        ],
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "profile": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "pushed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/OpsStatusSnapshot"
+          }
+        },
+        "additionalProperties": true
+      },
+      "OpsSummaryIngestRequest": {
+        "type": "object",
+        "required": [
+          "summaries"
+        ],
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "profile": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "pushed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "summaries": {
+            "type": "object",
+            "description": "Text bundles keyed by summary window in hours (`1`..`168`).",
+            "patternProperties": {
+              "^[1-9][0-9]{0,2}$": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": true
+      },
+      "IngestStoredResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "stored",
+          "source",
+          "received_at"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          },
+          "stored": {
+            "type": "boolean",
+            "const": true
+          },
+          "source": {
+            "type": "string"
+          },
+          "received_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TelegramChat": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": true
+      },
+      "TelegramMessage": {
+        "type": "object",
+        "properties": {
+          "chat": {
+            "$ref": "#/components/schemas/TelegramChat"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "TelegramUpdatePayload": {
+        "type": "object",
+        "properties": {
+          "update_id": {
+            "type": "integer"
+          },
+          "message": {
+            "$ref": "#/components/schemas/TelegramMessage"
+          }
+        },
+        "additionalProperties": true
+      },
+      "TelegramWebhookResult": {
+        "type": "object",
+        "required": [
+          "ok",
+          "command_handled"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          },
+          "command_handled": {
+            "type": "boolean"
+          },
+          "ignored_reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

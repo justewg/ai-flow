@@ -17,8 +17,12 @@ SOURCE_ROOT = REPO_ROOT / "docs/flow/web-source"
 CONFIG_PATH = SOURCE_ROOT / "source-map.json"
 DEFAULT_OUTPUT_DIR = REPO_ROOT / ".tmp/flow-docs/site"
 DEFAULT_STATIC_OUTPUT_DIR = REPO_ROOT / ".tmp/flow-docs/static"
+DEFAULT_SCALAR_OUTPUT_DIR = REPO_ROOT / ".tmp/flow-docs/scalar"
 FLOW_DIAGRAM_DOC = REPO_ROOT / "docs/flow/issue-330-flow-diagram.md"
 CHANGELOG_PATH = REPO_ROOT / "CHANGELOG.md"
+SCALAR_OPENAPI_SOURCE = REPO_ROOT / "docs/flow/scalar-api-reference.openapi.json"
+SCALAR_SERVER_SOURCE = REPO_ROOT / "scripts/flow_docs/scalar_reference_server.mjs"
+SCALAR_API_REFERENCE_VERSION = "1.34.6"
 
 FLOW_CHANGELOG_KEYWORDS = (
     "flow",
@@ -268,6 +272,186 @@ def write_metadata(output_dir: Path) -> None:
         "git_commit_short": (git_output("rev-parse", "--short", "HEAD") or "unknown"),
     }
     write_text(output_dir / "build-metadata.json", json.dumps(metadata, ensure_ascii=False, indent=2) + "\n")
+
+
+def render_scalar_config() -> str:
+    return json.dumps(
+        {
+            "url": "./openapi.json",
+            "showDeveloperTools": "never",
+        },
+        ensure_ascii=False,
+        indent=2,
+    ) + "\n"
+
+
+def render_scalar_index() -> str:
+    scalar_script_url = f"https://cdn.jsdelivr.net/npm/@scalar/api-reference@{SCALAR_API_REFERENCE_VERSION}"
+
+    return f"""<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PLANKA Flow API Reference</title>
+  <meta
+    name="description"
+    content="Self-hosted Scalar API Reference visualizer for PLANKA flow runtime services."
+  >
+  <style>
+    :root {{
+      color-scheme: light;
+      --bg: #f4efe5;
+      --panel: rgba(255, 250, 242, 0.92);
+      --ink: #201b16;
+      --muted: #6b625a;
+      --line: rgba(32, 27, 22, 0.12);
+      --accent: #0d5f52;
+      --accent-soft: rgba(13, 95, 82, 0.1);
+      --shadow: rgba(22, 18, 12, 0.12);
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      background:
+        radial-gradient(circle at top left, rgba(13, 95, 82, 0.16), transparent 28%),
+        radial-gradient(circle at top right, rgba(176, 109, 47, 0.14), transparent 20%),
+        linear-gradient(180deg, #f8f2e8 0%, #efe4d5 100%);
+    }}
+    a {{
+      color: var(--accent);
+      text-decoration: none;
+    }}
+    a:hover {{
+      text-decoration: underline;
+    }}
+    .page {{
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 24px;
+    }}
+    .hero {{
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 20px;
+      align-items: end;
+      margin-bottom: 20px;
+      padding: 24px 28px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: var(--panel);
+      box-shadow: 0 18px 48px var(--shadow);
+      backdrop-filter: blur(12px);
+    }}
+    .eyebrow {{
+      margin: 0 0 8px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }}
+    h1 {{
+      margin: 0;
+      font-size: clamp(2.2rem, 5vw, 4.4rem);
+      line-height: 0.98;
+    }}
+    .hero p:last-child {{
+      margin: 12px 0 0;
+      max-width: 68ch;
+      color: var(--muted);
+      line-height: 1.55;
+    }}
+    .hero-note {{
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: var(--accent-soft);
+      border: 1px solid rgba(13, 95, 82, 0.14);
+      color: var(--muted);
+      font-size: 0.94rem;
+      line-height: 1.45;
+    }}
+    .reference-shell {{
+      min-height: calc(100vh - 220px);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.7);
+      box-shadow: 0 18px 48px var(--shadow);
+    }}
+    .error-panel {{
+      margin: 40px;
+      padding: 24px;
+      border-radius: 18px;
+      background: #fff5f2;
+      border: 1px solid rgba(153, 50, 36, 0.16);
+      color: #6f2c1f;
+      font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      white-space: pre-wrap;
+    }}
+    @media (max-width: 860px) {{
+      .page {{
+        padding: 16px;
+      }}
+      .hero {{
+        grid-template-columns: 1fr;
+        padding: 20px;
+      }}
+      .reference-shell {{
+        min-height: calc(100vh - 160px);
+      }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">PLANKA Flow Runtime</p>
+        <h1>Scalar API Reference</h1>
+        <p>
+          Альтернативный self-hosted visualizer для HTTP-контуров auth-service и ops-bot.
+          Канонический многостраничный `flow-web-docs` static publish остаётся fallback-контуром.
+        </p>
+      </div>
+      <div class="hero-note">
+        Production-config зафиксирован в `scalar-config.json`.<br>
+        Dev-only элементы отключены через <code>showDeveloperTools: 'never'</code>.
+      </div>
+    </header>
+    <main class="reference-shell" id="app">
+      <noscript>Для Scalar API Reference требуется включённый JavaScript.</noscript>
+    </main>
+  </div>
+
+  <script src="{html.escape(scalar_script_url, quote=True)}"></script>
+  <script>
+    (async function () {{
+      const mountNode = document.getElementById("app");
+      try {{
+        const response = await fetch("./scalar-config.json", {{ cache: "no-store" }});
+        if (!response.ok) {{
+          throw new Error("scalar-config.json returned HTTP " + response.status);
+        }}
+        const config = await response.json();
+        if (!window.Scalar || typeof window.Scalar.createApiReference !== "function") {{
+          throw new Error("Scalar browser bundle did not expose createApiReference()");
+        }}
+        window.Scalar.createApiReference("#app", config);
+      }} catch (error) {{
+        mountNode.innerHTML =
+          '<div class="error-panel">Scalar API Reference failed to initialize.\\n' +
+          String(error && error.message ? error.message : error) +
+          "</div>";
+      }}
+    }})();
+  </script>
+</body>
+</html>
+"""
 
 
 def markdown_link_to_html(target: str) -> str:
@@ -853,6 +1037,24 @@ def build_static_site(config: dict[str, object], bundle_dir: Path, static_output
     write_text(static_output_dir / "assets/site.js", static_js() + "\n")
 
 
+def build_scalar_reference(scalar_output_dir: Path) -> None:
+    if scalar_output_dir.exists():
+        shutil.rmtree(scalar_output_dir, ignore_errors=True)
+    scalar_output_dir.mkdir(parents=True, exist_ok=True)
+
+    if not SCALAR_OPENAPI_SOURCE.exists():
+        raise FileNotFoundError(f"Scalar OpenAPI source not found: {SCALAR_OPENAPI_SOURCE}")
+    if not SCALAR_SERVER_SOURCE.exists():
+        raise FileNotFoundError(f"Scalar server source not found: {SCALAR_SERVER_SOURCE}")
+
+    openapi_document = json.loads(read_text(SCALAR_OPENAPI_SOURCE))
+    write_text(scalar_output_dir / "openapi.json", json.dumps(openapi_document, ensure_ascii=False, indent=2) + "\n")
+    shutil.copy2(SCALAR_SERVER_SOURCE, scalar_output_dir / "server.mjs")
+    write_text(scalar_output_dir / "index.html", render_scalar_index())
+    write_text(scalar_output_dir / "scalar-config.json", render_scalar_config())
+    write_metadata(scalar_output_dir)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build Flow web docs bundle for Readocly.")
     parser.add_argument(
@@ -865,6 +1067,11 @@ def parse_args() -> argparse.Namespace:
         default=str(DEFAULT_STATIC_OUTPUT_DIR),
         help="Directory for generated static HTML export.",
     )
+    parser.add_argument(
+        "--scalar-output-dir",
+        default=str(DEFAULT_SCALAR_OUTPUT_DIR),
+        help="Directory for generated Scalar API Reference site.",
+    )
     return parser.parse_args()
 
 
@@ -872,6 +1079,7 @@ def main() -> int:
     args = parse_args()
     output_dir = Path(args.output_dir).resolve()
     static_output_dir = Path(args.static_output_dir).resolve()
+    scalar_output_dir = Path(args.scalar_output_dir).resolve()
     config = json.loads(read_text(CONFIG_PATH))
 
     if output_dir.exists():
@@ -886,9 +1094,11 @@ def main() -> int:
     write_text(output_dir / "sidebars.yaml", "\n".join(render_sidebars(config["sidebar"])) + "\n")
     write_metadata(output_dir)
     build_static_site(config, output_dir, static_output_dir)
+    build_scalar_reference(scalar_output_dir)
 
     print(f"Built flow docs bundle: {output_dir}")
     print(f"Built flow docs static export: {static_output_dir}")
+    print(f"Built flow docs Scalar API Reference: {scalar_output_dir}")
     return 0
 
 

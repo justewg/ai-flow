@@ -129,6 +129,7 @@ sudo apt install -y \
   git \
   jq \
   openssh-client \
+  ripgrep \
   tmux \
   wget
 ```

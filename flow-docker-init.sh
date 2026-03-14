@@ -149,7 +149,14 @@ fi
 
 echo "Launching docker bootstrap wizard..." >&2
 
-"${bootstrap_checkout}/scripts/docker_bootstrap.sh" \
-  --toolkit-repo "$toolkit_repo_url" \
-  --toolkit-ref "$toolkit_ref" \
-  "${forwarded_args[@]}"
+bootstrap_cmd=(
+  "${bootstrap_checkout}/scripts/docker_bootstrap.sh"
+  --toolkit-repo "$toolkit_repo_url"
+  --toolkit-ref "$toolkit_ref"
+)
+
+if [[ ${#forwarded_args[@]} -gt 0 ]]; then
+  bootstrap_cmd+=("${forwarded_args[@]}")
+fi
+
+"${bootstrap_cmd[@]}"

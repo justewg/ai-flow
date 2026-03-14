@@ -25,6 +25,7 @@ daemon_interval="${FLOW_DAEMON_INTERVAL:-45}"
 watchdog_interval="${FLOW_WATCHDOG_INTERVAL:-45}"
 run_compose_config="yes"
 run_compose_up="ask"
+assume_defaults="${AI_FLOW_ASSUME_DEFAULTS:-0}"
 
 usage() {
   cat <<'EOF'
@@ -215,6 +216,11 @@ prompt_value() {
   local allow_empty="${3:-0}"
   local answer=""
 
+  if [[ "$assume_defaults" == "1" ]]; then
+    printf '%s' "$default_value"
+    return 0
+  fi
+
   if ! has_tty; then
     if [[ -n "$default_value" || "$allow_empty" == "1" ]]; then
       printf '%s' "$default_value"
@@ -245,6 +251,11 @@ prompt_choice() {
   local prompt_text="$1"
   local default_value="$2"
   local answer=""
+
+  if [[ "$assume_defaults" == "1" ]]; then
+    printf '%s' "$default_value"
+    return 0
+  fi
 
   if ! has_tty; then
     printf '%s' "$default_value"
@@ -745,7 +756,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 profile="$(slugify "$(prompt_value "First managed project profile" "${profile:-planka}")")"
-step "Interactive input detected: $(if has_tty; then echo yes; else echo no; fi)"
+if [[ "$assume_defaults" == "1" ]]; then
+  step "Interactive input detected: no (assume-defaults)"
+else
+  step "Interactive input detected: $(if has_tty; then echo yes; else echo no; fi)"
+fi
 runtime_user="$(prompt_value "Runtime user" "$runtime_user")"
 ai_flow_root="$(expand_path "$(prompt_value "AI flow root" "$ai_flow_root")")"
 workspace_repo_url="$(normalize_repo_url "$(prompt_value "Workspace repo URL" "${workspace_repo_url:-justewg/planka}")")"

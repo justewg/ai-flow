@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 toolkit_repo_url=""
 toolkit_ref="main"
 forwarded_args=()
+assume_defaults="${AI_FLOW_ASSUME_DEFAULTS:-0}"
 
 usage() {
   cat <<'EOF'
@@ -100,6 +101,13 @@ resolve_local_origin() {
   git -C "$checkout_dir" remote get-url origin 2>/dev/null || true
 }
 
+should_assume_defaults() {
+  [[ "${assume_defaults}" == "1" ]] && return 0
+  [[ ${#forwarded_args[@]} -eq 0 ]] || return 1
+  [[ -d "/var/sites/.ai-flow/config" ]] || return 1
+  find "/var/sites/.ai-flow/config" -maxdepth 1 -type f -name '*.flow.env' | grep -q .
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --toolkit-repo)
@@ -152,6 +160,10 @@ echo "Launching docker bootstrap wizard..." >&2
 bootstrap_cmd=(
   env
 )
+
+if should_assume_defaults; then
+  bootstrap_cmd+=(AI_FLOW_ASSUME_DEFAULTS=1)
+fi
 
 case "$toolkit_repo_url" in
   git@github.com:*|ssh://git@github.com/*)

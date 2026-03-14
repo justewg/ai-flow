@@ -187,6 +187,11 @@ ensure_dir_owned() {
   if chown "$runtime_user:$owner_group" "$dir_path" 2>/dev/null; then
     :
   else
+    if ! has_tty && ! sudo -n true >/dev/null 2>&1; then
+      echo "Host bootstrap needs root-owned path prep: ${dir_path}" >&2
+      echo "Run as root once: mkdir -p '${dir_path}' && chown '${runtime_user}:${owner_group}' '${dir_path}'" >&2
+      exit 1
+    fi
     sudo chown "$runtime_user:$owner_group" "$dir_path"
   fi
 }

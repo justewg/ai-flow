@@ -202,7 +202,7 @@ ensure_host_layout() {
 }
 
 has_tty() {
-  [[ -r /dev/tty && -w /dev/tty ]]
+  [[ -t 0 && -t 1 ]]
 }
 
 step() {
@@ -225,16 +225,16 @@ prompt_value() {
   fi
 
   if [[ -n "$default_value" ]]; then
-    printf '%s [%s]: ' "$prompt_text" "$default_value" > /dev/tty
+    printf '%s [%s]: ' "$prompt_text" "$default_value" >&2
   else
-    printf '%s: ' "$prompt_text" > /dev/tty
+    printf '%s: ' "$prompt_text" >&2
   fi
-  IFS= read -r answer < /dev/tty || true
+  IFS= read -r answer || true
   if [[ -z "$answer" ]]; then
     answer="$default_value"
   fi
   if [[ -z "$answer" && "$allow_empty" != "1" ]]; then
-    echo "Value is required." > /dev/tty
+    echo "Value is required." >&2
     prompt_value "$prompt_text" "$default_value" "$allow_empty"
     return 0
   fi
@@ -252,8 +252,8 @@ prompt_choice() {
   fi
 
   while true; do
-    printf '%s [%s]: ' "$prompt_text" "$default_value" > /dev/tty
-    IFS= read -r answer < /dev/tty || true
+    printf '%s [%s]: ' "$prompt_text" "$default_value" >&2
+    IFS= read -r answer || true
     answer="$(printf '%s' "${answer:-$default_value}" | tr '[:upper:]' '[:lower:]')"
     case "$answer" in
       ask|yes|no|y|n)
@@ -265,7 +265,7 @@ prompt_choice() {
         return 0
         ;;
     esac
-    echo "Expected one of: ask, yes, no." > /dev/tty
+    echo "Expected one of: ask, yes, no." >&2
   done
 }
 

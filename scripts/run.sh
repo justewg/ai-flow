@@ -499,7 +499,12 @@ case "$cmd" in
     codex_resolve_project_config
     issue_number="$(read_required_file "${CODEX_DIR}/issue_number.txt")"
     issue_url="https://github.com/${repo}/issues/${issue_number}"
+    issue_status="Backlog"
+    issue_flow="Backlog"
+    [[ -f "${CODEX_DIR}/project_new_status.txt" ]] && issue_status="$(read_required_file "${CODEX_DIR}/project_new_status.txt")"
+    [[ -f "${CODEX_DIR}/project_new_flow.txt" ]] && issue_flow="$(read_required_file "${CODEX_DIR}/project_new_flow.txt")"
     gh project item-add "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --url "$issue_url"
+    "${CODEX_SHARED_SCRIPTS_DIR}/project_set_status.sh" "ISSUE-${issue_number}" "$issue_status" "$issue_flow"
     ;;
 
   project_set_status)

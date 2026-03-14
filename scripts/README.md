@@ -355,6 +355,8 @@ Rollback нового профиля:
 - `.flow/shared/scripts/run.sh project_add_issue`
   - добавляет существующий GitHub Issue в Project v2 как issue-backed item через `gh project item-add --url ...`
   - использует fixed-input `issue_number.txt`, чтобы не плодить новые approval-подтверждения на плавающих `gh project item-add ... --url ...`
+  - после добавления сразу синхронно выставляет `Status/Flow`, по умолчанию `Backlog/Backlog`
+  - можно переопределить через `project_new_status.txt` и `project_new_flow.txt`
 - `.flow/shared/scripts/run.sh issue_close`
   - закрывает существующий GitHub Issue через fixed-input `issue_number.txt`
   - опционально использует `issue_close_reason.txt` и `issue_close_comment.txt`

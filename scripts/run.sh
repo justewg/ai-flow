@@ -506,8 +506,6 @@ case "$cmd" in
     auto_ignore_label="auto:ignore"
     had_auto_ignore_label=0
     added_auto_ignore_label=0
-    [[ -f "${CODEX_DIR}/project_new_status.txt" ]] && issue_status="$(read_required_file "${CODEX_DIR}/project_new_status.txt")"
-    [[ -f "${CODEX_DIR}/project_new_flow.txt" ]] && issue_flow="$(read_required_file "${CODEX_DIR}/project_new_flow.txt")"
     if gh api "$issue_label_url" --jq '.[].name' 2>/dev/null | grep -Fxq "$auto_ignore_label"; then
       had_auto_ignore_label=1
     else

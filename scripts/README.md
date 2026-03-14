@@ -358,7 +358,8 @@ Rollback нового профиля:
   - после добавления сразу синхронно выставляет `Status/Flow`, по умолчанию `Backlog/Backlog`
   - на время линковки временно ставит label `auto:ignore`, чтобы daemon не успел заклеймить карточку из дефолтного `Todo` до перевода в нужный `Status/Flow`
   - после успешной синхронизации `Status/Flow` снимает временно добавленный `auto:ignore`
-  - можно переопределить через `project_new_status.txt` и `project_new_flow.txt`
+  - игнорирует остаточные `project_new_status.txt` и `project_new_flow.txt`, чтобы новая issue-backed карточка всегда создавалась как `Backlog/Backlog`
+  - если после добавления нужен другой `Status/Flow`, это делается отдельным вызовом `.flow/shared/scripts/run.sh project_set_status`
 - `.flow/shared/scripts/run.sh issue_close`
   - закрывает существующий GitHub Issue через fixed-input `issue_number.txt`
   - опционально использует `issue_close_reason.txt` и `issue_close_comment.txt`

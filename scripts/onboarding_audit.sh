@@ -753,7 +753,13 @@ else
           missing_repo_secrets=""
           while IFS= read -r required_repo_secret; do
             [[ -n "$required_repo_secret" && "$required_repo_secret" != \#* ]] || continue
-            if printf '%s\n' "$repo_actions_secrets_out" | rg -x --quiet "$required_repo_secret"; then
+            if {
+              if command -v rg >/dev/null 2>&1; then
+                printf '%s\n' "$repo_actions_secrets_out" | rg -x --quiet "$required_repo_secret"
+              else
+                printf '%s\n' "$repo_actions_secrets_out" | grep -F -x -q "$required_repo_secret"
+              fi
+            }; then
               report_ok "GH_REPO_ACTION_SECRET" "$required_repo_secret"
             else
               missing_repo_secrets+="${required_repo_secret},"

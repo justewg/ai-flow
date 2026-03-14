@@ -299,15 +299,28 @@ clone_or_update_workspace() {
     run_as_runtime_user git clone --branch "$workspace_ref" "$workspace_repo_url" "$workspace_path"
   fi
 
-  if [[ -n "$toolkit_repo_url" ]] && run_as_runtime_user git -C "$workspace_path" config -f .gitmodules --get "submodule..flow/shared.url" >/dev/null 2>&1; then
-    run_as_runtime_user git -C "$workspace_path" config -f .gitmodules submodule..flow/shared.url "$toolkit_repo_url"
-  fi
-
   run_as_runtime_user git -C "$workspace_path" submodule sync --recursive
+  if [[ -n "$toolkit_repo_url" ]] && run_as_runtime_user git -C "$workspace_path" config -f .gitmodules --get "submodule..flow/shared.url" >/dev/null 2>&1; then
+    # Keep the authoritative workspace clean: override submodule URL in local git config,
+    # not in tracked .gitmodules.
+    run_as_runtime_user git -C "$workspace_path" config submodule..flow/shared.url "$toolkit_repo_url"
+    cleanup_bootstrap_gitmodules_override
+  fi
   if [[ "$toolkit_repo_url" == /* || "$toolkit_repo_url" == ./* || "$toolkit_repo_url" == ../* ]]; then
     run_as_runtime_user git -C "$workspace_path" -c protocol.file.allow=always submodule update --init --recursive
   else
     run_as_runtime_user git -C "$workspace_path" submodule update --init --recursive
+  fi
+}
+
+cleanup_bootstrap_gitmodules_override() {
+  local gitmodules_status other_status
+  gitmodules_status="$(run_as_runtime_user git -C "$workspace_path" status --porcelain --untracked-files=no -- .gitmodules || true)"
+  [[ -n "$gitmodules_status" ]] || return 0
+
+  other_status="$(run_as_runtime_user git -C "$workspace_path" status --porcelain --untracked-files=no | awk 'NF { if ($2 != ".gitmodules") print }' || true)"
+  if [[ -z "$other_status" ]]; then
+    run_as_runtime_user git -C "$workspace_path" checkout -- .gitmodules || true
   fi
 }
 
@@ -379,6 +392,7 @@ normalize_host_env() {
   upsert_env_key "$host_env_file" "FLOW_RUNTIME_LOG_DIR" "$runtime_logs_dir"
   upsert_env_key "$host_env_file" "FLOW_PM2_LOG_DIR" "$pm2_logs_dir"
   upsert_env_key "$host_env_file" "FLOW_HOST_RUNTIME_MODE" "linux-docker-hosted"
+  upsert_env_key "$host_env_file" "OPS_BOT_USE_DEFAULT" "0"
 
   remove_env_key "$host_env_file" "FLOW_LAUNCHAGENTS_DIR"
   remove_env_key "$host_env_file" "FLOW_LAUNCHD_DIR"
@@ -555,6 +569,27 @@ services:
         mkdir -p "${RUNTIME_HOME}" "${CODEX_HOME}"
         cd "${WORKSPACE_PATH}"
         exec ./.flow/shared/scripts/watchdog_loop.sh ${WATCHDOG_INTERVAL}
+
+  ops-bot:
+    <<: *ai_flow_base
+    container_name: ai-flow-${PROFILE}-ops-bot
+    stdin_open: false
+    tty: false
+    command:
+      - bash
+      - -lc
+      - |
+        mkdir -p "${RUNTIME_HOME}" "${CODEX_HOME}"
+        cd "${WORKSPACE_PATH}"
+        exec ./.flow/shared/scripts/ops_bot_start.sh
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS "http://127.0.0.1:${OPS_BOT_PORT:-8790}/health" >/dev/null || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 EOF
   chown "$runtime_user:$(runtime_group)" "${compose_root}/docker-compose.yml" 2>/dev/null || sudo chown "$runtime_user:$(runtime_group)" "${compose_root}/docker-compose.yml"
 }

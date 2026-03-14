@@ -21,6 +21,7 @@ Linux-hosted bootstrap launchers:
   - `bash <(curl -fsSL https://raw.githubusercontent.com/justewg/ai-flow/main/flow-host-init.sh)`
 - docker-hosted:
   - `bash <(curl -fsSL https://raw.githubusercontent.com/justewg/ai-flow/main/flow-docker-init.sh)`
+  - рабочий compose-срез сейчас включает `runtime`, `gh-app-auth`, `daemon`, `watchdog`, `ops-bot`
 
 Команды:
 - `.flow/shared/scripts/run.sh help`

@@ -88,7 +88,7 @@ preferred_github_git_protocol() {
     return
   fi
 
-  if GIT_SSH_COMMAND='ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new' \
+  if GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new' \
     git ls-remote git@github.com:justewg/ai-flow.git HEAD >/dev/null 2>&1; then
     printf 'ssh'
     return

@@ -150,6 +150,19 @@ fi
 echo "Launching docker bootstrap wizard..." >&2
 
 bootstrap_cmd=(
+  env
+)
+
+case "$toolkit_repo_url" in
+  git@github.com:*|ssh://git@github.com/*)
+    bootstrap_cmd+=(AI_FLOW_GIT_PROTOCOL=ssh)
+    ;;
+  https://github.com/*|http://github.com/*)
+    bootstrap_cmd+=(AI_FLOW_GIT_PROTOCOL=https)
+    ;;
+esac
+
+bootstrap_cmd+=(
   "${bootstrap_checkout}/scripts/docker_bootstrap.sh"
   --toolkit-repo "$toolkit_repo_url"
   --toolkit-ref "$toolkit_ref"

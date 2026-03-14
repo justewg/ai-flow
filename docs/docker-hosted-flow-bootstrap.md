@@ -47,7 +47,7 @@
 
 ## Контейнерная схема
 
-Текущий рабочий срез содержит 4 сервиса:
+Текущий рабочий срез содержит 5 сервисов:
 
 - `runtime`
   - long-lived shell container для `codex`, `gh`, ручных smoke-команд и интерактивной отладки;
@@ -57,6 +57,8 @@
   - запускает `./.flow/shared/scripts/daemon_loop.sh <interval>`;
 - `watchdog`
   - запускает `./.flow/shared/scripts/watchdog_loop.sh <interval>`.
+- `ops-bot`
+  - поднимает `./.flow/shared/scripts/ops_bot_start.sh` и даёт локальные `/health`, `/ops/status`, `/ops/status.json`, webhook/ingest contour.
 
 Все сервисы:
 
@@ -65,6 +67,7 @@
 - видят host-level `AI_FLOW_ROOT` по тому же абсолютному пути;
 - используют один и тот же runtime `HOME` и `CODEX_HOME`.
 - `daemon` и `watchdog` стартуют только после healthy `gh-app-auth`.
+- `ops-bot` живёт в том же compose-контуре и использует тот же workspace/state/log layout.
 
 ## Ключевое предположение
 
@@ -103,15 +106,26 @@ network_mode: host
 Пока это:
 
 - воспроизводимый compose/runtime layout;
-- контейнерный `daemon/watchdog` контур;
+- контейнерный контур `runtime + gh-app-auth + daemon + watchdog + ops-bot`;
 - точка входа для дальнейшей доработки Linux-hosted automation.
 
 Отдельно потом можно добирать:
 
-- `ops_bot` как отдельный сервис compose;
-- container-native healthchecks;
+- container-native healthchecks для всех сервисов и агрегированный smoke;
 - docker-based runbook для cutover и rollback;
 - `tmux`/operator shell вокруг compose-контейнеров.
+
+## Текущий milestone
+
+На текущем срезе уже подтверждено:
+
+- raw launcher `bash <(curl -fsSL ...)` реально поднимает compose-root на VPS;
+- authoritative workspace и host-local `flow.env` материализуются под `/.ai-flow`;
+- `gh-app-auth` внутри compose получает и refresh-ит GitHub App token;
+- `daemon/watchdog` работают в контейнерах с тем же toolkit;
+- `ops-bot` тоже входит в compose и использует тот же status/state контур.
+
+Если после этого `status_snapshot` показывает `WAIT_GITHUB_RATE_LIMIT`, это уже не проблема docker-инфраструктуры: runtime жив и упёрся в обычный GitHub GraphQL rate limit.
 
 ## Запуск
 
@@ -135,6 +149,8 @@ Shared command внутри checkout:
 cd /var/sites/.ai-flow/docker/planka
 ./up.sh
 docker compose --env-file .env -f docker-compose.yml ps
+./logs.sh gh-app-auth
+./logs.sh ops-bot
 ./logs.sh daemon
 ./exec-runtime.sh
 ```

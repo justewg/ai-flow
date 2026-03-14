@@ -36,6 +36,65 @@ local_toolkit_checkout() {
   return 1
 }
 
+preferred_github_git_protocol() {
+  if [[ -n "${AI_FLOW_GIT_PROTOCOL:-}" ]]; then
+    printf '%s' "${AI_FLOW_GIT_PROTOCOL}"
+    return
+  fi
+
+  if command -v gh >/dev/null 2>&1; then
+    gh config get git_protocol -h github.com 2>/dev/null || true
+    return
+  fi
+
+  if GIT_SSH_COMMAND='ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new' \
+    git ls-remote git@github.com:justewg/ai-flow.git HEAD >/dev/null 2>&1; then
+    printf 'ssh'
+    return
+  fi
+
+  printf 'https'
+}
+
+normalize_toolkit_repo_url() {
+  local value="${1:-}"
+  local protocol owner_repo
+  protocol="$(preferred_github_git_protocol)"
+  case "$value" in
+    https://github.com/*)
+      if [[ "$protocol" == "ssh" ]]; then
+        owner_repo="${value#https://github.com/}"
+        owner_repo="${owner_repo%.git}"
+        printf 'git@github.com:%s.git' "$owner_repo"
+      else
+        printf '%s' "$value"
+      fi
+      ;;
+    http://github.com/*)
+      if [[ "$protocol" == "ssh" ]]; then
+        owner_repo="${value#http://github.com/}"
+        owner_repo="${owner_repo%.git}"
+        printf 'git@github.com:%s.git' "$owner_repo"
+      else
+        printf '%s' "$value"
+      fi
+      ;;
+    ssh://*|git@*|/*|./*|../*)
+      printf '%s' "$value"
+      ;;
+    */*)
+      if [[ "$protocol" == "ssh" ]]; then
+        printf 'git@github.com:%s.git' "$value"
+      else
+        printf 'https://github.com/%s.git' "$value"
+      fi
+      ;;
+    *)
+      printf '%s' "$value"
+      ;;
+  esac
+}
+
 resolve_local_origin() {
   local checkout_dir="$1"
   git -C "$checkout_dir" remote get-url origin 2>/dev/null || true
@@ -73,9 +132,11 @@ else
   if [[ -z "$toolkit_repo_url" ]]; then
     toolkit_repo_url="https://github.com/justewg/ai-flow.git"
   fi
+  toolkit_repo_url="$(normalize_toolkit_repo_url "$toolkit_repo_url")"
   cleanup_dir="$(mktemp -d "${TMPDIR:-/tmp}/ai-flow-host-init.XXXXXX")"
   trap '[[ -n "${cleanup_dir:-}" ]] && rm -rf "${cleanup_dir}"' EXIT
-  git clone --depth 1 --branch "$toolkit_ref" "$toolkit_repo_url" "$cleanup_dir" >/dev/null 2>&1
+  echo "Fetching ai-flow toolkit from ${toolkit_repo_url}..." >&2
+  git clone --depth 1 --branch "$toolkit_ref" "$toolkit_repo_url" "$cleanup_dir"
   bootstrap_checkout="$cleanup_dir"
 fi
 

@@ -112,13 +112,49 @@ Acceptance:
 - описать и автоматизировать host prerequisites для выполнения `codex exec` на VPS.
 
 Что должно появиться:
+- канонический Linux-host runtime работает под обычным пользователем automation-host, а не под `root`;
+- выделенный `CODEX_HOME` на сервере (например, `~/.codex-server-api` или другой user-owned host-local path), не завязанный на репозиторий и не пишущий секреты в git;
+- основной auth mode для VPS — `codex login --with-api-key`, а не перенос ChatGPT `auth.json`;
+- OpenAI API key хранится только вне репозитория:
+  - в host-local env file (`~/.config/<profile>/openai.env`) или `systemd EnvironmentFile`;
+  - при необходимости может быть взят из уже существующего server-side secret storage другого проекта;
+- отдельный `$CODEX_HOME/config.toml` для runtime-параметров `codex` (approval/sandbox/profile/provider), без хранения в нём account secrets;
+- VPN prerequisite для Linux-hosted runtime оформлен как обязательный bootstrap step до smoke `codex exec`;
 - явный preflight для `codex` CLI, VPN service, OpenAI reachability;
 - health-check на доступ до OpenAI после старта VPN;
 - runbook и/или helper для host bootstrap;
 - диагностические состояния вида `WAIT_OPENAI_UNREACHABLE`, `WAIT_VPN_DOWN`.
 
+Что уже подтверждено руками на reg.ru VPS:
+- `codex` на сервере успешно установлен и запускается под обычным пользователем;
+- схема с перенесённым ChatGPT `auth.json` не является надёжной для VPS/VPN-path и дала `403` на `chatgpt.com/backend-api/codex/responses`;
+- схема с `OpenAI API key` подтверждённо работает:
+  - `CODEX_HOME="$HOME/.codex-server-api" codex login status` показывает `Logged in using an API key`;
+  - `CODEX_HOME="$HOME/.codex-server-api" codex exec "Ответь ровно строкой OK"` успешно выполняется;
+- до запуска `codex` на VPS требуется поднять VPN (`~/vpn.sh start`) и подтвердить внешний IP (`~/vpn.sh ip`).
+
+Канонический server-side smoke для этой задачи:
+1. Поднять VPN:
+   - `~/vpn.sh start`
+   - `~/vpn.sh ip`
+2. Подготовить user-owned `CODEX_HOME`:
+   - `mkdir -p ~/.codex-server-api && chmod 700 ~/.codex-server-api`
+3. Залогинить `codex` через API key:
+   - `printf '%s' "$OPENAI_API_KEY" | CODEX_HOME="$HOME/.codex-server-api" codex login --with-api-key`
+4. Проверить статус:
+   - `CODEX_HOME="$HOME/.codex-server-api" codex login status`
+5. Прогнать smoke:
+   - `CODEX_HOME="$HOME/.codex-server-api" codex exec "Ответь ровно строкой OK"`
+
+Источник секрета:
+- не repo-level `.env`;
+- не `flow.env`;
+- а host-local secret file/secret store вне git;
+- в уже проведённом smoke использовался существующий API key, ранее сохранённый в env на сервере для другого проекта.
+
 Acceptance:
-- на VPS можно подтверждённо запускать executor без ручной магии между ребутами;
+- на VPS можно подтверждённо запускать executor через `OpenAI API key` без ручной магии между ребутами;
+- после первичной настройки headless runtime не требует ручного браузерного логина на сервере;
 - preflight явно показывает, чего не хватает.
 
 ### PL-051. Single-runtime ownership и защита от dual-daemon

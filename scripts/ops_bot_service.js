@@ -9,6 +9,7 @@ const { execFile } = require("child_process");
 
 const ROOT_DIR = path.resolve(__dirname, "../../..");
 const FLOW_ROOT_DIR = path.join(ROOT_DIR, ".flow");
+const FLOW_SHARED_SCRIPTS_DIR = path.join(FLOW_ROOT_DIR, "shared", "scripts");
 const DEFAULT_CODEX_DIR = path.join(FLOW_ROOT_DIR, "state", "codex", "default");
 const DEFAULT_OPS_REMOTE_STATE_DIR = path.join(FLOW_ROOT_DIR, "state", "ops-bot", "remote");
 const DEFAULT_BIND = "127.0.0.1";
@@ -269,10 +270,10 @@ function loadConfig(env = process.env) {
   const allowedChatIds = new Set(splitCsv(env.OPS_BOT_ALLOWED_CHAT_IDS));
 
   const snapshotScript = path.resolve(
-    env.OPS_BOT_STATUS_SNAPSHOT_SCRIPT || path.join(ROOT_DIR, ".flow", "scripts", "status_snapshot.sh"),
+    env.OPS_BOT_STATUS_SNAPSHOT_SCRIPT || path.join(FLOW_SHARED_SCRIPTS_DIR, "status_snapshot.sh"),
   );
   const logSummaryScript = path.resolve(
-    env.OPS_BOT_LOG_SUMMARY_SCRIPT || path.join(ROOT_DIR, ".flow", "scripts", "log_summary.sh"),
+    env.OPS_BOT_LOG_SUMMARY_SCRIPT || path.join(FLOW_SHARED_SCRIPTS_DIR, "log_summary.sh"),
   );
 
   const refreshSec = Math.max(2, parseInteger(env.OPS_BOT_REFRESH_SEC, DEFAULT_REFRESH_SEC));

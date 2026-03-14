@@ -28,6 +28,7 @@ ACTIVE_TASK_GRACE_SEC="${WATCHDOG_ACTIVE_TASK_GRACE_SEC:-90}"
 DAEMON_LOG_STALE_SEC="${WATCHDOG_DAEMON_LOG_STALE_SEC:-180}"
 DAEMON_RATE_LIMIT_MAX_SLEEP_SEC="${DAEMON_RATE_LIMIT_MAX_SLEEP_SEC:-360}"
 DAEMON_LOG_STALE_RATE_LIMIT_SEC="${WATCHDOG_DAEMON_LOG_STALE_RATE_LIMIT_SEC:-0}"
+BRANCH_SYNC_NOTIFY_SEC="${WATCHDOG_BRANCH_SYNC_NOTIFY_SEC:-300}"
 
 mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
 
@@ -91,6 +92,7 @@ DAEMON_LOG_STALE_SEC="$(parse_uint_or_default "$DAEMON_LOG_STALE_SEC" "180")"
 DAEMON_INTERVAL="$(parse_uint_or_default "$DAEMON_INTERVAL" "45")"
 DAEMON_RATE_LIMIT_MAX_SLEEP_SEC="$(parse_uint_or_default "$DAEMON_RATE_LIMIT_MAX_SLEEP_SEC" "360")"
 DAEMON_LOG_STALE_RATE_LIMIT_SEC="$(parse_uint_or_default "$DAEMON_LOG_STALE_RATE_LIMIT_SEC" "0")"
+BRANCH_SYNC_NOTIFY_SEC="$(parse_uint_or_default "$BRANCH_SYNC_NOTIFY_SEC" "300")"
 
 if (( COOLDOWN_SEC < 30 )); then COOLDOWN_SEC=30; fi
 if (( EXECUTOR_STALE_SEC < 60 )); then EXECUTOR_STALE_SEC=60; fi
@@ -106,6 +108,7 @@ fi
 if (( DAEMON_LOG_STALE_RATE_LIMIT_SEC < DAEMON_LOG_STALE_SEC )); then
   DAEMON_LOG_STALE_RATE_LIMIT_SEC="$DAEMON_LOG_STALE_SEC"
 fi
+if (( BRANCH_SYNC_NOTIFY_SEC < 60 )); then BRANCH_SYNC_NOTIFY_SEC=300; fi
 
 log() {
   local ts
@@ -196,6 +199,9 @@ watchdog_reason_human_text() {
       ;;
     ACTIVE_TASK_WITHOUT_EXECUTOR_STATE)
       echo "активная задача есть, но состояние executor отсутствует"
+      ;;
+    BRANCH_SYNC_REQUIRED)
+      echo "daemon заблокирован на синхронизации веток и не может взять новую задачу"
       ;;
     *)
       echo "внутренняя причина watchdog: ${reason}"
@@ -345,10 +351,17 @@ executor_hb_epoch="$(read_file_or_default "${CODEX_DIR}/executor_heartbeat_epoch
 executor_hb_epoch="$(parse_uint_or_default "$executor_hb_epoch" "0")"
 daemon_log_mtime="$(file_mtime_epoch "$DAEMON_LOG_FILE")"
 daemon_log_mtime="$(parse_uint_or_default "$daemon_log_mtime" "0")"
+daemon_state_mtime="$(file_mtime_epoch "${CODEX_DIR}/daemon_state.txt")"
+daemon_state_mtime="$(parse_uint_or_default "$daemon_state_mtime" "0")"
 
 daemon_log_age=999999
 if (( daemon_log_mtime > 0 )); then
   daemon_log_age=$(( now_epoch - daemon_log_mtime ))
+fi
+
+daemon_state_age_sec=999999
+if (( daemon_state_mtime > 0 )); then
+  daemon_state_age_sec=$(( now_epoch - daemon_state_mtime ))
 fi
 
 daemon_log_stale_threshold="$DAEMON_LOG_STALE_SEC"
@@ -402,7 +415,7 @@ elif [[ -n "$active_task" ]]; then
   fi
 fi
 
-summary="active_task=${active_task:-none};active_issue=${active_issue:-none};daemon_agent_state=${daemon_agent_state};daemon_state=${daemon_state};executor_state=${executor_state:-none};executor_pid=${executor_pid:-none};executor_pid_alive=${executor_pid_alive};daemon_log_age=${daemon_log_age}s;daemon_log_stale_threshold=${daemon_log_stale_threshold}s;claim_age=${claim_age_sec}s;claim_grace_threshold=${ACTIVE_TASK_GRACE_SEC}s"
+summary="active_task=${active_task:-none};active_issue=${active_issue:-none};daemon_agent_state=${daemon_agent_state};daemon_state=${daemon_state};daemon_state_age=${daemon_state_age_sec}s;executor_state=${executor_state:-none};executor_pid=${executor_pid:-none};executor_pid_alive=${executor_pid_alive};daemon_log_age=${daemon_log_age}s;daemon_log_stale_threshold=${daemon_log_stale_threshold}s;claim_age=${claim_age_sec}s;claim_grace_threshold=${ACTIVE_TASK_GRACE_SEC}s"
 if [[ "${WATCHDOG_AUTH_DEGRADED:-0}" == "1" ]]; then
   auth_detail="${WATCHDOG_AUTH_LAST_DETAIL:-AUTH_UNAVAILABLE}"
   auth_fallback_reason="${WATCHDOG_AUTH_FALLBACK_REASON:-DISABLED}"
@@ -410,6 +423,21 @@ if [[ "${WATCHDOG_AUTH_DEGRADED:-0}" == "1" ]]; then
 fi
 echo "WATCHDOG_SUMMARY=${summary}"
 log "WATCHDOG_SUMMARY=${summary}"
+
+if [[ "$action" == "NONE" ]]; then
+  if [[ "$daemon_state" == "WAIT_BRANCH_SYNC" ]]; then
+    if (( daemon_state_age_sec >= BRANCH_SYNC_NOTIFY_SEC )); then
+      action="NOTIFY_BRANCH_SYNC_BLOCKED"
+      reason="BRANCH_SYNC_REQUIRED"
+    else
+      set_state "BLOCKED_BRANCH_SYNC" "$summary"
+      echo "WATCHDOG_ACTION=NONE"
+      echo "WATCHDOG_REASON=BRANCH_SYNC_REQUIRED"
+      echo "WATCHDOG_OK=1"
+      exit 0
+    fi
+  fi
+fi
 
 if [[ "$action" == "NONE" ]]; then
   set_state "HEALTHY" "$summary"
@@ -449,6 +477,8 @@ elif [[ "$action" == "HARD_RESTART_DAEMON" ]]; then
   if ! run_hard_recovery; then
     action_rc=$?
   fi
+elif [[ "$action" == "NOTIFY_BRANCH_SYNC_BLOCKED" ]]; then
+  :
 fi
 
 printf '%s\n' "$action" > "$LAST_ACTION_FILE"

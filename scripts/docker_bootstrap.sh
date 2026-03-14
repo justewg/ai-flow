@@ -805,6 +805,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+step "Resolving bootstrap defaults (assume-defaults=${assume_defaults}, tty=$(if has_tty; then echo yes; else echo no; fi))"
 profile="$(slugify "$(prompt_value "First managed project profile" "${profile:-planka}")")"
 if [[ "$assume_defaults" == "1" ]]; then
   step "Interactive input detected: no (assume-defaults)"

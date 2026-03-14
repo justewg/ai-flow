@@ -225,9 +225,9 @@ prompt_value() {
   fi
 
   if [[ -n "$default_value" ]]; then
-    printf '%s [%s]: ' "$prompt_text" "$default_value" >&2
+    printf '%s [%s]:\n' "$prompt_text" "$default_value" >&2
   else
-    printf '%s: ' "$prompt_text" >&2
+    printf '%s:\n' "$prompt_text" >&2
   fi
   IFS= read -r answer || true
   if [[ -z "$answer" ]]; then
@@ -252,7 +252,7 @@ prompt_choice() {
   fi
 
   while true; do
-    printf '%s [%s]: ' "$prompt_text" "$default_value" >&2
+    printf '%s [%s]:\n' "$prompt_text" "$default_value" >&2
     IFS= read -r answer || true
     answer="$(printf '%s' "${answer:-$default_value}" | tr '[:upper:]' '[:lower:]')"
     case "$answer" in

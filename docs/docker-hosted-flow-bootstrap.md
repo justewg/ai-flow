@@ -1,0 +1,146 @@
+# Docker-Hosted AI Flow Bootstrap
+
+## Зачем нужен этот режим
+
+`linux-hosted` через host-native `systemd` остаётся каноническим режимом для VPS, но для части серверных сценариев он даёт слишком много ручной конфигурации:
+
+- системные пакеты и их версии живут на хосте;
+- `gh`, `codex`, `node`, `git`, `ripgrep` и прочие зависимости надо ставить отдельно;
+- runtime легче загрязняется host-specific drift;
+- разбор полётов часто сводится к тому, что именно сломано на этой конкретной машине.
+
+`docker-hosted` вводится как отдельный deployment mode:
+
+- installer задаёт вопросы;
+- готовит authoritative workspace и host-local `flow.env`;
+- генерирует `docker-compose.yml`, `Dockerfile`, helper scripts и env files;
+- при желании сразу запускает контейнеры.
+
+## Что это даёт
+
+- воспроизводимый runtime image;
+- тонкий host bootstrap: достаточно `docker`, `docker compose`, SSH до GitHub и доступа к OpenAI/VPN;
+- одинаковый compose layout для `runtime`, `daemon`, `watchdog`;
+- секреты и state остаются вне git, но не размазываются по всей машине.
+
+## Что генерируется
+
+По умолчанию generator создаёт:
+
+- authoritative workspace:
+  - `/var/sites/.ai-flow/workspaces/<profile>`
+- host-local flow env:
+  - `/var/sites/.ai-flow/config/<profile>.flow.env`
+- docker root:
+  - `/var/sites/.ai-flow/docker/<profile>`
+
+Внутри docker root:
+
+- `Dockerfile`
+- `docker-compose.yml`
+- `.env`
+- `container.env`
+- `up.sh`
+- `down.sh`
+- `logs.sh`
+- `exec-runtime.sh`
+
+## Контейнерная схема
+
+Первый рабочий срез содержит 3 сервиса:
+
+- `runtime`
+  - long-lived shell container для `codex`, `gh`, ручных smoke-команд и интерактивной отладки;
+- `daemon`
+  - запускает `./.flow/shared/scripts/daemon_loop.sh <interval>`;
+- `watchdog`
+  - запускает `./.flow/shared/scripts/watchdog_loop.sh <interval>`.
+
+Все сервисы:
+
+- работают с `network_mode: host`;
+- монтируют один и тот же authoritative workspace;
+- видят host-level `AI_FLOW_ROOT` по тому же абсолютному пути;
+- используют один и тот же runtime `HOME` и `CODEX_HOME`.
+
+## Ключевое предположение
+
+По умолчанию считается, что host уже имеет доступ к OpenAI:
+
+- либо напрямую;
+- либо через поднятый на хосте VPN.
+
+Поэтому контейнеры используют:
+
+```yaml
+network_mode: host
+```
+
+Это сознательный дизайн первого среза: не прятать сетевую сложность внутрь контейнера, а использовать уже подтверждённый host path до OpenAI.
+
+## Что должен уметь хост
+
+Минимум:
+
+- `docker`
+- `docker compose`
+- `git`
+- SSH-доступ к GitHub
+- доступ к OpenAI/VPN
+
+Опционально, но желательно:
+
+- `gh` для ручной диагностики на хосте;
+- `tmux` для операторской оболочки, если потребуется работать без Docker exec.
+
+## Что пока не обещается
+
+Первый рабочий срез не обещает полного вытеснения host-native режима.
+
+Пока это:
+
+- воспроизводимый compose/runtime layout;
+- контейнерный `daemon/watchdog` контур;
+- точка входа для дальнейшей доработки Linux-hosted automation.
+
+Отдельно потом можно добирать:
+
+- `ops_bot` и `gh_app_auth` как отдельные сервисы compose;
+- container-native healthchecks;
+- docker-based runbook для cutover и rollback;
+- `tmux`/operator shell вокруг compose-контейнеров.
+
+## Запуск
+
+Raw launcher:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/justewg/ai-flow/main/flow-docker-init.sh)
+```
+
+Shared command внутри checkout:
+
+```bash
+./.flow/shared/scripts/run.sh docker_bootstrap
+```
+
+## Smoke после генерации
+
+Если generator уже отрисовал compose root:
+
+```bash
+cd /var/sites/.ai-flow/docker/planka
+./up.sh
+docker compose --env-file .env -f docker-compose.yml ps
+./logs.sh daemon
+./exec-runtime.sh
+```
+
+Внутри `runtime` контейнера дальше можно проверять:
+
+```bash
+cd /var/sites/.ai-flow/workspaces/planka
+codex --version
+gh --version
+./.flow/shared/scripts/run.sh onboarding_audit --profile planka
+```

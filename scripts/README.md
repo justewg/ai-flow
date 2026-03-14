@@ -58,7 +58,9 @@
 - `.flow/shared/scripts/run.sh app_deps_mermaid [output-file]` — построить Mermaid DAG зависимостей APP-issues из `Flow Meta` (`Depends-On/Blocks`) и записать markdown-файл (по умолчанию `docs/app-issues-dependency-diagram.md`).
 - `.flow/shared/scripts/run.sh backlog_seed_apply` — применить runtime-план создания backlog-задач из `<state-dir>/backlog_seed_plan.json` (по умолчанию 1 задача за запуск).
 - `.flow/shared/flow-init.sh [--profile <name>] [--target-repo <path>]` — канонический initializer launcher для нового или ещё не подключённого проекта. Его можно публиковать как raw-entrypoint и вызывать через `bash <(curl -fsSL ...)`. Launcher bootstrap-ит `/.flow/shared`, materialize-ит минимальный `.flow` layout, пишет безопасный `flow.sample.env`/`flow.env` через `profile_init init` и затем запускает `flow_configurator questionnaire` или печатает однозначный следующий шаг, если interactive tty недоступен.
+- `.flow/shared/flow-host-init.sh [options]` — канонический raw-entrypoint для Linux-hosted automation. Подходит для `curl ... | bash`: задаёт вопросы про runtime-user, `/.ai-flow`, repo URL/ref, host-local `flow.env`, создаёт host layout, authoritative workspace checkout и при необходимости запускает questionnaire/audit/install.
 - `.flow/shared/scripts/run.sh bootstrap_repo --profile <name> [--target-repo <path>]` — internal/bootstrap layer, который materialize-ит `.flow/shared` в target repo как submodule (или minimal git-clone fallback вне git worktree), создаёт `.flow/config`/`.flow/tmp/wizard`, кладёт стартовый `COMMAND_TEMPLATES.md` и вызывает `profile_init init`.
+- `.flow/shared/scripts/run.sh host_bootstrap [options]` — внутренний Linux-host bootstrap layer для authoritative runtime: создаёт `config/state/logs/systemd/workspaces` под `AI_FLOW_ROOT`, клонирует workspace, materialize-ит host-local `flow.env` вне deploy snapshot и по выбору запускает questionnaire/audit/install.
 - `.flow/shared/scripts/run.sh onboarding_audit [--profile <name>] [--skip-network]` — первичный аудит consumer-project: toolkit-файлы, локальные команды, git/gh, project-scoped flow env, repo и Project v2, repo workflow overlay и наличие обязательных GitHub Actions secrets.
 - `.flow/shared/scripts/run.sh update_toolkit [--ref <name>]` — подтянуть repo-local submodule `/.flow/shared` до `origin/<ref>` (по умолчанию `main`) и показать, изменился ли gitlink в родительском repo.
 - `.flow/shared/scripts/run.sh create_migration_kit --project <name> [--defaults-from <current|sample>] [--include-secrets] [--source-profile <name>] [--keep-project-binding] --target-repo <path> [--output <path>]` — собрать payload-only `migration_kit.tgz` без toolkit: `.flow/config/flow.env`, `.flow/config/flow.sample.env`, `.flow/github/*`, `.flow/templates/github/*`; в target repo записать `.flow/migration/do_migration.sh`, `.flow/migration/migration.conf`, `.flow/migration/README.md` и локальную копию payload archive. По умолчанию migration kit очищает `GITHUB_REPO` и `PROJECT_*`; сохранить source binding можно только явным `--keep-project-binding`.
@@ -69,13 +71,13 @@
 - `.flow/shared/scripts/run.sh profile_init <init|install|preflight|bootstrap|orchestrate> ...` — bootstrap и финальная orchestration нового profile/repo без ручной сборки install/smoke-команд. Канонический порядок для нового или уже существующего проекта: сначала `flow-init.sh` или `bootstrap_repo`, затем `flow_configurator questionnaire`, затем `onboarding_audit`, затем `profile_init orchestrate`.
 - `.flow/shared/scripts/run.sh daemon_tick` — один цикл демона: проверка `Todo`, подхват задачи, перевод в `In Progress`.
 - `.flow/shared/scripts/run.sh daemon_loop [interval-sec]` — непрерывный polling-цикл демона (по умолчанию 45 сек).
-- `.flow/shared/scripts/run.sh daemon_install [label] [interval-sec]` — установка и запуск `launchd`-агента.
-- `.flow/shared/scripts/run.sh daemon_uninstall [label]` — остановка и удаление `launchd`-агента.
-- `.flow/shared/scripts/run.sh daemon_status [label]` — проверка статуса `launchd`-агента.
+- `.flow/shared/scripts/run.sh daemon_install [label] [interval-sec]` — установка и запуск service backend (`launchd` на macOS, `systemd` на Linux).
+- `.flow/shared/scripts/run.sh daemon_uninstall [label]` — остановка и удаление service backend.
+- `.flow/shared/scripts/run.sh daemon_status [label]` — проверка статуса service backend.
 - `.flow/shared/scripts/run.sh watchdog_tick` — один цикл самодиагностики/самовосстановления.
 - `.flow/shared/scripts/run.sh watchdog_loop [interval-sec]` — непрерывный watchdog-цикл.
-- `.flow/shared/scripts/run.sh watchdog_install [label] [interval-sec]` — установка и запуск `launchd`-watchdog.
-- `.flow/shared/scripts/run.sh watchdog_uninstall [label]` — остановка и удаление `launchd`-watchdog.
+- `.flow/shared/scripts/run.sh watchdog_install [label] [interval-sec]` — установка и запуск watchdog через выбранный service backend.
+- `.flow/shared/scripts/run.sh watchdog_uninstall [label]` — остановка и удаление watchdog service.
 - `.flow/shared/scripts/run.sh watchdog_status [label]` — проверка статуса watchdog.
 - `.flow/shared/scripts/run.sh executor_reset` — сброс состояния автономного executor.
 - `.flow/shared/scripts/run.sh runtime_clear_active` — очистка active-context daemon (`daemon_active_*`).

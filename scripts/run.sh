@@ -47,6 +47,7 @@ Commands:
   app_deps_mermaid
   backlog_seed_apply
   bootstrap_repo
+  host_bootstrap
   onboarding_audit
   update_toolkit
   review_context_recover
@@ -601,6 +602,11 @@ case "$cmd" in
   bootstrap_repo)
     shift 1
     "${CODEX_SHARED_SCRIPTS_DIR}/bootstrap_repo.sh" "$@"
+    ;;
+
+  host_bootstrap)
+    shift 1
+    "${CODEX_SHARED_SCRIPTS_DIR}/host_bootstrap.sh" "$@"
     ;;
 
   onboarding_audit)

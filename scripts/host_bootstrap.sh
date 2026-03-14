@@ -68,14 +68,42 @@ expand_path() {
   esac
 }
 
+preferred_github_git_protocol() {
+  gh config get git_protocol -h github.com 2>/dev/null || true
+}
+
 normalize_repo_url() {
   local value="${1:-}"
+  local protocol owner_repo
+  protocol="$(preferred_github_git_protocol)"
   case "$value" in
-    https://*|http://*|ssh://*|git@*|/*|./*|../*)
+    https://github.com/*)
+      if [[ "$protocol" == "ssh" ]]; then
+        owner_repo="${value#https://github.com/}"
+        owner_repo="${owner_repo%.git}"
+        printf 'git@github.com:%s.git' "$owner_repo"
+      else
+        printf '%s' "$value"
+      fi
+      ;;
+    http://github.com/*)
+      if [[ "$protocol" == "ssh" ]]; then
+        owner_repo="${value#http://github.com/}"
+        owner_repo="${owner_repo%.git}"
+        printf 'git@github.com:%s.git' "$owner_repo"
+      else
+        printf '%s' "$value"
+      fi
+      ;;
+    ssh://*|git@*|/*|./*|../*)
       printf '%s' "$value"
       ;;
     */*)
-      printf 'https://github.com/%s.git' "$value"
+      if [[ "$protocol" == "ssh" ]]; then
+        printf 'git@github.com:%s.git' "$value"
+      else
+        printf 'https://github.com/%s.git' "$value"
+      fi
       ;;
     *)
       printf '%s' "$value"

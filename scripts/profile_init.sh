@@ -10,7 +10,7 @@ usage() {
 Usage: .flow/shared/scripts/profile_init.sh <init|install|preflight|bootstrap|orchestrate> [options]
 
 Modes:
-  init        Создать env template, state-dir и расчетные launchd labels.
+  init        Создать env template, state-dir и расчетные service labels.
   install     Провалидировать env и установить daemon/watchdog для профиля.
   preflight   Вывести health/smoke checklist для профиля.
   bootstrap   Последовательно выполнить init -> install -> preflight.
@@ -148,6 +148,7 @@ flow_state_root_dir="$(codex_resolve_flow_state_root_dir)"
 ai_flow_state_root_dir="$(codex_resolve_ai_flow_state_root_dir)"
 flow_env_file="$(codex_resolve_flow_env_file)"
 flow_sample_env_file="$(codex_resolve_flow_sample_env_file)"
+service_manager="$(codex_resolve_flow_service_manager)"
 launchd_namespace="$(codex_resolve_flow_launchd_namespace)"
 [[ -n "$project_profile" ]] || project_profile="$profile_slug"
 [[ -n "$env_file" ]] || env_file="${flow_env_file}"
@@ -166,11 +167,11 @@ if ! [[ "$watchdog_interval" =~ ^[0-9]+$ ]] || (( watchdog_interval < 10 )); the
 fi
 
 emit_profile_summary() {
-  local flow_logs_dir runtime_log_dir host_state_dir host_launchd_dir
+  local flow_logs_dir runtime_log_dir host_state_dir host_service_dir
   flow_logs_dir="$(resolve_flow_logs_dir_for_profile)"
   runtime_log_dir="$(resolve_runtime_log_dir_for_profile)"
   host_state_dir="$(resolve_ai_flow_state_dir_for_profile)"
-  host_launchd_dir="$(resolve_ai_flow_launchd_dir_for_profile)"
+  host_service_dir="$(resolve_host_service_dir_for_profile)"
   cat <<EOF
 PROFILE=${profile}
 PROFILE_SLUG=${profile_slug}
@@ -179,7 +180,8 @@ ENV_FILE=${env_file}
 SAMPLE_ENV_FILE=${flow_sample_env_file}
 STATE_DIR=${state_dir}
 HOST_STATE_DIR=${host_state_dir}
-LAUNCHD_DIR=${host_launchd_dir}
+SERVICE_MANAGER=${service_manager}
+SERVICE_UNIT_DIR=${host_service_dir}
 LOG_DIR=${flow_logs_dir}
 RUNTIME_LOG_DIR=${runtime_log_dir}
 DAEMON_LABEL=${daemon_label}
@@ -295,7 +297,8 @@ OPS_BOT_REMOTE_SUMMARY_TTL_SEC=1200
 #   AI_FLOW_ROOT_DIR=<sites-root>/.ai-flow
 #   FLOW_LOGS_DIR=<AI_FLOW_ROOT_DIR>/logs/<project-profile>
 #   .flow/state -> <AI_FLOW_ROOT_DIR>/state/<project-profile>
-#   .flow/launchd -> <AI_FLOW_ROOT_DIR>/launchd/<project-profile>
+#   .flow/launchd -> <AI_FLOW_ROOT_DIR>/launchd/<project-profile> (macOS launchd)
+#   .flow/systemd -> <AI_FLOW_ROOT_DIR>/systemd/<project-profile> (Linux systemd)
 # Uncomment only if you want explicit non-default paths.
 # AI_FLOW_ROOT_DIR=
 # FLOW_LOGS_DIR=
@@ -355,6 +358,28 @@ resolve_ai_flow_launchd_dir_for_profile() {
     launchd_root="$(codex_resolve_ai_flow_launchd_root_dir)"
   fi
   printf '%s/%s' "$launchd_root" "$(codex_slugify_value "$project_profile")"
+}
+
+resolve_ai_flow_systemd_dir_for_profile() {
+  local configured_ai_flow_root systemd_root
+  configured_ai_flow_root="$(codex_read_key_from_env_file "$env_file" "AI_FLOW_ROOT_DIR" || true)"
+  if [[ -n "$configured_ai_flow_root" ]]; then
+    systemd_root="${configured_ai_flow_root}/systemd"
+  else
+    systemd_root="$(codex_resolve_ai_flow_systemd_root_dir)"
+  fi
+  printf '%s/%s' "$systemd_root" "$(codex_slugify_value "$project_profile")"
+}
+
+resolve_host_service_dir_for_profile() {
+  case "$service_manager" in
+    launchd) resolve_ai_flow_launchd_dir_for_profile ;;
+    systemd) resolve_ai_flow_systemd_dir_for_profile ;;
+    *)
+      echo "Unsupported FLOW_SERVICE_MANAGER=${service_manager}" >&2
+      return 1
+      ;;
+  esac
 }
 
 ensure_state_symlink_target() {
@@ -435,6 +460,50 @@ ensure_launchd_symlink_target() {
     return 0
   fi
   ln -s "$host_launchd_dir_path" "$launchd_link_path"
+}
+
+ensure_systemd_symlink_target() {
+  local systemd_link_path="$1"
+  local host_systemd_dir_path="$2"
+
+  ensure_dir "$host_systemd_dir_path"
+
+  if [[ "$systemd_link_path" == "$host_systemd_dir_path" ]]; then
+    return 0
+  fi
+
+  ensure_dir "$(dirname "$systemd_link_path")"
+
+  if [[ -L "$systemd_link_path" ]]; then
+    if [[ "$dry_run" == "1" ]]; then
+      printf 'DRY_RUN ln -sfn %s %s\n' "$host_systemd_dir_path" "$systemd_link_path"
+      return 0
+    fi
+    ln -sfn "$host_systemd_dir_path" "$systemd_link_path"
+    return 0
+  fi
+
+  if [[ -d "$systemd_link_path" && ! -L "$systemd_link_path" ]]; then
+    if [[ "$dry_run" == "1" ]]; then
+      printf 'DRY_RUN preserve-existing-systemd-dir %s\n' "$systemd_link_path"
+      return 0
+    fi
+    return 0
+  fi
+
+  if [[ -e "$systemd_link_path" && ! -L "$systemd_link_path" ]]; then
+    if [[ "$dry_run" == "1" ]]; then
+      printf 'DRY_RUN preserve-existing-systemd-path %s\n' "$systemd_link_path"
+      return 0
+    fi
+    return 0
+  fi
+
+  if [[ "$dry_run" == "1" ]]; then
+    printf 'DRY_RUN ln -s %s %s\n' "$host_systemd_dir_path" "$systemd_link_path"
+    return 0
+  fi
+  ln -s "$host_systemd_dir_path" "$systemd_link_path"
 }
 
 ensure_runtime_log_layout() {
@@ -733,13 +802,16 @@ migrate_state_temp_artifacts() {
 }
 
 init_profile() {
-  local host_state_dir host_launchd_dir
+  local host_state_dir host_service_dir
   emit_profile_summary
   ensure_dir "$(dirname "$env_file")"
   host_state_dir="$(resolve_ai_flow_state_dir_for_profile)"
-  host_launchd_dir="$(resolve_ai_flow_launchd_dir_for_profile)"
+  host_service_dir="$(resolve_host_service_dir_for_profile)"
   ensure_state_symlink_target "$state_dir" "$host_state_dir"
-  ensure_launchd_symlink_target "${ROOT_DIR}/.flow/launchd" "$host_launchd_dir"
+  case "$service_manager" in
+    launchd) ensure_launchd_symlink_target "${ROOT_DIR}/.flow/launchd" "$host_service_dir" ;;
+    systemd) ensure_systemd_symlink_target "${ROOT_DIR}/.flow/systemd" "$host_service_dir" ;;
+  esac
   ensure_dir "$host_state_dir"
   ensure_state_namespace_layout "$host_state_dir"
   migrate_state_temp_artifacts "$host_state_dir"
@@ -914,11 +986,14 @@ install_profile() {
     return 1
   fi
 
-  local host_state_dir host_launchd_dir
+  local host_state_dir host_service_dir
   host_state_dir="$(resolve_ai_flow_state_dir_for_profile)"
-  host_launchd_dir="$(resolve_ai_flow_launchd_dir_for_profile)"
+  host_service_dir="$(resolve_host_service_dir_for_profile)"
   ensure_state_symlink_target "$state_dir" "$host_state_dir"
-  ensure_launchd_symlink_target "${ROOT_DIR}/.flow/launchd" "$host_launchd_dir"
+  case "$service_manager" in
+    launchd) ensure_launchd_symlink_target "${ROOT_DIR}/.flow/launchd" "$host_service_dir" ;;
+    systemd) ensure_systemd_symlink_target "${ROOT_DIR}/.flow/systemd" "$host_service_dir" ;;
+  esac
   ensure_dir "$host_state_dir"
   ensure_state_namespace_layout "$host_state_dir"
   migrate_state_temp_artifacts "$host_state_dir"

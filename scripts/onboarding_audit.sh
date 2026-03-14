@@ -374,7 +374,20 @@ check_command gh "CMD_GH" "1" "Установи GitHub CLI: https://cli.github.c
 check_command jq "CMD_JQ" "1" "Установи jq."
 check_command node "CMD_NODE" "1" "Установи Node.js LTS (рекомендуется >= 18)."
 check_command curl "CMD_CURL" "1" "Установи curl."
-check_command launchctl "CMD_LAUNCHCTL" "0" "Если нужен штатный daemon/watchdog через launchd, запускай на macOS с launchctl."
+service_manager="$(codex_resolve_flow_service_manager)"
+report_ok "FLOW_SERVICE_MANAGER" "$service_manager"
+case "$service_manager" in
+  launchd)
+    check_command launchctl "CMD_LAUNCHCTL" "0" "Если нужен штатный daemon/watchdog через launchd, запускай на macOS с launchctl."
+    ;;
+  systemd)
+    check_command systemctl "CMD_SYSTEMCTL" "1" "Для Linux-hosted daemon/watchdog нужен systemctl (обычно systemd user services)."
+    ;;
+  *)
+    report_warn "FLOW_SERVICE_MANAGER" "unsupported:${service_manager}"
+    report_action "FLOW_SERVICE_MANAGER" "Укажи поддерживаемый backend: FLOW_SERVICE_MANAGER=launchd|systemd."
+    ;;
+esac
 check_command pm2 "CMD_PM2" "0" "Если auth-service будет жить под PM2, установи pm2: npm install -g pm2"
 
 section "Git Repository"

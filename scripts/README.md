@@ -48,6 +48,7 @@
   - записывать имя команды в `.flow/tmp/run/dispatch_command.txt`;
   - при необходимости записывать аргументы по одному в `.flow/tmp/run/dispatch_args.txt`;
   - выполнять один стабильный entrypoint: `.flow/shared/scripts/run.sh dispatch`.
+  - создание временных файлов/директорий через `mktemp`, `.flow/tmp` или `/tmp` не считается отдельным approval-поводом; approval может понадобиться только для внешнего действия в той же команде (`gh`, сеть, запись вне sandbox и т.п.).
 - `.flow/shared/scripts/run.sh project_status_runtime <enqueue|apply|list|clear> ...` — runtime-очередь отложенных обновлений `Project Status/Flow`.
 - `.flow/shared/scripts/run.sh log_summary [--hours N|--from ISO|--to ISO]` — агрегированный отчет по логам daemon/watchdog/runtime/graphql за период (без аргументов берёт весь доступный диапазон логов).
 - `.flow/shared/scripts/run.sh status_snapshot` — нормализованный JSON snapshot состояния автоматики (daemon/watchdog/executor/очереди/blockers).

@@ -177,6 +177,44 @@ daemon_loop_running() {
   pgrep -f "${CODEX_SHARED_SCRIPTS_DIR}/daemon_loop.sh" >/dev/null 2>&1
 }
 
+dirty_runtime_mode() {
+  codex_resolve_config_value "FLOW_HOST_RUNTIME_MODE" ""
+}
+
+dirty_path_ignored() {
+  local path="${1:-}"
+  local runtime_mode
+  runtime_mode="$(dirty_runtime_mode)"
+  if [[ "$runtime_mode" != "linux-docker-hosted" ]]; then
+    return 1
+  fi
+
+  case "$path" in
+    .flow/shared|.gitmodules)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+filter_dirty_status_lines() {
+  local line path
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    path="$(printf '%s\n' "$line" | sed -E 's/^[[:space:]]*[MADRCU?!][MADRCU?!]?[[:space:]]*//')"
+    if dirty_path_ignored "$path"; then
+      continue
+    fi
+    printf '%s\n' "$line"
+  done
+}
+
+collect_dirty_tracked_lines() {
+  git -C "${ROOT_DIR}" status --short --untracked-files=no 2>/dev/null | filter_dirty_status_lines
+}
+
 html_escape() {
   local value="${1:-}"
   jq -rn --arg v "$value" '$v|@html'
@@ -327,8 +365,7 @@ run_hard_recovery() {
 
 now_epoch="$(date +%s)"
 
-if ! git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- ||
-  ! git -C "${ROOT_DIR}" diff --cached --quiet --ignore-submodules --; then
+if [[ -n "$(collect_dirty_tracked_lines)" ]]; then
   detail="WATCHDOG_PAUSED_DIRTY_WORKTREE=1"
   set_state "PAUSED_DIRTY_WORKTREE" "$detail"
   echo "$detail"

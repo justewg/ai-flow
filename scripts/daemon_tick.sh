@@ -217,6 +217,44 @@ resolve_config_value() {
   codex_resolve_config_value "$1" "${2:-}"
 }
 
+dirty_runtime_mode() {
+  resolve_config_value "FLOW_HOST_RUNTIME_MODE" ""
+}
+
+dirty_path_ignored() {
+  local path="${1:-}"
+  local runtime_mode
+  runtime_mode="$(dirty_runtime_mode)"
+  if [[ "$runtime_mode" != "linux-docker-hosted" ]]; then
+    return 1
+  fi
+
+  case "$path" in
+    .flow/shared|.gitmodules)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+filter_dirty_status_lines() {
+  local line path
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    path="$(printf '%s\n' "$line" | sed -E 's/^[[:space:]]*[MADRCU?!][MADRCU?!]?[[:space:]]*//')"
+    if dirty_path_ignored "$path"; then
+      continue
+    fi
+    printf '%s\n' "$line"
+  done
+}
+
+collect_dirty_tracked_lines() {
+  git -C "${ROOT_DIR}" status --short --untracked-files=no 2>/dev/null | filter_dirty_status_lines
+}
+
 project_gh_token="$(resolve_config_value "DAEMON_GH_PROJECT_TOKEN" "")"
 if [[ -z "$project_gh_token" ]]; then
   project_gh_token="$(resolve_config_value "CODEX_GH_PROJECT_TOKEN" "")"
@@ -2200,9 +2238,8 @@ fi
 # keep retrying finalization on each tick without requiring a new user reply.
 maybe_resume_dirty_gate_finalize_pending
 
-if ! git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- ||
-  ! git -C "${ROOT_DIR}" diff --cached --quiet --ignore-submodules --; then
-  tracked_lines=""
+tracked_lines="$(collect_dirty_tracked_lines)"
+if [[ -n "$tracked_lines" ]]; then
   tracked_count=""
   tracked_preview=""
   dirty_signature=""
@@ -2210,9 +2247,6 @@ if ! git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- ||
   if [[ -s "${CODEX_DIR}/daemon_active_task.txt" || -s "${CODEX_DIR}/daemon_waiting_kind.txt" || -s "${CODEX_DIR}/daemon_review_task_id.txt" ]]; then
     dirty_allow_context_continue="1"
   fi
-  tracked_lines="$(
-    git -C "${ROOT_DIR}" status --short --untracked-files=no 2>/dev/null || true
-  )"
   tracked_count="$(
     printf '%s\n' "$tracked_lines" | awk 'NF {count++} END {print count+0}'
   )"
@@ -2230,15 +2264,12 @@ if ! git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- ||
 
   # Dirty-gate reply may have committed/merged in the same tick.
   # Re-read tracked state to avoid creating a new gate from stale snapshot.
-  if git -C "${ROOT_DIR}" diff --quiet --ignore-submodules -- &&
-    git -C "${ROOT_DIR}" diff --cached --quiet --ignore-submodules --; then
+  tracked_lines="$(collect_dirty_tracked_lines)"
+  if [[ -z "$tracked_lines" ]]; then
     echo "WAIT_DIRTY_WORKTREE_RESOLVED_POST_ACTION=1"
     clear_dirty_gate_waiting_state_if_any
     clear_dirty_gate_local_state
   else
-    tracked_lines="$(
-      git -C "${ROOT_DIR}" status --short --untracked-files=no 2>/dev/null || true
-    )"
     tracked_count="$(
       printf '%s\n' "$tracked_lines" | awk 'NF {count++} END {print count+0}'
     )"

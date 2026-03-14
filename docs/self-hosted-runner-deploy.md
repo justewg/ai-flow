@@ -5,6 +5,7 @@
 ## Что изменилось в CI
 
 - Workflow `deploy-dev-pr.yml` и `deploy-main.yml` теперь запускаются на `runs-on: [self-hosted, planka-deploy]`.
+- Перед выкладкой workflow делает `actions/checkout` с `submodules: recursive`, поэтому `/.flow/shared` materialize-ится в workspace как обычные файлы toolkit snapshot.
 - Деплой выполняется локально на сервере через `rsync` из workspace runner в `DEPLOY_DEV_PATH`/`DEPLOY_PATH`.
 - SSH-секреты для деплоя больше не используются.
 
@@ -91,6 +92,17 @@ sudo chown -R gha-runner:gha-runner /var/sites/planka-dev /var/sites/planka
 2. Убедиться, что job `Deploy PR Preview to Dev Hosting` выполнен на runner `planka-deploy-01`.
 3. Проверить наличие обновленных файлов в `DEPLOY_DEV_PATH`.
 4. После merge в `main` проверить `Deploy Main to Hosting` и файлы в `DEPLOY_PATH`.
+5. Отдельно убедиться, что toolkit реально приехал в deploy snapshot:
+
+```bash
+ls -la /var/sites/planka/.flow/shared/scripts/run.sh
+```
+
+или для dev:
+
+```bash
+ls -la /var/sites/planka-dev/.flow/shared/scripts/run.sh
+```
 
 ## Troubleshooting
 
@@ -98,6 +110,7 @@ sudo chown -R gha-runner:gha-runner /var/sites/planka-dev /var/sites/planka
 - Если такой runner есть в другом repo, это не помогает: GitHub не шарит repository-level runners между репозиториями автоматически.
 - Если workflow падает на шаге `Explain missing self-hosted runner`, это тот же случай: GitHub API не видит подходящий runner.
 - Если preflight пишет warning `Runner preflight skipped`, это нормально: стандартный `GITHUB_TOKEN` не имеет доступа к API списка repository runners. В этом случае workflow просто продолжает запуск self-hosted job без fail-fast проверки.
+- Если deploy прошёл, но на сервере нет `.flow/shared/scripts/run.sh`, значит workflow был выполнен без recursive submodule checkout или runner разложил не тот workspace snapshot.
 - Проверить наличие runner можно в `Repository -> Settings -> Actions -> Runners`.
 - Проверить сервис на сервере:
 

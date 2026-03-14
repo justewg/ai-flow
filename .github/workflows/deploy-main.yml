@@ -85,6 +85,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Validate required settings
         run: |
@@ -102,6 +104,11 @@ jobs:
             --exclude '.env' \
             --exclude '.env.*' \
             ./ "$DEPLOY_PATH/"
+
+      - name: Verify deployed flow toolkit snapshot
+        run: |
+          test -x "$DEPLOY_PATH/.flow/shared/scripts/run.sh"
+          test -f "$DEPLOY_PATH/.gitmodules"
 
       - name: Optional post-deploy command
         if: ${{ env.DEPLOY_POST_COMMAND != '' }}

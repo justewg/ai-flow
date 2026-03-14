@@ -205,6 +205,10 @@ has_tty() {
   [[ -r /dev/tty && -w /dev/tty ]]
 }
 
+step() {
+  echo "[docker-bootstrap] $*" >&2
+}
+
 prompt_value() {
   local prompt_text="$1"
   local default_value="${2:-}"
@@ -679,6 +683,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 profile="$(slugify "$(prompt_value "First managed project profile" "${profile:-planka}")")"
+step "Interactive input detected: $(if has_tty; then echo yes; else echo no; fi)"
 runtime_user="$(prompt_value "Runtime user" "$runtime_user")"
 ai_flow_root="$(expand_path "$(prompt_value "AI flow root" "$ai_flow_root")")"
 workspace_repo_url="$(normalize_repo_url "$(prompt_value "Workspace repo URL" "${workspace_repo_url:-justewg/planka}")")"
@@ -705,17 +710,25 @@ fi
 compose_project_name="ai-flow-${profile}"
 compose_image_name="ai-flow-${profile}:latest"
 
+step "Preparing host layout under ${ai_flow_root}"
 ensure_host_layout
+step "Preparing runtime home paths under ${runtime_home}"
 ensure_runtime_home_paths
+step "Cloning or updating workspace at ${workspace_path}"
 clone_or_update_workspace
+step "Normalizing host env at ${host_env_file}"
 normalize_host_env
+step "Linking workspace flow.env"
 ensure_workspace_env_symlink
+step "Rendering Docker bootstrap files into ${compose_root}"
 render_compose_env
 render_container_env
 render_dockerfile
 render_compose_file
 render_helper_scripts
+step "Validating generated docker compose"
 run_compose_config_if_requested
+step "Optional container start phase"
 run_compose_up_if_requested
 
 cat <<EOF

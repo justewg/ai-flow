@@ -147,6 +147,8 @@ if [[ -z "$toolkit_repo_url" ]]; then
   toolkit_repo_url="https://github.com/justewg/ai-flow.git"
 fi
 
+echo "Launching docker bootstrap wizard..." >&2
+
 "${bootstrap_checkout}/scripts/docker_bootstrap.sh" \
   --toolkit-repo "$toolkit_repo_url" \
   --toolkit-ref "$toolkit_ref" \

@@ -193,6 +193,7 @@ case "$toolkit_repo_url" in
 esac
 
 bootstrap_cmd+=(
+  bash
   "${bootstrap_checkout}/scripts/docker_bootstrap.sh"
   --toolkit-repo "$toolkit_repo_url"
   --toolkit-ref "$toolkit_ref"

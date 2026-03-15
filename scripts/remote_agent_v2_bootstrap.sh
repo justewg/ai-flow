@@ -250,6 +250,44 @@ EOF
   sshd -t
 }
 
+reload_ssh_service() {
+  if systemctl reload ssh >/dev/null 2>&1; then
+    return 0
+  fi
+  if systemctl reload sshd >/dev/null 2>&1; then
+    return 0
+  fi
+  if service ssh reload >/dev/null 2>&1; then
+    return 0
+  fi
+  if service sshd reload >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "Unable to reload SSH service after installing ${sshd_fragment_path}" >&2
+  exit 1
+}
+
+verify_sshd_policy() {
+  local sshd_dump
+  sshd_dump="$(sshd -T -C "user=${agent_user},host=127.0.0.1,addr=127.0.0.1" 2>/dev/null || true)"
+  [[ -n "$sshd_dump" ]] || {
+    echo "Unable to verify effective SSH policy for ${agent_user}" >&2
+    exit 1
+  }
+  grep -Eq '^forcecommand /usr/local/sbin/ai-flow-remote-agent-v2-gateway$' <<< "$sshd_dump" || {
+    echo "Effective SSH policy missing expected ForceCommand for ${agent_user}" >&2
+    exit 1
+  }
+  grep -Eq '^permittty no$' <<< "$sshd_dump" || {
+    echo "Effective SSH policy missing PermitTTY no for ${agent_user}" >&2
+    exit 1
+  }
+  grep -Eq '^allowtcpforwarding no$' <<< "$sshd_dump" || {
+    echo "Effective SSH policy missing AllowTcpForwarding no for ${agent_user}" >&2
+    exit 1
+  }
+}
+
 install_sudoers() {
   cat > "$sudoers_path" <<EOF
 Defaults:${agent_user} !requiretty
@@ -379,6 +417,8 @@ install_platform_public_env
 install_project_public_env
 copy_secret_material
 install_sshd_fragment
+reload_ssh_service
+verify_sshd_policy
 install_sudoers
 install_systemd_units
 

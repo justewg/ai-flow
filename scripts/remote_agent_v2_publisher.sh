@@ -281,7 +281,7 @@ emit_ingress_metadata() {
   local public_base_url conf_file host_name health_present status_present debug_present webhook_present
   public_base_url="$(read_env_key "$platform_env" "OPS_BOT_PUBLIC_BASE_URL" || true)"
   conf_file="$(read_env_key "$project_env" "NGINX_CONF_FILE" || true)"
-  host_name="$(printf '%s' "$public_base_url" | sed -E 's#^[a-z]+://##; s#/.*$##; s/:.*$##')"
+  host_name="$(printf '%s' "$public_base_url" | sed -E 's#^[a-z]+://##; s#/.*$##; s#:.*$##')"
   [[ -n "$conf_file" ]] || conf_file="/etc/nginx/conf.d/${host_name}.conf"
   health_present="0"
   status_present="0"

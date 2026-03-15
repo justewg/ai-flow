@@ -171,7 +171,7 @@ install_project_public_env() {
   compose_env_file="${compose_root}/.env"
   compose_file="${compose_root}/docker-compose.yml"
   public_base_url="$(read_env_key "$source_platform_env_file" "OPS_BOT_PUBLIC_BASE_URL")"
-  host_name="$(printf '%s' "$public_base_url" | sed -E 's#^[a-z]+://##; s#/.*$##; s/:.*$##')"
+  host_name="$(printf '%s' "$public_base_url" | sed -E 's#^[a-z]+://##; s#/.*$##; s#:.*$##')"
   nginx_conf_file="/etc/nginx/conf.d/${host_name}.conf"
   ttl="$(( publisher_interval_sec * 2 ))"
   [[ -n "$ops_bind" ]] || ops_bind="127.0.0.1"

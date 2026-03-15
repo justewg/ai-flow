@@ -49,6 +49,7 @@ Commands:
   bootstrap_repo
   host_bootstrap
   docker_bootstrap
+  remote_agent_access_bootstrap
   onboarding_audit
   env_audit
   remote_probe
@@ -616,6 +617,11 @@ case "$cmd" in
   docker_bootstrap)
     shift 1
     "${CODEX_SHARED_SCRIPTS_DIR}/docker_bootstrap.sh" "$@"
+    ;;
+
+  remote_agent_access_bootstrap)
+    shift 1
+    "${CODEX_SHARED_SCRIPTS_DIR}/remote_agent_access_bootstrap.sh" "$@"
     ;;
 
   onboarding_audit)

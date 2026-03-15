@@ -133,6 +133,12 @@ network_mode: host
 
 После первого bootstrap повторный `curl|bash` не нужен для обычного обновления runtime.
 
+Важно по семантике:
+
+- `planka` в путях вида `/var/sites/.ai-flow/workspaces/planka` здесь означает конкретный consumer-project profile.
+- host-level surfaces (`ops-bot`, `gh-app-auth`, `/ops/status`, `/ops/debug/*`, `/telegram/webhook`) не должны называться доменом проекта по умолчанию.
+- для публичного ingress host-level контур лучше вешать на отдельный хост, например `aiflow.ewg40.ru`, а не смешивать с project-domain.
+
 Штатный путь такой:
 
 ```bash

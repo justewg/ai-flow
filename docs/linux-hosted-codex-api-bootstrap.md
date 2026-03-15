@@ -100,7 +100,7 @@ Linux-hosted automation не должна жить из deploy snapshot (`/var/s
 Рекомендуемый layout:
 
 ```bash
-/home/ewg/.config/planka-automation/openai.env
+/home/ewg/.config/ai-flow/openai.env
 /home/ewg/.secrets/gh-apps/codex-flow.private-key.pem
 ```
 
@@ -201,8 +201,8 @@ sudo chown -R ewg:ewg /var/sites/.ai-flow
 Примеры:
 
 ```bash
-mkdir -p /home/ewg/.config/planka-automation
-chmod 700 /home/ewg/.config/planka-automation
+mkdir -p /home/ewg/.config/ai-flow
+chmod 700 /home/ewg/.config/ai-flow
 
 mkdir -p /home/ewg/.secrets/gh-apps
 chmod 700 /home/ewg/.secrets
@@ -211,7 +211,7 @@ chmod 700 /home/ewg/.secrets/gh-apps
 
 После этого отдельно размещаются:
 
-- `/home/ewg/.config/planka-automation/openai.env`
+- `/home/ewg/.config/ai-flow/openai.env`
 - `/home/ewg/.secrets/gh-apps/codex-flow.private-key.pem`
 
 ## Что должно быть готово перед запуском host bootstrap
@@ -242,7 +242,7 @@ chmod 700 /home/ewg/.secrets/gh-apps
 
 Ключ хранится только вне git:
 
-- либо в host-local env file, например `~/.config/planka-automation/openai.env`;
+- либо в host-local env file, например `~/.config/ai-flow/openai.env`;
 - либо в `systemd EnvironmentFile`;
 - либо в уже существующем server-side secret storage другого проекта.
 
@@ -277,7 +277,7 @@ chmod 700 ~/.codex-server-api
 Пример:
 
 ```bash
-source ~/.config/planka-automation/openai.env
+source ~/.config/ai-flow/openai.env
 ```
 
 Файл должен жить вне репозитория и иметь права не шире `600`.

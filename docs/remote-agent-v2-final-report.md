@@ -324,6 +324,14 @@
   - why: outside Remote Agent v2 cutover scope
   - criticality: LOW
   - later: run `PL-059`
+- Post-stabilization JSON integrity hardening is still pending.
+  - why: current v2 is accepted and functional, but helper does not yet reject malformed JSON snapshots explicitly and publisher does not yet degrade on malformed upstream JSON explicitly
+  - criticality: LOW
+  - later: run `PL-062` and `PL-063`
+- Phase 2 service-user isolation for runtime is still pending.
+  - why: current runtime still uses operator-owned delivery/runtime context
+  - criticality: LOW
+  - later: run `PL-064`
 
 13. OPERATIONAL ROLLOUT PLAN
 - подготовительные шаги:
@@ -362,6 +370,9 @@
   - server-side secret rotation execution
 - список отложенных задач
   - runtime smoke on real `Todo` tasks
+  - helper-side JSON snapshot validation hardening
+  - publisher-side upstream JSON validation hardening
+  - Phase 2 runtime service-user isolation
 
 15. FINAL RECOMMENDATION
 - READY FOR REVIEW

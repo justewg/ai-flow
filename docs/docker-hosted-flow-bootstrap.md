@@ -59,6 +59,7 @@
   - запускает `./.flow/shared/scripts/watchdog_loop.sh <interval>`.
 - `ops-bot`
   - поднимает `./.flow/shared/scripts/ops_bot_start.sh` и даёт локальные `/health`, `/ops/status`, `/ops/status.json`, webhook/ingest contour.
+  - при включённом `OPS_BOT_DEBUG_ENABLED` также даёт защищённые `/ops/debug/*` endpoints для remote diagnosis without SSH.
 
 Все сервисы:
 

@@ -279,6 +279,7 @@ slugify() {
 array_append_unique() {
   local array_name="$1"
   local value="$2"
+  [[ -n "$value" ]] || return 0
   local item
   local array_items=()
   eval "array_items=(\"\${${array_name}[@]-}\")"
@@ -327,6 +328,18 @@ env_value() {
   local env_file="$1"
   local key="$2"
   codex_read_key_from_env_file "$env_file" "$key" || true
+}
+
+canonicalize_file_path() {
+  local file_path="$1"
+  if [[ -f "$file_path" ]]; then
+    local dir_path base_name
+    dir_path="$(cd "$(dirname "$file_path")" && pwd -P)"
+    base_name="$(basename "$file_path")"
+    printf '%s/%s' "$dir_path" "$base_name"
+  else
+    printf '%s' "$file_path"
+  fi
 }
 
 env_file_has_key() {
@@ -504,6 +517,7 @@ append_missing_group() {
   eval "keys_ref=(\"\${${array_name}[@]-}\")"
   [[ "${#keys_ref[@]}" -gt 0 ]] || return 0
   for key in "${keys_ref[@]}"; do
+    [[ -n "$key" ]] || continue
     if env_file_has_key "$env_file" "$key"; then
       continue
     fi
@@ -539,22 +553,22 @@ apply_fix_to_env_file() {
 detect_platform_env_file() {
   local ai_flow_root_dir candidate
   if [[ -n "$platform_env_file" ]]; then
-    printf '%s' "$platform_env_file"
+    printf '%s' "$(canonicalize_file_path "$platform_env_file")"
     return 0
   fi
   if [[ -n "${AI_FLOW_PLATFORM_ENV_FILE:-}" ]]; then
-    printf '%s' "$AI_FLOW_PLATFORM_ENV_FILE"
+    printf '%s' "$(canonicalize_file_path "$AI_FLOW_PLATFORM_ENV_FILE")"
     return 0
   fi
   ai_flow_root_dir="$(detect_ai_flow_root_dir)"
   candidate="${ai_flow_root_dir}/config/ai-flow.platform.env"
   if [[ -f "$candidate" ]]; then
-    printf '%s' "$candidate"
+    printf '%s' "$(canonicalize_file_path "$candidate")"
     return 0
   fi
   candidate="${HOME}/.config/ai-flow/ai-flow.platform.env"
   if [[ -f "$candidate" ]]; then
-    printf '%s' "$candidate"
+    printf '%s' "$(canonicalize_file_path "$candidate")"
     return 0
   fi
   printf '%s' "${ai_flow_root_dir}/config/ai-flow.platform.env"
@@ -611,21 +625,21 @@ detect_project_env_file() {
   local profile_slug="$1"
   local ai_flow_root_dir candidate
   if [[ -n "$project_env_file" ]]; then
-    printf '%s' "$project_env_file"
+    printf '%s' "$(canonicalize_file_path "$project_env_file")"
     return 0
   fi
   if [[ -n "${DAEMON_GH_ENV_FILE:-}" && -f "${DAEMON_GH_ENV_FILE}" ]]; then
-    printf '%s' "${DAEMON_GH_ENV_FILE}"
+    printf '%s' "$(canonicalize_file_path "${DAEMON_GH_ENV_FILE}")"
     return 0
   fi
   ai_flow_root_dir="$(codex_resolve_ai_flow_root_dir)"
   candidate="${ai_flow_root_dir}/config/${profile_slug}.flow.env"
   if [[ -f "$candidate" ]]; then
-    printf '%s' "$candidate"
+    printf '%s' "$(canonicalize_file_path "$candidate")"
     return 0
   fi
   candidate="$(codex_resolve_flow_env_file)"
-  printf '%s' "$candidate"
+  printf '%s' "$(canonicalize_file_path "$candidate")"
 }
 
 report_missing_keys() {
@@ -845,14 +859,18 @@ check_project_file() {
       && report_ok "FLOW_PM2_LOG_DIR_LAYOUT" "$expected_pm2_dir" \
       || { report_warn "FLOW_PM2_LOG_DIR_LAYOUT" "expected:${expected_pm2_dir};actual:$(env_value "$env_file" "FLOW_PM2_LOG_DIR")"; report_action "FLOW_PM2_LOG_DIR_LAYOUT" "Выстави FLOW_PM2_LOG_DIR=${expected_pm2_dir}"; }
 
-    [[ "$(env_value "$env_file" "OPS_BOT_REMOTE_STATE_DIR")" == "$expected_remote_state_dir" ]] \
-      && report_ok "OPS_BOT_REMOTE_STATE_DIR_LAYOUT" "$expected_remote_state_dir" \
-      || {
-        report_warn "OPS_BOT_REMOTE_STATE_DIR_LAYOUT" "expected:${expected_remote_state_dir};actual:$(env_value "$env_file" "OPS_BOT_REMOTE_STATE_DIR")"
-        report_action "OPS_BOT_REMOTE_STATE_DIR_LAYOUT" "Выстави OPS_BOT_REMOTE_STATE_DIR=${expected_remote_state_dir}"
+    local actual_ops_remote_state_dir
+    actual_ops_remote_state_dir="$(env_value "$env_file" "OPS_BOT_REMOTE_STATE_DIR")"
+    if [[ "$actual_ops_remote_state_dir" == "$expected_remote_state_dir" ]]; then
+      report_ok "OPS_BOT_REMOTE_STATE_DIR_LAYOUT" "$expected_remote_state_dir"
+    else
+      report_warn "OPS_BOT_REMOTE_STATE_DIR_LAYOUT" "expected:${expected_remote_state_dir};actual:${actual_ops_remote_state_dir}"
+      report_action "OPS_BOT_REMOTE_STATE_DIR_LAYOUT" "Выстави OPS_BOT_REMOTE_STATE_DIR=${expected_remote_state_dir}"
+      if [[ -n "$actual_ops_remote_state_dir" ]]; then
         array_append_unique "project_disable_keys" "OPS_BOT_REMOTE_STATE_DIR"
         array_append_unique "project_missing_core_keys" "OPS_BOT_REMOTE_STATE_DIR"
-      }
+      fi
+    fi
   fi
 
   if [[ "$fix_mode" == "1" ]]; then

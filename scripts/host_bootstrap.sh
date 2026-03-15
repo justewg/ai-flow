@@ -12,6 +12,7 @@ workspace_repo_url=""
 workspace_ref="development"
 workspace_path=""
 host_env_file=""
+platform_env_file=""
 source_flow_env=""
 toolkit_repo_url=""
 toolkit_ref="main"
@@ -37,6 +38,7 @@ Options:
   --workspace-ref <ref>        Git ref for workspace checkout. Default: development
   --workspace-path <path>      Workspace path. Default: <ai-flow-root>/workspaces/<profile>
   --host-env-file <path>       Host-local flow env path. Default: <ai-flow-root>/config/<profile>.flow.env
+  --platform-env-file <path>   Host-level ai-flow env path. Default: <ai-flow-root>/config/ai-flow.platform.env
   --source-flow-env <path>     Optional existing flow.env to copy before Linux normalization.
   --toolkit-repo <url>         ai-flow repo URL. Default: current origin or https://github.com/justewg/ai-flow.git
   --toolkit-ref <ref>          ai-flow ref for bootstrap. Default: main
@@ -368,6 +370,17 @@ normalize_host_env() {
   chown "$runtime_user:$(runtime_group)" "$host_env_file" 2>/dev/null || sudo chown "$runtime_user:$(runtime_group)" "$host_env_file"
 }
 
+ensure_platform_env() {
+  ensure_dir_owned "$(dirname "$platform_env_file")"
+  if [[ ! -f "$platform_env_file" ]]; then
+    : > "$platform_env_file"
+  fi
+  upsert_env_key "$platform_env_file" "AI_FLOW_ROOT_DIR" "$ai_flow_root"
+  upsert_env_key "$platform_env_file" "GH_APP_PM2_APP_NAME" "ai-flow-gh-app-auth"
+  upsert_env_key "$platform_env_file" "OPS_BOT_PM2_APP_NAME" "ai-flow-ops-bot"
+  chown "$runtime_user:$(runtime_group)" "$platform_env_file" 2>/dev/null || sudo chown "$runtime_user:$(runtime_group)" "$platform_env_file"
+}
+
 ensure_workspace_env_symlink() {
   local workspace_env_link="${workspace_path}/.flow/config/flow.env"
   run_as_runtime_user mkdir -p "${workspace_path}/.flow/config"
@@ -448,6 +461,11 @@ while [[ $# -gt 0 ]]; do
       host_env_file="$2"
       shift 2
       ;;
+    --platform-env-file)
+      [[ $# -ge 2 ]] || { echo "Missing value for --platform-env-file" >&2; exit 1; }
+      platform_env_file="$2"
+      shift 2
+      ;;
     --source-flow-env)
       [[ $# -ge 2 ]] || { echo "Missing value for --source-flow-env" >&2; exit 1; }
       source_flow_env="$2"
@@ -513,7 +531,11 @@ workspace_repo_url="$(normalize_repo_url "$(prompt_value "Workspace repo URL" "$
 if [[ -z "$host_env_file" ]]; then
   host_env_file="${ai_flow_root}/config/${profile}.flow.env"
 fi
+if [[ -z "$platform_env_file" ]]; then
+  platform_env_file="${ai_flow_root}/config/ai-flow.platform.env"
+fi
 host_env_file="$(expand_path "$(prompt_value "Host flow env path" "$host_env_file" "0")")"
+platform_env_file="$(expand_path "$(prompt_value "AI flow platform env path" "$platform_env_file" "0")")"
 source_flow_env="$(expand_path "$(prompt_value "Existing flow.env to copy (optional)" "$source_flow_env" "1")")"
 run_questionnaire="$(prompt_choice "Questionnaire mode (ask/yes/no)" "$run_questionnaire")"
 run_audit="$(prompt_choice "Audit mode (ask/yes/no)" "$run_audit")"
@@ -527,6 +549,7 @@ fi
 ensure_host_layout
 clone_or_update_workspace
 normalize_host_env
+ensure_platform_env
 ensure_workspace_env_symlink
 run_questionnaire_if_requested
 run_audit_if_requested
@@ -543,6 +566,7 @@ WORKSPACE_PATH=${workspace_path}
 TOOLKIT_REPO=${toolkit_repo_url}
 TOOLKIT_REF=${toolkit_ref}
 HOST_ENV_FILE=${host_env_file}
+PLATFORM_ENV_FILE=${platform_env_file}
 HOST_STATE_DIR=${ai_flow_root}/state/${profile}
 HOST_LOG_DIR=${ai_flow_root}/logs/${profile}
 NEXT_QUESTIONNAIRE=ROOT_DIR=${workspace_path} AI_FLOW_ROOT_DIR=${ai_flow_root} DAEMON_GH_ENV_FILE=${host_env_file} FLOW_SERVICE_MANAGER=systemd FLOW_SYSTEMD_SCOPE=user ./.flow/shared/scripts/run.sh flow_configurator questionnaire --profile ${profile}

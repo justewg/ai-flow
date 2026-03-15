@@ -12,6 +12,7 @@ workspace_repo_url=""
 workspace_ref="development"
 workspace_path=""
 host_env_file=""
+platform_env_file=""
 source_flow_env=""
 toolkit_repo_url=""
 toolkit_ref="main"
@@ -46,6 +47,7 @@ Options:
   --workspace-ref <ref>        Git ref for workspace checkout. Default: development
   --workspace-path <path>      Workspace path. Default: <ai-flow-root>/workspaces/<profile>
   --host-env-file <path>       Host-local flow env path. Default: <ai-flow-root>/config/<profile>.flow.env
+  --platform-env-file <path>   Host-level ai-flow env path. Default: <ai-flow-root>/config/ai-flow.platform.env
   --source-flow-env <path>     Optional existing flow.env to copy before Linux normalization.
   --toolkit-repo <url>         ai-flow repo URL/path. Default: current origin or https://github.com/justewg/ai-flow.git
   --toolkit-ref <ref>          ai-flow ref for bootstrap. Default: main
@@ -468,6 +470,21 @@ normalize_host_env() {
   fi
 }
 
+ensure_platform_env() {
+  ensure_dir_owned "$(dirname "$platform_env_file")"
+  if [[ ! -f "$platform_env_file" ]]; then
+    : > "$platform_env_file"
+  fi
+  upsert_env_key "$platform_env_file" "AI_FLOW_ROOT_DIR" "$ai_flow_root"
+  upsert_env_key "$platform_env_file" "FLOW_HOST_RUNTIME_MODE" "linux-docker-hosted"
+  upsert_env_key "$platform_env_file" "GH_APP_PM2_APP_NAME" "ai-flow-gh-app-auth"
+  upsert_env_key "$platform_env_file" "OPS_BOT_PM2_APP_NAME" "ai-flow-ops-bot"
+  if ! chown "$runtime_user:$(runtime_group)" "$platform_env_file" 2>/dev/null; then
+    echo "Cannot assign ownership for ${platform_env_file}; ensure it is user-writable and owned by ${runtime_user}." >&2
+    exit 1
+  fi
+}
+
 ensure_workspace_env_symlink() {
   local workspace_env_link="${workspace_path}/.flow/config/flow.env"
   run_as_runtime_user mkdir -p "${workspace_path}/.flow/config"
@@ -492,6 +509,7 @@ WORKSPACE_PATH=${workspace_path}
 RUNTIME_HOME=${runtime_home}
 CODEX_HOME=${codex_home}
 HOST_ENV_FILE=${host_env_file}
+PLATFORM_ENV_FILE=${platform_env_file}
 OPENAI_ENV_FILE=${openai_env_file}
 RUNTIME_UID=$(runtime_uid)
 RUNTIME_GID=$(runtime_gid)
@@ -512,6 +530,7 @@ PROJECT_PROFILE=${profile}
 ROOT_DIR=${workspace_path}
 FLOW_WORKSPACE_PATH=${workspace_path}
 AI_FLOW_ROOT_DIR=${ai_flow_root}
+AI_FLOW_PLATFORM_ENV_FILE=${platform_env_file}
 DAEMON_GH_ENV_FILE=${host_env_file}
 FLOW_HOST_RUNTIME_MODE=linux-docker-hosted
 FLOW_DOCKER_COMPOSE_ROOT=${compose_root}
@@ -577,6 +596,7 @@ services:
     working_dir: ${WORKSPACE_PATH}
     env_file:
       - ./container.env
+      - ${PLATFORM_ENV_FILE}
       - ${HOST_ENV_FILE}
       - ${OPENAI_ENV_FILE}
     environment:
@@ -761,6 +781,11 @@ while [[ $# -gt 0 ]]; do
       host_env_file="$2"
       shift 2
       ;;
+    --platform-env-file)
+      [[ $# -ge 2 ]] || { echo "Missing value for --platform-env-file" >&2; exit 1; }
+      platform_env_file="$2"
+      shift 2
+      ;;
     --source-flow-env)
       [[ $# -ge 2 ]] || { echo "Missing value for --source-flow-env" >&2; exit 1; }
       source_flow_env="$2"
@@ -840,6 +865,7 @@ workspace_ref="$(prompt_value "Workspace git ref" "$workspace_ref")"
 workspace_path="$(expand_path "$(prompt_value "Workspace path" "${workspace_path:-${ai_flow_root}/workspaces/${profile}}")")"
 workspace_repo_url="$(normalize_repo_url "$(prompt_value "Workspace repo URL" "${workspace_repo_url:-$(existing_workspace_origin "$workspace_path")}" "0")")"
 host_env_file="$(expand_path "$(prompt_value "Host flow env path" "${host_env_file:-${ai_flow_root}/config/${profile}.flow.env}")")"
+platform_env_file="$(expand_path "$(prompt_value "AI flow platform env path" "${platform_env_file:-${ai_flow_root}/config/ai-flow.platform.env}")")"
 source_flow_env="$(expand_path "$(prompt_value "Existing flow.env to copy (optional)" "${source_flow_env:-}" 1)")"
 toolkit_repo_url="$(normalize_repo_url "$(prompt_value "Toolkit repo URL" "${toolkit_repo_url:-$(current_toolkit_origin)}")")"
 toolkit_ref="$(prompt_value "Toolkit git ref" "$toolkit_ref")"
@@ -868,6 +894,8 @@ step "Cloning or updating workspace at ${workspace_path}"
 clone_or_update_workspace
 step "Normalizing host env at ${host_env_file}"
 normalize_host_env
+step "Ensuring ai-flow platform env at ${platform_env_file}"
+ensure_platform_env
 step "Linking workspace flow.env"
 ensure_workspace_env_symlink
 step "Rendering Docker bootstrap files into ${compose_root}"
@@ -886,6 +914,7 @@ DOCKER_BOOTSTRAP_OK=1
 PROFILE=${profile}
 WORKSPACE_PATH=${workspace_path}
 HOST_ENV_FILE=${host_env_file}
+PLATFORM_ENV_FILE=${platform_env_file}
 COMPOSE_ROOT=${compose_root}
 COMPOSE_PROJECT_NAME=${compose_project_name}
 NEXT_UP=${compose_root}/up.sh

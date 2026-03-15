@@ -314,7 +314,7 @@ detect_platform_env_file() {
     printf '%s' "$AI_FLOW_PLATFORM_ENV_FILE"
     return 0
   fi
-  ai_flow_root_dir="$(codex_resolve_ai_flow_root_dir)"
+  ai_flow_root_dir="$(detect_ai_flow_root_dir)"
   candidate="${ai_flow_root_dir}/config/ai-flow.platform.env"
   if [[ -f "$candidate" ]]; then
     printf '%s' "$candidate"
@@ -326,6 +326,53 @@ detect_platform_env_file() {
     return 0
   fi
   printf '%s' "${ai_flow_root_dir}/config/ai-flow.platform.env"
+}
+
+detect_ai_flow_root_dir() {
+  local candidate env_root
+  if [[ -n "${AI_FLOW_ROOT_DIR:-}" ]]; then
+    printf '%s' "${AI_FLOW_ROOT_DIR}"
+    return 0
+  fi
+  if [[ -n "${AI_FLOW_PLATFORM_ENV_FILE:-}" && -f "${AI_FLOW_PLATFORM_ENV_FILE}" ]]; then
+    env_root="$(env_value "${AI_FLOW_PLATFORM_ENV_FILE}" "AI_FLOW_ROOT_DIR")"
+    if [[ -n "$env_root" ]]; then
+      printf '%s' "$env_root"
+      return 0
+    fi
+  fi
+  if [[ -n "$platform_env_file" && -f "$platform_env_file" ]]; then
+    env_root="$(env_value "$platform_env_file" "AI_FLOW_ROOT_DIR")"
+    if [[ -n "$env_root" ]]; then
+      printf '%s' "$env_root"
+      return 0
+    fi
+  fi
+  if [[ -n "$project_env_file" && -f "$project_env_file" ]]; then
+    env_root="$(env_value "$project_env_file" "AI_FLOW_ROOT_DIR")"
+    if [[ -n "$env_root" ]]; then
+      printf '%s' "$env_root"
+      return 0
+    fi
+  fi
+  if [[ -n "${DAEMON_GH_ENV_FILE:-}" && -f "${DAEMON_GH_ENV_FILE}" ]]; then
+    env_root="$(env_value "${DAEMON_GH_ENV_FILE}" "AI_FLOW_ROOT_DIR")"
+    if [[ -n "$env_root" ]]; then
+      printf '%s' "$env_root"
+      return 0
+    fi
+  fi
+  if [[ -n "$profile" ]]; then
+    candidate="$(detect_project_env_file "$(slugify "$profile")")"
+    if [[ -f "$candidate" ]]; then
+      env_root="$(env_value "$candidate" "AI_FLOW_ROOT_DIR")"
+      if [[ -n "$env_root" ]]; then
+        printf '%s' "$env_root"
+        return 0
+      fi
+    fi
+  fi
+  codex_resolve_ai_flow_root_dir
 }
 
 detect_project_env_file() {
@@ -552,7 +599,7 @@ platform_env_file="$(detect_platform_env_file)"
 
 section "Env Audit"
 report_ok "ROOT_DIR" "$ROOT_DIR"
-report_ok "AI_FLOW_ROOT_DIR" "$(codex_resolve_ai_flow_root_dir)"
+report_ok "AI_FLOW_ROOT_DIR" "$(detect_ai_flow_root_dir)"
 
 check_platform_file "$platform_env_file"
 

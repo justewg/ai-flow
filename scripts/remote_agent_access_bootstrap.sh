@@ -27,7 +27,7 @@ Provision optional remote-agent access for read-only external diagnostics:
 - writes audit log path for every accepted/denied command.
 
 Options:
-  --runtime-user <user>         Existing runtime owner (example: ewg). Default: current user.
+  --runtime-user <user>         Existing runtime owner. Default: current user.
   --agent-user <user>           Dedicated remote agent SSH user. Default: aiflow
   --ai-flow-root <path>         AI flow host root. Default: resolved AI_FLOW_ROOT_DIR
   --workspace-path <path>       Authoritative workspace. Default: current ROOT_DIR
@@ -90,6 +90,12 @@ ensure_user() {
     return 0
   fi
   useradd --create-home --shell /bin/bash "$agent_user"
+}
+
+ensure_agent_not_in_docker_group() {
+  if getent group docker >/dev/null 2>&1; then
+    gpasswd -d "$agent_user" docker >/dev/null 2>&1 || true
+  fi
 }
 
 install_gateway() {
@@ -210,6 +216,7 @@ id "$runtime_user" >/dev/null 2>&1 || {
 }
 
 ensure_user
+ensure_agent_not_in_docker_group
 passwd -l "$agent_user" >/dev/null 2>&1 || true
 install_gateway
 install_audit_log
@@ -247,6 +254,7 @@ AUDIT_LOG_PATH=${audit_log_path}
 SUDOERS_PATH=${sudoers_path}
 AUTHORIZED_KEY_FILE=${authorized_key_file:-}
 PASSWORD_MODE=${password_mode}
+DOCKER_GROUP_POLICY=agent-user-not-in-docker-group
 NEXT_PROBE_EXAMPLE=ssh ${agent_user}@<host> semantically_overqualified_runtime_snapshot_env_audit_bundle_v1
 NEXT_DISABLE=passwd -l ${agent_user} && rm -f ${sudoers_path}
 EOF

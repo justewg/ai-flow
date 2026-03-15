@@ -74,16 +74,26 @@ file_exists_json() {
   [[ -e "$1" ]] && printf 'true' || printf 'false'
 }
 
-capture_compose() {
-  if [[ -f "$COMPOSE_ENV_FILE" && -f "$COMPOSE_FILE" ]]; then
-    docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" "$@" 2>&1 || true
-  fi
-}
-
 capture_http_status() {
   local url="$1"
   shift || true
   curl -sS -o /dev/null -w '%{http_code}' "$@" "$url" 2>/dev/null || true
+}
+
+list_compose_services() {
+  local compose_file="$1"
+  [[ -f "$compose_file" ]] || return 0
+  awk '
+    BEGIN { in_services=0 }
+    /^services:[[:space:]]*$/ { in_services=1; next }
+    in_services && /^[^[:space:]]/ { exit }
+    in_services && /^  [A-Za-z0-9._-]+:[[:space:]]*$/ {
+      line=$0
+      sub(/^  /, "", line)
+      sub(/:[[:space:]]*$/, "", line)
+      print line
+    }
+  ' "$compose_file"
 }
 
 emit_runtime_snapshot_env_audit_bundle() {
@@ -169,24 +179,24 @@ emit_runtime_log_tail_bundle() {
 }
 
 emit_docker_compose_contract_surface() {
-  local resolved_compose services_output mount_excerpt runtime_home_pattern
+  local services_output mount_excerpt runtime_home_pattern platform_env_from_compose_env
   local platform_env_wired="0" whole_home_mount_present="0"
-  resolved_compose="$(capture_compose config)"
-  services_output="$(capture_compose config --services)"
+  services_output="$(list_compose_services "$COMPOSE_FILE")"
   runtime_home_pattern="$(read_env_key "$COMPOSE_ENV_FILE" "RUNTIME_HOME")"
   [[ -n "$runtime_home_pattern" ]] || runtime_home_pattern="/home/unknown"
+  platform_env_from_compose_env="$(read_env_key "$COMPOSE_ENV_FILE" "PLATFORM_ENV_FILE")"
 
   if [[ -f "$COMPOSE_FILE" ]] && grep -Eq '^[[:space:]]*-[[:space:]]*\$\{PLATFORM_ENV_FILE\}' "$COMPOSE_FILE"; then
     platform_env_wired="1"
   fi
-  if [[ -n "${resolved_compose}" ]] && printf '%s\n' "$resolved_compose" | grep -Fq "${runtime_home_pattern}:${runtime_home_pattern}"; then
-    whole_home_mount_present="1"
-  elif [[ -f "$COMPOSE_FILE" ]] && grep -Fq "${runtime_home_pattern}:${runtime_home_pattern}" "$COMPOSE_FILE"; then
+  if [[ -f "$COMPOSE_FILE" ]] && grep -Fq "${runtime_home_pattern}:${runtime_home_pattern}" "$COMPOSE_FILE"; then
     whole_home_mount_present="1"
   fi
 
   mount_excerpt="$(
-    printf '%s\n' "$resolved_compose" | grep -E 'source: /(var/sites/\.ai-flow|home/)|target: /(var/sites/\.ai-flow|home/)' || true
+    if [[ -f "$COMPOSE_FILE" ]]; then
+      rg -n -C 1 '/var/sites/\.ai-flow|/home/' "$COMPOSE_FILE" || true
+    fi
   )"
 
   jq -n \
@@ -194,6 +204,7 @@ emit_docker_compose_contract_surface() {
     --arg compose_env_file "$COMPOSE_ENV_FILE" \
     --arg compose_file "$COMPOSE_FILE" \
     --arg platform_env_file "$PLATFORM_ENV_FILE" \
+    --arg platform_env_file_from_compose_env "$platform_env_from_compose_env" \
     --arg project_env_file "$PROJECT_ENV_FILE" \
     --arg openai_env_file "$(read_env_key "$COMPOSE_ENV_FILE" "OPENAI_ENV_FILE")" \
     --arg runtime_home "$runtime_home_pattern" \
@@ -213,6 +224,7 @@ emit_docker_compose_contract_surface() {
       compose_file: $compose_file,
       compose_file_exists: $compose_file_exists,
       platform_env_file: $platform_env_file,
+      platform_env_file_from_compose_env: $platform_env_file_from_compose_env,
       project_env_file: $project_env_file,
       openai_env_file: $openai_env_file,
       runtime_home: $runtime_home,
@@ -224,29 +236,32 @@ emit_docker_compose_contract_surface() {
 }
 
 emit_ops_bot_debug_gate_surface() {
-  local ops_port debug_enabled debug_token container_env_output
-  local health_http_status debug_http_status local_runtime_status
+  local ops_port debug_enabled debug_token
+  local health_http_status debug_http_status debug_enabled_normalized
   ops_port="$(read_env_key "$PROJECT_ENV_FILE" "OPS_BOT_PORT")"
   [[ -n "$ops_port" ]] || ops_port="8790"
   debug_enabled="$(read_env_key "$PLATFORM_ENV_FILE" "OPS_BOT_DEBUG_ENABLED")"
+  debug_enabled_normalized="$(printf '%s' "$debug_enabled" | tr '[:upper:]' '[:lower:]')"
   debug_token="$(read_env_key "$PLATFORM_ENV_FILE" "OPS_BOT_DEBUG_BEARER_TOKEN")"
-  container_env_output="$(capture_compose exec -T ops-bot env | grep '^OPS_BOT_DEBUG' || true)"
   health_http_status="$(capture_http_status "http://127.0.0.1:${ops_port}/health")"
   debug_http_status=""
   if [[ -n "$debug_token" ]]; then
     debug_http_status="$(capture_http_status "http://127.0.0.1:${ops_port}/ops/debug/runtime.json" -H "Authorization: Bearer ${debug_token}")"
   fi
-  local_runtime_status="$(capture_compose ps ops-bot)"
 
   jq -n \
     --arg ops_port "$ops_port" \
     --arg debug_enabled_raw "$debug_enabled" \
-    --arg container_env_output "$container_env_output" \
     --arg health_http_status "$health_http_status" \
     --arg debug_http_status "$debug_http_status" \
-    --arg local_runtime_status "$local_runtime_status" \
+    --arg platform_env_file "$PLATFORM_ENV_FILE" \
+    --arg compose_env_file "$COMPOSE_ENV_FILE" \
+    --arg compose_file "$COMPOSE_FILE" \
     --argjson debug_token_present "$(bool_json "$([[ -n "$debug_token" ]] && echo 1 || echo 0)")" \
-    --argjson debug_enabled_truthy "$(bool_json "$([[ "${debug_enabled,,}" =~ ^(1|true|yes|on)$ ]] && echo 1 || echo 0)")" \
+    --argjson debug_enabled_truthy "$(bool_json "$([[ "$debug_enabled_normalized" =~ ^(1|true|yes|on)$ ]] && echo 1 || echo 0)")" \
+    --argjson platform_env_file_exists "$(file_exists_json "$PLATFORM_ENV_FILE")" \
+    --argjson compose_env_file_exists "$(file_exists_json "$COMPOSE_ENV_FILE")" \
+    --argjson compose_file_exists "$(file_exists_json "$COMPOSE_FILE")" \
     '{
       probe: "semantically_overqualified_ops_bot_debug_gate_surface_v1",
       ops_port: $ops_port,
@@ -255,8 +270,12 @@ emit_ops_bot_debug_gate_surface() {
       debug_token_present: $debug_token_present,
       health_http_status: $health_http_status,
       debug_http_status: $debug_http_status,
-      container_env_output: $container_env_output,
-      compose_ps_ops_bot: $local_runtime_status
+      platform_env_file: $platform_env_file,
+      platform_env_file_exists: $platform_env_file_exists,
+      compose_env_file: $compose_env_file,
+      compose_env_file_exists: $compose_env_file_exists,
+      compose_file: $compose_file,
+      compose_file_exists: $compose_file_exists
     }'
 }
 

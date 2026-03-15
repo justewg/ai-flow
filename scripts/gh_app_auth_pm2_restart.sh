@@ -8,7 +8,7 @@ codex_load_flow_env
 FLOW_LOGS_DIR="$(codex_resolve_flow_logs_dir)"
 FLOW_PM2_LOG_DIR="$(codex_resolve_flow_pm2_log_dir)"
 export FLOW_LOGS_DIR FLOW_PM2_LOG_DIR
-PM2_APP_NAME="${GH_APP_PM2_APP_NAME:-planka-gh-app-auth}"
+PM2_APP_NAME="${GH_APP_PM2_APP_NAME:-ai-flow-gh-app-auth}"
 
 if ! command -v pm2 >/dev/null 2>&1; then
   echo "pm2 command is required (install: npm install -g pm2)" >&2

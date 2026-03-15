@@ -195,7 +195,7 @@ function createGitHubTokenFetcher(config) {
         headers: {
           Authorization: `Bearer ${jwt}`,
           Accept: "application/vnd.github+json",
-          "User-Agent": "planka-gh-app-auth-service",
+          "User-Agent": "ai-flow-gh-app-auth-service",
           "X-GitHub-Api-Version": "2022-11-28",
           "Content-Type": "application/json",
           "Content-Length": "0",

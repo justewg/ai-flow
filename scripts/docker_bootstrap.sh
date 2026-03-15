@@ -39,7 +39,7 @@ Bootstrap docker-based ai-flow runtime on a Linux host:
 - optionally runs `docker compose config` and `docker compose up -d --build`.
 
 Options:
-  --profile <name>             First managed project profile (example: planka).
+  --profile <name>             First managed project profile (example: acme).
   --runtime-user <user>        Linux user owning automation runtime. Default: current user.
   --ai-flow-root <path>        Host root for config/state/logs/workspaces. Default: /var/sites/.ai-flow if writable, otherwise $HOME/.ai-flow
   --workspace-repo <url>       Consumer repo URL or path for authoritative workspace.
@@ -52,7 +52,7 @@ Options:
   --compose-root <path>        Docker compose root. Default: <ai-flow-root>/docker/<profile>
   --runtime-home <path>        Runtime HOME mounted into containers. Default: /home/<runtime-user>
   --codex-home <path>          CODEX_HOME inside runtime. Default: <runtime-home>/.codex-server-api
-  --openai-env-file <path>     Host-local env file with OPENAI_API_KEY. Default: <runtime-home>/.config/planka-automation/openai.env
+  --openai-env-file <path>     Host-local env file with OPENAI_API_KEY. Default: <runtime-home>/.config/ai-flow/openai.env
   --daemon-interval <seconds>  Daemon loop interval. Default: 45
   --watchdog-interval <sec>    Watchdog loop interval. Default: 45
   --config <ask|yes|no>        Run `docker compose config`. Default: yes
@@ -153,6 +153,13 @@ normalize_repo_url() {
 
 current_toolkit_origin() {
   git -C "$(cd "${SCRIPT_DIR}/.." && pwd)" remote get-url origin 2>/dev/null || true
+}
+
+existing_workspace_origin() {
+  local workspace_dir="${1:-}"
+  if [[ -d "${workspace_dir}/.git" ]]; then
+    git -C "$workspace_dir" remote get-url origin 2>/dev/null || true
+  fi
 }
 
 current_user() {
@@ -821,7 +828,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-profile="$(slugify "$(prompt_value "First managed project profile" "${profile:-planka}")")"
+profile="$(slugify "$(prompt_value "First managed project profile" "${profile:-acme}")")"
 if [[ "$assume_defaults" == "1" ]]; then
   step "Interactive input detected: no (assume-defaults)"
 else
@@ -829,9 +836,9 @@ else
 fi
 runtime_user="$(prompt_value "Runtime user" "$runtime_user")"
 ai_flow_root="$(expand_path "$(prompt_value "AI flow root" "${ai_flow_root:-$(default_ai_flow_root)}")")"
-workspace_repo_url="$(normalize_repo_url "$(prompt_value "Workspace repo URL" "${workspace_repo_url:-justewg/planka}")")"
 workspace_ref="$(prompt_value "Workspace git ref" "$workspace_ref")"
 workspace_path="$(expand_path "$(prompt_value "Workspace path" "${workspace_path:-${ai_flow_root}/workspaces/${profile}}")")"
+workspace_repo_url="$(normalize_repo_url "$(prompt_value "Workspace repo URL" "${workspace_repo_url:-$(existing_workspace_origin "$workspace_path")}" "0")")"
 host_env_file="$(expand_path "$(prompt_value "Host flow env path" "${host_env_file:-${ai_flow_root}/config/${profile}.flow.env}")")"
 source_flow_env="$(expand_path "$(prompt_value "Existing flow.env to copy (optional)" "${source_flow_env:-}" 1)")"
 toolkit_repo_url="$(normalize_repo_url "$(prompt_value "Toolkit repo URL" "${toolkit_repo_url:-$(current_toolkit_origin)}")")"
@@ -839,7 +846,7 @@ toolkit_ref="$(prompt_value "Toolkit git ref" "$toolkit_ref")"
 compose_root="$(expand_path "$(prompt_value "Docker compose root" "${compose_root:-${ai_flow_root}/docker/${profile}}")")"
 runtime_home="$(expand_path "$(prompt_value "Runtime HOME path" "${runtime_home:-$(default_runtime_home)}")")"
 codex_home="$(expand_path "$(prompt_value "CODEX_HOME path" "${codex_home:-${runtime_home}/.codex-server-api}")")"
-openai_env_file="$(expand_path "$(prompt_value "OpenAI env file" "${openai_env_file:-${runtime_home}/.config/planka-automation/openai.env}")")"
+openai_env_file="$(expand_path "$(prompt_value "OpenAI env file" "${openai_env_file:-${runtime_home}/.config/ai-flow/openai.env}")")"
 daemon_interval="$(prompt_value "Daemon interval (seconds)" "$daemon_interval")"
 watchdog_interval="$(prompt_value "Watchdog interval (seconds)" "$watchdog_interval")"
 run_compose_config="$(prompt_choice "Run docker compose config" "$run_compose_config")"

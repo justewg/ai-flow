@@ -40,7 +40,7 @@ Usage:
   .flow/shared/scripts/ops_bot_webhook_register.sh info
 
 Environment (from .flow/config/flow.env or process env):
-  OPS_BOT_PUBLIC_BASE_URL (required for register; example: https://planka.ewg40.ru)
+  OPS_BOT_PUBLIC_BASE_URL (required for register; example: https://aiflow.ewg40.ru)
   OPS_BOT_WEBHOOK_PATH (optional, default: /telegram/webhook)
   OPS_BOT_WEBHOOK_SECRET (optional; appended to webhook path)
   OPS_BOT_TG_SECRET_TOKEN (optional; passed as secret_token for Telegram webhook)
@@ -93,7 +93,7 @@ run_delete_webhook() {
 run_set_webhook() {
   public_base_url="$(normalize_base_url "${OPS_BOT_PUBLIC_BASE_URL:-}")"
   if [[ -z "$public_base_url" ]]; then
-    echo "OPS_BOT_PUBLIC_BASE_URL is required for register (example: https://planka.ewg40.ru)." >&2
+    echo "OPS_BOT_PUBLIC_BASE_URL is required for register (example: https://aiflow.ewg40.ru)." >&2
     exit 1
   fi
   if [[ "$public_base_url" != http://* && "$public_base_url" != https://* ]]; then

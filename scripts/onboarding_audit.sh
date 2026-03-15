@@ -549,7 +549,7 @@ else
       report_ok "ENV_GH_APP_PM2_APP_NAME" "$gh_app_pm2_name"
     elif is_truthy "$gh_app_pm2_use_default"; then
       if [[ -n "$auth_service_coordinates" ]]; then
-        report_ok "ENV_GH_APP_PM2_APP_NAME" "using-default:planka-gh-app-auth"
+        report_ok "ENV_GH_APP_PM2_APP_NAME" "using-default:ai-flow-gh-app-auth"
         report_ok "ENV_GH_APP_PM2_USE_DEFAULT" "1"
         report_ok "ENV_GH_APP_SERVICE_COORDINATES" "$auth_service_coordinates"
       else
@@ -557,7 +557,7 @@ else
         report_action "ENV_GH_APP_PM2_USE_DEFAULT" "Если используешь shared/default auth-service, укажи координаты через DAEMON_GH_AUTH_TOKEN_URL или GH_APP_BIND/GH_APP_PORT. Иначе убери GH_APP_PM2_USE_DEFAULT=1 и задай отдельный GH_APP_PM2_APP_NAME."
       fi
     elif [[ "${profile:-default}" != "default" ]]; then
-      report_warn "ENV_GH_APP_PM2_APP_NAME" "using-default:planka-gh-app-auth"
+      report_warn "ENV_GH_APP_PM2_APP_NAME" "using-default:ai-flow-gh-app-auth"
       report_action "ENV_GH_APP_PM2_APP_NAME" "Если auth-service будет отдельным для этого consumer-project, задай уникальное GH_APP_PM2_APP_NAME в .env или .env.deploy. Если auth-service общий на хосте, можно оставить shared имя."
     fi
   fi
@@ -628,9 +628,9 @@ else
     if [[ -n "$ops_bot_pm2_name" ]]; then
       report_ok "ENV_OPS_BOT_PM2_APP_NAME" "$ops_bot_pm2_name"
     elif is_truthy "$ops_bot_use_default"; then
-      report_ok "ENV_OPS_BOT_PM2_APP_NAME" "using-default:planka-ops-bot"
+      report_ok "ENV_OPS_BOT_PM2_APP_NAME" "using-default:ai-flow-ops-bot"
     elif [[ "${profile:-default}" != "default" ]]; then
-      report_warn "ENV_OPS_BOT_PM2_APP_NAME" "using-default:planka-ops-bot"
+      report_warn "ENV_OPS_BOT_PM2_APP_NAME" "using-default:ai-flow-ops-bot"
       report_action "ENV_OPS_BOT_PM2_APP_NAME" "Если ops-bot будет отдельным для consumer-project, задай уникальное OPS_BOT_PM2_APP_NAME в .env или .env.deploy."
     fi
     if [[ -n "$ops_bot_port" ]]; then

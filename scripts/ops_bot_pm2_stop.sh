@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PM2_APP_NAME="${OPS_BOT_PM2_APP_NAME:-planka-ops-bot}"
+PM2_APP_NAME="${OPS_BOT_PM2_APP_NAME:-ai-flow-ops-bot}"
 
 if ! command -v pm2 >/dev/null 2>&1; then
   echo "pm2 command is required (install: npm install -g pm2)" >&2

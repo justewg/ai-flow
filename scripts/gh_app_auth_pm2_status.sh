@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./env/bootstrap.sh
 source "${SCRIPT_DIR}/env/bootstrap.sh"
 codex_load_flow_env
-PM2_APP_NAME="${GH_APP_PM2_APP_NAME:-planka-gh-app-auth}"
+PM2_APP_NAME="${GH_APP_PM2_APP_NAME:-ai-flow-gh-app-auth}"
 require_online=0
 
 if [[ "${1:-}" == "--require-online" ]]; then

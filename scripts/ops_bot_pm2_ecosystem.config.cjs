@@ -5,7 +5,7 @@ const path = require("path");
 const rootDir = path.resolve(__dirname, "../..");
 const flowRootDir = path.join(rootDir, ".flow");
 const flowLogsDir = process.env.FLOW_LOGS_DIR || path.join(flowRootDir, "logs");
-const pm2AppName = process.env.OPS_BOT_PM2_APP_NAME || "planka-ops-bot";
+const pm2AppName = process.env.OPS_BOT_PM2_APP_NAME || "ai-flow-ops-bot";
 const pm2LogDir = process.env.FLOW_PM2_LOG_DIR || path.join(flowLogsDir, "pm2");
 
 module.exports = {

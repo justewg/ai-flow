@@ -9,7 +9,7 @@ FLOW_LOGS_DIR="$(codex_resolve_flow_logs_dir)"
 PM2_LOG_DIR="$(codex_resolve_flow_pm2_log_dir)"
 FLOW_PM2_LOG_DIR="${PM2_LOG_DIR}"
 export FLOW_LOGS_DIR FLOW_PM2_LOG_DIR
-PM2_APP_NAME="${GH_APP_PM2_APP_NAME:-planka-gh-app-auth}"
+PM2_APP_NAME="${GH_APP_PM2_APP_NAME:-ai-flow-gh-app-auth}"
 PM2_ECOSYSTEM_FILE="${CODEX_SHARED_SCRIPTS_DIR}/gh_app_auth_pm2_ecosystem.config.cjs"
 
 if ! command -v pm2 >/dev/null 2>&1; then

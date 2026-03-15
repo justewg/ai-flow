@@ -317,7 +317,7 @@ Rollback нового профиля:
 - `GH_APP_TOKEN_SKEW_SEC` — упреждающее обновление installation token (по умолчанию `300` сек).
 - `GH_APP_API_BASE_URL` — базовый URL GitHub API (по умолчанию `https://api.github.com`).
 - `GH_APP_HTTP_TIMEOUT_MS` — timeout HTTP-запроса к GitHub API (по умолчанию `10000` мс).
-- `GH_APP_PM2_APP_NAME` — имя PM2 процесса auth-сервиса (по умолчанию `planka-gh-app-auth`).
+- `GH_APP_PM2_APP_NAME` — имя PM2 процесса auth-сервиса (host-level default: `ai-flow-gh-app-auth`; dedicated profile обычно использует `${PROJECT_PROFILE}-gh-app-auth`).
 - `GH_APP_PM2_USE_DEFAULT` — если `1/true/yes/on`, `onboarding_audit` считает shared/default auth-service допустимым без отдельного `GH_APP_PM2_APP_NAME`, но только если явно заданы координаты сервиса через `DAEMON_GH_AUTH_TOKEN_URL` или `GH_APP_BIND/GH_APP_PORT`.
 - `GH_APP_PM2_RESTART_TIMEOUT_SEC` — timeout проверки авто-restart в `gh_app_auth_pm2_crash_test` (по умолчанию `20` сек).
 - `DAEMON_GH_ENV_FILE` — явный путь к project-scoped flow env-файлу; `profile_init install` прокидывает его в `launchd`-plist, чтобы daemon/watchdog переживали новый shell/login без ручного export.
@@ -751,7 +751,7 @@ chmod +x .flow/shared/scripts/*.sh
 - `WATCHDOG_DAEMON_LOG_STALE_RATE_LIMIT_SEC` (порог stale daemon log/lock для `WAIT_GITHUB_RATE_LIMIT`; по умолчанию `DAEMON_RATE_LIMIT_MAX_SLEEP_SEC + WATCHDOG_DAEMON_INTERVAL_SEC + 60`)
 - `OPS_BOT_BIND` (bind ops-бот сервиса; по умолчанию `127.0.0.1`)
 - `OPS_BOT_PORT` (порт ops-бот сервиса; по умолчанию `8790`)
-- `OPS_BOT_USE_DEFAULT` (если `1/true/yes/on`, `onboarding_audit` считает допустимым shared/default local ops-bot на текущем хосте: `PM2_APP_NAME=planka-ops-bot`, `BIND=127.0.0.1`, `PORT=8790`; public/remote contour при этом оценивается отдельно через `OPS_BOT_PUBLIC_BASE_URL` и `OPS_REMOTE_*`)
+- `OPS_BOT_USE_DEFAULT` (если `1/true/yes/on`, `onboarding_audit` считает допустимым shared/default local ops-bot на текущем хосте: `PM2_APP_NAME=ai-flow-ops-bot`, `BIND=127.0.0.1`, `PORT=8790`; public/remote contour при этом оценивается отдельно через `OPS_BOT_PUBLIC_BASE_URL` и `OPS_REMOTE_*`)
 - `OPS_BOT_WEBHOOK_PATH` (базовый path webhook; по умолчанию `/telegram/webhook`)
 - `OPS_BOT_WEBHOOK_SECRET` (добавляется в path webhook для защиты URL)
 - `OPS_BOT_TG_SECRET_TOKEN` (опциональная проверка заголовка `X-Telegram-Bot-Api-Secret-Token`)
@@ -775,14 +775,14 @@ chmod +x .flow/shared/scripts/*.sh
 - `OPS_BOT_DEBUG_MAX_LINES` (верхний лимит `lines` для debug tail endpoint; по умолчанию `400`)
 - `OPS_BOT_DEBUG_MAX_BYTES` (сколько байт читать с конца лог-файла перед line-tail; по умолчанию `262144`)
 - `OPS_BOT_TG_BOT_TOKEN` (опциональный токен бота; fallback chain: `OPS_BOT_TG_BOT_TOKEN -> DAEMON_TG_BOT_TOKEN -> TG_BOT_TOKEN`)
-- `OPS_BOT_PM2_APP_NAME` (имя PM2 процесса ops-бота; по умолчанию `planka-ops-bot`)
+- `OPS_BOT_PM2_APP_NAME` (имя PM2 процесса ops-бота; host-level default: `ai-flow-ops-bot`; dedicated profile обычно использует `${PROJECT_PROFILE}-ops-bot`)
 - `OPS_REMOTE_STATUS_PUSH_ENABLED` (включает push локального snapshot на удаленный ingest endpoint)
-- `OPS_REMOTE_STATUS_PUSH_URL` (полный URL ingest endpoint, например `https://planka-dev.ewg40.ru/ops/ingest/status`)
+- `OPS_REMOTE_STATUS_PUSH_URL` (полный URL ingest endpoint, например `https://aiflow.ewg40.ru/ops/ingest/status`)
 - `OPS_REMOTE_STATUS_PUSH_SECRET` (секрет заголовка `X-Ops-Status-Secret` для push)
 - `OPS_REMOTE_STATUS_PUSH_TIMEOUT_SEC` (HTTP timeout push-запроса; по умолчанию `6`)
 - `OPS_REMOTE_STATUS_PUSH_SOURCE` (лейбл источника; по умолчанию `PROJECT_PROFILE`, затем repo-name, затем hostname)
 - `OPS_REMOTE_SUMMARY_PUSH_ENABLED` (включает push локального summary bundle на удаленный ingest endpoint)
-- `OPS_REMOTE_SUMMARY_PUSH_URL` (полный URL summary ingest endpoint, например `https://planka-dev.ewg40.ru/ops/ingest/log-summary`)
+- `OPS_REMOTE_SUMMARY_PUSH_URL` (полный URL summary ingest endpoint, например `https://aiflow.ewg40.ru/ops/ingest/log-summary`)
 - `OPS_REMOTE_SUMMARY_PUSH_SECRET` (секрет заголовка `X-Ops-Status-Secret` для summary push; fallback к `OPS_REMOTE_STATUS_PUSH_SECRET`)
 - `OPS_REMOTE_SUMMARY_PUSH_TIMEOUT_SEC` (HTTP timeout summary push-запроса; по умолчанию `8`)
 - `OPS_REMOTE_SUMMARY_PUSH_SOURCE` (лейбл источника summary push; по умолчанию `PROJECT_PROFILE`, затем repo-name, затем hostname)

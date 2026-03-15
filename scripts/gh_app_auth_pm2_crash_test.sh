@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-PM2_APP_NAME="${GH_APP_PM2_APP_NAME:-planka-gh-app-auth}"
+PM2_APP_NAME="${GH_APP_PM2_APP_NAME:-ai-flow-gh-app-auth}"
 RESTART_TIMEOUT_SEC="${GH_APP_PM2_RESTART_TIMEOUT_SEC:-20}"
 
 extract_kv() {

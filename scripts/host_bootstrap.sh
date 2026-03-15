@@ -30,7 +30,7 @@ Bootstrap Linux-hosted flow runtime on a server:
 - optionally runs questionnaire, onboarding audit, and service install.
 
 Options:
-  --profile <name>             Project profile (example: planka).
+  --profile <name>             Project profile (example: acme).
   --runtime-user <user>        Linux user owning automation runtime. Default: current user.
   --ai-flow-root <path>        Host root for config/state/logs/workspaces. Default: /var/sites/.ai-flow
   --workspace-repo <url>       Consumer repo URL to clone into authoritative workspace.
@@ -46,8 +46,8 @@ Options:
   -h, --help                   Show help.
 
 Examples:
-  .flow/shared/scripts/host_bootstrap.sh --profile planka --workspace-repo https://github.com/justewg/planka.git
-  bash <(curl -fsSL https://raw.githubusercontent.com/justewg/ai-flow/main/flow-host-init.sh) --profile planka
+  .flow/shared/scripts/host_bootstrap.sh --profile acme --workspace-repo https://github.com/example/acme.git
+  bash <(curl -fsSL https://raw.githubusercontent.com/justewg/ai-flow/main/flow-host-init.sh) --profile acme
 EOF
 }
 
@@ -129,6 +129,13 @@ normalize_repo_url() {
 
 current_toolkit_origin() {
   git -C "$(cd "${SCRIPT_DIR}/.." && pwd)" remote get-url origin 2>/dev/null || true
+}
+
+existing_workspace_origin() {
+  local workspace_dir="${1:-}"
+  if [[ -d "${workspace_dir}/.git" ]]; then
+    git -C "$workspace_dir" remote get-url origin 2>/dev/null || true
+  fi
 }
 
 current_user() {
@@ -491,18 +498,18 @@ if [[ -z "$toolkit_repo_url" ]]; then
 fi
 
 if [[ -z "$profile" ]]; then
-  profile="$(prompt_value "Project profile" "planka" "0")"
+  profile="$(prompt_value "Project profile" "acme" "0")"
 fi
 profile="$(slugify "$profile")"
 
 runtime_user="$(prompt_value "Runtime user" "$runtime_user" "0")"
 ai_flow_root="$(expand_path "$(prompt_value "AI flow root" "$ai_flow_root" "0")")"
-workspace_repo_url="$(normalize_repo_url "$(prompt_value "Workspace repo URL" "$workspace_repo_url" "0")")"
 workspace_ref="$(prompt_value "Workspace git ref" "$workspace_ref" "0")"
 if [[ -z "$workspace_path" ]]; then
   workspace_path="${ai_flow_root}/workspaces/${profile}"
 fi
 workspace_path="$(expand_path "$(prompt_value "Workspace path" "$workspace_path" "0")")"
+workspace_repo_url="$(normalize_repo_url "$(prompt_value "Workspace repo URL" "${workspace_repo_url:-$(existing_workspace_origin "$workspace_path")}" "0")")"
 if [[ -z "$host_env_file" ]]; then
   host_env_file="${ai_flow_root}/config/${profile}.flow.env"
 fi

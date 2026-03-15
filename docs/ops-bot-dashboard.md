@@ -49,7 +49,7 @@ OPS_BOT_WEBHOOK_PATH=/telegram/webhook
 OPS_BOT_WEBHOOK_SECRET=<long-random-path-secret>
 OPS_BOT_TG_SECRET_TOKEN=<long-random-header-secret>
 OPS_BOT_ALLOWED_CHAT_IDS=<your_chat_id>
-OPS_BOT_PUBLIC_BASE_URL=https://ops.example.com  # public status/webhook server URL
+  OPS_BOT_PUBLIC_BASE_URL=https://aiflow.example.com  # host-level public status/webhook server URL
 OPS_BOT_DEBUG_ENABLED=1
 OPS_BOT_DEBUG_BEARER_TOKEN=<long-random-bearer-token>
 # TG_BOT_TOKEN=... (или OPS_BOT_TG_BOT_TOKEN)
@@ -108,11 +108,11 @@ OPS_BOT_REMOTE_SUMMARY_TTL_SEC=1200
 На локальном рантайме (daemon-loop):
 ```bash
 OPS_REMOTE_STATUS_PUSH_ENABLED=1
-OPS_REMOTE_STATUS_PUSH_URL=https://ops-runtime.example.com/ops/ingest/status
+OPS_REMOTE_STATUS_PUSH_URL=https://aiflow.example.com/ops/ingest/status
 OPS_REMOTE_STATUS_PUSH_SECRET=<shared-secret>
 OPS_REMOTE_STATUS_SOURCE=planka
 OPS_REMOTE_SUMMARY_PUSH_ENABLED=1
-OPS_REMOTE_SUMMARY_PUSH_URL=https://ops-runtime.example.com/ops/ingest/log-summary
+OPS_REMOTE_SUMMARY_PUSH_URL=https://aiflow.example.com/ops/ingest/log-summary
 OPS_REMOTE_SUMMARY_PUSH_SECRET=<shared-secret>
 OPS_REMOTE_SUMMARY_PUSH_HOURS=1,6,24
 OPS_REMOTE_SUMMARY_PUSH_MIN_INTERVAL_SEC=300

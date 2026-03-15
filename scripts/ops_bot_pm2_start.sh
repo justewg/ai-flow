@@ -9,7 +9,7 @@ FLOW_LOGS_DIR="$(codex_resolve_flow_logs_dir)"
 PM2_LOG_DIR="$(codex_resolve_flow_pm2_log_dir)"
 FLOW_PM2_LOG_DIR="${PM2_LOG_DIR}"
 export FLOW_LOGS_DIR FLOW_PM2_LOG_DIR
-PM2_APP_NAME="${OPS_BOT_PM2_APP_NAME:-planka-ops-bot}"
+PM2_APP_NAME="${OPS_BOT_PM2_APP_NAME:-ai-flow-ops-bot}"
 PM2_ECOSYSTEM_FILE="${CODEX_SHARED_SCRIPTS_DIR}/ops_bot_pm2_ecosystem.config.cjs"
 
 if ! command -v pm2 >/dev/null 2>&1; then

@@ -227,17 +227,38 @@ emit_compose_metadata() {
   local interval="$3"
   local ttl="$4"
   local compose_root compose_file compose_env_file services whole_home_mount platform_env_wired
+  local project_public_env_file platform_public_env_file project_secrets_env_file platform_secrets_env_file openai_env_file server_env_authority_wired legacy_runtime_env_fallback
   compose_root="$(read_env_key "$project_env" "COMPOSE_ROOT" || true)"
   compose_file="$(read_env_key "$project_env" "COMPOSE_FILE" || true)"
   compose_env_file="$(read_env_key "$project_env" "COMPOSE_ENV_FILE" || true)"
   services="$(list_compose_services "$compose_file")"
+  project_public_env_file=""
+  platform_public_env_file=""
+  project_secrets_env_file=""
+  platform_secrets_env_file=""
+  openai_env_file=""
   whole_home_mount="0"
   platform_env_wired="0"
+  server_env_authority_wired="0"
+  legacy_runtime_env_fallback="0"
   if [[ -f "$compose_file" ]] && grep -Eq '^[[:space:]]*-[[:space:]]*/home/[^:]+:/home/[^[:space:]]+' "$compose_file"; then
     whole_home_mount="1"
   fi
-  if [[ -f "$compose_file" ]] && grep -Eq 'PLATFORM_ENV_FILE|/etc/ai-flow/public/platform\.env' "$compose_file"; then
+  if [[ -f "$compose_file" ]] && grep -Eq 'PLATFORM_ENV_FILE|PLATFORM_PUBLIC_ENV_FILE|/etc/ai-flow/public/platform\.env' "$compose_file"; then
     platform_env_wired="1"
+  fi
+  if [[ -f "$compose_env_file" ]]; then
+    project_public_env_file="$(read_env_key "$compose_env_file" "PROJECT_PUBLIC_ENV_FILE" || true)"
+    platform_public_env_file="$(read_env_key "$compose_env_file" "PLATFORM_PUBLIC_ENV_FILE" || true)"
+    project_secrets_env_file="$(read_env_key "$compose_env_file" "PROJECT_SECRETS_ENV_FILE" || true)"
+    platform_secrets_env_file="$(read_env_key "$compose_env_file" "PLATFORM_SECRETS_ENV_FILE" || true)"
+    openai_env_file="$(read_env_key "$compose_env_file" "OPENAI_ENV_FILE" || true)"
+  fi
+  if [[ "$project_public_env_file" == /etc/ai-flow/* && "$platform_public_env_file" == /etc/ai-flow/* && "$project_secrets_env_file" == /etc/ai-flow/* && "$platform_secrets_env_file" == /etc/ai-flow/* ]]; then
+    server_env_authority_wired="1"
+  fi
+  if [[ "$project_public_env_file" == /var/sites/.ai-flow/config/* || "$platform_public_env_file" == /var/sites/.ai-flow/config/* || "$project_secrets_env_file" == /var/sites/.ai-flow/config/* || "$platform_secrets_env_file" == /var/sites/.ai-flow/config/* || "$openai_env_file" == /home/*/.config/ai-flow/openai.env ]]; then
+    legacy_runtime_env_fallback="1"
   fi
 
   jq -cn \
@@ -246,12 +267,19 @@ emit_compose_metadata() {
     --arg compose_root "$compose_root" \
     --arg compose_file "$compose_file" \
     --arg compose_env_file "$compose_env_file" \
+    --arg project_public_env_file "$project_public_env_file" \
+    --arg platform_public_env_file "$platform_public_env_file" \
+    --arg project_secrets_env_file "$project_secrets_env_file" \
+    --arg platform_secrets_env_file "$platform_secrets_env_file" \
+    --arg openai_env_file "$openai_env_file" \
     --argjson publisher_interval_sec "$interval" \
     --argjson snapshot_ttl_sec "$ttl" \
     --argjson compose_root_exists "$(file_exists_json "$compose_root")" \
     --argjson compose_file_exists "$(file_exists_json "$compose_file")" \
     --argjson compose_env_file_exists "$(file_exists_json "$compose_env_file")" \
     --argjson platform_env_wired "$([[ "$platform_env_wired" == "1" ]] && echo true || echo false)" \
+    --argjson server_env_authority_wired "$([[ "$server_env_authority_wired" == "1" ]] && echo true || echo false)" \
+    --argjson legacy_runtime_env_fallback "$([[ "$legacy_runtime_env_fallback" == "1" ]] && echo true || echo false)" \
     --argjson whole_home_mount_present "$([[ "$whole_home_mount" == "1" ]] && echo true || echo false)" \
     --argjson services "$(lines_to_json_array "$services")" \
     '{
@@ -266,7 +294,14 @@ emit_compose_metadata() {
       compose_file_exists: $compose_file_exists,
       compose_env_file: $compose_env_file,
       compose_env_file_exists: $compose_env_file_exists,
+      project_public_env_file: $project_public_env_file,
+      platform_public_env_file: $platform_public_env_file,
+      project_secrets_env_file: $project_secrets_env_file,
+      platform_secrets_env_file: $platform_secrets_env_file,
+      openai_env_file: $openai_env_file,
       platform_env_wired: $platform_env_wired,
+      server_env_authority_wired: $server_env_authority_wired,
+      legacy_runtime_env_fallback: $legacy_runtime_env_fallback,
       whole_home_mount_present: $whole_home_mount_present,
       services: $services
     }'

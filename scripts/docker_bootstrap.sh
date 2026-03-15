@@ -13,6 +13,10 @@ workspace_ref="development"
 workspace_path=""
 host_env_file=""
 platform_env_file=""
+project_public_env_file=""
+platform_public_env_file=""
+project_secrets_env_file=""
+platform_secrets_env_file=""
 source_flow_env=""
 toolkit_repo_url=""
 toolkit_ref="main"
@@ -51,13 +55,21 @@ Options:
   --workspace-path <path>      Workspace path. Default: <ai-flow-root>/workspaces/<profile>
   --host-env-file <path>       Host-local flow env path. Default: <ai-flow-root>/config/<profile>.flow.env
   --platform-env-file <path>   Host-level ai-flow env path. Default: <ai-flow-root>/config/ai-flow.platform.env
+  --project-public-env-file <path>
+                               Runtime project public env authority. Default: /etc/ai-flow/public/projects/<profile>.env when present, otherwise <host-env-file>
+  --platform-public-env-file <path>
+                               Runtime platform public env authority. Default: /etc/ai-flow/public/platform.env when present, otherwise <platform-env-file>
+  --project-secrets-env-file <path>
+                               Runtime project secrets env authority. Default: /etc/ai-flow/secrets/projects/<profile>/runtime.env when present, otherwise <host-env-file>
+  --platform-secrets-env-file <path>
+                               Runtime platform secrets env authority. Default: /etc/ai-flow/secrets/platform/runtime.env when present, otherwise <platform-env-file>
   --source-flow-env <path>     Optional existing flow.env to copy before Linux normalization.
   --toolkit-repo <url>         ai-flow repo URL/path. Default: current origin or https://github.com/justewg/ai-flow.git
   --toolkit-ref <ref>          ai-flow ref for bootstrap. Default: main
   --compose-root <path>        Docker compose root. Default: <ai-flow-root>/docker/<profile>
   --runtime-home <path>        Runtime HOME inside containers. Default: /home/<runtime-user>
   --codex-home <path>          CODEX_HOME inside runtime. Default: <runtime-home>/.codex-server-api
-  --openai-env-file <path>     Host-local env file with OPENAI_API_KEY. Default: <runtime-home>/.config/ai-flow/openai.env
+  --openai-env-file <path>     Runtime OpenAI env authority. Default: /etc/ai-flow/secrets/platform/openai.env when present, otherwise <runtime-home>/.config/ai-flow/openai.env
   --daemon-interval <seconds>  Daemon loop interval. Default: 45
   --watchdog-interval <sec>    Watchdog loop interval. Default: 45
   --config <ask|yes|no>        Run `docker compose config`. Default: yes
@@ -535,7 +547,46 @@ ensure_runtime_home_paths() {
   ensure_dir_owned "$runtime_ssh_dir"
   ensure_dir_owned "$runtime_gh_config_dir"
   ensure_dir_owned "$gh_app_private_key_dir"
-  ensure_dir_owned "$(dirname "$openai_env_file")"
+  case "$openai_env_file" in
+    /etc/ai-flow/secrets/*) ;;
+    *) ensure_dir_owned "$(dirname "$openai_env_file")" ;;
+  esac
+}
+
+pick_existing_or_default() {
+  local preferred_path="$1"
+  local fallback_path="$2"
+  if [[ -n "$preferred_path" && -f "$preferred_path" ]]; then
+    printf '%s' "$preferred_path"
+  else
+    printf '%s' "$fallback_path"
+  fi
+}
+
+resolve_runtime_env_authority() {
+  local server_public_root="/etc/ai-flow/public"
+  local server_secrets_root="/etc/ai-flow/secrets"
+  local default_platform_public="${server_public_root}/platform.env"
+  local default_project_public="${server_public_root}/projects/${profile}.env"
+  local default_platform_secrets="${server_secrets_root}/platform/runtime.env"
+  local default_project_secrets="${server_secrets_root}/projects/${profile}/runtime.env"
+  local default_openai_env="${server_secrets_root}/platform/openai.env"
+
+  if [[ -z "$platform_public_env_file" ]]; then
+    platform_public_env_file="$(pick_existing_or_default "$default_platform_public" "$platform_env_file")"
+  fi
+  if [[ -z "$project_public_env_file" ]]; then
+    project_public_env_file="$(pick_existing_or_default "$default_project_public" "$host_env_file")"
+  fi
+  if [[ -z "$platform_secrets_env_file" ]]; then
+    platform_secrets_env_file="$(pick_existing_or_default "$default_platform_secrets" "$platform_env_file")"
+  fi
+  if [[ -z "$project_secrets_env_file" ]]; then
+    project_secrets_env_file="$(pick_existing_or_default "$default_project_secrets" "$host_env_file")"
+  fi
+  if [[ -z "$openai_env_file" ]]; then
+    openai_env_file="$(pick_existing_or_default "$default_openai_env" "${runtime_home}/.config/ai-flow/openai.env")"
+  fi
 }
 
 render_compose_env() {
@@ -550,6 +601,10 @@ RUNTIME_GH_CONFIG_DIR=${runtime_gh_config_dir}
 GH_APP_PRIVATE_KEY_DIR=${gh_app_private_key_dir}
 HOST_ENV_FILE=${host_env_file}
 PLATFORM_ENV_FILE=${platform_env_file}
+PROJECT_PUBLIC_ENV_FILE=${project_public_env_file}
+PLATFORM_PUBLIC_ENV_FILE=${platform_public_env_file}
+PROJECT_SECRETS_ENV_FILE=${project_secrets_env_file}
+PLATFORM_SECRETS_ENV_FILE=${platform_secrets_env_file}
 OPENAI_ENV_FILE=${openai_env_file}
 RUNTIME_UID=$(runtime_uid)
 RUNTIME_GID=$(runtime_gid)
@@ -570,8 +625,10 @@ PROJECT_PROFILE=${profile}
 ROOT_DIR=${workspace_path}
 FLOW_WORKSPACE_PATH=${workspace_path}
 AI_FLOW_ROOT_DIR=${ai_flow_root}
-AI_FLOW_PLATFORM_ENV_FILE=${platform_env_file}
-DAEMON_GH_ENV_FILE=${host_env_file}
+AI_FLOW_PLATFORM_ENV_FILE=${platform_public_env_file}
+DAEMON_GH_ENV_FILE=${project_public_env_file}
+AI_FLOW_PLATFORM_SECRETS_ENV_FILE=${platform_secrets_env_file}
+DAEMON_GH_SECRETS_ENV_FILE=${project_secrets_env_file}
 FLOW_HOST_RUNTIME_MODE=linux-docker-hosted
 FLOW_DOCKER_COMPOSE_ROOT=${compose_root}
 HOME=${runtime_home}
@@ -636,8 +693,10 @@ services:
     working_dir: ${WORKSPACE_PATH}
     env_file:
       - ./container.env
-      - ${PLATFORM_ENV_FILE}
-      - ${HOST_ENV_FILE}
+      - ${PLATFORM_PUBLIC_ENV_FILE}
+      - ${PROJECT_PUBLIC_ENV_FILE}
+      - ${PLATFORM_SECRETS_ENV_FILE}
+      - ${PROJECT_SECRETS_ENV_FILE}
       - ${OPENAI_ENV_FILE}
     environment:
       HOME: ${RUNTIME_HOME}
@@ -829,6 +888,26 @@ while [[ $# -gt 0 ]]; do
       platform_env_file="$2"
       shift 2
       ;;
+    --project-public-env-file)
+      [[ $# -ge 2 ]] || { echo "Missing value for --project-public-env-file" >&2; exit 1; }
+      project_public_env_file="$2"
+      shift 2
+      ;;
+    --platform-public-env-file)
+      [[ $# -ge 2 ]] || { echo "Missing value for --platform-public-env-file" >&2; exit 1; }
+      platform_public_env_file="$2"
+      shift 2
+      ;;
+    --project-secrets-env-file)
+      [[ $# -ge 2 ]] || { echo "Missing value for --project-secrets-env-file" >&2; exit 1; }
+      project_secrets_env_file="$2"
+      shift 2
+      ;;
+    --platform-secrets-env-file)
+      [[ $# -ge 2 ]] || { echo "Missing value for --platform-secrets-env-file" >&2; exit 1; }
+      platform_secrets_env_file="$2"
+      shift 2
+      ;;
     --source-flow-env)
       [[ $# -ge 2 ]] || { echo "Missing value for --source-flow-env" >&2; exit 1; }
       source_flow_env="$2"
@@ -915,7 +994,12 @@ toolkit_ref="$(prompt_value "Toolkit git ref" "$toolkit_ref")"
 compose_root="$(expand_path "$(prompt_value "Docker compose root" "${compose_root:-${ai_flow_root}/docker/${profile}}")")"
 runtime_home="$(expand_path "$(prompt_value "Runtime HOME path" "${runtime_home:-$(default_runtime_home)}")")"
 codex_home="$(expand_path "$(prompt_value "CODEX_HOME path" "${codex_home:-${runtime_home}/.codex-server-api}")")"
-openai_env_file="$(expand_path "$(prompt_value "OpenAI env file" "${openai_env_file:-${runtime_home}/.config/ai-flow/openai.env}")")"
+resolve_runtime_env_authority
+platform_public_env_file="$(expand_path "$platform_public_env_file")"
+project_public_env_file="$(expand_path "$project_public_env_file")"
+platform_secrets_env_file="$(expand_path "$platform_secrets_env_file")"
+project_secrets_env_file="$(expand_path "$project_secrets_env_file")"
+openai_env_file="$(expand_path "$(prompt_value "OpenAI env file" "$openai_env_file")")"
 daemon_interval="$(prompt_value "Daemon interval (seconds)" "$daemon_interval")"
 watchdog_interval="$(prompt_value "Watchdog interval (seconds)" "$watchdog_interval")"
 run_compose_config="$(prompt_choice "Run docker compose config" "$run_compose_config")"
@@ -959,6 +1043,11 @@ PROFILE=${profile}
 WORKSPACE_PATH=${workspace_path}
 HOST_ENV_FILE=${host_env_file}
 PLATFORM_ENV_FILE=${platform_env_file}
+PROJECT_PUBLIC_ENV_FILE=${project_public_env_file}
+PLATFORM_PUBLIC_ENV_FILE=${platform_public_env_file}
+PROJECT_SECRETS_ENV_FILE=${project_secrets_env_file}
+PLATFORM_SECRETS_ENV_FILE=${platform_secrets_env_file}
+OPENAI_ENV_FILE=${openai_env_file}
 COMPOSE_ROOT=${compose_root}
 COMPOSE_PROJECT_NAME=${compose_project_name}
 NEXT_UP=${compose_root}/up.sh

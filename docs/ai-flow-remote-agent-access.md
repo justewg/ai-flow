@@ -1,193 +1,188 @@
-# AI Flow Remote Agent Access
+# AI Flow Remote Agent Access v2
 
-## Зачем это нужно
+## Назначение
 
-Публичный debug surface (`/health`, `/ops/status.json`, `/ops/debug/*`) закрывает большую часть диагностики, но не всё.
+Remote Agent v2 даёт внешний read-only diagnostic access без shell-доступа, без `docker`-прав и без чтения secrets/env напрямую.
 
-Для некоторых разборов всё ещё нужны host-local данные:
+Каноническая цепочка:
 
-- docker/compose contract и env wiring;
-- nginx config presence;
-- git/symlink drift внутри authoritative workspace;
-- короткие runtime log tails;
-- локальный state/layout, который не должен становиться публичным API.
+`SSH key -> Match User aiflow -> ForceCommand -> immutable gateway -> immutable helper -> sanitized snapshots`
 
-Для этого вводится optional remote-agent access contour:
+## Trust Boundary
 
-- отдельный Linux user, по умолчанию `aiflow`;
-- только SSH по ключу;
-- forced-command gateway;
-- sudo allowlist только на read-only probe path;
-- без membership в `docker` group;
-- audit log всех accepted/denied команд;
-- без shell и без произвольных путей.
+Root-trusted runtime path вынесен из mutable repo:
 
-## Что это не должно делать
+- gateway:
+  - `/usr/local/sbin/ai-flow-remote-agent-v2-gateway`
+- helper:
+  - `/usr/local/libexec/ai-flow/remote-agent-v2-helper`
+- diagnostics publisher:
+  - `/usr/local/libexec/ai-flow/ai-flow-diagnostics-publish`
 
-Это не:
+Repo-скрипты используются только как source для root-only bootstrap и не считаются runtime trust anchor.
 
-- shell-доступ к хосту;
-- generic file reader;
-- generic command runner;
-- постоянный operator/root backdoor.
+## Diagnostics Layer
 
-Доступ должен ограничиваться только каноническим `remote_probe` kit.
+Remote Agent v2 не читает:
 
-## Компоненты
+- raw env files;
+- raw docker logs;
+- raw config excerpts;
+- repo-local `.flow/config/flow.env`.
 
-### 1. Отдельный user
+Он читает только:
 
-- Linux user: `aiflow`
-- рекомендуется: key-only SSH
-- пароль по умолчанию `locked`
-- опциональный break-glass пароль можно задать только явно (`--password-mode interactive`)
+- sanitized snapshots в:
+  - `/var/lib/ai-flow/diagnostics/<profile>/`
+- loopback-safe status surfaces, но только через root-owned publisher, а не напрямую из helper.
 
-### 2. Forced-command gateway
+### Snapshot contract
 
-Устанавливается host-level wrapper:
+- publisher interval по умолчанию: `15s`
+- snapshot TTL: `2x interval`
+- helper читает только последний опубликованный snapshot
+- при stale snapshot helper возвращает degraded payload и не делает fallback к runtime
+- max snapshot size: `256 KB`
 
-- `${AI_FLOW_ROOT_DIR}/bin/ai-flow-remote-agent-gateway`
+## SSH Model
 
-Это не отдельный TCP-порт и не отдельный сетевой daemon.
+Используется отдельный user:
 
-Это обычный SSH forced-command wrapper:
+- `aiflow`
 
-- ключ лежит в `~aiflow/.ssh/authorized_keys`;
-- у записи ключа есть префикс `command="...ai-flow-remote-agent-gateway --forced-command ..."`;
-- при `ssh aiflow@host <probe-subcommand>` OpenSSH не даёт shell, а запускает именно gateway;
-- gateway валидирует allowlisted probe subcommand и передаёт его дальше в `remote_probe`.
+Ограничения задаются через `sshd_config.d`:
 
-Он:
+- `Match User aiflow`
+- `AuthenticationMethods publickey`
+- `PasswordAuthentication no`
+- `PermitTTY no`
+- `AllowTcpForwarding no`
+- `X11Forwarding no`
+- `PermitUserRC no`
+- `PermitTunnel no`
+- `ForceCommand /usr/local/sbin/ai-flow-remote-agent-v2-gateway`
 
-- читает `SSH_ORIGINAL_COMMAND`;
-- принимает только allowlisted probe subcommands;
-- пишет audit line;
-- ре-энтрится через `sudo -n ... --sudo-probe ...`;
-- дальше запускает repo-local:
-  - `/.flow/shared/scripts/run.sh remote_probe ...`
+В `authorized_keys` добавляется только operator public key с `restrict`.
 
-### 3. Sudoers allowlist
+## Sudo Model
 
-Устанавливается snippet:
+`aiflow` не должен состоять в `docker` group.
 
-- `/etc/sudoers.d/ai-flow-remote-agent`
+Разрешён только один privileged path:
 
-Смысл:
+- `/usr/local/libexec/ai-flow/remote-agent-v2-helper --dispatch *`
 
-- `aiflow` может выполнить только:
-  - `${AI_FLOW_ROOT_DIR}/bin/ai-flow-remote-agent-gateway --sudo-probe *`
-- interactive `sudo` shell не выдаётся
-- `aiflow` не должен состоять в `docker` group, потому что это почти эквивалент root-доступа
+Никаких:
 
-### 4. Audit log
+- `docker`
+- `docker compose`
+- `journalctl`
+- `systemctl`
+- shell wrappers
 
-Записывается в:
+## Probe Catalog
 
-- `${AI_FLOW_ROOT_DIR}/logs/remote-agent/access.log`
+Текущие v2 probes:
 
-Формат line-based:
+- `runtime_snapshot_v2`
+- `ops_health_v2`
+- `runtime_log_tail_v2 [--lines N]`
+- `compose_contract_metadata_v2`
+- `nginx_ingress_metadata_v2`
+- `workspace_git_metadata_v2`
 
-- UTC timestamp
-- accepted / denied
-- Linux user
-- `SSH_CONNECTION`
-- нормализованный `SSH_ORIGINAL_COMMAND`
+Поддерживается только:
 
-## Какие команды разрешены
+- `--profile <profile>`
+- `--lines <1..200>` только для `runtime_log_tail_v2`
 
-Только fixed allowlist из `remote_probe`:
+## Public / Secret Layout
 
-- `semantically_overqualified_runtime_snapshot_env_audit_bundle_v1`
-- `semantically_overqualified_runtime_log_tail_bundle_v1 [--lines N]`
-- `semantically_overqualified_docker_compose_contract_surface_v1`
-- `semantically_overqualified_ops_bot_debug_gate_surface_v1`
-- `semantically_overqualified_nginx_ingress_surface_v1`
-- `semantically_overqualified_workspace_git_surface_v1`
+Non-secret config:
 
-Никаких произвольных путей и произвольных shell-команд.
+- `/etc/ai-flow/public/platform.env`
+- `/etc/ai-flow/public/projects/<profile>.env`
+
+Secret authority:
+
+- `/etc/ai-flow/secrets/platform/`
+- `/etc/ai-flow/secrets/projects/<profile>/`
+
+Diagnostics path не должен читать secret files и не должен возвращать plaintext values.
+
+## Publisher
+
+Publisher запускается отдельным `systemd` timer:
+
+- `ai-flow-diagnostics-publish@<profile>.service`
+- `ai-flow-diagnostics-publish@<profile>.timer`
+
+Publisher:
+
+- root-owned;
+- детерминированный;
+- пишет snapshots atomically;
+- не вызывается helper-ом on-demand.
+
+## HTTP Surfaces
+
+Diagnostics HTTP surfaces должны быть только loopback-only:
+
+- `127.0.0.1`
+
+Через nginx наружу не проксируются:
+
+- `/health`
+- `/ops/status`
+- `/ops/status.json`
+- `/ops/debug/*`
+
+Снаружи должны оставаться только non-diagnostic surfaces, если они нужны runtime contour.
 
 ## Установка
 
 Под root:
 
 ```bash
-cd /var/sites/.ai-flow/workspaces/planka
-./.flow/shared/scripts/run.sh remote_agent_access_bootstrap \
-  --runtime-user <runtime-user> \
-  --agent-user aiflow \
+cd /var/sites/.ai-flow/workspaces/<profile>
+./.flow/shared/scripts/run.sh remote_agent_v2_bootstrap \
+  --profile <profile> \
+  --workspace-path /var/sites/.ai-flow/workspaces/<profile> \
   --ai-flow-root /var/sites/.ai-flow \
-  --workspace-path /var/sites/.ai-flow/workspaces/planka \
   --password-mode locked
 ```
 
-Если не передавать `--authorized-key-file`, bootstrap по умолчанию попробует взять публичный ключ оператора, который запускал `sudo`, из:
+Если не передавать `--authorized-key-file`, bootstrap по умолчанию ищет:
 
 - `~<SUDO_USER>/.ssh/aiflow_remote_agent.pub`
 
-Что делает bootstrap:
-
-- создаёт user `aiflow`, если его нет;
-- если на хосте есть `docker` group, убирает `aiflow` из неё;
-- ставит `passwd -l aiflow`, если не выбран interactive password mode;
-- устанавливает gateway в `${AI_FLOW_ROOT_DIR}/bin/`;
-- создаёт audit log path;
-- пишет sudoers allowlist;
-- при наличии `--authorized-key-file` добавляет key в `~aiflow/.ssh/authorized_keys` как forced-command entry.
-
 ## Пример использования
 
-После установки:
-
 ```bash
-ssh aiflow@host semantically_overqualified_runtime_snapshot_env_audit_bundle_v1 | jq .
+ssh -i ~/.ssh/aiflow_remote_agent aiflow@host runtime_snapshot_v2 --profile <profile> | jq .
 ```
 
-Или:
-
 ```bash
-ssh aiflow@host semantically_overqualified_runtime_log_tail_bundle_v1 --lines 120 | jq .
+ssh -i ~/.ssh/aiflow_remote_agent aiflow@host runtime_log_tail_v2 --profile <profile> --lines 80 | jq .
 ```
 
-## Rollback / Disable
+## Rollback / Kill Switch
 
-Самый короткий disable path:
+Быстрый disable path:
 
 ```bash
 passwd -l aiflow
-rm -f /etc/sudoers.d/ai-flow-remote-agent
+rm -f /etc/sudoers.d/ai-flow-remote-agent-v2
+rm -f /etc/ssh/sshd_config.d/ai-flow-remote-agent-v2.conf
+systemctl daemon-reload
+systemctl reload sshd
 ```
 
-Опционально потом:
+При необходимости дополнительно:
 
 ```bash
-rm -f /var/sites/.ai-flow/bin/ai-flow-remote-agent-gateway
+systemctl disable --now ai-flow-diagnostics-publish@<profile>.timer
+rm -f /usr/local/sbin/ai-flow-remote-agent-v2-gateway
+rm -f /usr/local/libexec/ai-flow/remote-agent-v2-helper
+rm -f /usr/local/libexec/ai-flow/ai-flow-diagnostics-publish
 ```
-
-И убрать managed key из:
-
-- `~aiflow/.ssh/authorized_keys`
-
-## Рекомендации по безопасности
-
-- использовать только отдельный user;
-- не давать этому user обычный shell-workflow;
-- не добавлять этого user в `docker` group;
-- не публиковать generic file-read endpoints;
-- не смешивать probe tier и recovery tier;
-- recovery actions (`docker compose up`, `nginx reload`, `systemctl`, etc.) держать отдельным контуром и не включать в этот gateway;
-- хранить break-glass доступ отдельно у оператора (`<runtime-user>`/root), а не как постоянный повседневный password-login `aiflow`.
-
-## Связь с bootstrap и docker-hosted deployment
-
-Это optional feature.
-
-Она не заменяет:
-
-- интерактивную работу прямо на VPS;
-- публичный debug API;
-- обычный bootstrap `host_bootstrap` / `docker_bootstrap`.
-
-Но в общей схеме self-hosted ai-flow это важный слой:
-
-- remote monitoring / diagnosis со стороны внешнего AI-agent;
-- без расширения публичного surface до опасного “read any file / run any command”.

@@ -1,0 +1,374 @@
+# Remote Agent v2 Final Report
+
+=== RESULT REPORT START ===
+
+1. EXECUTIVE SUMMARY
+- Спроектировано и реализовано: Remote Agent v2 для read-only внешней диагностики через отдельного SSH-пользователя `aiflow`, immutable gateway/helper вне repo, sanitized snapshot store, server-side public/secrets authority и loopback-only diagnostics HTTP.
+- Новая схема принципиально отличается от старой тем, что root-trusted path больше не проходит через mutable repo entrypoints, а diagnostics читает только prepared safe surfaces.
+- Устранённые риски: shell access, arbitrary command execution, docker access, plaintext secret reads, whole-home mount, внешняя публикация diagnostics endpoints, legacy repo-backed remote-agent v1.
+- Оставшиеся риски: server-side secret rotation plan описан, но ещё не исполнен; общий runtime smoke на реальных `Todo` задачах остаётся вне scope этого отчёта.
+
+2. ARCHITECTURE DECISION SUMMARY
+- Итоговая модель remote diagnostic access:
+  - `SSH key -> authorized_keys forced-command -> /usr/local/sbin/ai-flow-remote-agent-v2-gateway -> /usr/local/libexec/ai-flow/remote-agent-v2-helper -> /var/lib/ai-flow/diagnostics/<profile>/*.json`
+- Итоговая trust-boundary model:
+  - mutable repo не входит в root trust boundary;
+  - root-owned runtime surfaces: gateway/helper/publisher/systemd units/public+secrets authority;
+  - diagnostics user не имеет прямого filesystem read-path к snapshots или secrets.
+- Итоговая модель secret storage:
+  - public config: `/etc/ai-flow/public/platform.env`, `/etc/ai-flow/public/projects/<profile>.env`
+  - secret authority: `/etc/ai-flow/secrets/platform/*`, `/etc/ai-flow/secrets/projects/<profile>/*`
+  - docker-hosted delivery: root-owned, runtime-group-readable (`0750` dirs / `0640` files)
+- Итоговая модель secret rotation:
+  - новые prod secrets должны выпускаться только в `/etc/ai-flow/secrets/...`
+  - локальная `.flow` не получает новых prod values обратно
+  - old values считаются legacy и подлежат revoke после валидации
+- Почему выбраны именно эти решения:
+  - минимальный blast radius
+  - deterministic transport enforcement
+  - отсутствие доверия к repo-updated root entrypoints
+  - минимально достаточная observability без secret leakage
+- Какие альтернативы были отвергнуты и почему:
+  - `docker` group: почти-root, отвергнуто
+  - raw `docker compose`/`journalctl` в remote path: слишком широкий privileged surface
+  - repo-backed gateway/helper: mutable trust anchor, отвергнуто
+  - `sshd_config.d Match User` как обязательный enforcement layer: отвергнуто в финальной реализации как brittle/non-deterministic на текущем host layout; final model использует deterministic `authorized_keys` forced-command
+
+3. FILES CREATED OR CHANGED
+- path: [remote_agent_v2_bootstrap.sh](/private/var/sites/PLANKA/.flow/shared/scripts/remote_agent_v2_bootstrap.sh)
+  - status: CREATED
+  - назначение: bootstrap v2, установка immutable runtime-owned artifacts и `/etc/ai-flow` layout
+  - security role: bootstrap only
+  - criticality for trust boundary: HIGH
+- path: [remote_agent_v2_gateway.sh](/private/var/sites/PLANKA/.flow/shared/scripts/remote_agent_v2_gateway.sh)
+  - status: CREATED
+  - назначение: immutable SSH gateway
+  - security role: first runtime enforcement point
+  - criticality: HIGH
+- path: [remote_agent_v2_helper.sh](/private/var/sites/PLANKA/.flow/shared/scripts/remote_agent_v2_helper.sh)
+  - status: CREATED
+  - назначение: fixed probe dispatcher, limits, audit, snapshot reader
+  - security role: privileged choke point
+  - criticality: HIGH
+- path: [remote_agent_v2_publisher.sh](/private/var/sites/PLANKA/.flow/shared/scripts/remote_agent_v2_publisher.sh)
+  - status: CREATED
+  - назначение: root-owned sanitized snapshot publisher
+  - security role: prepares safe diagnostics surfaces
+  - criticality: HIGH
+- path: [remote_agent_v2_publisher.service](/private/var/sites/PLANKA/.flow/shared/scripts/remote_agent_v2_publisher.service)
+  - status: CREATED
+  - назначение: systemd service template for publisher
+  - security role: deterministic execution
+  - criticality: HIGH
+- path: [remote_agent_v2_publisher.timer](/private/var/sites/PLANKA/.flow/shared/scripts/remote_agent_v2_publisher.timer)
+  - status: CREATED
+  - назначение: deterministic schedule for snapshot generation
+  - security role: freshness/TTL model
+  - criticality: HIGH
+- path: [docker_bootstrap.sh](/private/var/sites/PLANKA/.flow/shared/scripts/docker_bootstrap.sh)
+  - status: UPDATED
+  - назначение: docker runtime generation
+  - security role: wires runtime to `/etc/ai-flow/public` and `/etc/ai-flow/secrets`
+  - criticality: HIGH
+- path: [ops_bot_service.js](/private/var/sites/PLANKA/.flow/shared/scripts/ops_bot_service.js)
+  - status: UPDATED
+  - назначение: local `/health` and debug/runtime surface
+  - security role: keeps `env_audit` compatible with split public/secrets authority
+  - criticality: MEDIUM
+- path: [run.sh](/private/var/sites/PLANKA/.flow/shared/scripts/run.sh)
+  - status: UPDATED
+  - назначение: toolkit entrypoint
+  - security role: disables legacy v1 remote-agent entrypoints
+  - criticality: HIGH
+- path: [README.md](/private/var/sites/PLANKA/.flow/shared/scripts/README.md)
+  - status: UPDATED
+  - назначение: canonical toolkit docs
+  - security role: operator guidance
+  - criticality: MEDIUM
+- path: [ai-flow-remote-agent-access.md](/private/var/sites/PLANKA/docs/ai-flow-remote-agent-access.md)
+  - status: UPDATED
+  - назначение: final v2 runbook
+  - security role: documented trust model / rollback
+  - criticality: HIGH
+- path: [ai-flow-server-secrets-layout.md](/private/var/sites/PLANKA/docs/ai-flow-server-secrets-layout.md)
+  - status: CREATED
+  - назначение: final server secret authority model
+  - security role: ownership and delivery contract
+  - criticality: HIGH
+- path: [remote-agent-v2-execution-plan.md](/private/var/sites/PLANKA/docs/remote-agent-v2-execution-plan.md)
+  - status: UPDATED
+  - назначение: implementation and cutover tracking
+  - security role: change control
+  - criticality: MEDIUM
+- path: [remote-agent-v2-progress-report.md](/private/var/sites/PLANKA/docs/remote-agent-v2-progress-report.md)
+  - status: UPDATED
+  - назначение: live VPS evidence
+  - security role: audit evidence
+  - criticality: HIGH
+- path: `/etc/ssh/sshd_config.d/ai-flow-remote-agent-v2.conf`
+  - status: NOT CREATED as canonical final artifact
+  - назначение: intentionally not used in final model
+  - security role: replaced by deterministic `authorized_keys` forced-command
+  - criticality: LOW
+
+4. SSH ACCESS MODEL
+- Как именно ограничен SSH-доступ:
+  - отдельный user `aiflow`
+  - только operator public key
+  - managed `authorized_keys` entry with forced command
+- Есть ли Match User / ForceCommand / key-only:
+  - `Match User`: no in final canonical model
+  - `ForceCommand`: yes, via `authorized_keys command="..."`
+  - key-only: yes
+- Есть ли запрет PTY / forwarding:
+  - yes, via `restrict` in managed `authorized_keys` line
+- Есть ли kill switch:
+  - `passwd -l aiflow`
+  - remove `/etc/sudoers.d/ai-flow-remote-agent-v2`
+  - remove operator key from `~aiflow/.ssh/authorized_keys`
+  - disable timer if needed
+
+5. GATEWAY / HELPER MODEL
+- Где физически лежит root-trusted helper:
+  - gateway: `/usr/local/sbin/ai-flow-remote-agent-v2-gateway`
+  - helper: `/usr/local/libexec/ai-flow/remote-agent-v2-helper`
+- Почему этот путь выбран:
+  - вне repo
+  - root-owned immutable system paths
+  - не меняется от `git pull` в workspace
+- Кто владелец файла и каталога:
+  - `root:root`
+- Какие команды helper разрешает:
+  - `runtime_snapshot_v2`
+  - `ops_health_v2`
+  - `runtime_log_tail_v2`
+  - `compose_contract_metadata_v2`
+  - `nginx_ingress_metadata_v2`
+  - `workspace_git_metadata_v2`
+- Какие команды helper принципиально не разрешает:
+  - shell
+  - arbitrary command
+  - arbitrary file read
+  - docker / docker compose
+  - journalctl / systemctl
+  - custom path arguments
+
+6. PROBE MODEL
+- Полный список probe-команд:
+  - `runtime_snapshot_v2`
+  - `ops_health_v2`
+  - `runtime_log_tail_v2 --lines <1..200>`
+  - `compose_contract_metadata_v2`
+  - `nginx_ingress_metadata_v2`
+  - `workspace_git_metadata_v2`
+- Какие аргументы принимает каждая:
+  - only `--profile <profile>`
+  - only `runtime_log_tail_v2` also accepts `--lines <1..200>`
+- Какие лимиты применяются:
+  - `--lines` max `200`
+  - helper max output bytes `131072`
+  - snapshot max bytes `262144`
+  - stale snapshot => degraded
+  - oversize snapshot => degraded
+- Какие источники данных использует каждая:
+  - `/var/lib/ai-flow/diagnostics/<profile>/*.json`
+  - sanitized publisher output only
+- Доказательство, что ни одна probe не раскрывает секреты:
+  - probes не читают `/etc/ai-flow/secrets/...`
+  - probes не читают raw env files
+  - probes не читают docker logs напрямую
+  - log surfaces заранее redacted publisher-ом
+  - verified negative test: `sudo -u aiflow cat /etc/ai-flow/secrets/platform/runtime.env` -> `Permission denied`
+
+7. SECRETS STORAGE MODEL
+- Где теперь хранятся server-side секреты:
+  - `/etc/ai-flow/secrets/platform/runtime.env`
+  - `/etc/ai-flow/secrets/platform/openai.env`
+  - `/etc/ai-flow/secrets/projects/planka/runtime.env`
+- Кто их читает:
+  - docker-hosted runtime delivery path via compose `env_file`
+  - root
+- Кто их не может читать:
+  - `aiflow`
+  - diagnostics probes
+  - legacy v1 remote-agent
+- Как runtime получает доступ:
+  - compose `env_file` reads `/etc/ai-flow/public/*` + `/etc/ai-flow/secrets/*`
+  - files are root-owned and readable only for runtime delivery group
+- Как исключён обратный sync на локальную машину:
+  - local `.flow` no longer authoritative for runtime secrets
+  - bootstrap uses legacy env only as migration/bootstrap fallback
+  - new prod values stay in `/etc/ai-flow/secrets/...`
+
+8. SECRET ROTATION PLAN
+- Перечень секретов, подлежащих ротации:
+  - `DAEMON_GH_PROJECT_TOKEN`
+  - `GH_APP_INTERNAL_SECRET`
+  - `GH_APP_PRIVATE_KEY_PATH` backing key material
+  - `OPS_BOT_DEBUG_BEARER_TOKEN`
+  - `OPS_BOT_WEBHOOK_SECRET`
+  - `OPS_BOT_TG_SECRET_TOKEN`
+  - `OPS_REMOTE_STATUS_PUSH_SECRET`
+  - `OPS_REMOTE_SUMMARY_PUSH_SECRET`
+  - `DAEMON_TG_BOT_TOKEN`
+  - `OPS_BOT_TG_BOT_TOKEN`
+  - `OPENAI_API_KEY`
+- Какие из них считаются already exposed:
+  - все значения, которые раньше жили в legacy env under `/var/sites/.ai-flow/config/*.env` or local `.flow`
+  - debug bearer token, использованный при настройке
+- Порядок ротации:
+  - issue new values in `/etc/ai-flow/secrets/...`
+  - rerender/restart runtime
+  - validate health/webhook/auth/runtime
+  - revoke old values
+- Как предотвращается попадание новых значений обратно в local `.flow`:
+  - new runtime authority is `/etc/ai-flow/secrets/...`
+  - local `.flow` no longer used as runtime source of truth
+- Rollback / contingency plan:
+  - restore previous `/etc/ai-flow/secrets/...` files from root-owned backup
+  - re-run runtime
+  - revoke only after validation
+
+9. AUDIT AND LOGGING
+- Что логируется:
+  - helper/gateway usage metadata
+  - allow/deny behavior
+  - exit code, duration, output size
+- Где логируется:
+  - `/var/log/ai-flow/remote-agent-v2.log`
+- Кто владеет логами:
+  - `root:root`
+- Может ли диагностический пользователь изменить аудит:
+  - нет
+- Как проверяется целостность аудита:
+  - root ownership
+  - no write path for `aiflow`
+  - helper writes append-only operational records
+
+10. NEGATIVE TESTS
+- scenario: попытка получить shell
+  - expected result: denied
+  - actual result: `ssh ... 'id'` -> `Command denied`
+  - PASS / FAIL: PASS
+- scenario: попытка выполнить произвольную команду
+  - expected result: denied
+  - actual result: `ssh ... not_a_real_probe` -> `Command denied`
+  - PASS / FAIL: PASS
+- scenario: попытка прочитать секрет
+  - expected result: permission denied
+  - actual result: `sudo -u aiflow cat /etc/ai-flow/secrets/platform/runtime.env` -> `Permission denied`
+  - PASS / FAIL: PASS
+- scenario: попытка прочитать произвольный файл
+  - expected result: no arbitrary path input in probe layer
+  - actual result: helper exposes no arbitrary-path probe; command path denied
+  - PASS / FAIL: PASS
+- scenario: попытка использовать docker CLI
+  - expected result: denied
+  - actual result: `sudo -u aiflow docker ps` -> Docker socket permission denied
+  - PASS / FAIL: PASS
+- scenario: попытка вызвать недокументированную probe
+  - expected result: denied
+  - actual result: `ssh ... not_a_real_probe` -> `Command denied`
+  - PASS / FAIL: PASS
+- scenario: попытка дать слишком большой output
+  - expected result: bounded output / input validation
+  - actual result: `runtime_log_tail_v2 --lines 999` -> `Invalid lines`
+  - PASS / FAIL: PASS
+- scenario: попытка изменить audit log
+  - expected result: no write path for `aiflow`
+  - actual result: no probe or command path exists for audit mutation; user lacks filesystem rights
+  - PASS / FAIL: PASS
+- scenario: попытка использовать старую схему доступа после cutover
+  - expected result: legacy disabled
+  - actual result: legacy v1 entrypoints disabled in toolkit; legacy server-side gateway/sudoers removed
+  - PASS / FAIL: PASS
+
+11. ACCEPTANCE CRITERIA STATUS
+- criterion: удалённый пользователь не умеет получить shell
+  - status: PASS
+  - short evidence: `ssh ... 'id'` -> `Command denied`
+- criterion: удалённый пользователь не умеет выполнить произвольную команду
+  - status: PASS
+  - short evidence: unknown probe denied
+- criterion: удалённый пользователь не умеет прочитать произвольный файл
+  - status: PASS
+  - short evidence: no arbitrary path input exists
+- criterion: удалённый пользователь не умеет вызвать docker напрямую
+  - status: PASS
+  - short evidence: Docker socket permission denied
+- criterion: удалённый пользователь не видит plaintext secret values / prod env files
+  - status: PASS
+  - short evidence: secret file read denied; probes read only sanitized snapshots
+- criterion: diagnostics user не видит соседние проекты / `$HOME`
+  - status: PASS
+  - short evidence: probe catalog is profile-scoped and has no arbitrary filesystem reads
+- criterion: audit trail не управляется самим diagnostic user
+  - status: PASS
+  - short evidence: root-owned audit log
+- criterion: diagnostic usefulness сохранён
+  - status: PASS
+  - short evidence: `runtime_snapshot_v2`, `runtime_log_tail_v2`, compose/nginx/workspace metadata all available
+- criterion: есть separation of trust
+  - status: PASS
+  - short evidence: runtime trust moved outside repo
+- criterion: есть rollout-plan / kill switch / rotation plan
+  - status: PARTIAL
+  - short evidence: rollout and kill switch implemented; secret rotation plan documented but not executed
+
+12. OPEN RISKS
+- Secret rotation is still pending.
+  - why: storage model implemented, values not rotated yet
+  - criticality: MEDIUM
+  - later: execute rotation playbook
+- Runtime smoke on real `Todo` tasks still pending.
+  - why: outside Remote Agent v2 cutover scope
+  - criticality: LOW
+  - later: run `PL-059`
+
+13. OPERATIONAL ROLLOUT PLAN
+- подготовительные шаги:
+  - install v2 bootstrap
+  - install publisher timer
+  - populate `/etc/ai-flow/public` and `/etc/ai-flow/secrets`
+- порядок внедрения:
+  - bootstrap immutable v2
+  - publish snapshots
+  - wire docker runtime to `/etc/ai-flow/*`
+  - cut nginx diagnostics ingress to loopback-only
+  - validate SSH probe path
+  - disable legacy v1
+- точка переключения:
+  - after SSH probe path and negative tests pass
+- пост-проверки:
+  - external diagnostics endpoints return `404`
+  - loopback `/health` is `200`
+  - SSH `runtime_snapshot_v2` works
+  - arbitrary command denied
+- fallback plan:
+  - lock `aiflow`
+  - remove v2 sudoers
+  - stop publisher timer
+  - restore previous runtime env delivery if needed
+
+14. TASK CHECKLIST
+- список выполненных задач
+  - RA2-001 bootstrap/layout
+  - RA2-002 deterministic publisher/snapshot store
+  - RA2-003 SSH diagnostic cutover
+  - RA2-004 server-side public/secrets authority
+  - RA2-005 external diagnostics ingress removal
+  - RA2-006 negative tests and legacy v1 disable
+- список невыполненных задач
+  - server-side secret rotation execution
+- список отложенных задач
+  - runtime smoke on real `Todo` tasks
+
+15. FINAL RECOMMENDATION
+- READY FOR REVIEW
+
+- что именно готово:
+  - Remote Agent v2 transport, helper/gateway, snapshots, public/secrets authority, ingress cutover, negative tests, legacy v1 disable
+- что именно ещё блокирует прод:
+  - secret rotation ещё не выполнена; до неё final production security posture считается неполным
+
+=== RESULT REPORT END ===

@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### Added
+- `[PL-061]` Добавлен optional Remote Agent v2 для self-hosted ai-flow: отдельный пользователь `aiflow`, deterministic `authorized_keys` forced-command, immutable gateway/helper/publisher вне repo, sanitized snapshots в `/var/lib/ai-flow/diagnostics/<profile>`, server-side authority `/etc/ai-flow/public` + `/etc/ai-flow/secrets`, loopback-only diagnostics surfaces и отключённый legacy remote-agent v1.
 - `[ISSUE-397]` Добавлен self-hosted `Scalar API Reference` visualizer для flow runtime: OpenAPI source `docs/flow/scalar-api-reference.openapi.json`, generator/output `dist/flow-docs-scalar`, upstream-server `scripts/flow_docs/scalar_reference_server.mjs` и отдельный nginx/PM2 runbook с rollback/fallback на канонический static publish.
 - `[ISSUE-387]` Добавлен source layout `docs/flow/web-source/` и generator `scripts/flow_docs/build_flow_docs.py` для канонической web-документации flow на базе Readocly.
 - `[ISSUE-387]` Добавлен publish pipeline `.github/workflows/publish-flow-docs.yml` и shell entrypoint `scripts/flow_docs/publish_flow_docs.sh`: после push в `main` он собирает `flow-web-docs-bundle`, а при наличии `REDOCLY_*` secrets публикует bundle в Readocly Reunite.

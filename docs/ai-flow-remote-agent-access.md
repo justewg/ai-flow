@@ -6,7 +6,7 @@ Remote Agent v2 даёт внешний read-only diagnostic access без shell
 
 Каноническая цепочка:
 
-`SSH key -> Match User aiflow -> ForceCommand -> immutable gateway -> immutable helper -> sanitized snapshots`
+`SSH key -> authorized_keys forced-command -> immutable gateway -> immutable helper -> sanitized snapshots`
 
 ## Trust Boundary
 
@@ -50,19 +50,16 @@ Remote Agent v2 не читает:
 
 - `aiflow`
 
-Ограничения задаются через `sshd_config.d`:
+Ограничения задаются детерминированно через managed строку в `~aiflow/.ssh/authorized_keys`:
 
-- `Match User aiflow`
-- `AuthenticationMethods publickey`
-- `PasswordAuthentication no`
-- `PermitTTY no`
-- `AllowTcpForwarding no`
-- `X11Forwarding no`
-- `PermitUserRC no`
-- `PermitTunnel no`
-- `ForceCommand /usr/local/sbin/ai-flow-remote-agent-v2-gateway`
+- `command="/usr/local/sbin/ai-flow-remote-agent-v2-gateway",restrict <operator-pubkey>`
 
-В `authorized_keys` добавляется только operator public key с `restrict`.
+То есть:
+
+- shell не выдаётся;
+- arbitrary command не проходит;
+- PTY и forwarding закрываются самим `restrict`;
+- парольный вход не используется, аккаунт держится `locked`.
 
 ## Sudo Model
 
@@ -173,9 +170,7 @@ ssh -i ~/.ssh/aiflow_remote_agent aiflow@host runtime_log_tail_v2 --profile <pro
 ```bash
 passwd -l aiflow
 rm -f /etc/sudoers.d/ai-flow-remote-agent-v2
-rm -f /etc/ssh/sshd_config.d/ai-flow-remote-agent-v2.conf
 systemctl daemon-reload
-systemctl reload sshd
 ```
 
 При необходимости дополнительно:

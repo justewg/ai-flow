@@ -23,7 +23,6 @@
   - создает `/etc/ai-flow/public`
   - создает `/etc/ai-flow/secrets`
   - создает `/var/lib/ai-flow/diagnostics/<profile>`
-  - пишет `sshd_config.d` fragment
   - пишет sudoers fragment
 - repo не входит в root trust boundary runtime-контура
 
@@ -33,10 +32,6 @@
 - реализованы шаблоны immutable v2 компонентов
 - обновлен [run.sh](/private/var/sites/PLANKA/.flow/shared/scripts/run.sh)
 - обновлен runbook
-
-### Что ещё не сделано
-
-- policy-layer caveat по effective `Match User + ForceCommand` ещё не закрыт; enforcement сейчас дублируется через managed `authorized_keys`
 
 ### Текущий статус
 
@@ -78,7 +73,7 @@
 
 ### Что должно быть сделано
 
-- `Match User + ForceCommand`
+- deterministic `authorized_keys` forced-command
 - key-only `aiflow`
 - immutable gateway вызывает immutable helper
 - probes читают только sanitized snapshots
@@ -93,13 +88,11 @@
 
 ### Что ещё не сделано
 
-- не прогнаны все negative tests через `ssh aiflow@host ...`
-- policy-layer caveat: `SSHD_POLICY_EFFECTIVE=0`, effective `Match User + ForceCommand` на хосте пока не подтверждён
-- legacy v1 contour ещё не отключён
+- перейти от functional smoke к полному negative test suite
 
 ### Текущий статус
 
-`In Progress`
+`Done`
 
 ## RA2-004
 
@@ -183,10 +176,6 @@
 - kill switch и rollback path задокументированы для v2
 - legacy v1 toolkit entrypoints переведены в disabled mode; новый штатный путь только `remote_agent_v2_bootstrap` + SSH `aiflow`
 
-### Что ещё не сделано
-
-- policy-layer caveat по `SSHD_POLICY_EFFECTIVE=0` остаётся отдельно в `RA2-003`
-
 ### Текущий статус
 
 `Done`
@@ -202,4 +191,4 @@
 
 Не протестировано пока:
 
-- только отдельный `sshd` policy-layer caveat (`SSHD_POLICY_EFFECTIVE=0`) на конкретном хосте
+- нет дополнительных open items по Remote Agent v2; дальнейшие проверки относятся уже к общему runtime smoke

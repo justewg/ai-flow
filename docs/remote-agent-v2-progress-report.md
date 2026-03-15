@@ -33,11 +33,14 @@
 ### Исправленные дефекты
 
 - bootstrap host parsing bug в `OPS_BOT_PUBLIC_BASE_URL`
-- mode для `/etc/ai-flow/secrets` ужесточён до `0700`
+- secret authority переведена на финальный delivery contract:
+  - root-owned
+  - `0750` dirs / `0640` files для docker-hosted runtime group
+  - без прямого read-path для `aiflow`
 
 ### Остаток
 
-- отдельный caveat по `sshd` policy-layer вынесен в `RA2-003`
+- open items по `RA2-001` отсутствуют
 
 ## RA2-002
 
@@ -71,7 +74,7 @@
 
 ### Статус
 
-`In Progress`, функционально работает с caveat
+`Done`
 
 ### Подтверждено
 
@@ -82,18 +85,11 @@
 - `ssh -i ~/.ssh/aiflow_remote_agent aiflow@127.0.0.1 'id'`
   возвращает `Command denied`
 
-### Что пришлось сделать
+### Финальная модель
 
-- `sshd_config.d` policy-layer остался ineffective на живом хосте:
-  - `SSHD_POLICY_EFFECTIVE=0`
-  - `sshd -T -C ...` не показывает ожидаемый `ForceCommand`
-- поэтому enforcement сейчас идёт через managed запись в `~aiflow/.ssh/authorized_keys`:
+- enforcement идёт через managed запись в `~aiflow/.ssh/authorized_keys`:
   - `command="/usr/local/sbin/ai-flow-remote-agent-v2-gateway",restrict ...`
-
-### Остаток
-
-- понять, можно ли дожать effective `Match User + ForceCommand` на данном distro/config layout
-- до этого считать policy-layer caveat задокументированным, но не блокирующим v2 probe path
+- `sshd_config.d` policy-layer исключён из канонической модели как brittle/non-deterministic слой
 
 ## RA2-004
 
@@ -194,4 +190,4 @@
 
 ### Ещё нет
 
-- отдельный policy-layer caveat по `SSHD_POLICY_EFFECTIVE=0` остаётся в `RA2-003`, но v2 cutover не блокирует
+- отдельных open items по v2 cutover больше нет

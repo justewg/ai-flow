@@ -15,7 +15,7 @@
 
 ### Статус
 
-`In Progress`, функционально почти завершено
+`Done`
 
 ### Подтверждено
 
@@ -37,14 +37,13 @@
 
 ### Остаток
 
-- повторный bootstrap после SSH reload fix
-- подтверждение, что `Match User + ForceCommand` реально применился
+- отдельный caveat по `sshd` policy-layer вынесен в `RA2-003`
 
 ## RA2-002
 
 ### Статус
 
-`In Progress`, базовая функциональность подтверждена
+`Done`
 
 ### Подтверждено
 
@@ -66,43 +65,41 @@
 
 ### Остаток
 
-- проверить stale/oversize negative paths
+- stale/oversize negative paths переходят в `RA2-006`
 
 ## RA2-003
 
 ### Статус
 
-`Blocked`
+`In Progress`, функционально работает с caveat
 
-### Что произошло
+### Подтверждено
 
-- `ssh -i ~/.ssh/aiflow_remote_agent aiflow@127.0.0.1 runtime_snapshot_v2 --profile planka`
-  вернул:
-  - `bash: runtime_snapshot_v2: command not found`
-- `ssh ... 'id'` выполнился как обычный shell login
+- `ssh -i ~/.ssh/aiflow_remote_agent aiflow@127.0.0.1 runtime_snapshot_v2 --profile planka | jq .`
+  возвращает рабочий sanitized snapshot
+- `ssh -i ~/.ssh/aiflow_remote_agent aiflow@127.0.0.1 runtime_log_tail_v2 --profile planka --lines 20 | jq .`
+  возвращает bounded sanitized log tail
+- `ssh -i ~/.ssh/aiflow_remote_agent aiflow@127.0.0.1 'id'`
+  возвращает `Command denied`
 
-### Диагноз
+### Что пришлось сделать
 
-- `sshd_config.d` fragment был установлен, но bootstrap не делал reload SSH daemon
-- из-за этого `Match User + ForceCommand` не применился
+- `sshd_config.d` policy-layer остался ineffective на живом хосте:
+  - `SSHD_POLICY_EFFECTIVE=0`
+  - `sshd -T -C ...` не показывает ожидаемый `ForceCommand`
+- поэтому enforcement сейчас идёт через managed запись в `~aiflow/.ssh/authorized_keys`:
+  - `command="/usr/local/sbin/ai-flow-remote-agent-v2-gateway",restrict ...`
 
-### Исправление в коде
+### Остаток
 
-- bootstrap теперь:
-  - делает reload `ssh`/`sshd`
-  - проверяет effective policy через `sshd -T -C ...`
-
-### Следующий шаг
-
-- обновить toolkit на VPS
-- повторно запустить `remote_agent_v2_bootstrap`
-- снова проверить `ssh aiflow@127.0.0.1 ...`
+- понять, можно ли дожать effective `Match User + ForceCommand` на данном distro/config layout
+- до этого считать policy-layer caveat задокументированным, но не блокирующим v2 probe path
 
 ## RA2-004
 
 ### Статус
 
-`Planned`
+`In Progress`
 
 ### Уже сделано
 
@@ -111,10 +108,21 @@
   - `/etc/ai-flow/public/projects/<profile>.env`
   - `/etc/ai-flow/secrets/platform`
   - `/etc/ai-flow/secrets/projects/<profile>`
+- `docker_bootstrap` переведён на первичное wiring runtime через:
+  - `/etc/ai-flow/public/platform.env`
+  - `/etc/ai-flow/public/projects/<profile>.env`
+  - `/etc/ai-flow/secrets/platform/runtime.env`
+  - `/etc/ai-flow/secrets/projects/<profile>/runtime.env`
+  - `/etc/ai-flow/secrets/platform/openai.env`
+  с fallback на legacy `/var/sites/.ai-flow/config/*.env` только для migration/bootstrap
+- publisher `compose_metadata.json` теперь должен явно показывать:
+  - какие env authority paths реально подключены
+  - `server_env_authority_wired=true|false`
+  - `legacy_runtime_env_fallback=true|false`
 
 ### Ещё не сделано
 
-- runtime на VPS ещё не переведён полностью на чтение server-side secret authority
+- новый compose/env wiring ещё не прогнан на VPS через rerender
 - rotation playbook ещё не исполнен
 
 ## RA2-005

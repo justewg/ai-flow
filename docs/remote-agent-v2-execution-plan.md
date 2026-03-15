@@ -36,12 +36,11 @@
 
 ### Что ещё не сделано
 
-- не прогнан реальный bootstrap на VPS
-- не проверены `sshd` reload, sudoers install и `systemd` timer install на живом сервере
+- policy-layer caveat по effective `Match User + ForceCommand` ещё не закрыт; enforcement сейчас дублируется через managed `authorized_keys`
 
 ### Текущий статус
 
-`In Progress`
+`Done`
 
 ## RA2-002
 
@@ -65,13 +64,11 @@
 
 ### Что ещё не сделано
 
-- не прогнан publisher на VPS
-- не проверено содержимое snapshots на живом профиле
 - не проверено stale/oversize поведение end-to-end
 
 ### Текущий статус
 
-`Planned`
+`Done`
 
 ## RA2-003
 
@@ -96,13 +93,13 @@
 
 ### Что ещё не сделано
 
-- не установлен `aiflow` SSH contour на VPS
-- не прогнаны реальные negative tests через `ssh aiflow@host ...`
+- не прогнаны все negative tests через `ssh aiflow@host ...`
+- policy-layer caveat: `SSHD_POLICY_EFFECTIVE=0`, effective `Match User + ForceCommand` на хосте пока не подтверждён
 - legacy v1 contour ещё не отключён
 
 ### Текущий статус
 
-`Planned`
+`In Progress`
 
 ## RA2-004
 
@@ -123,15 +120,17 @@
 - bootstrap готовит этот layout
 - добавлен [ai-flow-server-secrets-layout.md](/private/var/sites/PLANKA/docs/ai-flow-server-secrets-layout.md)
 - v2 docs зафиксировали separation model
+- `docker_bootstrap.sh` переведён на первичное runtime wiring через `/etc/ai-flow/public/*` и `/etc/ai-flow/secrets/*` с fallback на legacy env authority только для migration/bootstrap
+- publisher начал публиковать расширенный `compose_metadata.json` с явным признаком `server_env_authority_wired`
 
 ### Что ещё не сделано
 
-- runtime на VPS ещё не переключен на новый secrets authority
+- runtime на VPS ещё не rerender'ен новым compose/env contract
 - ротация prod secrets ещё не выполнена
 
 ### Текущий статус
 
-`Planned`
+`In Progress`
 
 ## RA2-005
 
@@ -204,9 +203,6 @@
 
 Не протестировано пока:
 
-- запуск bootstrap на VPS
-- работа `systemd timer`
-- публикация snapshot files
-- SSH forced-command через `aiflow`
+- новый `/etc/ai-flow` compose/env wiring на VPS
 - cutover nginx/loopback-only diagnostics
 - отказ от legacy v1 на живом сервере

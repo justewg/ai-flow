@@ -654,6 +654,19 @@ function parseEnvAuditOutput(output) {
 }
 
 async function loadEnvAudit(config) {
+  const auditArgs = ["--profile", config.projectProfile];
+  const legacyProjectEnvFile = String(process.env.DAEMON_GH_LEGACY_ENV_FILE || process.env.HOST_ENV_FILE || "").trim();
+  const legacyPlatformEnvFile = String(
+    process.env.AI_FLOW_PLATFORM_LEGACY_ENV_FILE || process.env.PLATFORM_ENV_FILE || "",
+  ).trim();
+
+  if (legacyProjectEnvFile) {
+    auditArgs.push("--project-env-file", legacyProjectEnvFile);
+  }
+  if (legacyPlatformEnvFile) {
+    auditArgs.push("--platform-env-file", legacyPlatformEnvFile);
+  }
+
   if (!config.projectProfile) {
     return {
       ready: false,
@@ -685,7 +698,7 @@ async function loadEnvAudit(config) {
     };
   }
   try {
-    const { stdout, stderr } = await execFileAsync(config.envAuditScript, ["--profile", config.projectProfile], {
+    const { stdout, stderr } = await execFileAsync(config.envAuditScript, auditArgs, {
       cwd: ROOT_DIR,
       timeout: Math.max(config.cmdTimeoutMs, 15000),
       maxBuffer: 1024 * 1024,

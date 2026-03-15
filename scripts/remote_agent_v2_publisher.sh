@@ -300,7 +300,7 @@ emit_compose_metadata() {
   local project_env="$2"
   local interval="$3"
   local ttl="$4"
-  local compose_root compose_file compose_env_file services whole_home_mount platform_env_wired
+  local compose_root compose_file compose_env_file services whole_home_mount platform_env_wired runtime_ssh_dir
   local project_public_env_file platform_public_env_file project_secrets_env_file platform_secrets_env_file openai_env_file server_env_authority_wired legacy_runtime_env_fallback
   compose_root="$(read_env_key "$project_env" "COMPOSE_ROOT" || true)"
   compose_file="$(read_env_key "$project_env" "COMPOSE_FILE" || true)"
@@ -311,6 +311,7 @@ emit_compose_metadata() {
   project_secrets_env_file=""
   platform_secrets_env_file=""
   openai_env_file=""
+  runtime_ssh_dir=""
   whole_home_mount="0"
   platform_env_wired="0"
   server_env_authority_wired="0"
@@ -322,6 +323,7 @@ emit_compose_metadata() {
     platform_env_wired="1"
   fi
   if [[ -f "$compose_env_file" ]]; then
+    runtime_ssh_dir="$(read_env_key "$compose_env_file" "RUNTIME_SSH_DIR" || true)"
     project_public_env_file="$(read_env_key "$compose_env_file" "PROJECT_PUBLIC_ENV_FILE" || true)"
     platform_public_env_file="$(read_env_key "$compose_env_file" "PLATFORM_PUBLIC_ENV_FILE" || true)"
     project_secrets_env_file="$(read_env_key "$compose_env_file" "PROJECT_SECRETS_ENV_FILE" || true)"
@@ -341,6 +343,7 @@ emit_compose_metadata() {
     --arg compose_root "$compose_root" \
     --arg compose_file "$compose_file" \
     --arg compose_env_file "$compose_env_file" \
+    --arg runtime_ssh_dir "$runtime_ssh_dir" \
     --arg project_public_env_file "$project_public_env_file" \
     --arg platform_public_env_file "$platform_public_env_file" \
     --arg project_secrets_env_file "$project_secrets_env_file" \
@@ -368,6 +371,7 @@ emit_compose_metadata() {
       compose_file_exists: $compose_file_exists,
       compose_env_file: $compose_env_file,
       compose_env_file_exists: $compose_env_file_exists,
+      runtime_ssh_dir: $runtime_ssh_dir,
       project_public_env_file: $project_public_env_file,
       platform_public_env_file: $platform_public_env_file,
       project_secrets_env_file: $project_secrets_env_file,

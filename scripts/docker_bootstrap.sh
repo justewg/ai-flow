@@ -533,7 +533,12 @@ ensure_workspace_env_symlink() {
 
 derive_runtime_mount_paths() {
   local gh_app_private_key_path=""
-  runtime_ssh_dir="${runtime_home}/.ssh"
+  local server_repo_ssh_dir="/etc/ai-flow/secrets/projects/${profile}/repo-ssh"
+  if [[ -d "$server_repo_ssh_dir" ]]; then
+    runtime_ssh_dir="$server_repo_ssh_dir"
+  else
+    runtime_ssh_dir="${runtime_home}/.ssh"
+  fi
   runtime_gh_config_dir="${runtime_home}/.config/gh"
   gh_app_private_key_path="$(read_env_key "$host_env_file" "GH_APP_PRIVATE_KEY_PATH")"
   gh_app_private_key_dir="$(dirname "$gh_app_private_key_path")"
@@ -544,7 +549,10 @@ derive_runtime_mount_paths() {
 
 ensure_runtime_home_paths() {
   ensure_dir_owned "$codex_home"
-  ensure_dir_owned "$runtime_ssh_dir"
+  case "$runtime_ssh_dir" in
+    /etc/ai-flow/secrets/*) ;;
+    *) ensure_dir_owned "$runtime_ssh_dir" ;;
+  esac
   ensure_dir_owned "$runtime_gh_config_dir"
   ensure_dir_owned "$gh_app_private_key_dir"
   case "$openai_env_file" in

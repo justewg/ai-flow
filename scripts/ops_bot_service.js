@@ -134,6 +134,19 @@ function readEnvKey(filePath, key) {
   return "";
 }
 
+function defaultAiFlowRootDir(env = process.env) {
+  const fromEnv = String(env.AI_FLOW_ROOT_DIR || "").trim();
+  if (fromEnv) {
+    return path.resolve(fromEnv);
+  }
+  const flowEnvFile = path.join(ROOT_DIR, ".flow", "config", "flow.env");
+  const fromFlowEnv = readEnvKey(flowEnvFile, "AI_FLOW_ROOT_DIR");
+  if (fromFlowEnv) {
+    return path.resolve(fromFlowEnv);
+  }
+  return ROOT_DIR;
+}
+
 function execFileAsync(file, args = [], options = {}) {
   return new Promise((resolve, reject) => {
     execFile(file, args, options, (error, stdout, stderr) => {
@@ -329,6 +342,7 @@ function loadConfig(env = process.env) {
   const tgBotToken = String(env.OPS_BOT_TG_BOT_TOKEN || env.DAEMON_TG_BOT_TOKEN || env.TG_BOT_TOKEN || "").trim();
   const publicBaseUrl = String(env.OPS_BOT_PUBLIC_BASE_URL || "").trim();
   const flowEnvFile = path.join(ROOT_DIR, ".flow", "config", "flow.env");
+  const aiFlowRootDir = defaultAiFlowRootDir(env);
   const profileConfigDir = path.join(ROOT_DIR, ".flow", "config", "profiles");
   const localStateRootDir = path.join(ROOT_DIR, ".flow", "state", "codex");
   const codexStateDir = path.resolve(env.CODEX_STATE_DIR || env.FLOW_STATE_DIR || DEFAULT_CODEX_DIR);
@@ -339,7 +353,7 @@ function loadConfig(env = process.env) {
     env.FLOW_PM2_LOG_DIR || readEnvKey(flowEnvFile, "FLOW_PM2_LOG_DIR") || path.join(path.dirname(runtimeLogDir), "pm2"),
   );
   const remoteStateDir = path.resolve(
-    env.OPS_BOT_REMOTE_STATE_DIR || path.join(ROOT_DIR, ".flow", "state", "ops-bot", "remote"),
+    env.OPS_BOT_REMOTE_STATE_DIR || path.join(aiFlowRootDir, "state", "ops-bot", "remote"),
   );
   const remoteSnapshotFile = path.resolve(
     env.OPS_BOT_REMOTE_SNAPSHOT_FILE || path.join(remoteStateDir, "_legacy", "snapshot.json"),
@@ -386,6 +400,7 @@ function loadConfig(env = process.env) {
     cmdTimeoutMs,
     tgBotToken,
     publicBaseUrl,
+    aiFlowRootDir,
     flowEnvFile,
     profileConfigDir,
     localStateRootDir,
@@ -560,6 +575,7 @@ async function buildDebugRuntimePayload(config) {
     available_logs: DEBUG_LOG_NAMES,
     paths: {
       root_dir: ROOT_DIR,
+      ai_flow_root_dir: config.aiFlowRootDir,
       runtime_log_dir: config.runtimeLogDir,
       codex_state_dir: config.codexStateDir,
       remote_state_dir: config.remoteStateDir,

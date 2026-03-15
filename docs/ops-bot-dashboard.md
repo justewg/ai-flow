@@ -100,7 +100,7 @@ OPS_BOT_INGEST_PATH=/ops/ingest/status
 OPS_BOT_INGEST_SECRET=<shared-secret>
 OPS_BOT_SUMMARY_INGEST_PATH=/ops/ingest/log-summary
 OPS_BOT_SUMMARY_INGEST_SECRET=<shared-secret>
-OPS_BOT_REMOTE_STATE_DIR=.flow/state/ops-bot/remote
+OPS_BOT_REMOTE_STATE_DIR=/var/sites/.ai-flow/state/ops-bot/remote
 OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC=600
 OPS_BOT_REMOTE_SUMMARY_TTL_SEC=1200
 ```

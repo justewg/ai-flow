@@ -29,6 +29,8 @@
 
 - authoritative workspace:
   - `/var/sites/.ai-flow/workspaces/<profile>`
+- host-level platform env:
+  - `/var/sites/.ai-flow/config/ai-flow.platform.env`
 - host-local flow env:
   - `/var/sites/.ai-flow/config/<profile>.flow.env`
 - docker root:
@@ -44,6 +46,28 @@
 - `down.sh`
 - `logs.sh`
 - `exec-runtime.sh`
+
+## Разделение platform env и project env
+
+Семантика должна быть такой:
+
+- `ai-flow.platform.env`
+  - host-level и platform-level настройки;
+  - public ingress/base URL;
+  - host-level `ops-bot` / `gh-app-auth` defaults;
+  - debug bearer token и другие не-project-specific секреты.
+- `<profile>.flow.env`
+  - только project/runtime binding конкретного consumer-project;
+  - repo/project profile;
+  - project state/log paths;
+  - project-specific automation tokens и прочий runtime binding.
+
+Для `planka` это означает:
+
+- platform env:
+  - `/var/sites/.ai-flow/config/ai-flow.platform.env`
+- project env:
+  - `/var/sites/.ai-flow/config/planka.flow.env`
 
 ## Контейнерная схема
 
@@ -69,6 +93,7 @@
 - используют один и тот же runtime `HOME` и `CODEX_HOME`.
 - `daemon` и `watchdog` стартуют только после healthy `gh-app-auth`.
 - `ops-bot` живёт в том же compose-контуре и использует тот же workspace/state/log layout.
+- host-level переменные сервисов приходят из `ai-flow.platform.env`, project-specific — из `<profile>.flow.env`.
 
 ## Ключевое предположение
 

@@ -756,6 +756,7 @@ check_project_file() {
   local env_keys=()
   local key value bad_keys=() misplaced_keys=() legacy_keys=()
   local project_ai_flow_root platform_ai_flow_root expected_logs_dir expected_runtime_dir expected_pm2_dir expected_state_dir expected_remote_state_dir project_profile_value
+  local expected_host_env_file workspace_env_file workspace_env_target
 
   section "Project Env"
   if [[ -f "$env_file" ]]; then
@@ -833,11 +834,35 @@ check_project_file() {
   fi
 
   if [[ -n "$project_ai_flow_root" ]]; then
+    expected_host_env_file="${project_ai_flow_root}/config/${project_profile}.flow.env"
+    workspace_env_file="${ROOT_DIR}/.flow/config/flow.env"
     expected_state_dir="${project_ai_flow_root}/state/${project_profile}"
     expected_logs_dir="${project_ai_flow_root}/logs/${project_profile}"
     expected_runtime_dir="${expected_logs_dir}/runtime"
     expected_pm2_dir="${expected_logs_dir}/pm2"
     expected_remote_state_dir="${project_ai_flow_root}/state/ops-bot/remote"
+
+    if [[ -L "$workspace_env_file" ]]; then
+      workspace_env_target="$(readlink "$workspace_env_file")"
+      if [[ "$workspace_env_target" != /* ]]; then
+        workspace_env_target="$(cd "$(dirname "$workspace_env_file")/$(dirname "$workspace_env_target")" && pwd -P)/$(basename "$workspace_env_target")"
+      fi
+      if [[ "$workspace_env_target" == "$expected_host_env_file" ]]; then
+        report_ok "FLOW_ENV_SYMLINK" "${workspace_env_file} -> ${expected_host_env_file}"
+      else
+        report_warn "FLOW_ENV_SYMLINK" "unexpected-target:${workspace_env_target}"
+        report_action "FLOW_ENV_SYMLINK" "Сделай ${workspace_env_file} symlink на ${expected_host_env_file}"
+      fi
+    elif [[ -f "$workspace_env_file" && -f "$expected_host_env_file" ]]; then
+      report_warn "FLOW_ENV_DUPLICATE_FILES" "${workspace_env_file};${expected_host_env_file}"
+      report_action "FLOW_ENV_DUPLICATE_FILES" "Оставь source-of-truth в ${expected_host_env_file}, а ${workspace_env_file} замени symlink-ом"
+    elif [[ -f "$workspace_env_file" ]]; then
+      report_warn "FLOW_ENV_WORKSPACE_LOCAL" "${workspace_env_file}"
+      report_action "FLOW_ENV_WORKSPACE_LOCAL" "Если хочешь host-level source-of-truth, создай ${expected_host_env_file} и замени ${workspace_env_file} symlink-ом"
+    elif [[ -f "$expected_host_env_file" ]]; then
+      report_warn "FLOW_ENV_WORKSPACE_MISSING" "${workspace_env_file}"
+      report_action "FLOW_ENV_WORKSPACE_MISSING" "Создай symlink ${workspace_env_file} -> ${expected_host_env_file}"
+    fi
 
     [[ "$(env_value "$env_file" "CODEX_STATE_DIR")" == "$expected_state_dir" ]] \
       && report_ok "CODEX_STATE_DIR_LAYOUT" "$expected_state_dir" \

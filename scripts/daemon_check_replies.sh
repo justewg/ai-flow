@@ -364,6 +364,39 @@ cleanup_review_task_branch_if_merged() {
   fi
 }
 
+clear_waiting_for_terminal_review_pr() {
+  local issue_number="$1"
+  local kind_label="$2"
+  local review_branch_name="$3"
+  local review_pr_number="$4"
+  local review_pr_state="$5"
+  local review_pr_merged_at="$6"
+  local review_pr_closed_at="$7"
+
+  if [[ "$review_pr_state" == "MERGED" || -n "$review_pr_merged_at" ]]; then
+    cleanup_review_task_branch_if_merged "$review_branch_name"
+    clear_waiting_state
+    clear_review_context
+    echo "STALE_WAITING_CONTEXT_CLEARED=REVIEW_PR_MERGED"
+    echo "STALE_WAITING_ISSUE_NUMBER=$issue_number"
+    echo "STALE_WAITING_PR_NUMBER=$review_pr_number"
+    echo "STALE_WAITING_KIND=$kind_label"
+    echo "NO_WAITING_USER_REPLY=1"
+    exit 0
+  fi
+
+  if [[ "$review_pr_state" == "CLOSED" || -n "$review_pr_closed_at" ]]; then
+    clear_waiting_state
+    clear_review_context
+    echo "STALE_WAITING_CONTEXT_CLEARED=REVIEW_PR_CLOSED"
+    echo "STALE_WAITING_ISSUE_NUMBER=$issue_number"
+    echo "STALE_WAITING_PR_NUMBER=$review_pr_number"
+    echo "STALE_WAITING_KIND=$kind_label"
+    echo "NO_WAITING_USER_REPLY=1"
+    exit 0
+  fi
+}
+
 clear_stale_waiting_context() {
   local reason="$1"
   local issue_number="${2:-}"
@@ -501,72 +534,60 @@ if [[ "$issue_auto_ignore" == "1" ]]; then
 fi
 
 # Fallback against post-merge auto-close failures:
-# for REVIEW_FEEDBACK we should not block daemon indefinitely once linked PR
-# is already merged/closed.
-if is_review_feedback_kind "$kind_label"; then
-  review_pr_number=""
-  review_issue_number=""
-  [[ -s "$review_pr_file" ]] && review_pr_number="$(<"$review_pr_file")"
-  [[ -s "$review_issue_file" ]] && review_issue_number="$(<"$review_issue_file")"
+# once linked review PR is already merged/closed, stale waiting context should
+# not block daemon indefinitely, even if the last waiting-kind was BLOCKER.
+review_pr_number=""
+review_issue_number=""
+[[ -s "$review_pr_file" ]] && review_pr_number="$(<"$review_pr_file")"
+[[ -s "$review_issue_file" ]] && review_issue_number="$(<"$review_issue_file")"
 
-  if [[ -n "$review_issue_number" && "$review_issue_number" != "$issue_number" ]]; then
-    emit_wait_state "$task_id" "$issue_number" "$question_comment_id" "$kind_label"
-    echo "WAITING_FOR_REVIEW_CONTEXT_MATCH=1"
-    echo "WAITING_CONTEXT_ISSUE_NUMBER=$issue_number"
-    echo "WAITING_REVIEW_ISSUE_NUMBER=$review_issue_number"
+if is_review_feedback_kind "$kind_label" &&
+  [[ -n "$review_issue_number" && "$review_issue_number" != "$issue_number" ]]; then
+  emit_wait_state "$task_id" "$issue_number" "$question_comment_id" "$kind_label"
+  echo "WAITING_FOR_REVIEW_CONTEXT_MATCH=1"
+  echo "WAITING_CONTEXT_ISSUE_NUMBER=$issue_number"
+  echo "WAITING_REVIEW_ISSUE_NUMBER=$review_issue_number"
+  exit 0
+fi
+
+if [[ "$review_pr_number" =~ ^[0-9]+$ ]] &&
+  [[ -z "$review_issue_number" || "$review_issue_number" == "$issue_number" ]]; then
+  review_pr_json=""
+  if ! review_pr_json="$(
+    "${CODEX_SHARED_SCRIPTS_DIR}/gh_retry.sh" \
+      gh api "repos/${REPO}/pulls/${review_pr_number}" \
+        --jq '{state: (.state // ""), mergedAt: (.merged_at // ""), closedAt: (.closed_at // "")}'
+  )"; then
+    rc=$?
+    if [[ "$rc" -eq 75 ]]; then
+      emit_wait_state "$task_id" "$issue_number" "$question_comment_id" "$kind_label"
+      echo "WAIT_GITHUB_API_UNSTABLE=1"
+      echo "WAITING_FOR_REVIEW_PR_STATE=1"
+      echo "WAITING_REVIEW_PR_NUMBER=$review_pr_number"
+      exit 0
+    fi
+    # Non-retryable PR lookup failure should not deadlock queue.
+    clear_waiting_state
+    clear_review_context
+    echo "STALE_WAITING_CONTEXT_CLEARED=REVIEW_PR_LOOKUP_FAILED"
+    echo "STALE_WAITING_ISSUE_NUMBER=$issue_number"
+    echo "STALE_WAITING_PR_NUMBER=$review_pr_number"
+    echo "NO_WAITING_USER_REPLY=1"
     exit 0
   fi
 
-  if [[ "$review_pr_number" =~ ^[0-9]+$ ]]; then
-    review_pr_json=""
-    if ! review_pr_json="$(
-      "${CODEX_SHARED_SCRIPTS_DIR}/gh_retry.sh" \
-        gh api "repos/${REPO}/pulls/${review_pr_number}" \
-          --jq '{state: (.state // ""), mergedAt: (.merged_at // ""), closedAt: (.closed_at // "")}'
-    )"; then
-      rc=$?
-      if [[ "$rc" -eq 75 ]]; then
-        emit_wait_state "$task_id" "$issue_number" "$question_comment_id" "$kind_label"
-        echo "WAIT_GITHUB_API_UNSTABLE=1"
-        echo "WAITING_FOR_REVIEW_PR_STATE=1"
-        echo "WAITING_REVIEW_PR_NUMBER=$review_pr_number"
-        exit 0
-      fi
-      # Non-retryable PR lookup failure should not deadlock queue.
-      clear_waiting_state
-      clear_review_context
-      echo "STALE_WAITING_CONTEXT_CLEARED=REVIEW_PR_LOOKUP_FAILED"
-      echo "STALE_WAITING_ISSUE_NUMBER=$issue_number"
-      echo "STALE_WAITING_PR_NUMBER=$review_pr_number"
-      echo "NO_WAITING_USER_REPLY=1"
-      exit 0
-    fi
+  review_pr_state="$(printf '%s' "$review_pr_json" | jq -r '.state // ""' | tr '[:lower:]' '[:upper:]')"
+  review_pr_merged_at="$(printf '%s' "$review_pr_json" | jq -r '.mergedAt // ""')"
+  review_pr_closed_at="$(printf '%s' "$review_pr_json" | jq -r '.closedAt // ""')"
 
-    review_pr_state="$(printf '%s' "$review_pr_json" | jq -r '.state // ""' | tr '[:lower:]' '[:upper:]')"
-    review_pr_merged_at="$(printf '%s' "$review_pr_json" | jq -r '.mergedAt // ""')"
-    review_pr_closed_at="$(printf '%s' "$review_pr_json" | jq -r '.closedAt // ""')"
-
-    if [[ "$review_pr_state" == "MERGED" || -n "$review_pr_merged_at" ]]; then
-      cleanup_review_task_branch_if_merged "$review_branch_name"
-      clear_waiting_state
-      clear_review_context
-      echo "STALE_WAITING_CONTEXT_CLEARED=REVIEW_PR_MERGED"
-      echo "STALE_WAITING_ISSUE_NUMBER=$issue_number"
-      echo "STALE_WAITING_PR_NUMBER=$review_pr_number"
-      echo "NO_WAITING_USER_REPLY=1"
-      exit 0
-    fi
-
-    if [[ "$review_pr_state" == "CLOSED" || -n "$review_pr_closed_at" ]]; then
-      clear_waiting_state
-      clear_review_context
-      echo "STALE_WAITING_CONTEXT_CLEARED=REVIEW_PR_CLOSED"
-      echo "STALE_WAITING_ISSUE_NUMBER=$issue_number"
-      echo "STALE_WAITING_PR_NUMBER=$review_pr_number"
-      echo "NO_WAITING_USER_REPLY=1"
-      exit 0
-    fi
-  fi
+  clear_waiting_for_terminal_review_pr \
+    "$issue_number" \
+    "$kind_label" \
+    "$review_branch_name" \
+    "$review_pr_number" \
+    "$review_pr_state" \
+    "$review_pr_merged_at" \
+    "$review_pr_closed_at"
 fi
 
 if [[ "$pending_post" == "1" ]]; then

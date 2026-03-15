@@ -95,6 +95,11 @@
 - монтируют один и тот же authoritative workspace;
 - видят host-level `AI_FLOW_ROOT` по тому же абсолютному пути;
 - используют один и тот же runtime `HOME`, но не монтируют весь host home целиком: в контейнеры пробрасываются только `CODEX_HOME`, `~/.ssh`, `~/.config/gh` и каталог с `GH_APP_PRIVATE_KEY_PATH`.
+- для git-доступа runtime-контур предпочитает server-side SSH dir `/etc/ai-flow/secrets/projects/<profile>/repo-ssh`, если он существует; иначе использует fallback `~/.ssh`.
+- рекомендуемый production-вариант для daemon/watchdog/runtime:
+  - отдельный GitHub deploy/service key;
+  - файлы `id_ed25519`, `id_ed25519.pub`, `known_hosts` в `/etc/ai-flow/secrets/projects/<profile>/repo-ssh`;
+  - права: каталог `0750`, приватный ключ `0640`, владелец `root:<runtime-group>`.
 - `daemon` и `watchdog` стартуют только после healthy `gh-app-auth`.
 - `ops-bot` живёт в том же compose-контуре и использует тот же workspace/state/log layout.
 - host-level переменные сервисов приходят из `ai-flow.platform.env`, project-specific — из `<profile>.flow.env`.

@@ -245,6 +245,7 @@ Match User ${agent_user}
     PermitUserRC no
     PermitTunnel no
     ForceCommand ${gateway_install_path}
+Match all
 EOF
   chmod 0644 "$sshd_fragment_path"
   sshd -t

@@ -534,10 +534,15 @@ async function main() {
         question({
           key: "OPS_BOT_REMOTE_STATE_DIR",
           label: "OPS_BOT_REMOTE_STATE_DIR",
-          help: "Локальный каталог для remote snapshot/log-summary ingest. Обычно .flow/state/ops-bot/remote.",
+          help: "Локальный каталог для remote snapshot/log-summary ingest. Обычно <AI_FLOW_ROOT_DIR>/state/ops-bot/remote.",
           required: true,
-          defaultValue: (ctx) => ctx.current("OPS_BOT_REMOTE_STATE_DIR") || ".flow/state/ops-bot/remote",
-          defaultSource: (ctx) => (ctx.current("OPS_BOT_REMOTE_STATE_DIR") ? "flow.env" : "default:.flow/state/ops-bot/remote"),
+          defaultValue: (ctx) =>
+            ctx.current("OPS_BOT_REMOTE_STATE_DIR") ||
+            `${ctx.current("AI_FLOW_ROOT_DIR") || ctx.value("AI_FLOW_ROOT_DIR") || "<AI_FLOW_ROOT_DIR>"}/state/ops-bot/remote`,
+          defaultSource: (ctx) =>
+            ctx.current("OPS_BOT_REMOTE_STATE_DIR")
+              ? "flow.env"
+              : `derived:${ctx.current("AI_FLOW_ROOT_DIR") || ctx.value("AI_FLOW_ROOT_DIR") || "<AI_FLOW_ROOT_DIR>"}/state/ops-bot/remote`,
           validate: validatePathLike,
         }),
         question({

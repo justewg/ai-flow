@@ -760,7 +760,7 @@ chmod +x .flow/shared/scripts/*.sh
 - `OPS_BOT_INGEST_SECRET` (секрет заголовка `X-Ops-Status-Secret` для ingest POST)
 - `OPS_BOT_SUMMARY_INGEST_PATH` (path ingest endpoint для remote `log_summary`; по умолчанию `/ops/ingest/log-summary`)
 - `OPS_BOT_SUMMARY_INGEST_SECRET` (секрет для summary-ingest; если не задан — используется `OPS_BOT_INGEST_SECRET`)
-- `OPS_BOT_REMOTE_STATE_DIR` (каталог раздельного remote ingest storage; по умолчанию `.flow/state/ops-bot/remote`)
+- `OPS_BOT_REMOTE_STATE_DIR` (каталог раздельного remote ingest storage; по умолчанию `<AI_FLOW_ROOT_DIR>/state/ops-bot/remote`)
 - `OPS_BOT_REMOTE_SNAPSHOT_FILE` (legacy-файл кеша последнего принятого удаленного snapshot; по умолчанию `.flow/state/ops-bot/remote/_legacy/snapshot.json`)
 - `OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC` (TTL удаленного snapshot в секундах; по умолчанию `600`)
 - `OPS_BOT_REMOTE_SUMMARY_FILE` (legacy-файл кеша последнего принятого удаленного summary bundle; по умолчанию `.flow/state/ops-bot/remote/_legacy/summary.json`)

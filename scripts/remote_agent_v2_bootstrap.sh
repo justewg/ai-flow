@@ -117,6 +117,14 @@ home_dir_for_user() {
   getent passwd "$1" | cut -d: -f6
 }
 
+runtime_delivery_user() {
+  invoking_user
+}
+
+runtime_delivery_group() {
+  id -gn "$(runtime_delivery_user)"
+}
+
 default_authorized_key_file() {
   local operator_user operator_home candidate
   operator_user="$(invoking_user)"
@@ -151,7 +159,7 @@ install_immutable_binaries() {
 install_public_and_secret_layout() {
   install -d -o root -g root -m 0755 /etc/ai-flow
   install -d -o root -g root -m 0755 /etc/ai-flow/public "$public_projects_root"
-  install -d -o root -g root -m 0700 /etc/ai-flow/secrets "$secrets_platform_root" "${secrets_projects_root}/${profile_name}"
+  install -d -o root -g "$(runtime_delivery_group)" -m 0750 /etc/ai-flow/secrets "$secrets_platform_root" "${secrets_projects_root}/${profile_name}"
   install -d -o root -g root -m 0750 "${diagnostics_root}/${profile_name}"
   install -d -o root -g root -m 0750 /var/log/ai-flow
   touch "$audit_log_path"
@@ -215,7 +223,8 @@ copy_selected_secret_keys() {
   shift 2 || true
   local key value
   : > "$target_env"
-  chmod 0600 "$target_env"
+  chown root:"$(runtime_delivery_group)" "$target_env"
+  chmod 0640 "$target_env"
   for key in "$@"; do
     value="$(read_env_key "$source_env" "$key")"
     if [[ -n "$value" ]]; then
@@ -230,7 +239,7 @@ copy_secret_material() {
   copy_selected_secret_keys "$source_platform_env_file" "$platform_secret_env" "${platform_secret_keys[@]}"
   copy_selected_secret_keys "$source_project_env_file" "$project_secret_env" "${project_secret_keys[@]}"
   if [[ -n "$source_openai_env_file" && -f "$source_openai_env_file" ]]; then
-    install -o root -g root -m 0600 "$source_openai_env_file" "${secrets_platform_root}/openai.env"
+    install -o root -g "$(runtime_delivery_group)" -m 0640 "$source_openai_env_file" "${secrets_platform_root}/openai.env"
   fi
 }
 

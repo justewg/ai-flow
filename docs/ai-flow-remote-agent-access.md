@@ -47,6 +47,15 @@
 
 - `${AI_FLOW_ROOT_DIR}/bin/ai-flow-remote-agent-gateway`
 
+Это не отдельный TCP-порт и не отдельный сетевой daemon.
+
+Это обычный SSH forced-command wrapper:
+
+- ключ лежит в `~aiflow/.ssh/authorized_keys`;
+- у записи ключа есть префикс `command="...ai-flow-remote-agent-gateway --forced-command ..."`;
+- при `ssh aiflow@host <probe-subcommand>` OpenSSH не даёт shell, а запускает именно gateway;
+- gateway валидирует allowlisted probe subcommand и передаёт его дальше в `remote_probe`.
+
 Он:
 
 - читает `SSH_ORIGINAL_COMMAND`;
@@ -106,9 +115,12 @@ cd /var/sites/.ai-flow/workspaces/planka
   --agent-user aiflow \
   --ai-flow-root /var/sites/.ai-flow \
   --workspace-path /var/sites/.ai-flow/workspaces/planka \
-  --authorized-key-file /root/.ssh/aiflow_remote_agent.pub \
   --password-mode locked
 ```
+
+Если не передавать `--authorized-key-file`, bootstrap по умолчанию попробует взять публичный ключ оператора, который запускал `sudo`, из:
+
+- `~<SUDO_USER>/.ssh/aiflow_remote_agent.pub`
 
 Что делает bootstrap:
 

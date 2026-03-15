@@ -2443,9 +2443,22 @@ if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
   fi
 fi
 
-if ! maybe_release_active_task_on_status_mismatch; then
-  rc=$?
-  [[ "$rc" -eq 75 ]] && exit 0
+active_release_out="$(
+  maybe_release_active_task_on_status_mismatch 2>&1
+)"
+active_release_rc=$?
+if [[ -n "$active_release_out" ]]; then
+  emit_lines "$active_release_out"
+fi
+if [[ "$active_release_rc" -eq 75 ]]; then
+  exit 0
+fi
+if [[ "$active_release_rc" -ne 0 ]]; then
+  exit "$active_release_rc"
+fi
+if printf '%s' "$active_release_out" | grep -q '^ACTIVE_TASK_RELEASED_STATUS_MISMATCH=1'; then
+  echo "ACTIVE_TASK_RELEASED_TICK_ABORTED=1"
+  exit 0
 fi
 
 if [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]]; then

@@ -19,7 +19,6 @@ source_openai_env_file=""
 readonly gateway_install_path="/usr/local/sbin/ai-flow-remote-agent-v2-gateway"
 readonly helper_install_path="/usr/local/libexec/ai-flow/remote-agent-v2-helper"
 readonly publisher_install_path="/usr/local/libexec/ai-flow/ai-flow-diagnostics-publish"
-readonly sshd_fragment_path="/etc/ssh/sshd_config.d/ai-flow-remote-agent-v2.conf"
 readonly sudoers_path="/etc/sudoers.d/ai-flow-remote-agent-v2"
 readonly systemd_service_path="/etc/systemd/system/ai-flow-diagnostics-publish@.service"
 readonly systemd_timer_path="/etc/systemd/system/ai-flow-diagnostics-publish@.timer"
@@ -52,7 +51,7 @@ Usage: sudo .flow/shared/scripts/remote_agent_v2_bootstrap.sh [options]
 
 Install Remote Agent v2:
 - immutable gateway/helper/publisher under /usr/local;
-- sshd Match User + ForceCommand fragment;
+- deterministic `authorized_keys` forced-command for `aiflow`;
 - sudoers allowlist only for immutable helper;
 - server-side public/secrets layout under /etc/ai-flow;
 - deterministic diagnostics publisher timer;
@@ -243,62 +242,6 @@ copy_secret_material() {
   fi
 }
 
-install_sshd_fragment() {
-  cat > "$sshd_fragment_path" <<EOF
-Match User ${agent_user}
-    AuthenticationMethods publickey
-    PasswordAuthentication no
-    PermitTTY no
-    AllowTcpForwarding no
-    X11Forwarding no
-    PermitUserRC no
-    PermitTunnel no
-    ForceCommand ${gateway_install_path}
-Match all
-EOF
-  chmod 0644 "$sshd_fragment_path"
-  sshd -t
-}
-
-reload_ssh_service() {
-  if systemctl reload ssh >/dev/null 2>&1; then
-    return 0
-  fi
-  if systemctl reload sshd >/dev/null 2>&1; then
-    return 0
-  fi
-  if service ssh reload >/dev/null 2>&1; then
-    return 0
-  fi
-  if service sshd reload >/dev/null 2>&1; then
-    return 0
-  fi
-  echo "Unable to reload SSH service after installing ${sshd_fragment_path}" >&2
-  exit 1
-}
-
-verify_sshd_policy() {
-  local sshd_dump
-  sshd_dump="$(sshd -T -C "user=${agent_user},host=127.0.0.1,addr=127.0.0.1" 2>/dev/null || true)"
-  [[ -n "$sshd_dump" ]] || {
-    echo "WARN: Unable to verify effective SSH policy for ${agent_user}" >&2
-    return 1
-  }
-  grep -Eq '^forcecommand /usr/local/sbin/ai-flow-remote-agent-v2-gateway$' <<< "$sshd_dump" || {
-    echo "WARN: Effective SSH policy missing expected ForceCommand for ${agent_user}" >&2
-    return 1
-  }
-  grep -Eq '^permittty no$' <<< "$sshd_dump" || {
-    echo "WARN: Effective SSH policy missing PermitTTY no for ${agent_user}" >&2
-    return 1
-  }
-  grep -Eq '^allowtcpforwarding no$' <<< "$sshd_dump" || {
-    echo "WARN: Effective SSH policy missing AllowTcpForwarding no for ${agent_user}" >&2
-    return 1
-  }
-  return 0
-}
-
 install_sudoers() {
   cat > "$sudoers_path" <<EOF
 Defaults:${agent_user} !requiretty
@@ -343,6 +286,13 @@ append_authorized_key() {
   mv "${authorized_keys}.tmp" "$authorized_keys"
   chown "$agent_user:$agent_user" "$authorized_keys"
   chmod 0600 "$authorized_keys"
+}
+
+cleanup_legacy_remote_agent() {
+  rm -f /etc/ssh/sshd_config.d/ai-flow-remote-agent-v2.conf
+  systemctl reload ssh >/dev/null 2>&1 || systemctl reload sshd >/dev/null 2>&1 || service ssh reload >/dev/null 2>&1 || service sshd reload >/dev/null 2>&1 || true
+  rm -f "${ai_flow_root}/bin/ai-flow-remote-agent-gateway"
+  rm -f /etc/sudoers.d/ai-flow-remote-agent
 }
 
 while [[ $# -gt 0 ]]; do
@@ -435,14 +385,9 @@ install_public_and_secret_layout
 install_platform_public_env
 install_project_public_env
 copy_secret_material
-install_sshd_fragment
-reload_ssh_service
-sshd_policy_effective="0"
-if verify_sshd_policy; then
-  sshd_policy_effective="1"
-fi
 install_sudoers
 install_systemd_units
+cleanup_legacy_remote_agent
 
 if [[ -n "$authorized_key_file" ]]; then
   [[ -f "$authorized_key_file" ]] || { echo "Public key file not found: ${authorized_key_file}" >&2; exit 1; }
@@ -473,4 +418,3 @@ echo "PROJECT_PUBLIC_ENV=${public_projects_root}/${profile_name}.env"
 echo "PROJECT_SECRETS_ENV=${secrets_projects_root}/${profile_name}/runtime.env"
 echo "PLATFORM_SECRETS_ENV=${secrets_platform_root}/runtime.env"
 echo "AUDIT_LOG=${audit_log_path}"
-echo "SSHD_POLICY_EFFECTIVE=${sshd_policy_effective}"

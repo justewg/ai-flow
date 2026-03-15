@@ -3,7 +3,7 @@
 === RESULT REPORT START ===
 
 1. EXECUTIVE SUMMARY
-- Спроектировано и реализовано: Remote Agent v2 для read-only внешней диагностики через отдельного SSH-пользователя `aiflow`, immutable gateway/helper вне repo, sanitized snapshot store, server-side public/secrets authority и loopback-only diagnostics HTTP.
+- Спроектировано и реализовано: Remote Agent v2 для read-only внешней диагностики через отдельного SSH-пользователя `aiflow`, immutable gateway/helper вне repo, sanitized snapshot store, server-side public/secrets authority, loopback-only diagnostics HTTP и JSON-integrity validation на publish/read path.
 - Новая схема принципиально отличается от старой тем, что root-trusted path больше не проходит через mutable repo entrypoints, а diagnostics читает только prepared safe surfaces.
 - Устранённые риски: shell access, arbitrary command execution, docker access, plaintext secret reads, whole-home mount, внешняя публикация diagnostics endpoints, legacy repo-backed remote-agent v1.
 - Оставшиеся риски: server-side secret rotation plan описан, но ещё не исполнен; общий runtime smoke на реальных `Todo` задачах остаётся вне scope этого отчёта.
@@ -28,6 +28,7 @@
   - deterministic transport enforcement
   - отсутствие доверия к repo-updated root entrypoints
   - минимально достаточная observability без secret leakage
+  - explicit integrity checks for malformed upstream/status JSON and malformed published snapshots
 - Какие альтернативы были отвергнуты и почему:
   - `docker` group: почти-root, отвергнуто
   - raw `docker compose`/`journalctl` в remote path: слишком широкий privileged surface
@@ -168,6 +169,7 @@
   - `--lines` max `200`
   - helper max output bytes `131072`
   - snapshot max bytes `262144`
+  - malformed snapshot JSON => degraded with `snapshot_invalid_json=true`
   - stale snapshot => degraded
   - oversize snapshot => degraded
 - Какие источники данных использует каждая:
@@ -324,10 +326,6 @@
   - why: outside Remote Agent v2 cutover scope
   - criticality: LOW
   - later: run `PL-059`
-- Post-stabilization JSON integrity hardening is still pending.
-  - why: current v2 is accepted and functional, but helper does not yet reject malformed JSON snapshots explicitly and publisher does not yet degrade on malformed upstream JSON explicitly
-  - criticality: LOW
-  - later: run `PL-062` and `PL-063`
 - Phase 2 service-user isolation for runtime is still pending.
   - why: current runtime still uses operator-owned delivery/runtime context
   - criticality: LOW
@@ -370,8 +368,6 @@
   - server-side secret rotation execution
 - список отложенных задач
   - runtime smoke on real `Todo` tasks
-  - helper-side JSON snapshot validation hardening
-  - publisher-side upstream JSON validation hardening
   - Phase 2 runtime service-user isolation
 
 15. FINAL RECOMMENDATION

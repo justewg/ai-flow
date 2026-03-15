@@ -31,7 +31,8 @@ Options:
   --agent-user <user>           Dedicated remote agent SSH user. Default: aiflow
   --ai-flow-root <path>         AI flow host root. Default: resolved AI_FLOW_ROOT_DIR
   --workspace-path <path>       Authoritative workspace. Default: current ROOT_DIR
-  --authorized-key-file <path>  Public key file to append into ~agent/.ssh/authorized_keys
+  --authorized-key-file <path>  Public key file to append into ~agent/.ssh/authorized_keys.
+                                Default: ~<SUDO_USER>/.ssh/aiflow_remote_agent.pub if present.
   --password-mode <locked|interactive>
                                 locked: keep password login disabled (default)
                                 interactive: run passwd for break-glass password after setup
@@ -54,6 +55,30 @@ expand_path() {
     "~/"*) printf '%s/%s' "$HOME" "${value#~/}" ;;
     *) printf '%s' "$value" ;;
   esac
+}
+
+invoking_user() {
+  if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
+    printf '%s' "${SUDO_USER}"
+  else
+    printf '%s' "${USER:-$(id -un)}"
+  fi
+}
+
+home_dir_for_user() {
+  local target_user="$1"
+  getent passwd "$target_user" | cut -d: -f6
+}
+
+default_authorized_key_file() {
+  local operator_user operator_home candidate
+  operator_user="$(invoking_user)"
+  operator_home="$(home_dir_for_user "$operator_user" || true)"
+  [[ -n "$operator_home" ]] || return 0
+  candidate="${operator_home}/.ssh/aiflow_remote_agent.pub"
+  if [[ -f "$candidate" ]]; then
+    printf '%s' "$candidate"
+  fi
 }
 
 agent_home_dir() {
@@ -167,6 +192,9 @@ require_root
 
 [[ -n "$ai_flow_root" ]] || ai_flow_root="$(codex_resolve_ai_flow_root_dir)"
 [[ -n "$workspace_path" ]] || workspace_path="$ROOT_DIR"
+if [[ -z "$authorized_key_file" ]]; then
+  authorized_key_file="$(default_authorized_key_file)"
+fi
 ai_flow_root="$(expand_path "$ai_flow_root")"
 workspace_path="$(expand_path "$workspace_path")"
 gateway_install_path="${ai_flow_root}/bin/ai-flow-remote-agent-gateway"

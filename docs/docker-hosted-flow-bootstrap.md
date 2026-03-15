@@ -69,6 +69,10 @@
 - project env:
   - `/var/sites/.ai-flow/config/planka.flow.env`
 
+Отдельный разбор `required / optional / legacy` по env см. в:
+
+- [ai-flow-env-checklist.md](/private/var/sites/PLANKA/docs/ai-flow-env-checklist.md)
+
 ## Контейнерная схема
 
 Текущий рабочий срез содержит 5 сервисов:

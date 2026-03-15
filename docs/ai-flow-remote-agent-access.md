@@ -28,7 +28,7 @@
 - shell-доступ к хосту;
 - generic file reader;
 - generic command runner;
-- постоянный root/ewg backdoor.
+- постоянный operator/root backdoor.
 
 Доступ должен ограничиваться только каноническим `remote_probe` kit.
 
@@ -111,7 +111,7 @@
 ```bash
 cd /var/sites/.ai-flow/workspaces/planka
 ./.flow/shared/scripts/run.sh remote_agent_access_bootstrap \
-  --runtime-user ewg \
+  --runtime-user <runtime-user> \
   --agent-user aiflow \
   --ai-flow-root /var/sites/.ai-flow \
   --workspace-path /var/sites/.ai-flow/workspaces/planka \
@@ -171,7 +171,7 @@ rm -f /var/sites/.ai-flow/bin/ai-flow-remote-agent-gateway
 - не публиковать generic file-read endpoints;
 - не смешивать probe tier и recovery tier;
 - recovery actions (`docker compose up`, `nginx reload`, `systemctl`, etc.) держать отдельным контуром и не включать в этот gateway;
-- хранить break-glass доступ отдельно у оператора (`ewg`/root), а не как постоянный повседневный password-login `aiflow`.
+- хранить break-glass доступ отдельно у оператора (`<runtime-user>`/root), а не как постоянный повседневный password-login `aiflow`.
 
 ## Связь с bootstrap и docker-hosted deployment
 

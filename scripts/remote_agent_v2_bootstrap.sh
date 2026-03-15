@@ -309,7 +309,7 @@ install_systemd_units() {
 
 append_authorized_key() {
   local key_file="$1"
-  local home_dir ssh_dir authorized_keys key_line managed_prefix
+  local home_dir ssh_dir authorized_keys key_line managed_prefix tmp_file
   home_dir="$(home_dir_for_user "$agent_user")"
   ssh_dir="${home_dir}/.ssh"
   authorized_keys="${ssh_dir}/authorized_keys"
@@ -318,15 +318,22 @@ append_authorized_key() {
   chown "$agent_user:$agent_user" "$authorized_keys"
   chmod 0600 "$authorized_keys"
 
+  tmp_file="$(mktemp)"
   while IFS= read -r key_line || [[ -n "$key_line" ]]; do
     [[ -n "${key_line//[[:space:]]/}" ]] || continue
     [[ "$key_line" =~ ^# ]] && continue
     managed_prefix="command=\"${gateway_install_path}\",restrict "
-    if grep -Fqx "${managed_prefix}${key_line}" "$authorized_keys"; then
-      continue
-    fi
+    grep -Fv "$key_line" "$authorized_keys" > "$tmp_file" || true
+    mv "$tmp_file" "$authorized_keys"
+    touch "$authorized_keys"
     printf '%s%s\n' "$managed_prefix" "$key_line" >> "$authorized_keys"
   done < "$key_file"
+
+  rm -f "$tmp_file"
+  awk '!seen[$0]++' "$authorized_keys" > "${authorized_keys}.tmp"
+  mv "${authorized_keys}.tmp" "$authorized_keys"
+  chown "$agent_user:$agent_user" "$authorized_keys"
+  chmod 0600 "$authorized_keys"
 }
 
 while [[ $# -gt 0 ]]; do

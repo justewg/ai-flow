@@ -55,6 +55,7 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh remote_agent_v2_bootstrap`
 - `.flow/shared/scripts/run.sh env_audit`
 - `.flow/shared/scripts/run.sh remote_agent_v2_publisher`
+- `.flow/shared/scripts/run.sh vpn_safe <start|stop|restart|enable|disable|status|ip|route-info>`
 - Для interactive approvals и переменных аргументов:
   - не вызывать `gh ...`, `git ...`, `project_set_status.sh ...` напрямую;
   - записывать входные данные в fixed input files через `run.sh write/copy/clear`;
@@ -80,6 +81,7 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh env_audit [--profile <name>] [--platform-env-file <path>] [--project-env-file <path>] [--fix]` — аудит platform/project env на консистентность: core/full expected keys, misplaced keys, legacy values и canonical host-root layout; `--fix` комментирует misplaced/legacy ключи и добавляет сгруппированные placeholders для недостающих.
 - `.flow/shared/scripts/run.sh remote_probe <subcommand>` — legacy v1 probe kit. Штатно отключён; вместо него использовать Remote Agent v2 SSH probes через `aiflow`.
 - `.flow/shared/scripts/run.sh remote_agent_v2_publisher --profile <name>` — root-only локальный publisher sanitized diagnostics snapshots. Читает только loopback-safe surfaces и allowlisted metadata inputs, пишет bounded artifacts в `/var/lib/ai-flow/diagnostics/<profile>`.
+- `.flow/shared/scripts/run.sh vpn_safe <command>` — безопасный wrapper для host-level OpenVPN unit. Перед `start/restart` сохраняет `/32` route до текущего SSH client IP через исходный default gateway, чтобы full-tunnel VPN не рвал активную SSH-сессию. Для домашнего launcher-а `~/vpn.sh` рекомендуется просто проксировать вызов в этот toolkit command.
 - `.flow/shared/scripts/run.sh nginx_ops_ingress_audit [--platform-env-file <path>] [--host <hostname>] [--conf-file <path>]` — аудит nginx ingress для host-level ai-flow surfaces: читает `OPS_BOT_PUBLIC_BASE_URL`, ищет `/etc/nginx/conf.d/<host>.conf`, показывает существующие `location`-блоки и печатает append-only snippet для отсутствующих `/health`, `/ops/`, `/ops/debug/`, `/telegram/webhook/`.
 - `.flow/shared/scripts/run.sh update_toolkit [--ref <name>]` — подтянуть repo-local submodule `/.flow/shared` до `origin/<ref>` (по умолчанию `main`) и показать, изменился ли gitlink в родительском repo.
 - `.flow/shared/scripts/run.sh create_migration_kit --project <name> [--defaults-from <current|sample>] [--include-secrets] [--source-profile <name>] [--keep-project-binding] --target-repo <path> [--output <path>]` — собрать payload-only `migration_kit.tgz` без toolkit: `.flow/config/flow.env`, `.flow/config/flow.sample.env`, `.flow/github/*`, `.flow/templates/github/*`; в target repo записать `.flow/migration/do_migration.sh`, `.flow/migration/migration.conf`, `.flow/migration/README.md` и локальную копию payload archive. По умолчанию migration kit очищает `GITHUB_REPO` и `PROJECT_*`; сохранить source binding можно только явным `--keep-project-binding`.

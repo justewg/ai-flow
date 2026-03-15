@@ -55,6 +55,7 @@ Commands:
   env_audit
   remote_probe
   remote_agent_v2_publisher
+  vpn_safe
   nginx_ops_ingress_audit
   update_toolkit
   review_context_recover
@@ -651,6 +652,11 @@ case "$cmd" in
   remote_agent_v2_publisher)
     shift 1
     "${CODEX_SHARED_SCRIPTS_DIR}/remote_agent_v2_publisher.sh" "$@"
+    ;;
+
+  vpn_safe)
+    shift 1
+    "${CODEX_SHARED_SCRIPTS_DIR}/vpn_safe.sh" "$@"
     ;;
 
   nginx_ops_ingress_audit)

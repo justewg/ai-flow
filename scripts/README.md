@@ -51,6 +51,7 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh log_tail_all`
 - `.flow/shared/scripts/run.sh host_bootstrap`
 - `.flow/shared/scripts/run.sh docker_bootstrap`
+- `.flow/shared/scripts/run.sh env_audit`
 - Для interactive approvals и переменных аргументов:
   - не вызывать `gh ...`, `git ...`, `project_set_status.sh ...` напрямую;
   - записывать входные данные в fixed input files через `run.sh write/copy/clear`;
@@ -71,6 +72,7 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh bootstrap_repo --profile <name> [--target-repo <path>]` — internal/bootstrap layer, который materialize-ит `.flow/shared` в target repo как submodule (или minimal git-clone fallback вне git worktree), создаёт `.flow/config`/`.flow/tmp/wizard`, кладёт стартовый `COMMAND_TEMPLATES.md` и вызывает `profile_init init`.
 - `.flow/shared/scripts/run.sh host_bootstrap [options]` — внутренний Linux-host bootstrap layer для authoritative runtime: создаёт `config/state/logs/systemd/workspaces` под `AI_FLOW_ROOT`, клонирует workspace, materialize-ит host-local `flow.env` вне deploy snapshot и по выбору запускает questionnaire/audit/install.
 - `.flow/shared/scripts/run.sh onboarding_audit [--profile <name>] [--skip-network]` — первичный аудит consumer-project: toolkit-файлы, локальные команды, git/gh, project-scoped flow env, repo и Project v2, repo workflow overlay и наличие обязательных GitHub Actions secrets.
+- `.flow/shared/scripts/run.sh env_audit [--profile <name>] [--platform-env-file <path>] [--project-env-file <path>]` — аудит platform/project env на консистентность: core/full expected keys, misplaced keys, legacy values и canonical host-root layout.
 - `.flow/shared/scripts/run.sh update_toolkit [--ref <name>]` — подтянуть repo-local submodule `/.flow/shared` до `origin/<ref>` (по умолчанию `main`) и показать, изменился ли gitlink в родительском repo.
 - `.flow/shared/scripts/run.sh create_migration_kit --project <name> [--defaults-from <current|sample>] [--include-secrets] [--source-profile <name>] [--keep-project-binding] --target-repo <path> [--output <path>]` — собрать payload-only `migration_kit.tgz` без toolkit: `.flow/config/flow.env`, `.flow/config/flow.sample.env`, `.flow/github/*`, `.flow/templates/github/*`; в target repo записать `.flow/migration/do_migration.sh`, `.flow/migration/migration.conf`, `.flow/migration/README.md` и локальную копию payload archive. По умолчанию migration kit очищает `GITHUB_REPO` и `PROJECT_*`; сохранить source binding можно только явным `--keep-project-binding`.
   Явные log-path overrides (`FLOW_LOGS_DIR`, `FLOW_RUNTIME_LOG_DIR`, `FLOW_PM2_LOG_DIR`) при этом автоматически переписываются на `<AI_FLOW_ROOT_DIR>/logs/<target-profile>[/runtime|/pm2]`.

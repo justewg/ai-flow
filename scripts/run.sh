@@ -50,6 +50,7 @@ Commands:
   host_bootstrap
   docker_bootstrap
   onboarding_audit
+  env_audit
   update_toolkit
   review_context_recover
   create_migration_kit
@@ -618,6 +619,11 @@ case "$cmd" in
   onboarding_audit)
     shift 1
     "${CODEX_SHARED_SCRIPTS_DIR}/onboarding_audit.sh" "$@"
+    ;;
+
+  env_audit)
+    shift 1
+    "${CODEX_SHARED_SCRIPTS_DIR}/env_audit.sh" "$@"
     ;;
 
   update_toolkit)

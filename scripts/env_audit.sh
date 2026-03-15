@@ -530,6 +530,32 @@ append_missing_group() {
   done
 }
 
+repair_workspace_env_symlink() {
+  local workspace_env_file="$1"
+  local host_env_file="$2"
+  local backup_path=""
+
+  mkdir -p "$(dirname "$workspace_env_file")"
+  mkdir -p "$(dirname "$host_env_file")"
+  [[ -f "$host_env_file" ]] || : > "$host_env_file"
+
+  if [[ -L "$workspace_env_file" ]]; then
+    ln -sfn "$host_env_file" "$workspace_env_file"
+    return 0
+  fi
+
+  if [[ -f "$workspace_env_file" ]]; then
+    backup_path="${workspace_env_file}.pre-symlink-backup.$(date +%s)"
+    cp "$workspace_env_file" "$backup_path"
+    rm -f "$workspace_env_file"
+    report_ok "FLOW_ENV_WORKSPACE_BACKUP" "$backup_path"
+  else
+    rm -f "$workspace_env_file"
+  fi
+
+  ln -s "$host_env_file" "$workspace_env_file"
+}
+
 apply_fix_to_env_file() {
   local env_file="$1"
   local scope="$2"
@@ -761,6 +787,7 @@ check_project_file() {
   local project_profile="$2"
   local env_keys=()
   local key value bad_keys=() misplaced_keys=() legacy_keys=()
+  local flow_env_needs_repair="0"
   local project_ai_flow_root platform_ai_flow_root expected_logs_dir expected_runtime_dir expected_pm2_dir expected_state_dir expected_remote_state_dir project_profile_value
   local expected_host_env_file workspace_env_file workspace_env_target
 
@@ -856,16 +883,20 @@ check_project_file() {
       if [[ "$workspace_env_target" == "$expected_host_env_file" ]]; then
         report_ok "FLOW_ENV_SYMLINK" "${workspace_env_file} -> ${expected_host_env_file}"
       else
+        flow_env_needs_repair="1"
         report_warn "FLOW_ENV_SYMLINK" "unexpected-target:${workspace_env_target}"
         report_action "FLOW_ENV_SYMLINK" "Сделай ${workspace_env_file} symlink на ${expected_host_env_file}"
       fi
     elif [[ -f "$workspace_env_file" && -f "$expected_host_env_file" ]]; then
+      flow_env_needs_repair="1"
       report_warn "FLOW_ENV_DUPLICATE_FILES" "${workspace_env_file};${expected_host_env_file}"
       report_action "FLOW_ENV_DUPLICATE_FILES" "Оставь source-of-truth в ${expected_host_env_file}, а ${workspace_env_file} замени symlink-ом"
     elif [[ -f "$workspace_env_file" ]]; then
+      flow_env_needs_repair="1"
       report_warn "FLOW_ENV_WORKSPACE_LOCAL" "${workspace_env_file}"
       report_action "FLOW_ENV_WORKSPACE_LOCAL" "Если хочешь host-level source-of-truth, создай ${expected_host_env_file} и замени ${workspace_env_file} symlink-ом"
     elif [[ -f "$expected_host_env_file" ]]; then
+      flow_env_needs_repair="1"
       report_warn "FLOW_ENV_WORKSPACE_MISSING" "${workspace_env_file}"
       report_action "FLOW_ENV_WORKSPACE_MISSING" "Создай symlink ${workspace_env_file} -> ${expected_host_env_file}"
     fi
@@ -906,6 +937,10 @@ check_project_file() {
 
   if [[ "$fix_mode" == "1" ]]; then
     apply_fix_to_env_file "$env_file" "project" "project_disable_keys" "project_missing_core_keys" "project_missing_standard_keys"
+    if [[ "$flow_env_needs_repair" == "1" && -n "${expected_host_env_file:-}" && -n "${workspace_env_file:-}" ]]; then
+      repair_workspace_env_symlink "$workspace_env_file" "$expected_host_env_file"
+      report_ok "FLOW_ENV_SYMLINK_FIXED" "${workspace_env_file} -> ${expected_host_env_file}"
+    fi
   fi
 }
 

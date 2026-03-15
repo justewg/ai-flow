@@ -72,7 +72,7 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh bootstrap_repo --profile <name> [--target-repo <path>]` — internal/bootstrap layer, который materialize-ит `.flow/shared` в target repo как submodule (или minimal git-clone fallback вне git worktree), создаёт `.flow/config`/`.flow/tmp/wizard`, кладёт стартовый `COMMAND_TEMPLATES.md` и вызывает `profile_init init`.
 - `.flow/shared/scripts/run.sh host_bootstrap [options]` — внутренний Linux-host bootstrap layer для authoritative runtime: создаёт `config/state/logs/systemd/workspaces` под `AI_FLOW_ROOT`, клонирует workspace, materialize-ит host-local `flow.env` вне deploy snapshot и по выбору запускает questionnaire/audit/install.
 - `.flow/shared/scripts/run.sh onboarding_audit [--profile <name>] [--skip-network]` — первичный аудит consumer-project: toolkit-файлы, локальные команды, git/gh, project-scoped flow env, repo и Project v2, repo workflow overlay и наличие обязательных GitHub Actions secrets.
-- `.flow/shared/scripts/run.sh env_audit [--profile <name>] [--platform-env-file <path>] [--project-env-file <path>]` — аудит platform/project env на консистентность: core/full expected keys, misplaced keys, legacy values и canonical host-root layout.
+- `.flow/shared/scripts/run.sh env_audit [--profile <name>] [--platform-env-file <path>] [--project-env-file <path>] [--fix]` — аудит platform/project env на консистентность: core/full expected keys, misplaced keys, legacy values и canonical host-root layout; `--fix` комментирует misplaced/legacy ключи и добавляет сгруппированные placeholders для недостающих.
 - `.flow/shared/scripts/run.sh update_toolkit [--ref <name>]` — подтянуть repo-local submodule `/.flow/shared` до `origin/<ref>` (по умолчанию `main`) и показать, изменился ли gitlink в родительском repo.
 - `.flow/shared/scripts/run.sh create_migration_kit --project <name> [--defaults-from <current|sample>] [--include-secrets] [--source-profile <name>] [--keep-project-binding] --target-repo <path> [--output <path>]` — собрать payload-only `migration_kit.tgz` без toolkit: `.flow/config/flow.env`, `.flow/config/flow.sample.env`, `.flow/github/*`, `.flow/templates/github/*`; в target repo записать `.flow/migration/do_migration.sh`, `.flow/migration/migration.conf`, `.flow/migration/README.md` и локальную копию payload archive. По умолчанию migration kit очищает `GITHUB_REPO` и `PROJECT_*`; сохранить source binding можно только явным `--keep-project-binding`.
   Явные log-path overrides (`FLOW_LOGS_DIR`, `FLOW_RUNTIME_LOG_DIR`, `FLOW_PM2_LOG_DIR`) при этом автоматически переписываются на `<AI_FLOW_ROOT_DIR>/logs/<target-profile>[/runtime|/pm2]`.
@@ -607,7 +607,8 @@ Rollback нового профиля:
   - для `executor` использует fallback из `watchdog_state_detail`, поэтому в idle видно `state=IDLE`, даже если `executor_*` файлы очищены
   - нормализует `overall_status` и `action_required` (например, `WAIT_DIRTY_WORKTREE + BLOCKING_TODO=0` трактуется как non-blocking warning)
 - `ops_bot_service.js`
-  - HTTP сервис с endpoint-ами: `GET /health`, `GET /ops/status`, `GET /ops/status.json`
+- HTTP сервис с endpoint-ами: `GET /health`, `GET /ops/status`, `GET /ops/status.json`
+- `GET /health` теперь также показывает `env_audit_ready`, `env_audit_status`, `env_audit_summary` для локального project env
   - optional debug API: `GET /ops/debug/runtime.json`, `GET /ops/debug/log-summary.json?hours=6`, `GET /ops/debug/logs/<daemon|watchdog|executor|graphql-rate>?lines=120`
   - debug API по умолчанию выключен; включается через `OPS_BOT_DEBUG_ENABLED=1` и `OPS_BOT_DEBUG_BEARER_TOKEN=<token>`
   - Telegram webhook handler: `POST /telegram/webhook[/<secret>]`

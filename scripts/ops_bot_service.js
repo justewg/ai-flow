@@ -11,7 +11,6 @@ const ROOT_DIR = path.resolve(__dirname, "../../..");
 const FLOW_ROOT_DIR = path.join(ROOT_DIR, ".flow");
 const FLOW_SHARED_SCRIPTS_DIR = path.join(FLOW_ROOT_DIR, "shared", "scripts");
 const DEFAULT_CODEX_DIR = path.join(FLOW_ROOT_DIR, "state", "codex", "default");
-const DEFAULT_OPS_REMOTE_STATE_DIR = path.join(FLOW_ROOT_DIR, "state", "ops-bot", "remote");
 const DEFAULT_BIND = "127.0.0.1";
 const DEFAULT_PORT = 8790;
 const DEFAULT_WEBHOOK_PATH = "/telegram/webhook";
@@ -335,6 +334,9 @@ function loadConfig(env = process.env) {
   const logSummaryScript = path.resolve(
     env.OPS_BOT_LOG_SUMMARY_SCRIPT || path.join(FLOW_SHARED_SCRIPTS_DIR, "log_summary.sh"),
   );
+  const envAuditScript = path.resolve(
+    env.OPS_BOT_ENV_AUDIT_SCRIPT || path.join(FLOW_SHARED_SCRIPTS_DIR, "env_audit.sh"),
+  );
 
   const refreshSec = Math.max(2, parseInteger(env.OPS_BOT_REFRESH_SEC, DEFAULT_REFRESH_SEC));
   const cmdTimeoutMs = Math.max(2000, parseInteger(env.OPS_BOT_CMD_TIMEOUT_MS, DEFAULT_CMD_TIMEOUT_MS));
@@ -342,6 +344,7 @@ function loadConfig(env = process.env) {
   const tgBotToken = String(env.OPS_BOT_TG_BOT_TOKEN || env.DAEMON_TG_BOT_TOKEN || env.TG_BOT_TOKEN || "").trim();
   const publicBaseUrl = String(env.OPS_BOT_PUBLIC_BASE_URL || "").trim();
   const flowEnvFile = path.join(ROOT_DIR, ".flow", "config", "flow.env");
+  const projectProfile = String(env.PROJECT_PROFILE || readEnvKey(flowEnvFile, "PROJECT_PROFILE") || "").trim();
   const aiFlowRootDir = defaultAiFlowRootDir(env);
   const profileConfigDir = path.join(ROOT_DIR, ".flow", "config", "profiles");
   const localStateRootDir = path.join(ROOT_DIR, ".flow", "state", "codex");
@@ -396,10 +399,12 @@ function loadConfig(env = process.env) {
     allowedChatIds,
     snapshotScript,
     logSummaryScript,
+    envAuditScript,
     refreshSec,
     cmdTimeoutMs,
     tgBotToken,
     publicBaseUrl,
+    projectProfile,
     aiFlowRootDir,
     flowEnvFile,
     profileConfigDir,
@@ -417,6 +422,11 @@ function loadConfig(env = process.env) {
     debugDefaultLines,
     debugMaxLines,
     debugMaxBytes,
+    envAuditCache: {
+      promise: null,
+      value: null,
+      loadedAtMs: 0,
+    },
   };
 }
 
@@ -567,10 +577,12 @@ function requireDebugAuth(req, res, config) {
 
 async function buildDebugRuntimePayload(config) {
   const snapshot = await loadEffectiveSnapshot(config);
+  const envAudit = await loadEffectiveEnvAudit(config);
   return {
     generated_at: new Date().toISOString(),
     debug_surface: "ops-bot",
     snapshot,
+    env_audit: envAudit,
     log_summary_hint: "/ops/debug/log-summary.json?hours=6",
     available_logs: DEBUG_LOG_NAMES,
     paths: {
@@ -581,6 +593,155 @@ async function buildDebugRuntimePayload(config) {
       remote_state_dir: config.remoteStateDir,
     },
   };
+}
+
+function parseEnvAuditOutput(output) {
+  const text = String(output || "").replace(/\r\n/g, "\n");
+  const lines = text.split("\n").filter(Boolean);
+  const result = {
+    ready: false,
+    status: "unknown",
+    summary: "",
+    ok: 0,
+    warn: 0,
+    fail: 0,
+    action: 0,
+    warnings: [],
+    failures: [],
+    actions: [],
+    output: text.trim(),
+  };
+  for (const line of lines) {
+    let match = /^⚠️ CHECK_WARN ([A-Z0-9_]+)=(.*)$/.exec(line);
+    if (match) {
+      result.warnings.push({ key: match[1], value: match[2] });
+      continue;
+    }
+    match = /^❌ CHECK_FAIL ([A-Z0-9_]+)=(.*)$/.exec(line);
+    if (match) {
+      result.failures.push({ key: match[1], value: match[2] });
+      continue;
+    }
+    match = /^👉 ACTION ([A-Z0-9_]+)=(.*)$/.exec(line);
+    if (match) {
+      result.actions.push({ key: match[1], value: match[2] });
+      continue;
+    }
+    match = /^SUMMARY ok=(\d+) warn=(\d+) fail=(\d+) action=(\d+)$/.exec(line);
+    if (match) {
+      result.ok = Number.parseInt(match[1], 10) || 0;
+      result.warn = Number.parseInt(match[2], 10) || 0;
+      result.fail = Number.parseInt(match[3], 10) || 0;
+      result.action = Number.parseInt(match[4], 10) || 0;
+      result.summary = line;
+      continue;
+    }
+    match = /^ENV_AUDIT_READY=(\d+)$/.exec(line);
+    if (match) {
+      result.ready = match[1] === "1";
+    }
+  }
+  if (result.fail > 0) {
+    result.status = "fail";
+  } else if (result.warn > 0) {
+    result.status = "warn";
+  } else if (result.ready) {
+    result.status = "ok";
+  } else {
+    result.status = "not_ready";
+  }
+  return result;
+}
+
+async function loadEnvAudit(config) {
+  if (!config.projectProfile) {
+    return {
+      ready: false,
+      status: "skipped",
+      summary: "project profile is not configured",
+      ok: 0,
+      warn: 0,
+      fail: 0,
+      action: 0,
+      warnings: [],
+      failures: [],
+      actions: [],
+      profile: "",
+    };
+  }
+  if (!fs.existsSync(config.envAuditScript)) {
+    return {
+      ready: false,
+      status: "missing_script",
+      summary: `env audit script not found: ${config.envAuditScript}`,
+      ok: 0,
+      warn: 0,
+      fail: 1,
+      action: 0,
+      warnings: [],
+      failures: [{ key: "ENV_AUDIT_SCRIPT", value: config.envAuditScript }],
+      actions: [],
+      profile: config.projectProfile,
+    };
+  }
+  try {
+    const { stdout, stderr } = await execFileAsync(config.envAuditScript, ["--profile", config.projectProfile], {
+      cwd: ROOT_DIR,
+      timeout: Math.max(config.cmdTimeoutMs, 15000),
+      maxBuffer: 1024 * 1024,
+      env: {
+        ...process.env,
+        PROJECT_PROFILE: config.projectProfile,
+      },
+    });
+    const parsed = parseEnvAuditOutput(`${stdout}${stderr ? `\n${stderr}` : ""}`);
+    return {
+      ...parsed,
+      profile: config.projectProfile,
+    };
+  } catch (error) {
+    return {
+      ready: false,
+      status: "error",
+      summary: error && error.message ? error.message : "env audit failed",
+      ok: 0,
+      warn: 0,
+      fail: 1,
+      action: 0,
+      warnings: [],
+      failures: [{ key: "ENV_AUDIT_ERROR", value: error && error.message ? error.message : "unknown error" }],
+      actions: [],
+      profile: config.projectProfile,
+      output: [error && error.stdout ? error.stdout : "", error && error.stderr ? error.stderr : ""]
+        .filter(Boolean)
+        .join("\n")
+        .trim(),
+    };
+  }
+}
+
+async function loadEffectiveEnvAudit(config) {
+  const refreshMs = Math.max(2000, config.refreshSec * 1000);
+  const cache = config.envAuditCache || {
+    promise: null,
+    value: null,
+    loadedAtMs: 0,
+  };
+  if (cache.value && Date.now() - cache.loadedAtMs < refreshMs) {
+    return cache.value;
+  }
+  if (!cache.promise) {
+    cache.promise = loadEnvAudit(config)
+      .then((value) => {
+        cache.value = value;
+        cache.loadedAtMs = Date.now();
+        return value;
+      })
+      .finally(() => {
+        cache.promise = null;
+      });
+  }
+  return cache.promise;
 }
 
 async function loadSnapshot(config) {
@@ -1584,6 +1745,7 @@ function createServer(config, logger) {
       const url = new URL(req.url || "/", "http://localhost");
 
       if (req.method === "GET" && url.pathname === "/health") {
+        const envAudit = await loadEffectiveEnvAudit(config);
         sendJson(res, 200, {
           status: "ok",
           service: "ops-bot",
@@ -1592,6 +1754,9 @@ function createServer(config, logger) {
           summary_ingest_path: config.summaryIngestPath,
           ingest_enabled: config.ingestEnabled,
           telegram_enabled: Boolean(config.tgBotToken),
+          env_audit_ready: envAudit.ready,
+          env_audit_status: envAudit.status,
+          env_audit_summary: envAudit.summary,
         });
         return;
       }
@@ -1876,8 +2041,10 @@ module.exports = {
   handleTelegramCommand,
   isObjectLike,
   loadConfig,
+  loadEffectiveEnvAudit,
   loadEffectiveSummary,
   loadProjectSnapshotsOverview,
   normalizeCommand,
+  parseEnvAuditOutput,
   resolveIncomingMessage,
 };

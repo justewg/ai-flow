@@ -7,7 +7,7 @@ const os = require("os");
 const path = require("path");
 const test = require("node:test");
 
-const { createServer, loadConfig, loadEffectiveSummary } = require("./ops_bot_service");
+const { createServer, loadConfig, loadEffectiveSummary, parseEnvAuditOutput } = require("./ops_bot_service");
 
 function listen(server, host = "127.0.0.1", port = 0) {
   return new Promise((resolve, reject) => {
@@ -77,6 +77,7 @@ function createTempScripts(t) {
 
   const snapshotScript = path.join(tempDir, "status_snapshot_mock.sh");
   const summaryScript = path.join(tempDir, "log_summary_mock.sh");
+  const envAuditScript = path.join(tempDir, "env_audit_mock.sh");
   const runtimeLogDir = path.join(tempDir, "runtime-logs");
   fs.mkdirSync(runtimeLogDir, { recursive: true });
 
@@ -98,10 +99,24 @@ echo "summary ok"
 `,
     "utf8",
   );
+  fs.writeFileSync(
+    envAuditScript,
+    `#!/usr/bin/env bash
+set -euo pipefail
+cat <<'TEXT'
+## Env Audit
+✅ CHECK_OK PROJECT_ENV_FILE=/tmp/mock/flow.env
+SUMMARY ok=2 warn=0 fail=0 action=0
+ENV_AUDIT_READY=1
+TEXT
+`,
+    "utf8",
+  );
   fs.chmodSync(snapshotScript, 0o755);
   fs.chmodSync(summaryScript, 0o755);
+  fs.chmodSync(envAuditScript, 0o755);
 
-  return { snapshotScript, summaryScript, runtimeLogDir };
+  return { snapshotScript, summaryScript, envAuditScript, runtimeLogDir };
 }
 
 function createConfig(t, overrides = {}) {
@@ -128,6 +143,7 @@ JSON
     OPS_BOT_ALLOWED_CHAT_IDS: "",
     OPS_BOT_STATUS_SNAPSHOT_SCRIPT: scripts.snapshotScript,
     OPS_BOT_LOG_SUMMARY_SCRIPT: scripts.summaryScript,
+    OPS_BOT_ENV_AUDIT_SCRIPT: overrides.envAuditScript || scripts.envAuditScript,
     OPS_BOT_REFRESH_SEC: "3",
     OPS_BOT_CMD_TIMEOUT_MS: "5000",
     OPS_BOT_PUBLIC_BASE_URL: "https://planka.ewg40.ru",
@@ -145,8 +161,30 @@ JSON
     OPS_BOT_DEBUG_DEFAULT_LINES: overrides.debugDefaultLines || "",
     OPS_BOT_DEBUG_MAX_LINES: overrides.debugMaxLines || "",
     FLOW_RUNTIME_LOG_DIR: overrides.runtimeLogDir || scripts.runtimeLogDir,
+    PROJECT_PROFILE: overrides.projectProfile || "planka",
   });
 }
+
+test("parseEnvAuditOutput extracts summary and problems", () => {
+  const parsed = parseEnvAuditOutput(
+    [
+      "## Env Audit",
+      "⚠️ CHECK_WARN PROJECT_UNEXPECTED_KEYS=FLOW_SERVICE_MANAGER",
+      "❌ CHECK_FAIL PLATFORM_ENV_FILE=missing:/tmp/ai-flow.platform.env",
+      "👉 ACTION PLATFORM_ENV_FILE=Создай platform env",
+      "SUMMARY ok=10 warn=1 fail=1 action=1",
+      "ENV_AUDIT_READY=0",
+    ].join("\n"),
+  );
+  assert.equal(parsed.ready, false);
+  assert.equal(parsed.status, "fail");
+  assert.equal(parsed.warn, 1);
+  assert.equal(parsed.fail, 1);
+  assert.equal(parsed.action, 1);
+  assert.equal(parsed.warnings[0].key, "PROJECT_UNEXPECTED_KEYS");
+  assert.equal(parsed.failures[0].key, "PLATFORM_ENV_FILE");
+  assert.equal(parsed.actions[0].key, "PLATFORM_ENV_FILE");
+});
 
 test("ops bot endpoints and invalid updates are handled safely", async (t) => {
   const config = createConfig(t);
@@ -164,6 +202,8 @@ test("ops bot endpoints and invalid updates are handled safely", async (t) => {
   });
   assert.equal(health.statusCode, 200);
   assert.equal(health.body.status, "ok");
+  assert.equal(health.body.env_audit_ready, true);
+  assert.equal(health.body.env_audit_status, "ok");
 
   const statusJson = await requestJson({
     method: "GET",
@@ -544,6 +584,8 @@ test("debug endpoints require bearer token and expose runtime payload", async (t
   });
   assert.equal(authorized.statusCode, 200);
   assert.equal(authorized.body.snapshot.overall_status, "HEALTHY");
+  assert.equal(authorized.body.env_audit.ready, true);
+  assert.equal(authorized.body.env_audit.status, "ok");
   assert.equal(Array.isArray(authorized.body.available_logs), true);
   assert.equal(authorized.body.available_logs.includes("daemon"), true);
 });

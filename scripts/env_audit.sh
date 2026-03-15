@@ -537,15 +537,21 @@ apply_fix_to_env_file() {
   local missing_core_array_name="$4"
   local missing_standard_array_name="$5"
   local disable_ref=()
+  local filtered_disable_ref=()
+  local key
   local scope_label
   eval "disable_ref=(\"\${${disable_array_name}[@]-}\")"
+  for key in "${disable_ref[@]}"; do
+    [[ -n "$key" ]] || continue
+    filtered_disable_ref+=("$key")
+  done
   scope_label="$(printf '%s' "$scope" | tr '[:lower:]' '[:upper:]')"
   ensure_env_file_for_fix "$env_file"
   disable_keys_in_env_file "$env_file" "$disable_array_name"
   append_missing_group "$env_file" "$scope" "${scope} missing core keys" "$missing_core_array_name"
   append_missing_group "$env_file" "$scope" "${scope} missing standard keys" "$missing_standard_array_name"
-  if [[ "${#disable_ref[@]}" -gt 0 ]]; then
-    report_ok "${scope_label}_FIX_DISABLED_KEYS" "$(join_by "," "${disable_ref[@]}")"
+  if [[ "${#filtered_disable_ref[@]}" -gt 0 ]]; then
+    report_ok "${scope_label}_FIX_DISABLED_KEYS" "$(join_by "," "${filtered_disable_ref[@]}")"
   fi
   report_ok "${scope_label}_FIX_APPLIED" "$env_file"
 }

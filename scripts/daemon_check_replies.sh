@@ -35,6 +35,12 @@ is_blocker_kind() {
   [[ "$(printf '%s' "$value" | tr '[:lower:]' '[:upper:]')" == "BLOCKER" ]]
 }
 
+has_resume_intent() {
+  local body="$1"
+  printf '%s' "$body" | grep -Eq \
+    '(^|[[:space:]])(go|lgtm|approve|approved)($|[[:space:]])|([Пп][Рр][Оо][Дд][Оо][Лл][Жж][АаЙй])|([Вв][Оо][Зз][Оо][Бб][Нн][Оо][Вв][Ии])|([Вв][Ыы][Пп][Оо][Лл][Нн][ЯяЙй])|([Дд][Ее][Лл][АаЙй][[:space:]]+[Дд][Аа][Лл][Ьь][Шш][Ее])|([Мм][Оо][Жж][Нн][Оо][[:space:]]+[Пп][Рр][Оо][Дд][Оо][Лл][Жж][Аа][Тт][Ьь])|([Рр][Аа][Зз][Рр][Ее][Шш][Аа][Юю])|([Оо][Кк][, ]*[Пп][Рр][Оо][Дд][Оо][Лл][Жж])'
+}
+
 detect_reply_mode() {
   local kind="$1"
   local body="$2"
@@ -48,6 +54,10 @@ detect_reply_mode() {
   )"
   if [[ "$explicit_mode" == "QUESTION" || "$explicit_mode" == "REWORK" ]]; then
     printf '%s' "$explicit_mode"
+    return 0
+  fi
+  if [[ "$explicit_mode" == "FINALIZE" || "$explicit_mode" == "CONTINUE" || "$explicit_mode" == "RESUME" ]]; then
+    printf 'REWORK'
     return 0
   fi
 
@@ -81,7 +91,7 @@ detect_reply_mode() {
       return 0
     fi
 
-    if printf '%s' "$body" | grep -Eiq '(продолж|возобнов|выполняй|делай дальше|go|lgtm|approve|approved|можно продолжать|разрешаю|ок[, ]*продолж)'; then
+    if has_resume_intent "$body"; then
       printf 'REWORK'
       return 0
     fi

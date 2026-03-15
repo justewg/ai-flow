@@ -19,7 +19,7 @@
 
 - установлен `codex`;
 - рабочий checkout проекта, например `/var/sites/planka`;
-- пользователь runtime, например `ewg`;
+- пользователь runtime, например `<runtime-user>`;
 - поднятый VPN-доступ до OpenAI.
 
 ## Реестр того, что должно быть на сервере
@@ -31,7 +31,7 @@
 - `root`:
   - только для host bootstrap, установки системных пакетов, `systemd` wiring и VPN service;
   - не используется как runtime user для `codex`, `daemon`, `watchdog`.
-- runtime user, например `ewg`:
+- runtime user, например `<runtime-user>`:
   - владелец Linux-hosted automation runtime;
   - запускает `codex`, `daemon`, `watchdog`, позже `tmux`;
   - владеет host-level `ai-flow` runtime root.
@@ -52,9 +52,7 @@
 
 Рекомендуемый владелец:
 
-```bash
-ewg:ewg
-```
+`<runtime-user>:<runtime-group>`
 
 ### Authoritative workspace
 
@@ -114,8 +112,8 @@ Platform env:
 Рекомендуемый layout:
 
 ```bash
-/home/ewg/.config/ai-flow/openai.env
-/home/ewg/.secrets/gh-apps/codex-flow.private-key.pem
+/home/<runtime-user>/.config/ai-flow/openai.env
+/home/<runtime-user>/.secrets/gh-apps/codex-flow.private-key.pem
 ```
 
 ### Обязательные runtime surfaces
@@ -196,7 +194,7 @@ GIT_SSH_COMMAND='ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new' git l
 
 ```bash
 sudo mkdir -p /var/sites/.ai-flow
-sudo chown -R ewg:ewg /var/sites/.ai-flow
+sudo chown -R <runtime-user>:<runtime-group> /var/sites/.ai-flow
 ```
 
 ### 7. OpenAI VPN path
@@ -215,24 +213,24 @@ sudo chown -R ewg:ewg /var/sites/.ai-flow
 Примеры:
 
 ```bash
-mkdir -p /home/ewg/.config/ai-flow
-chmod 700 /home/ewg/.config/ai-flow
+mkdir -p /home/<runtime-user>/.config/ai-flow
+chmod 700 /home/<runtime-user>/.config/ai-flow
 
-mkdir -p /home/ewg/.secrets/gh-apps
-chmod 700 /home/ewg/.secrets
-chmod 700 /home/ewg/.secrets/gh-apps
+mkdir -p /home/<runtime-user>/.secrets/gh-apps
+chmod 700 /home/<runtime-user>/.secrets
+chmod 700 /home/<runtime-user>/.secrets/gh-apps
 ```
 
 После этого отдельно размещаются:
 
-- `/home/ewg/.config/ai-flow/openai.env`
-- `/home/ewg/.secrets/gh-apps/codex-flow.private-key.pem`
+- `/home/<runtime-user>/.config/ai-flow/openai.env`
+- `/home/<runtime-user>/.secrets/gh-apps/codex-flow.private-key.pem`
 
 ## Что должно быть готово перед запуском host bootstrap
 
 Перед `flow-host-init.sh` должны быть готовы:
 
-- runtime user, например `ewg`;
+- runtime user, например `<runtime-user>`;
 - доступ к GitHub по SSH;
 - установленный `gh`;
 - установленный `codex`;

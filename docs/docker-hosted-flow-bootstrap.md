@@ -94,7 +94,7 @@
 - работают с `network_mode: host`;
 - монтируют один и тот же authoritative workspace;
 - видят host-level `AI_FLOW_ROOT` по тому же абсолютному пути;
-- используют один и тот же runtime `HOME` и `CODEX_HOME`.
+- используют один и тот же runtime `HOME`, но не монтируют весь host home целиком: в контейнеры пробрасываются только `CODEX_HOME`, `~/.ssh`, `~/.config/gh` и каталог с `GH_APP_PRIVATE_KEY_PATH`.
 - `daemon` и `watchdog` стартуют только после healthy `gh-app-auth`.
 - `ops-bot` живёт в том же compose-контуре и использует тот же workspace/state/log layout.
 - host-level переменные сервисов приходят из `ai-flow.platform.env`, project-specific — из `<profile>.flow.env`.

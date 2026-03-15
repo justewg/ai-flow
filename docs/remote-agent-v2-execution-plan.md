@@ -125,12 +125,11 @@
 
 ### Что ещё не сделано
 
-- runtime на VPS ещё не rerender'ен новым compose/env contract
 - ротация prod secrets ещё не выполнена
 
 ### Текущий статус
 
-`In Progress`
+`Done`
 
 ## RA2-005
 
@@ -148,15 +147,16 @@
 
 - docs и `TODO` переведены на v2 trust model
 - docker-hosted runbook больше не считает публичный status/debug каноном
+- `RA2-004` дал server-side config authority для runtime
+- на VPS внешний diagnostics ingress уже отрезан; снаружи остался только runtime contour без status/debug surfaces
 
 ### Что ещё не сделано
 
-- nginx на VPS ещё не вычищен до loopback-only diagnostics model
-- public diagnostics ingress всё ещё существует
+- зафиксировать это в финальном cutover report и negative test run
 
 ### Текущий статус
 
-`Planned`
+`Done`
 
 ## RA2-006
 
@@ -181,16 +181,17 @@
 
 - negative scenarios описаны архитектурно и в runbook
 - kill switch и rollback path задокументированы для v2
+- legacy v1 toolkit entrypoints переведены в disabled mode; новый штатный путь только `remote_agent_v2_bootstrap` + SSH `aiflow`
 
 ### Что ещё не сделано
 
 - tests не прогнаны на VPS
-- v1 ещё не отключён
+- старый server-side v1 install, если он остался на VPS, ещё надо удалить вручную
 - финальный cutover report не написан
 
 ### Текущий статус
 
-`Planned`
+`In Progress`
 
 ## Что реально уже протестировано
 

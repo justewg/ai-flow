@@ -99,7 +99,7 @@
 
 ### Статус
 
-`In Progress`
+`Done`
 
 ### Уже сделано
 
@@ -122,35 +122,56 @@
 
 ### Ещё не сделано
 
-- новый compose/env wiring ещё не прогнан на VPS через rerender
 - rotation playbook ещё не исполнен
+
+### Подтверждено на VPS
+
+- `PROJECT_PUBLIC_ENV_FILE=/etc/ai-flow/public/projects/planka.env`
+- `PLATFORM_PUBLIC_ENV_FILE=/etc/ai-flow/public/platform.env`
+- `PROJECT_SECRETS_ENV_FILE=/etc/ai-flow/secrets/projects/planka/runtime.env`
+- `PLATFORM_SECRETS_ENV_FILE=/etc/ai-flow/secrets/platform/runtime.env`
+- `OPENAI_ENV_FILE=/etc/ai-flow/secrets/platform/openai.env`
+- `/etc/ai-flow/secrets/*` переведены на docker-hosted delivery contract:
+  - dirs `0750`
+  - files `0640`
+  - group = runtime delivery group
+- `compose_metadata.json` показывает:
+  - `server_env_authority_wired=true`
+  - `legacy_runtime_env_fallback=false`
+  - `whole_home_mount_present=false`
 
 ## RA2-005
 
 ### Статус
 
-`Planned`
+`Done`
 
-### Подтверждено как открытый риск
+### Подтверждено
 
-- `ingress_metadata.json` показывает:
-  - `diagnostics_exposed_externally=true`
-  - `ops_debug=true`
-
-### Следствие
-
-- внешний diagnostics ingress ещё не закрыт
-- `loopback-only` модель пока не доведена
+- ранний `ingress_metadata.json` ещё показывал старое состояние до nginx-cutover; фактическая проверка после reload подтверждает наружный `404`
+- внешний diagnostics ingress на `aiflow.ewg40.ru` уже отрезан:
+  - `https://aiflow.ewg40.ru/health` -> `404`
+  - `https://aiflow.ewg40.ru/ops/status.json` -> `404`
+  - `https://aiflow.ewg40.ru/ops/debug/runtime.json` -> `404`
+- loopback surfaces продолжают работать:
+  - `http://127.0.0.1:8790/health` -> `200`
+  - `http://127.0.0.1:8790/ops/debug/runtime.json` доступен только по bearer token
 
 ## RA2-006
 
 ### Статус
 
-`Planned`
+`In Progress`
 
 ### Уже есть
 
 - negative scenarios определены архитектурно и в runbook
+- legacy v1 toolkit entrypoints переведены в disabled mode:
+  - `run.sh remote_agent_access_bootstrap`
+  - `run.sh remote_probe`
+  - direct `remote_agent_access_bootstrap.sh`
+  - direct `remote_probe.sh`
+  - direct `remote_agent_gateway.sh`
 
 ### Ещё нет
 

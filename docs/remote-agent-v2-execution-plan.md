@@ -185,13 +185,11 @@
 
 ### Что ещё не сделано
 
-- tests не прогнаны на VPS
-- старый server-side v1 install, если он остался на VPS, ещё надо удалить вручную
-- финальный cutover report не написан
+- policy-layer caveat по `SSHD_POLICY_EFFECTIVE=0` остаётся отдельно в `RA2-003`
 
 ### Текущий статус
 
-`In Progress`
+`Done`
 
 ## Что реально уже протестировано
 
@@ -204,6 +202,4 @@
 
 Не протестировано пока:
 
-- новый `/etc/ai-flow` compose/env wiring на VPS
-- cutover nginx/loopback-only diagnostics
-- отказ от legacy v1 на живом сервере
+- только отдельный `sshd` policy-layer caveat (`SSHD_POLICY_EFFECTIVE=0`) на конкретном хосте

@@ -161,7 +161,7 @@
 
 ### Статус
 
-`In Progress`
+`Done`
 
 ### Уже есть
 
@@ -172,9 +172,26 @@
   - direct `remote_agent_access_bootstrap.sh`
   - direct `remote_probe.sh`
   - direct `remote_agent_gateway.sh`
+- server-side legacy v1 artifacts удалены:
+  - `/var/sites/.ai-flow/bin/ai-flow-remote-agent-gateway`
+  - `/etc/sudoers.d/ai-flow-remote-agent`
+
+### Подтверждено на VPS
+
+- `ssh -i ~/.ssh/aiflow_remote_agent aiflow@127.0.0.1 'id'`
+  - `Command denied`
+- `ssh -i ~/.ssh/aiflow_remote_agent aiflow@127.0.0.1 runtime_snapshot_v2 --profile planka | jq '.snapshot_stale,.profile'`
+  - `false`
+  - `"planka"`
+- `ssh -i ~/.ssh/aiflow_remote_agent aiflow@127.0.0.1 runtime_log_tail_v2 --profile planka --lines 999`
+  - `Invalid lines`
+- `ssh -i ~/.ssh/aiflow_remote_agent aiflow@127.0.0.1 not_a_real_probe`
+  - `Command denied`
+- `sudo -u aiflow docker ps`
+  - permission denied to Docker socket
+- `sudo -u aiflow cat /etc/ai-flow/secrets/platform/runtime.env`
+  - `Permission denied`
 
 ### Ещё нет
 
-- реального VPS negative test run
-- cutover report
-- disable legacy v1 contour
+- отдельный policy-layer caveat по `SSHD_POLICY_EFFECTIVE=0` остаётся в `RA2-003`, но v2 cutover не блокирует

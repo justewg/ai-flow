@@ -18,6 +18,7 @@
 - только SSH по ключу;
 - forced-command gateway;
 - sudo allowlist только на read-only probe path;
+- без membership в `docker` group;
 - audit log всех accepted/denied команд;
 - без shell и без произвольных путей.
 
@@ -76,6 +77,7 @@
 - `aiflow` может выполнить только:
   - `${AI_FLOW_ROOT_DIR}/bin/ai-flow-remote-agent-gateway --sudo-probe *`
 - interactive `sudo` shell не выдаётся
+- `aiflow` не должен состоять в `docker` group, потому что это почти эквивалент root-доступа
 
 ### 4. Audit log
 
@@ -125,6 +127,7 @@ cd /var/sites/.ai-flow/workspaces/planka
 Что делает bootstrap:
 
 - создаёт user `aiflow`, если его нет;
+- если на хосте есть `docker` group, убирает `aiflow` из неё;
 - ставит `passwd -l aiflow`, если не выбран interactive password mode;
 - устанавливает gateway в `${AI_FLOW_ROOT_DIR}/bin/`;
 - создаёт audit log path;
@@ -168,6 +171,7 @@ rm -f /var/sites/.ai-flow/bin/ai-flow-remote-agent-gateway
 
 - использовать только отдельный user;
 - не давать этому user обычный shell-workflow;
+- не добавлять этого user в `docker` group;
 - не публиковать generic file-read endpoints;
 - не смешивать probe tier и recovery tier;
 - recovery actions (`docker compose up`, `nginx reload`, `systemctl`, etc.) держать отдельным контуром и не включать в этот gateway;

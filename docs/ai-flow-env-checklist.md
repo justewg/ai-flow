@@ -4,6 +4,12 @@
 
 Этот чек-лист нужен, чтобы не смешивать host/platform env и project env.
 
+Для машинной проверки используй:
+
+```bash
+.flow/shared/scripts/run.sh env_audit --profile <profile>
+```
+
 Для `docker-hosted` и `linux-hosted` семантика должна быть такой:
 
 - platform env:
@@ -58,6 +64,20 @@ Project env содержит только binding конкретного consume
 
 - `PROJECT_PROFILE`
   - пример: `planka`
+- `GITHUB_REPO`
+  - пример: `justewg/planka`
+- `FLOW_BASE_BRANCH`
+  - пример: `main`
+- `FLOW_HEAD_BRANCH`
+  - пример: `development`
+- `PROJECT_OWNER`
+- `PROJECT_NUMBER`
+- `PROJECT_ID`
+- `DAEMON_GH_PROJECT_TOKEN`
+- `GH_APP_INTERNAL_SECRET`
+- `GH_APP_ID`
+- `GH_APP_INSTALLATION_ID`
+- `GH_APP_PRIVATE_KEY_PATH`
 - `AI_FLOW_ROOT_DIR`
   - пример: `/var/sites/.ai-flow`
 - `CODEX_STATE_DIR`
@@ -72,18 +92,14 @@ Project env содержит только binding конкретного consume
   - пример: `/var/sites/.ai-flow/logs/planka/pm2`
 - `FLOW_HOST_RUNTIME_MODE`
   - пример: `linux-docker-hosted`
-- `DAEMON_GH_PROJECT_TOKEN`
-- `GH_APP_INTERNAL_SECRET`
-- `GH_APP_ID`
-- `GH_APP_INSTALLATION_ID`
-- `GH_APP_PRIVATE_KEY_PATH`
-
-### Обычно нужны для текущего runtime contour
-
 - `GH_APP_BIND`
   - обычно `127.0.0.1`
 - `GH_APP_PORT`
   - обычно `8787`
+- `GH_APP_TOKEN_SKEW_SEC`
+  - обычно `300`
+- `DAEMON_GH_AUTH_TIMEOUT_SEC`
+  - обычно `8`
 - `OPS_BOT_BIND`
   - обычно `127.0.0.1`
 - `OPS_BOT_PORT`
@@ -95,6 +111,18 @@ Project env содержит только binding конкретного consume
 - `OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC`
 - `OPS_BOT_REMOTE_SUMMARY_TTL_SEC`
 
+### Полный стандартный contract
+
+- `GH_APP_OWNER`
+- `GH_APP_REPO`
+- `GH_APP_PM2_USE_DEFAULT`
+- `OPS_BOT_USE_DEFAULT`
+- `OPS_BOT_REFRESH_SEC`
+- `OPS_BOT_CMD_TIMEOUT_MS`
+- `FLOW_LAUNCHD_NAMESPACE`
+- `WATCHDOG_DAEMON_LABEL`
+- `WATCHDOG_DAEMON_INTERVAL_SEC`
+
 ### Опциональные project-level ключи
 
 - `DAEMON_TG_BOT_TOKEN`
@@ -105,6 +133,7 @@ Project env содержит только binding конкретного consume
 - `DAEMON_GH_TOKEN_FALLBACK_ENABLED`
 - `DAEMON_GH_TOKEN`
 - `DAEMON_GH_AUTH_TOKEN_URL`
+- `EXECUTOR_CODEX_BYPASS_SANDBOX`
 - `GH_APP_PM2_USE_DEFAULT`
 - `OPS_BOT_USE_DEFAULT`
 - `OPS_BOT_TG_BOT_TOKEN`

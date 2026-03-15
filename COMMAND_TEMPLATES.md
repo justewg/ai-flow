@@ -65,12 +65,20 @@
   - UI mask: `scripts/codex/project_set_status.sh`
 - Canonical helper: `.flow/shared/scripts/task_ask.sh`
   - Шаблон: `.flow/shared/scripts/task_ask.sh <question|blocker> <message-file>`
+- Canonical wrapper entrypoint: `.flow/shared/scripts/run.sh task_ask`
+  - Шаблон: `.flow/shared/scripts/run.sh task_ask <question|blocker> <message-file>`
+  - Regex mask: `^\.flow/shared/scripts/run\.sh\s+task_ask\s+(?:question|blocker)\s+.+$`
+  - UI mask: `.flow/shared/scripts/run.sh task_ask`
 - Legacy compatibility wrapper: `scripts/codex/task_ask.sh`
   - Шаблон: `scripts/codex/task_ask.sh <question|blocker> <message-file>`
   - Regex mask: `^scripts/codex/task_ask\.sh\s+(?:question|blocker)\s+.+$`
   - UI mask: `scripts/codex/task_ask.sh`
 - Canonical helper: `.flow/shared/scripts/daemon_check_replies.sh`
   - Шаблон: `.flow/shared/scripts/daemon_check_replies.sh`
+- Canonical wrapper entrypoint: `.flow/shared/scripts/run.sh daemon_check_replies`
+  - Шаблон: `.flow/shared/scripts/run.sh daemon_check_replies`
+  - Regex mask: `^\.flow/shared/scripts/run\.sh\s+daemon_check_replies$`
+  - UI mask: `.flow/shared/scripts/run.sh daemon_check_replies`
 - Legacy compatibility wrapper: `scripts/codex/daemon_check_replies.sh`
   - Шаблон: `scripts/codex/daemon_check_replies.sh`
   - Regex mask: `^scripts/codex/daemon_check_replies\.sh$`

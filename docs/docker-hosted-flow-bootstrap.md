@@ -86,8 +86,8 @@
 - `watchdog`
   - запускает `./.flow/shared/scripts/watchdog_loop.sh <interval>`.
 - `ops-bot`
-  - поднимает `./.flow/shared/scripts/ops_bot_start.sh` и даёт локальные `/health`, `/ops/status`, `/ops/status.json`, webhook/ingest contour.
-  - при включённом `OPS_BOT_DEBUG_ENABLED` также даёт защищённые `/ops/debug/*` endpoints для remote diagnosis without SSH.
+  - поднимает `./.flow/shared/scripts/ops_bot_start.sh` и даёт loopback-local `/health`, `/ops/status`, `/ops/status.json`, webhook/ingest contour.
+  - эти diagnostics surfaces в v2 считаются только internal source для publisher/helper и не должны публиковаться наружу через nginx.
 
 Все сервисы:
 
@@ -165,9 +165,10 @@ network_mode: host
 Важно по семантике:
 
 - `planka` в путях вида `/var/sites/.ai-flow/workspaces/planka` здесь означает конкретный consumer-project profile.
-- host-level surfaces (`ops-bot`, `gh-app-auth`, `/ops/status`, `/ops/debug/*`, `/telegram/webhook`) не должны называться доменом проекта по умолчанию.
+- host-level surfaces (`ops-bot`, `gh-app-auth`, `/telegram/webhook`) не должны называться доменом проекта по умолчанию.
 - для публичного ingress host-level контур лучше вешать на отдельный хост, например `aiflow.ewg40.ru`, а не смешивать с project-domain.
-- для read-only внешней AI-диагностики поверх этого контура можно опционально поднять отдельный `aiflow` SSH user + forced-command gateway + sudo allowlist только на `remote_probe`; подробности в [ai-flow-remote-agent-access.md](/private/var/sites/PLANKA/docs/ai-flow-remote-agent-access.md).
+- status/debug diagnostics surfaces в v2 должны оставаться loopback-only и не проксироваться наружу через nginx.
+- для read-only внешней AI-диагностики поверх этого контура нужно использовать отдельный `aiflow` SSH user + immutable gateway/helper + sanitized snapshots; подробности в [ai-flow-remote-agent-access.md](/private/var/sites/PLANKA/docs/ai-flow-remote-agent-access.md).
 
 Штатный путь такой:
 

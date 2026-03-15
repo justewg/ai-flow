@@ -58,6 +58,7 @@
 - final status:
 - manual intervention required:
 - regressions found:
+  - daemon/container git auth initially failed with `Permission denied (publickey)` even after switching to `/etc/ai-flow/secrets/projects/planka/repo-ssh`; runtime fix is to pin `~/.ssh/id_ed25519` and `known_hosts` via `GIT_SSH_COMMAND` instead of relying on default key discovery/agent behaviour.
 
 ## Batch 2
 

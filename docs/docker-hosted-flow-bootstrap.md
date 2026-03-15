@@ -100,6 +100,7 @@
   - отдельный GitHub deploy/service key;
   - файлы `id_ed25519`, `id_ed25519.pub`, `known_hosts` в `/etc/ai-flow/secrets/projects/<profile>/repo-ssh`;
   - права: каталог `0750`, приватный ключ `0640`, владелец `root:<runtime-group>`.
+  - при использовании этого каталога runtime пинит `~/.ssh/id_ed25519` через `GIT_SSH_COMMAND` с `IdentitiesOnly=yes` и отдельным `UserKnownHostsFile`, чтобы не зависеть от agent/default key discovery внутри контейнера.
 - `daemon` и `watchdog` стартуют только после healthy `gh-app-auth`.
 - `ops-bot` живёт в том же compose-контуре и использует тот же workspace/state/log layout.
 - host-level переменные сервисов приходят из `ai-flow.platform.env`, project-specific — из `<profile>.flow.env`.

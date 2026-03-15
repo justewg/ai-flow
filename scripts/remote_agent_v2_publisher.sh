@@ -116,6 +116,54 @@ lines_to_json_array() {
   printf '%s' "${1:-}" | jq -Rsc 'split("\n") | map(select(length > 0))'
 }
 
+degraded_runtime_snapshot() {
+  local profile="$1"
+  local interval="$2"
+  local ttl="$3"
+  local health_url="$4"
+  local status_url="$5"
+  local health_http="$6"
+  local status_http="$7"
+  local invalid_health_json="$8"
+  local invalid_status_json="$9"
+
+  jq -cn \
+    --arg profile "$profile" \
+    --arg published_at "$(now_utc)" \
+    --arg health_url "$health_url" \
+    --arg status_url "$status_url" \
+    --arg health_http_status "$health_http" \
+    --arg status_http_status "$status_http" \
+    --argjson publisher_interval_sec "$interval" \
+    --argjson snapshot_ttl_sec "$ttl" \
+    --argjson invalid_health_json "$invalid_health_json" \
+    --argjson invalid_status_json "$invalid_status_json" \
+    '{
+      schema_version: 1,
+      profile: $profile,
+      published_at: $published_at,
+      publisher_interval_sec: $publisher_interval_sec,
+      snapshot_ttl_sec: $snapshot_ttl_sec,
+      publisher_degraded: true,
+      source: {
+        health_url: $health_url,
+        status_url: $status_url,
+        health_http_status: $health_http_status,
+        status_http_status: $status_http_status,
+        invalid_health_json: $invalid_health_json,
+        invalid_status_json: $invalid_status_json
+      },
+      health: {},
+      status: {
+        overall_status: "DEGRADED",
+        headline: "diagnostics publisher received invalid upstream JSON",
+        publisher_degraded: true,
+        invalid_health_json: $invalid_health_json,
+        invalid_status_json: $invalid_status_json
+      }
+    }'
+}
+
 write_snapshot() {
   local target_path="$1"
   local payload="$2"
@@ -141,7 +189,7 @@ emit_runtime_snapshot() {
   local project_env="$2"
   local interval="$3"
   local ttl="$4"
-  local ops_bind ops_port health_url status_url health_http status_http health_json status_json
+  local ops_bind ops_port health_url status_url health_http status_http health_raw status_raw health_json status_json invalid_health_json invalid_status_json
   ops_bind="$(read_env_key "$project_env" "OPS_BOT_BIND" || true)"
   ops_port="$(read_env_key "$project_env" "OPS_BOT_PORT" || true)"
   [[ -n "$ops_bind" ]] || ops_bind="127.0.0.1"
@@ -153,11 +201,37 @@ emit_runtime_snapshot() {
   status_http="$(capture_http_status "$status_url")"
   health_json='{}'
   status_json='{}'
+  invalid_health_json='false'
+  invalid_status_json='false'
   if [[ "$health_http" == "200" ]]; then
-    health_json="$(capture_http_json "$health_url")"
+    health_raw="$(capture_http_json "$health_url" || true)"
+    if [[ -n "$health_raw" ]] && health_json="$(printf '%s' "$health_raw" | jq -c . 2>/dev/null)"; then
+      :
+    else
+      invalid_health_json='true'
+    fi
   fi
   if [[ "$status_http" == "200" ]]; then
-    status_json="$(capture_http_json "$status_url")"
+    status_raw="$(capture_http_json "$status_url" || true)"
+    if [[ -n "$status_raw" ]] && status_json="$(printf '%s' "$status_raw" | jq -c . 2>/dev/null)"; then
+      :
+    else
+      invalid_status_json='true'
+    fi
+  fi
+
+  if [[ "$invalid_health_json" == "true" || "$invalid_status_json" == "true" ]]; then
+    degraded_runtime_snapshot \
+      "$profile" \
+      "$interval" \
+      "$ttl" \
+      "$health_url" \
+      "$status_url" \
+      "$health_http" \
+      "$status_http" \
+      "$invalid_health_json" \
+      "$invalid_status_json"
+    return 0
   fi
 
   jq -cn \

@@ -195,6 +195,12 @@ oversize_payload() {
   emit_degraded_json "$profile" "$probe" "$(jq -cn --argjson size "$size" --argjson limit "$MAX_SNAPSHOT_BYTES" '{snapshot_oversize:true,snapshot_size_bytes:$size,snapshot_size_limit_bytes:$limit}')"
 }
 
+invalid_json_payload() {
+  local profile="$1"
+  local probe="$2"
+  emit_degraded_json "$profile" "$probe" '{"snapshot_invalid_json":true}'
+}
+
 read_snapshot_payload() {
   local probe="$1"
   local profile="$2"
@@ -224,7 +230,11 @@ read_snapshot_payload() {
     return 0
   fi
 
-  snapshot_json="$(cat "$snapshot_file")"
+  if ! snapshot_json="$(jq -c . "$snapshot_file" 2>/dev/null)"; then
+    invalid_json_payload "$profile" "$probe"
+    return 0
+  fi
+
   case "$probe" in
     runtime_log_tail_v2)
       jq -c \

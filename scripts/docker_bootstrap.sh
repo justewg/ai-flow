@@ -27,6 +27,7 @@ openai_env_file=""
 runtime_ssh_dir=""
 runtime_gh_config_dir=""
 gh_app_private_key_dir=""
+runtime_git_ssh_command=""
 compose_project_name=""
 compose_image_name=""
 daemon_interval="${FLOW_DAEMON_INTERVAL:-45}"
@@ -540,6 +541,11 @@ derive_runtime_mount_paths() {
     runtime_ssh_dir="${runtime_home}/.ssh"
   fi
   runtime_gh_config_dir="${runtime_home}/.config/gh"
+  if [[ "$runtime_ssh_dir" == "/etc/ai-flow/secrets/projects/${profile}/repo-ssh" ]]; then
+    runtime_git_ssh_command="ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${runtime_home}/.ssh/known_hosts -o IdentitiesOnly=yes -i ${runtime_home}/.ssh/id_ed25519"
+  else
+    runtime_git_ssh_command="ssh -o StrictHostKeyChecking=accept-new"
+  fi
   gh_app_private_key_path="$(read_env_key "$host_env_file" "GH_APP_PRIVATE_KEY_PATH")"
   gh_app_private_key_dir="$(dirname "$gh_app_private_key_path")"
   if [[ -z "$gh_app_private_key_dir" || "$gh_app_private_key_dir" == "." ]]; then
@@ -644,7 +650,7 @@ FLOW_DOCKER_COMPOSE_ROOT=${compose_root}
 HOME=${runtime_home}
 CODEX_HOME=${codex_home}
 TERM=xterm-256color
-GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=accept-new
+GIT_SSH_COMMAND=${runtime_git_ssh_command}
 EOF
   if ! chown "$runtime_user:$(runtime_group)" "${compose_root}/container.env" 2>/dev/null; then
     echo "Cannot assign ownership for ${compose_root}/container.env; ensure compose root is writable by ${runtime_user}." >&2

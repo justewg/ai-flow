@@ -142,9 +142,9 @@ payload_json="$(
     --arg generated_at "$pushed_at" \
     --arg profile "$project_profile" \
     --arg repo "$project_repo" \
-    --arg label "$project_label" \
+    --arg project_label_value "$project_label" \
     --argjson summaries "$summaries_json" \
-    '{source:$source,pushed_at:$pushed_at,generated_at:$generated_at,profile:$profile,repo:$repo,label:$label,summaries:$summaries}'
+    '{"source":$source,"pushed_at":$pushed_at,"generated_at":$generated_at,"profile":$profile,"repo":$repo,"label":$project_label_value,"summaries":$summaries}'
 )"
 
 secret="${OPS_REMOTE_SUMMARY_PUSH_SECRET:-${OPS_REMOTE_STATUS_PUSH_SECRET:-}}"

@@ -72,8 +72,8 @@ payload_json="$(
       --arg pushed_at "$pushed_at" \
       --arg profile "$project_profile" \
       --arg repo "$project_repo" \
-      --arg label "$project_label" \
-      '{source:$source,pushed_at:$pushed_at,profile:$profile,repo:$repo,label:$label,snapshot:.}'
+      --arg project_label_value "$project_label" \
+      '{"source":$source,"pushed_at":$pushed_at,"profile":$profile,"repo":$repo,"label":$project_label_value,"snapshot":.}'
 )"
 
 secret="${OPS_REMOTE_STATUS_PUSH_SECRET:-}"

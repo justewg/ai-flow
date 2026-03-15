@@ -20,6 +20,9 @@ compose_root=""
 runtime_home=""
 codex_home=""
 openai_env_file=""
+runtime_ssh_dir=""
+runtime_gh_config_dir=""
+gh_app_private_key_dir=""
 compose_project_name=""
 compose_image_name=""
 daemon_interval="${FLOW_DAEMON_INTERVAL:-45}"
@@ -52,7 +55,7 @@ Options:
   --toolkit-repo <url>         ai-flow repo URL/path. Default: current origin or https://github.com/justewg/ai-flow.git
   --toolkit-ref <ref>          ai-flow ref for bootstrap. Default: main
   --compose-root <path>        Docker compose root. Default: <ai-flow-root>/docker/<profile>
-  --runtime-home <path>        Runtime HOME mounted into containers. Default: /home/<runtime-user>
+  --runtime-home <path>        Runtime HOME inside containers. Default: /home/<runtime-user>
   --codex-home <path>          CODEX_HOME inside runtime. Default: <runtime-home>/.codex-server-api
   --openai-env-file <path>     Host-local env file with OPENAI_API_KEY. Default: <runtime-home>/.config/ai-flow/openai.env
   --daemon-interval <seconds>  Daemon loop interval. Default: 45
@@ -431,6 +434,27 @@ remove_env_key() {
   mv "$tmp_file" "$file_path"
 }
 
+read_env_key() {
+  local file_path="$1"
+  local key="$2"
+  [[ -f "$file_path" ]] || return 0
+  awk -F= -v wanted="$key" '
+    $0 ~ /^[[:space:]]*#/ { next }
+    {
+      raw_key=$1
+      sub(/^[[:space:]]*export[[:space:]]+/, "", raw_key)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", raw_key)
+      if (raw_key != wanted) next
+      sub(/^[^=]*=/, "", $0)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0)
+      gsub(/^"/, "", $0)
+      gsub(/"$/, "", $0)
+      print $0
+      exit
+    }
+  ' "$file_path"
+}
+
 normalize_host_env() {
   local state_dir logs_dir runtime_logs_dir pm2_logs_dir
   state_dir="${ai_flow_root}/state/${profile}"
@@ -495,9 +519,22 @@ ensure_workspace_env_symlink() {
   run_as_runtime_user ln -sfn "$host_env_file" "$workspace_env_link"
 }
 
+derive_runtime_mount_paths() {
+  local gh_app_private_key_path=""
+  runtime_ssh_dir="${runtime_home}/.ssh"
+  runtime_gh_config_dir="${runtime_home}/.config/gh"
+  gh_app_private_key_path="$(read_env_key "$host_env_file" "GH_APP_PRIVATE_KEY_PATH")"
+  gh_app_private_key_dir="$(dirname "$gh_app_private_key_path")"
+  if [[ -z "$gh_app_private_key_dir" || "$gh_app_private_key_dir" == "." ]]; then
+    gh_app_private_key_dir="${runtime_home}/.secrets/gh-apps"
+  fi
+}
+
 ensure_runtime_home_paths() {
-  ensure_dir_owned "$runtime_home"
   ensure_dir_owned "$codex_home"
+  ensure_dir_owned "$runtime_ssh_dir"
+  ensure_dir_owned "$runtime_gh_config_dir"
+  ensure_dir_owned "$gh_app_private_key_dir"
   ensure_dir_owned "$(dirname "$openai_env_file")"
 }
 
@@ -508,6 +545,9 @@ AI_FLOW_ROOT=${ai_flow_root}
 WORKSPACE_PATH=${workspace_path}
 RUNTIME_HOME=${runtime_home}
 CODEX_HOME=${codex_home}
+RUNTIME_SSH_DIR=${runtime_ssh_dir}
+RUNTIME_GH_CONFIG_DIR=${runtime_gh_config_dir}
+GH_APP_PRIVATE_KEY_DIR=${gh_app_private_key_dir}
 HOST_ENV_FILE=${host_env_file}
 PLATFORM_ENV_FILE=${platform_env_file}
 OPENAI_ENV_FILE=${openai_env_file}
@@ -605,12 +645,15 @@ services:
     volumes:
       - ${AI_FLOW_ROOT}:${AI_FLOW_ROOT}
       - ${WORKSPACE_PATH}:${WORKSPACE_PATH}
-      - ${RUNTIME_HOME}:${RUNTIME_HOME}
+      - ${CODEX_HOME}:${CODEX_HOME}
+      - ${RUNTIME_SSH_DIR}:${RUNTIME_HOME}/.ssh
+      - ${RUNTIME_GH_CONFIG_DIR}:${RUNTIME_HOME}/.config/gh
+      - ${GH_APP_PRIVATE_KEY_DIR}:${GH_APP_PRIVATE_KEY_DIR}:ro
     command:
       - bash
       - -lc
       - |
-        mkdir -p "${RUNTIME_HOME}" "${CODEX_HOME}"
+        mkdir -p "${RUNTIME_HOME}" "${CODEX_HOME}" "${RUNTIME_HOME}/.config"
         exec sleep infinity
     stdin_open: true
     tty: true
@@ -624,7 +667,7 @@ services:
       - bash
       - -lc
       - |
-        mkdir -p "${RUNTIME_HOME}" "${CODEX_HOME}"
+        mkdir -p "${RUNTIME_HOME}" "${CODEX_HOME}" "${RUNTIME_HOME}/.config"
         cd "${WORKSPACE_PATH}"
         exec ./.flow/shared/scripts/gh_app_auth_start.sh
     healthcheck:
@@ -648,7 +691,7 @@ services:
       - bash
       - -lc
       - |
-        mkdir -p "${RUNTIME_HOME}" "${CODEX_HOME}"
+        mkdir -p "${RUNTIME_HOME}" "${CODEX_HOME}" "${RUNTIME_HOME}/.config"
         cd "${WORKSPACE_PATH}"
         exec ./.flow/shared/scripts/daemon_loop.sh ${DAEMON_INTERVAL}
 
@@ -664,7 +707,7 @@ services:
       - bash
       - -lc
       - |
-        mkdir -p "${RUNTIME_HOME}" "${CODEX_HOME}"
+        mkdir -p "${RUNTIME_HOME}" "${CODEX_HOME}" "${RUNTIME_HOME}/.config"
         cd "${WORKSPACE_PATH}"
         exec ./.flow/shared/scripts/watchdog_loop.sh ${WATCHDOG_INTERVAL}
 
@@ -677,7 +720,7 @@ services:
       - bash
       - -lc
       - |
-        mkdir -p "${RUNTIME_HOME}" "${CODEX_HOME}"
+        mkdir -p "${RUNTIME_HOME}" "${CODEX_HOME}" "${RUNTIME_HOME}/.config"
         cd "${WORKSPACE_PATH}"
         exec ./.flow/shared/scripts/ops_bot_start.sh
     healthcheck:
@@ -888,12 +931,13 @@ compose_image_name="ai-flow-${profile}:latest"
 
 step "Preparing host layout under ${ai_flow_root}"
 ensure_host_layout
-step "Preparing runtime home paths under ${runtime_home}"
-ensure_runtime_home_paths
 step "Cloning or updating workspace at ${workspace_path}"
 clone_or_update_workspace
 step "Normalizing host env at ${host_env_file}"
 normalize_host_env
+derive_runtime_mount_paths
+step "Preparing runtime mount paths under ${runtime_home}"
+ensure_runtime_home_paths
 step "Ensuring ai-flow platform env at ${platform_env_file}"
 ensure_platform_env
 step "Linking workspace flow.env"

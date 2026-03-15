@@ -1,0 +1,11 @@
+[Unit]
+Description=AI Flow diagnostics publisher timer for %i
+
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=@PUBLISH_INTERVAL_SEC@
+Unit=ai-flow-diagnostics-publish@%i.service
+
+[Install]
+WantedBy=timers.target
+

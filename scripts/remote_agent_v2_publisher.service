@@ -1,0 +1,12 @@
+[Unit]
+Description=AI Flow diagnostics publisher for %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/ai-flow/ai-flow-diagnostics-publish --profile %i
+User=root
+Group=root
+NoNewPrivileges=yes
+

@@ -50,9 +50,11 @@ Commands:
   host_bootstrap
   docker_bootstrap
   remote_agent_access_bootstrap
+  remote_agent_v2_bootstrap
   onboarding_audit
   env_audit
   remote_probe
+  remote_agent_v2_publisher
   nginx_ops_ingress_audit
   update_toolkit
   review_context_recover
@@ -624,6 +626,11 @@ case "$cmd" in
     "${CODEX_SHARED_SCRIPTS_DIR}/remote_agent_access_bootstrap.sh" "$@"
     ;;
 
+  remote_agent_v2_bootstrap)
+    shift 1
+    "${CODEX_SHARED_SCRIPTS_DIR}/remote_agent_v2_bootstrap.sh" "$@"
+    ;;
+
   onboarding_audit)
     shift 1
     "${CODEX_SHARED_SCRIPTS_DIR}/onboarding_audit.sh" "$@"
@@ -637,6 +644,11 @@ case "$cmd" in
   remote_probe)
     shift 1
     "${CODEX_SHARED_SCRIPTS_DIR}/remote_probe.sh" "$@"
+    ;;
+
+  remote_agent_v2_publisher)
+    shift 1
+    "${CODEX_SHARED_SCRIPTS_DIR}/remote_agent_v2_publisher.sh" "$@"
     ;;
 
   nginx_ops_ingress_audit)

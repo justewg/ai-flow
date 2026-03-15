@@ -18,9 +18,11 @@ action_count=0
 platform_missing_core_keys=()
 platform_missing_standard_keys=()
 platform_disable_keys=()
+platform_malformed_lines=()
 project_missing_core_keys=()
 project_missing_standard_keys=()
 project_disable_keys=()
+project_malformed_lines=()
 
 platform_core_required=(
   "AI_FLOW_ROOT_DIR"
@@ -324,6 +326,23 @@ read_env_keys_into_array() {
   done < "$file_path"
 }
 
+collect_malformed_env_lines() {
+  local file_path="$1"
+  local array_name="$2"
+  local line line_no=0
+  eval "$array_name=()"
+  [[ -f "$file_path" ]] || return 0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line_no=$((line_no + 1))
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ -n "${line//[[:space:]]/}" ]] || continue
+    if [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*= ]]; then
+      continue
+    fi
+    eval "${array_name}+=(\"${line_no}:${line}\")"
+  done < "$file_path"
+}
+
 env_value() {
   local env_file="$1"
   local key="$2"
@@ -507,6 +526,31 @@ disable_keys_in_env_file() {
   mv "$tmp_file" "$env_file"
 }
 
+disable_malformed_lines_in_env_file() {
+  local env_file="$1"
+  local array_name="$2"
+  local tmp_file line line_no=0 entry malformed_line
+  local malformed_ref=()
+  eval "malformed_ref=(\"\${${array_name}[@]-}\")"
+  [[ "${#malformed_ref[@]}" -gt 0 ]] || return 0
+  tmp_file="$(mktemp "${env_file}.env_audit.XXXXXX")"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line_no=$((line_no + 1))
+    malformed_line=""
+    for entry in "${malformed_ref[@]}"; do
+      [[ "$entry" == "${line_no}:"* ]] || continue
+      malformed_line="${entry#*:}"
+      break
+    done
+    if [[ -n "$malformed_line" ]]; then
+      printf '# env_audit disabled malformed: %s\n' "$line" >> "$tmp_file"
+      continue
+    fi
+    printf '%s\n' "$line" >> "$tmp_file"
+  done < "$env_file"
+  mv "$tmp_file" "$env_file"
+}
+
 append_missing_group() {
   local env_file="$1"
   local scope="$2"
@@ -560,22 +604,34 @@ apply_fix_to_env_file() {
   local env_file="$1"
   local scope="$2"
   local disable_array_name="$3"
-  local missing_core_array_name="$4"
-  local missing_standard_array_name="$5"
+  local malformed_array_name="$4"
+  local missing_core_array_name="$5"
+  local missing_standard_array_name="$6"
   local disable_ref=()
   local filtered_disable_ref=()
+  local malformed_ref=()
+  local filtered_malformed_ref=()
   local key
   local scope_label
   eval "disable_ref=(\"\${${disable_array_name}[@]-}\")"
+  eval "malformed_ref=(\"\${${malformed_array_name}[@]-}\")"
   for key in "${disable_ref[@]}"; do
     [[ -n "$key" ]] || continue
     filtered_disable_ref+=("$key")
   done
+  for key in "${malformed_ref[@]}"; do
+    [[ -n "$key" ]] || continue
+    filtered_malformed_ref+=("$key")
+  done
   scope_label="$(printf '%s' "$scope" | tr '[:lower:]' '[:upper:]')"
   ensure_env_file_for_fix "$env_file"
+  disable_malformed_lines_in_env_file "$env_file" "$malformed_array_name"
   disable_keys_in_env_file "$env_file" "$disable_array_name"
   append_missing_group "$env_file" "$scope" "${scope} missing core keys" "$missing_core_array_name"
   append_missing_group "$env_file" "$scope" "${scope} missing standard keys" "$missing_standard_array_name"
+  if [[ "${#filtered_malformed_ref[@]}" -gt 0 ]]; then
+    report_ok "${scope_label}_FIX_DISABLED_MALFORMED" "$(join_by ";" "${filtered_malformed_ref[@]}")"
+  fi
   if [[ "${#filtered_disable_ref[@]}" -gt 0 ]]; then
     report_ok "${scope_label}_FIX_DISABLED_KEYS" "$(join_by "," "${filtered_disable_ref[@]}")"
   fi
@@ -734,8 +790,16 @@ check_platform_file() {
   fi
 
   read_env_keys_into_array "$env_file" env_keys
+  collect_malformed_env_lines "$env_file" platform_malformed_lines
   report_missing_keys "$env_file" "PLATFORM_CORE" "fail" "platform_missing_core_keys" "${platform_core_required[@]}"
   report_missing_keys "$env_file" "PLATFORM_STANDARD" "warn" "platform_missing_standard_keys" "${platform_full_expected[@]}"
+
+  if [[ "${#platform_malformed_lines[@]}" -gt 0 ]]; then
+    report_fail "PLATFORM_MALFORMED_LINES" "$(join_by ";" "${platform_malformed_lines[@]}")"
+    report_action "PLATFORM_MALFORMED_LINES" "Удали или закомментируй некорректные строки в ${env_file}"
+  else
+    report_ok "PLATFORM_MALFORMED_LINES" "none"
+  fi
 
   for key in "${env_keys[@]}"; do
     value="$(env_value "$env_file" "$key")"
@@ -778,7 +842,7 @@ check_platform_file() {
   fi
 
   if [[ "$fix_mode" == "1" ]]; then
-    apply_fix_to_env_file "$env_file" "platform" "platform_disable_keys" "platform_missing_core_keys" "platform_missing_standard_keys"
+    apply_fix_to_env_file "$env_file" "platform" "platform_disable_keys" "platform_malformed_lines" "platform_missing_core_keys" "platform_missing_standard_keys"
   fi
 }
 
@@ -806,8 +870,16 @@ check_project_file() {
   fi
 
   read_env_keys_into_array "$env_file" env_keys
+  collect_malformed_env_lines "$env_file" project_malformed_lines
   report_missing_keys "$env_file" "PROJECT_CORE" "fail" "project_missing_core_keys" "${project_core_required[@]}"
   report_missing_keys "$env_file" "PROJECT_STANDARD" "warn" "project_missing_standard_keys" "${project_full_expected[@]}"
+
+  if [[ "${#project_malformed_lines[@]}" -gt 0 ]]; then
+    report_fail "PROJECT_MALFORMED_LINES" "$(join_by ";" "${project_malformed_lines[@]}")"
+    report_action "PROJECT_MALFORMED_LINES" "Удали или закомментируй некорректные строки в ${env_file}"
+  else
+    report_ok "PROJECT_MALFORMED_LINES" "none"
+  fi
 
   for key in "${env_keys[@]}"; do
     value="$(env_value "$env_file" "$key")"
@@ -936,7 +1008,7 @@ check_project_file() {
   fi
 
   if [[ "$fix_mode" == "1" ]]; then
-    apply_fix_to_env_file "$env_file" "project" "project_disable_keys" "project_missing_core_keys" "project_missing_standard_keys"
+    apply_fix_to_env_file "$env_file" "project" "project_disable_keys" "project_malformed_lines" "project_missing_core_keys" "project_missing_standard_keys"
     if [[ "$flow_env_needs_repair" == "1" && -n "${expected_host_env_file:-}" && -n "${workspace_env_file:-}" ]]; then
       repair_workspace_env_symlink "$workspace_env_file" "$expected_host_env_file"
       report_ok "FLOW_ENV_SYMLINK_FIXED" "${workspace_env_file} -> ${expected_host_env_file}"

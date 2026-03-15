@@ -137,7 +137,7 @@ Acceptance:
 - схема с `OpenAI API key` подтверждённо работает:
   - `CODEX_HOME="$HOME/.codex-server-api" codex login status` показывает `Logged in using an API key`;
   - `CODEX_HOME="$HOME/.codex-server-api" codex exec "Ответь ровно строкой OK"` успешно выполняется;
-- до запуска `codex` на VPS требуется поднять VPN (`~/vpn.sh start`) и подтвердить внешний IP (`~/vpn.sh ip`).
+- до запуска `codex` на VPS требуется поднять VPN через safe-wrapper (`~/vpn.sh start`) и подтвердить внешний IP (`~/vpn.sh ip`); wrapper должен сохранять `/32` route до текущего SSH client IP, чтобы full-tunnel OpenVPN не рвал активную SSH-сессию.
 
 Канонический server-side smoke для этой задачи:
 1. Поднять VPN:

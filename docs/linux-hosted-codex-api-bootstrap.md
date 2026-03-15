@@ -208,6 +208,19 @@ sudo chown -R <runtime-user>:<runtime-group> /var/sites/.ai-flow
 ~/vpn.sh ip
 ```
 
+Рекомендуемый `~/vpn.sh` не должен напрямую вызывать `systemctl start openvpn-...`, потому что full-tunnel OpenVPN может порвать текущую SSH-сессию. Канонический wrapper:
+
+```bash
+cat > ~/vpn.sh <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exec /var/sites/.ai-flow/workspaces/planka/.flow/shared/scripts/run.sh vpn_safe "$@"
+EOF
+chmod +x ~/vpn.sh
+```
+
+`vpn_safe start` перед запуском OpenVPN сохраняет `/32` route до текущего SSH client IP через исходный default gateway. Это защищает от self-lockout, когда сервер и оператор одновременно сидят в одном и том же VPN-контуре.
+
 ### 8. Host-local secret files
 
 Примеры:
@@ -274,6 +287,12 @@ chmod 700 /home/<runtime-user>/.secrets/gh-apps
 `~/vpn.sh ip` должен показывать внешний IP VPN-контура, а не обычный IP хоста.
 
 Если VPN не поднят, Linux-hosted runtime надо считать неготовым.
+
+Для диагностики безопасного маршрута:
+
+```bash
+~/vpn.sh route-info
+```
 
 ## Канонический bootstrap
 

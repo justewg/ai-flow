@@ -43,7 +43,9 @@ Public config:
 Secret material:
 
 - owner: `root:root`
-- mode: `0600` files, `0700` dirs
+- mode:
+  - host-native/systemd path: `0600` files, `0700` dirs
+  - docker-hosted path: `0640` files, `0750` dirs with group = runtime delivery group
 - readable только runtime/service delivery path
 
 Diagnostics snapshots:

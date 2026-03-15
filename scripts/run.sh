@@ -51,6 +51,7 @@ Commands:
   docker_bootstrap
   onboarding_audit
   env_audit
+  nginx_ops_ingress_audit
   update_toolkit
   review_context_recover
   create_migration_kit
@@ -624,6 +625,11 @@ case "$cmd" in
   env_audit)
     shift 1
     "${CODEX_SHARED_SCRIPTS_DIR}/env_audit.sh" "$@"
+    ;;
+
+  nginx_ops_ingress_audit)
+    shift 1
+    "${CODEX_SHARED_SCRIPTS_DIR}/nginx_ops_ingress_audit.sh" "$@"
     ;;
 
   update_toolkit)

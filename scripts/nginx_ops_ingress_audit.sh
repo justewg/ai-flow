@@ -66,6 +66,30 @@ read_env_key() {
   ' "$env_file"
 }
 
+detect_ai_flow_root_dir() {
+  local flow_env_file env_root
+  if [[ -n "${AI_FLOW_ROOT_DIR:-}" ]]; then
+    printf '%s' "${AI_FLOW_ROOT_DIR}"
+    return 0
+  fi
+  flow_env_file="${ROOT_DIR}/.flow/config/flow.env"
+  if [[ -f "$flow_env_file" ]]; then
+    env_root="$(read_env_key "$flow_env_file" "AI_FLOW_ROOT_DIR")"
+    if [[ -n "$env_root" ]]; then
+      printf '%s' "$env_root"
+      return 0
+    fi
+  fi
+  if [[ -n "${DAEMON_GH_ENV_FILE:-}" && -f "${DAEMON_GH_ENV_FILE}" ]]; then
+    env_root="$(read_env_key "${DAEMON_GH_ENV_FILE}" "AI_FLOW_ROOT_DIR")"
+    if [[ -n "$env_root" ]]; then
+      printf '%s' "$env_root"
+      return 0
+    fi
+  fi
+  codex_resolve_ai_flow_root_dir
+}
+
 derive_host_from_public_base_url() {
   local public_base_url="$1"
   local stripped
@@ -198,7 +222,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$platform_env_file" ]]; then
-  platform_env_file="$(codex_resolve_ai_flow_root_dir)/config/ai-flow.platform.env"
+  platform_env_file="$(detect_ai_flow_root_dir)/config/ai-flow.platform.env"
 fi
 platform_env_file="$(canonicalize_file_path "$platform_env_file")"
 

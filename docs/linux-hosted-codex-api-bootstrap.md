@@ -214,7 +214,7 @@ sudo chown -R <runtime-user>:<runtime-group> /var/sites/.ai-flow
 cat > ~/vpn.sh <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-exec /var/sites/.ai-flow/workspaces/planka/.flow/shared/scripts/run.sh vpn_safe "$@"
+exec /var/sites/.ai-flow/workspaces/planka/.flow/shared/scripts/vpn_safe.sh "$@"
 EOF
 chmod +x ~/vpn.sh
 ```

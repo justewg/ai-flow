@@ -59,6 +59,7 @@
   - запускает `./.flow/shared/scripts/watchdog_loop.sh <interval>`.
 - `ops-bot`
   - поднимает `./.flow/shared/scripts/ops_bot_start.sh` и даёт локальные `/health`, `/ops/status`, `/ops/status.json`, webhook/ingest contour.
+  - при включённом `OPS_BOT_DEBUG_ENABLED` также даёт защищённые `/ops/debug/*` endpoints для remote diagnosis without SSH.
 
 Все сервисы:
 
@@ -124,8 +125,65 @@ network_mode: host
 - `gh-app-auth` внутри compose получает и refresh-ит GitHub App token;
 - `daemon/watchdog` работают в контейнерах с тем же toolkit;
 - `ops-bot` тоже входит в compose и использует тот же status/state контур.
+- `status_snapshot` на VPS может выйти в `HEALTHY` с `daemon=IDLE_NO_TASKS` и `watchdog=HEALTHY`.
 
 Если после этого `status_snapshot` показывает `WAIT_GITHUB_RATE_LIMIT`, это уже не проблема docker-инфраструктуры: runtime жив и упёрся в обычный GitHub GraphQL rate limit.
+
+## Штатный update path
+
+После первого bootstrap повторный `curl|bash` не нужен для обычного обновления runtime.
+
+Штатный путь такой:
+
+```bash
+cd /var/sites/.ai-flow/workspaces/planka/.flow/shared
+git pull --ff-only origin main
+```
+
+```bash
+cd /var/sites/.ai-flow/docker/planka
+./up.sh
+docker compose --env-file .env -f docker-compose.yml ps
+```
+
+Если `git status --short` внутри authoritative workspace показывает только `M .flow/shared`, для `linux-docker-hosted` это допустимый runtime-update и не должно блокировать daemon/watchdog.
+
+## Временный ops-bot port split
+
+Если на хосте уже живёт старый host-side `ops-bot` на `127.0.0.1:8790`, безопасный первый cutover такой:
+
+- docker `ops-bot` временно переводится на `8791` через `OPS_BOT_PORT=8791` в host-local `flow.env`;
+- старый host-side contour продолжает жить на `8790`;
+- новый compose contour проверяется отдельно через `curl http://127.0.0.1:8791/health`.
+
+После подтверждения работы docker `ops-bot` перенос на канонический `8790` делается отдельным шагом.
+
+## Cutover 8791 -> 8790
+
+Безопасный порядок:
+
+1. Найти старый listener:
+   - `ss -ltnp | grep 8790`
+   - `ps -ef | grep ops_bot | grep -v grep`
+   - при необходимости `pm2 ls`
+2. Остановить старый host-side `ops-bot` или его supervisor.
+3. Вернуть в `/var/sites/.ai-flow/config/planka.flow.env`:
+   - `OPS_BOT_PORT=8790`
+4. Переподнять compose:
+
+```bash
+cd /var/sites/.ai-flow/docker/planka
+./up.sh
+docker compose --env-file .env -f docker-compose.yml ps
+```
+
+5. Проверить:
+
+```bash
+curl -fsS http://127.0.0.1:8790/health
+```
+
+Если health отвечает из docker contour, старый ops runtime можно считать полностью заменённым.
 
 ## Запуск
 

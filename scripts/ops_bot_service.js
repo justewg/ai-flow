@@ -22,6 +22,10 @@ const DEFAULT_CMD_TIMEOUT_MS = 10000;
 const DEFAULT_SUMMARY_HOURS = 6;
 const DEFAULT_REMOTE_SNAPSHOT_TTL_SEC = 600;
 const DEFAULT_REMOTE_SUMMARY_TTL_SEC = 1200;
+const DEFAULT_DEBUG_DEFAULT_LINES = 120;
+const DEFAULT_DEBUG_MAX_LINES = 400;
+const DEFAULT_DEBUG_MAX_BYTES = 256 * 1024;
+const DEBUG_LOG_NAMES = ["daemon", "watchdog", "executor", "graphql-rate"];
 
 function parseInteger(value, fallback) {
   const parsed = Number.parseInt(String(value ?? fallback), 10);
@@ -42,6 +46,14 @@ function parseBoolean(value, fallback = false) {
   }
   const normalized = String(value).trim().toLowerCase();
   return ["1", "true", "yes", "on"].includes(normalized);
+}
+
+function parsePositiveInteger(value, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}) {
+  const parsed = parseInteger(value, fallback);
+  if (!Number.isInteger(parsed) || parsed < min) {
+    return fallback;
+  }
+  return Math.min(parsed, max);
 }
 
 function normalizePath(value, fallback) {
@@ -221,11 +233,15 @@ function collectRequestBody(req, maxBytes = 1024 * 1024) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let total = 0;
+    let overflow = false;
     req.on("data", (chunk) => {
+      if (overflow) {
+        return;
+      }
       total += chunk.length;
       if (total > maxBytes) {
+        overflow = true;
         reject(new Error("request body too large"));
-        req.destroy();
         return;
       }
       chunks.push(chunk);
@@ -238,20 +254,37 @@ function collectRequestBody(req, maxBytes = 1024 * 1024) {
 }
 
 function createLogger() {
+  const entries = [];
+  const MAX_ENTRIES = 400;
+
   function line(level, message) {
     const stamp = new Date().toISOString();
     return `${stamp} ${level} ${message}`;
   }
 
+  function push(level, message) {
+    entries.push(line(level, message));
+    if (entries.length > MAX_ENTRIES) {
+      entries.splice(0, entries.length - MAX_ENTRIES);
+    }
+  }
+
   return {
     info(message) {
+      push("INFO", message);
       process.stdout.write(`${line("INFO", message)}\n`);
     },
     warn(message) {
+      push("WARN", message);
       process.stdout.write(`${line("WARN", message)}\n`);
     },
     error(message) {
+      push("ERROR", message);
       process.stderr.write(`${line("ERROR", message)}\n`);
+    },
+    tail(limit = DEFAULT_DEBUG_DEFAULT_LINES) {
+      const safeLimit = Math.max(1, Math.min(MAX_ENTRIES, parsePositiveInteger(limit, DEFAULT_DEBUG_DEFAULT_LINES)));
+      return entries.slice(-safeLimit);
     },
   };
 }
@@ -268,6 +301,20 @@ function loadConfig(env = process.env) {
   const summaryIngestSecret = String(env.OPS_BOT_SUMMARY_INGEST_SECRET || ingestSecret).trim();
   const ingestEnabled = parseBoolean(env.OPS_BOT_INGEST_ENABLED, false);
   const allowedChatIds = new Set(splitCsv(env.OPS_BOT_ALLOWED_CHAT_IDS));
+  const debugBearerToken = String(env.OPS_BOT_DEBUG_BEARER_TOKEN || "").trim();
+  const debugEnabled = parseBoolean(env.OPS_BOT_DEBUG_ENABLED, debugBearerToken.length > 0);
+  const debugDefaultLines = parsePositiveInteger(env.OPS_BOT_DEBUG_DEFAULT_LINES, DEFAULT_DEBUG_DEFAULT_LINES, {
+    min: 10,
+    max: DEFAULT_DEBUG_MAX_LINES,
+  });
+  const debugMaxLines = parsePositiveInteger(env.OPS_BOT_DEBUG_MAX_LINES, DEFAULT_DEBUG_MAX_LINES, {
+    min: debugDefaultLines,
+    max: 2000,
+  });
+  const debugMaxBytes = parsePositiveInteger(env.OPS_BOT_DEBUG_MAX_BYTES, DEFAULT_DEBUG_MAX_BYTES, {
+    min: 16 * 1024,
+    max: 2 * 1024 * 1024,
+  });
 
   const snapshotScript = path.resolve(
     env.OPS_BOT_STATUS_SNAPSHOT_SCRIPT || path.join(FLOW_SHARED_SCRIPTS_DIR, "status_snapshot.sh"),
@@ -285,6 +332,12 @@ function loadConfig(env = process.env) {
   const profileConfigDir = path.join(ROOT_DIR, ".flow", "config", "profiles");
   const localStateRootDir = path.join(ROOT_DIR, ".flow", "state", "codex");
   const codexStateDir = path.resolve(env.CODEX_STATE_DIR || env.FLOW_STATE_DIR || DEFAULT_CODEX_DIR);
+  const runtimeLogDir = path.resolve(
+    env.FLOW_RUNTIME_LOG_DIR || readEnvKey(flowEnvFile, "FLOW_RUNTIME_LOG_DIR") || path.join(ROOT_DIR, ".flow", "logs", "runtime"),
+  );
+  const pm2LogDir = path.resolve(
+    env.FLOW_PM2_LOG_DIR || readEnvKey(flowEnvFile, "FLOW_PM2_LOG_DIR") || path.join(path.dirname(runtimeLogDir), "pm2"),
+  );
   const remoteStateDir = path.resolve(
     env.OPS_BOT_REMOTE_STATE_DIR || path.join(ROOT_DIR, ".flow", "state", "ops-bot", "remote"),
   );
@@ -292,14 +345,14 @@ function loadConfig(env = process.env) {
     env.OPS_BOT_REMOTE_SNAPSHOT_FILE || path.join(remoteStateDir, "_legacy", "snapshot.json"),
   );
   const remoteSnapshotTtlSec = Math.max(
-    30,
+    1,
     parseInteger(env.OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC, DEFAULT_REMOTE_SNAPSHOT_TTL_SEC),
   );
   const remoteSummaryFile = path.resolve(
     env.OPS_BOT_REMOTE_SUMMARY_FILE || path.join(remoteStateDir, "_legacy", "summary.json"),
   );
   const remoteSummaryTtlSec = Math.max(
-    60,
+    1,
     parseInteger(env.OPS_BOT_REMOTE_SUMMARY_TTL_SEC, DEFAULT_REMOTE_SUMMARY_TTL_SEC),
   );
 
@@ -337,11 +390,180 @@ function loadConfig(env = process.env) {
     profileConfigDir,
     localStateRootDir,
     codexStateDir,
+    runtimeLogDir,
+    pm2LogDir,
     remoteStateDir,
     remoteSnapshotFile,
     remoteSnapshotTtlSec,
     remoteSummaryFile,
     remoteSummaryTtlSec,
+    debugEnabled,
+    debugBearerToken,
+    debugDefaultLines,
+    debugMaxLines,
+    debugMaxBytes,
+  };
+}
+
+function buildDebugLogMap(config) {
+  return {
+    daemon: path.join(config.runtimeLogDir, "daemon.log"),
+    watchdog: path.join(config.runtimeLogDir, "watchdog.log"),
+    executor: path.join(config.runtimeLogDir, "executor.log"),
+    "graphql-rate": path.join(config.runtimeLogDir, "graphql_rate_stats.log"),
+  };
+}
+
+function buildSecretRedactions(config) {
+  const envSecretKeys = [
+    "OPS_BOT_DEBUG_BEARER_TOKEN",
+    "OPS_BOT_INGEST_SECRET",
+    "OPS_BOT_SUMMARY_INGEST_SECRET",
+    "OPS_BOT_TG_SECRET_TOKEN",
+    "OPS_BOT_WEBHOOK_SECRET",
+    "OPS_REMOTE_STATUS_PUSH_SECRET",
+    "OPS_REMOTE_SUMMARY_PUSH_SECRET",
+    "TG_BOT_TOKEN",
+    "OPS_BOT_TG_BOT_TOKEN",
+    "DAEMON_TG_BOT_TOKEN",
+    "DAEMON_GH_PROJECT_TOKEN",
+    "DAEMON_GH_TOKEN",
+    "CODEX_GH_PROJECT_TOKEN",
+    "CODEX_GH_TOKEN",
+    "GH_APP_INTERNAL_SECRET",
+    "OPENAI_API_KEY",
+  ];
+  const replacements = new Map();
+  const candidates = [
+    ["OPS_BOT_DEBUG_BEARER_TOKEN", config.debugBearerToken],
+    ["OPS_BOT_INGEST_SECRET", config.ingestSecret],
+    ["OPS_BOT_SUMMARY_INGEST_SECRET", config.summaryIngestSecret],
+    ["OPS_BOT_TG_SECRET_TOKEN", config.telegramSecretToken],
+    ["OPS_BOT_WEBHOOK_SECRET", config.webhookSecret],
+    ["OPS_BOT_TG_BOT_TOKEN", config.tgBotToken],
+  ];
+  for (const key of envSecretKeys) {
+    candidates.push([key, process.env[key] || ""]);
+  }
+  for (const [key, value] of candidates) {
+    const normalized = String(value || "").trim();
+    if (normalized.length < 6) {
+      continue;
+    }
+    if (!replacements.has(normalized)) {
+      replacements.set(normalized, `<redacted:${key}>`);
+    }
+  }
+  return Array.from(replacements.entries());
+}
+
+function redactSensitiveText(input, config) {
+  let text = String(input || "");
+  for (const [rawValue, replacement] of buildSecretRedactions(config)) {
+    text = text.split(rawValue).join(replacement);
+  }
+  text = text.replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b/g, "Bearer <redacted:bearer>");
+  text = text.replace(/\b(sk-[A-Za-z0-9_-]{12,})\b/g, "<redacted:openai-key>");
+  return text;
+}
+
+function readTailText(filePath, maxBytes) {
+  const stats = fs.statSync(filePath);
+  const safeBytes = Math.max(4096, maxBytes);
+  const start = Math.max(0, stats.size - safeBytes);
+  const length = stats.size - start;
+  const fd = fs.openSync(filePath, "r");
+  try {
+    const buffer = Buffer.alloc(length);
+    fs.readSync(fd, buffer, 0, length, start);
+    return {
+      text: buffer.toString("utf8"),
+      truncated: start > 0,
+      fileSize: stats.size,
+    };
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function extractTailLines(text, lines, truncatedByBytes) {
+  const normalized = String(text || "").replace(/\r\n/g, "\n");
+  const allLines = normalized.split("\n");
+  if (allLines.length > 0 && allLines[allLines.length - 1] === "") {
+    allLines.pop();
+  }
+  const safeLines = Math.max(1, lines);
+  const tailLines = allLines.slice(-safeLines);
+  return {
+    text: tailLines.join("\n"),
+    lineCount: tailLines.length,
+    truncated: truncatedByBytes || allLines.length > safeLines,
+  };
+}
+
+function loadDebugLogTail(config, logName, requestedLines) {
+  const logMap = buildDebugLogMap(config);
+  if (!Object.prototype.hasOwnProperty.call(logMap, logName)) {
+    const error = new Error(`unknown debug log: ${logName}`);
+    error.code = "UNKNOWN_LOG";
+    throw error;
+  }
+  const filePath = logMap[logName];
+  const safeLines = Math.max(1, Math.min(config.debugMaxLines, requestedLines || config.debugDefaultLines));
+  if (!fs.existsSync(filePath)) {
+    return {
+      name: logName,
+      path: filePath,
+      exists: false,
+      lines_requested: safeLines,
+      lines_returned: 0,
+      truncated: false,
+      text: "",
+    };
+  }
+  const tailChunk = readTailText(filePath, config.debugMaxBytes);
+  const tailLines = extractTailLines(tailChunk.text, safeLines, tailChunk.truncated);
+  return {
+    name: logName,
+    path: filePath,
+    exists: true,
+    lines_requested: safeLines,
+    lines_returned: tailLines.lineCount,
+    truncated: tailLines.truncated,
+    file_size_bytes: tailChunk.fileSize,
+    text: redactSensitiveText(tailLines.text, config),
+  };
+}
+
+function requireDebugAuth(req, res, config) {
+  if (!config.debugEnabled || !config.debugBearerToken) {
+    sendJson(res, 404, { error: "NOT_FOUND", message: "debug surface disabled" });
+    return false;
+  }
+  const headerValue = extractHeader(req, "authorization");
+  const expected = `Bearer ${config.debugBearerToken}`;
+  if (headerValue !== expected) {
+    res.setHeader("WWW-Authenticate", 'Bearer realm="ops-debug"');
+    sendJson(res, 401, { error: "UNAUTHORIZED", message: "invalid debug bearer token" });
+    return false;
+  }
+  return true;
+}
+
+async function buildDebugRuntimePayload(config) {
+  const snapshot = await loadEffectiveSnapshot(config);
+  return {
+    generated_at: new Date().toISOString(),
+    debug_surface: "ops-bot",
+    snapshot,
+    log_summary_hint: "/ops/debug/log-summary.json?hours=6",
+    available_logs: DEBUG_LOG_NAMES,
+    paths: {
+      root_dir: ROOT_DIR,
+      runtime_log_dir: config.runtimeLogDir,
+      codex_state_dir: config.codexStateDir,
+      remote_state_dir: config.remoteStateDir,
+    },
   };
 }
 
@@ -440,7 +662,7 @@ function loadRemoteSummaries(config) {
   if (isObjectLike(legacy) && isObjectLike(legacy.summaries)) {
     records.push(legacy);
   }
-  return records.sort((left, right) => {
+  return dedupeRemoteRecords(records).sort((left, right) => {
     const leftMs = Date.parse(String(left.received_at || left.pushed_at || "")) || 0;
     const rightMs = Date.parse(String(right.received_at || right.pushed_at || "")) || 0;
     return rightMs - leftMs;
@@ -567,11 +789,34 @@ function loadRemoteSnapshots(config) {
   if (isObjectLike(legacy) && isObjectLike(legacy.snapshot)) {
     records.push(legacy);
   }
-  return records.sort((left, right) => {
+  return dedupeRemoteRecords(records).sort((left, right) => {
     const leftMs = Date.parse(String(left.received_at || left.pushed_at || "")) || 0;
     const rightMs = Date.parse(String(right.received_at || right.pushed_at || "")) || 0;
     return rightMs - leftMs;
   });
+}
+
+function dedupeRemoteRecords(records) {
+  const seen = new Set();
+  const result = [];
+  for (const record of records) {
+    const snapshot = isObjectLike(record.snapshot) ? record.snapshot : {};
+    const project = isObjectLike(snapshot.project) ? snapshot.project : {};
+    const key = [
+      String(record.source || ""),
+      String(record.profile || project.profile || ""),
+      String(record.repo || project.repo || ""),
+      String(record.received_at || ""),
+      String(record.pushed_at || ""),
+      String(snapshot.generated_at || record.generated_at || ""),
+    ].join("|");
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(record);
+  }
+  return result;
 }
 
 function writeRemoteSnapshot(config, payload) {
@@ -1346,11 +1591,62 @@ function createServer(config, logger) {
         return;
       }
 
+      if (req.method === "GET" && url.pathname === "/ops/debug/runtime.json") {
+        if (!requireDebugAuth(req, res, config)) {
+          return;
+        }
+        const payload = await buildDebugRuntimePayload(config);
+        sendJson(res, 200, payload);
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname === "/ops/debug/log-summary.json") {
+        if (!requireDebugAuth(req, res, config)) {
+          return;
+        }
+        const hours = parsePositiveInteger(url.searchParams.get("hours"), DEFAULT_SUMMARY_HOURS, {
+          min: 1,
+          max: 168,
+        });
+        const summary = await loadEffectiveSummary(config, hours);
+        sendJson(res, 200, {
+          ...summary,
+          text: redactSensitiveText(summary.text, config),
+        });
+        return;
+      }
+
+      const debugLogMatch = /^\/ops\/debug\/logs\/([a-z0-9._-]+)$/.exec(url.pathname);
+      if (req.method === "GET" && debugLogMatch) {
+        if (!requireDebugAuth(req, res, config)) {
+          return;
+        }
+        const lines = parsePositiveInteger(url.searchParams.get("lines"), config.debugDefaultLines, {
+          min: 1,
+          max: config.debugMaxLines,
+        });
+        try {
+          const payload = loadDebugLogTail(config, debugLogMatch[1], lines);
+          sendJson(res, 200, payload);
+        } catch (error) {
+          if (error && error.code === "UNKNOWN_LOG") {
+            sendJson(res, 404, {
+              error: "UNKNOWN_LOG",
+              message: error.message,
+              available_logs: DEBUG_LOG_NAMES,
+            });
+            return;
+          }
+          throw error;
+        }
+        return;
+      }
+
       if (req.method === "GET" && url.pathname === "/") {
         sendText(
           res,
           200,
-          `Automation ops-bot service\nGET /health\nGET /ops/status\nGET /ops/status.json\nPOST ${config.ingestPath}\nPOST ${config.summaryIngestPath}\n`,
+          `Automation ops-bot service\nGET /health\nGET /ops/status\nGET /ops/status.json\nGET /ops/debug/runtime.json\nGET /ops/debug/log-summary.json?hours=6\nGET /ops/debug/logs/{daemon|watchdog|executor|graphql-rate}?lines=120\nPOST ${config.ingestPath}\nPOST ${config.summaryIngestPath}\n`,
         );
         return;
       }

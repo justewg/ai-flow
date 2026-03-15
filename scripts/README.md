@@ -606,6 +606,8 @@ Rollback нового профиля:
   - нормализует `overall_status` и `action_required` (например, `WAIT_DIRTY_WORKTREE + BLOCKING_TODO=0` трактуется как non-blocking warning)
 - `ops_bot_service.js`
   - HTTP сервис с endpoint-ами: `GET /health`, `GET /ops/status`, `GET /ops/status.json`
+  - optional debug API: `GET /ops/debug/runtime.json`, `GET /ops/debug/log-summary.json?hours=6`, `GET /ops/debug/logs/<daemon|watchdog|executor|graphql-rate>?lines=120`
+  - debug API по умолчанию выключен; включается через `OPS_BOT_DEBUG_ENABLED=1` и `OPS_BOT_DEBUG_BEARER_TOKEN=<token>`
   - Telegram webhook handler: `POST /telegram/webhook[/<secret>]`
   - невалидный webhook JSON -> `400 BAD_REQUEST`; payload > 1 MiB -> `413 PAYLOAD_TOO_LARGE`
   - update без команды обрабатывается безопасно (`200`, `command_handled=false`)
@@ -663,6 +665,10 @@ Rollback нового профиля:
 - `.flow/shared/scripts/run.sh ops_remote_status_push` (ожидается `OPS_REMOTE_PUSH_OK=1` при настроенных `OPS_REMOTE_STATUS_PUSH_*`)
 - `.flow/shared/scripts/run.sh ops_remote_summary_push` (ожидается `OPS_REMOTE_SUMMARY_PUSH_OK=1` при настроенных `OPS_REMOTE_SUMMARY_PUSH_*`)
 - HTTP-проверки: `GET /health`, `GET /ops/status`, `GET /ops/status.json`
+- Debug HTTP-проверки при включённом debug API:
+  - `GET /ops/debug/runtime.json`
+  - `GET /ops/debug/log-summary.json?hours=6`
+  - `GET /ops/debug/logs/daemon?lines=200`
 - webhook negative-checks: невалидный JSON -> `400`, слишком большой payload -> `413`, update без команды -> `200 command_handled=false`
 - Telegram webhook + команды: `/help`, `/status`, `/summary 6`, `/status_page`
 
@@ -763,6 +769,11 @@ chmod +x .flow/shared/scripts/*.sh
 - `OPS_BOT_PUBLIC_BASE_URL` (внешний URL status/webhook server для ops-bot: используется для `/status_page`, Telegram webhook registration и публичного ingress, например `https://ops.example.com`)
 - `OPS_BOT_REFRESH_SEC` (интервал автообновления `/ops/status` в секундах; по умолчанию `5`)
 - `OPS_BOT_CMD_TIMEOUT_MS` (таймаут внутренних команд snapshot/summary; по умолчанию `10000`)
+- `OPS_BOT_DEBUG_ENABLED` (включает read-only debug API `/ops/debug/*`; по умолчанию `false`, автоматически считается включённым если задан bearer token)
+- `OPS_BOT_DEBUG_BEARER_TOKEN` (обязательный bearer token для debug API; если пуст, `/ops/debug/*` недоступны)
+- `OPS_BOT_DEBUG_DEFAULT_LINES` (default `lines` для debug tail endpoint; по умолчанию `120`)
+- `OPS_BOT_DEBUG_MAX_LINES` (верхний лимит `lines` для debug tail endpoint; по умолчанию `400`)
+- `OPS_BOT_DEBUG_MAX_BYTES` (сколько байт читать с конца лог-файла перед line-tail; по умолчанию `262144`)
 - `OPS_BOT_TG_BOT_TOKEN` (опциональный токен бота; fallback chain: `OPS_BOT_TG_BOT_TOKEN -> DAEMON_TG_BOT_TOKEN -> TG_BOT_TOKEN`)
 - `OPS_BOT_PM2_APP_NAME` (имя PM2 процесса ops-бота; по умолчанию `planka-ops-bot`)
 - `OPS_REMOTE_STATUS_PUSH_ENABLED` (включает push локального snapshot на удаленный ingest endpoint)

@@ -5,6 +5,9 @@
 - health endpoint: `GET /health`
 - web dashboard: `GET /ops/status`
 - JSON snapshot: `GET /ops/status.json`
+- debug snapshot: `GET /ops/debug/runtime.json`
+- debug log-summary: `GET /ops/debug/log-summary.json?hours=6`
+- debug log tails: `GET /ops/debug/logs/<daemon|watchdog|executor|graphql-rate>?lines=120`
 - Telegram webhook: `POST /telegram/webhook[/<secret>]`
 - runtime ingest endpoint: `POST /ops/ingest/status` (опционально, для split-runtime)
 - summary ingest endpoint: `POST /ops/ingest/log-summary` (опционально, для split-runtime `/summary`)
@@ -47,7 +50,44 @@ OPS_BOT_WEBHOOK_SECRET=<long-random-path-secret>
 OPS_BOT_TG_SECRET_TOKEN=<long-random-header-secret>
 OPS_BOT_ALLOWED_CHAT_IDS=<your_chat_id>
 OPS_BOT_PUBLIC_BASE_URL=https://ops.example.com  # public status/webhook server URL
+OPS_BOT_DEBUG_ENABLED=1
+OPS_BOT_DEBUG_BEARER_TOKEN=<long-random-bearer-token>
 # TG_BOT_TOKEN=... (или OPS_BOT_TG_BOT_TOKEN)
+```
+
+### Debug surface для удалённой диагностики
+
+Если automation уже живёт на VPS и ты хочешь читать её state/tails из внешнего чата без SSH, можно включить read-only debug API:
+
+```bash
+OPS_BOT_DEBUG_ENABLED=1
+OPS_BOT_DEBUG_BEARER_TOKEN=<long-random-bearer-token>
+OPS_BOT_DEBUG_DEFAULT_LINES=120
+OPS_BOT_DEBUG_MAX_LINES=400
+OPS_BOT_DEBUG_MAX_BYTES=262144
+```
+
+Тогда появляются дополнительные routes:
+
+- `GET /ops/debug/runtime.json`
+  - расширенный runtime payload: текущий effective `status_snapshot`, root paths и список доступных логов.
+- `GET /ops/debug/log-summary.json?hours=6`
+  - JSON-обёртка над `log_summary`, удобна для remote analysis.
+- `GET /ops/debug/logs/<name>?lines=<n>`
+  - allowlist только для:
+    - `daemon`
+    - `watchdog`
+    - `executor`
+    - `graphql-rate`
+  - ответ возвращается в JSON с `text`, `lines_returned`, `truncated`, `path`.
+  - содержимое проходит через базовое redaction правил для известных secret/token значений.
+
+Пример запроса:
+
+```bash
+curl -fsS \
+  -H "Authorization: Bearer ${OPS_BOT_DEBUG_BEARER_TOKEN}" \
+  http://127.0.0.1:8790/ops/debug/runtime.json | jq .
 ```
 
 ### Split runtime (локальная автоматика + удаленный HTTPS бот)
@@ -110,6 +150,19 @@ location /telegram/webhook/ {
   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
   proxy_set_header X-Forwarded-Proto $scheme;
 }
+
+# protected debug API
+location /ops/debug/ {
+  if ($http_authorization != "Bearer ${ops_debug_bearer_token}") {
+    return 401;
+  }
+  proxy_pass http://127.0.0.1:8790;
+  proxy_http_version 1.1;
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+}
 ```
 
 ## Регистрация webhook в Telegram
@@ -131,6 +184,10 @@ location /telegram/webhook/ {
   - `.flow/shared/scripts/run.sh ops_bot_pm2_health`
 - Snapshot sanity:
   - `.flow/shared/scripts/run.sh status_snapshot | jq .`
+- Debug API:
+  - `GET /ops/debug/runtime.json`
+  - `GET /ops/debug/log-summary.json?hours=6`
+  - `GET /ops/debug/logs/daemon?lines=200`
 
 ## Smoke-checklist rollout (manual)
 1. Проверить prereq: `node -v`, `pm2 -v`, `jq --version`.

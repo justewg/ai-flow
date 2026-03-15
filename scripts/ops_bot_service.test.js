@@ -77,6 +77,8 @@ function createTempScripts(t) {
 
   const snapshotScript = path.join(tempDir, "status_snapshot_mock.sh");
   const summaryScript = path.join(tempDir, "log_summary_mock.sh");
+  const runtimeLogDir = path.join(tempDir, "runtime-logs");
+  fs.mkdirSync(runtimeLogDir, { recursive: true });
 
   fs.writeFileSync(
     snapshotScript,
@@ -99,7 +101,7 @@ echo "summary ok"
   fs.chmodSync(snapshotScript, 0o755);
   fs.chmodSync(summaryScript, 0o755);
 
-  return { snapshotScript, summaryScript };
+  return { snapshotScript, summaryScript, runtimeLogDir };
 }
 
 function createConfig(t, overrides = {}) {
@@ -138,6 +140,11 @@ JSON
     OPS_BOT_REMOTE_SNAPSHOT_TTL_SEC: overrides.remoteSnapshotTtlSec || "",
     OPS_BOT_REMOTE_SUMMARY_FILE: overrides.remoteSummaryFile || "",
     OPS_BOT_REMOTE_SUMMARY_TTL_SEC: overrides.remoteSummaryTtlSec || "",
+    OPS_BOT_DEBUG_ENABLED: overrides.debugEnabled ? "1" : "",
+    OPS_BOT_DEBUG_BEARER_TOKEN: overrides.debugBearerToken || "",
+    OPS_BOT_DEBUG_DEFAULT_LINES: overrides.debugDefaultLines || "",
+    OPS_BOT_DEBUG_MAX_LINES: overrides.debugMaxLines || "",
+    FLOW_RUNTIME_LOG_DIR: overrides.runtimeLogDir || scripts.runtimeLogDir,
   });
 }
 
@@ -353,7 +360,7 @@ test("ingest endpoint stores remote snapshot and serves it when local runtime is
   t.after(async () => {
     await closeServer(staleService);
   });
-  await new Promise((resolve) => setTimeout(resolve, 1200));
+  await new Promise((resolve) => setTimeout(resolve, 2100));
   const staleStatus = await requestJson({
     method: "GET",
     url: `http://127.0.0.1:${stalePort}/ops/status.json`,
@@ -507,4 +514,90 @@ test("multiple remote runtimes are stored separately and exposed in status json"
   assert.equal(statusJson.body.remote_sources.length, 2);
   assert.equal(statusJson.body.remote_sources[0].label, "justewg/favs");
   assert.equal(statusJson.body.remote_sources[1].label, "justewg/planka");
+});
+
+test("debug endpoints require bearer token and expose runtime payload", async (t) => {
+  const config = createConfig(t, {
+    debugEnabled: true,
+    debugBearerToken: "debug-token-123456",
+  });
+  const service = createServer(config, { info() {}, warn() {}, error() {} });
+  const port = await listen(service);
+  t.after(async () => {
+    await closeServer(service);
+  });
+
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const unauthorized = await requestJson({
+    method: "GET",
+    url: `${baseUrl}/ops/debug/runtime.json`,
+  });
+  assert.equal(unauthorized.statusCode, 401);
+  assert.equal(unauthorized.body.error, "UNAUTHORIZED");
+
+  const authorized = await requestJson({
+    method: "GET",
+    url: `${baseUrl}/ops/debug/runtime.json`,
+    headers: {
+      Authorization: "Bearer debug-token-123456",
+    },
+  });
+  assert.equal(authorized.statusCode, 200);
+  assert.equal(authorized.body.snapshot.overall_status, "HEALTHY");
+  assert.equal(Array.isArray(authorized.body.available_logs), true);
+  assert.equal(authorized.body.available_logs.includes("daemon"), true);
+});
+
+test("debug log tail is allowlisted and redacts sensitive values", async (t) => {
+  const runtimeLogDir = fs.mkdtempSync(path.join(os.tmpdir(), "planka-ops-debug-logs-"));
+  t.after(() => {
+    fs.rmSync(runtimeLogDir, { recursive: true, force: true });
+  });
+  fs.writeFileSync(
+    path.join(runtimeLogDir, "daemon.log"),
+    [
+      "one",
+      "Authorization: Bearer debug-token-123456",
+      "project token debug-token-123456",
+      "tail-line",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+
+  const config = createConfig(t, {
+    debugEnabled: true,
+    debugBearerToken: "debug-token-123456",
+    runtimeLogDir,
+    debugDefaultLines: "2",
+    debugMaxLines: "5",
+  });
+  const service = createServer(config, { info() {}, warn() {}, error() {} });
+  const port = await listen(service);
+  t.after(async () => {
+    await closeServer(service);
+  });
+
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const tail = await requestJson({
+    method: "GET",
+    url: `${baseUrl}/ops/debug/logs/daemon?lines=5`,
+    headers: {
+      Authorization: "Bearer debug-token-123456",
+    },
+  });
+  assert.equal(tail.statusCode, 200);
+  assert.equal(tail.body.name, "daemon");
+  assert.equal(tail.body.exists, true);
+  assert.match(tail.body.text, /<redacted:OPS_BOT_DEBUG_BEARER_TOKEN>/);
+
+  const unknown = await requestJson({
+    method: "GET",
+    url: `${baseUrl}/ops/debug/logs/ops-bot?lines=5`,
+    headers: {
+      Authorization: "Bearer debug-token-123456",
+    },
+  });
+  assert.equal(unknown.statusCode, 404);
+  assert.equal(unknown.body.error, "UNKNOWN_LOG");
 });

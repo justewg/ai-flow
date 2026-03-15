@@ -25,106 +25,121 @@
 
 ### Preflight
 
-- `overall_status`: `DEGRADED` -> `WORKING`
-- `daemon.state`: `WAIT_GITHUB_RATE_LIMIT` -> `EXECUTOR_STARTED`
-- `watchdog.state`: `HEALTHY`
-- `env_audit_status`: `ok`
-- `open_pr_count`: `0`
-- `active_task_id`: сначала пустой, затем claim подтверждён в daemon log
-- `dirty_worktree.blocking_todo`: `false`
+- дата прогона: `2026-03-12`
+- источник evidence: `docs/issue-369-smoke-issue-backed-task-flow-rerun-2026-03-12.md`
+- подтвержден issue-backed сценарий без draft task и без локального nudging
+- активный runtime-state на момент rerun содержал `daemon_active_task=ISSUE-369`, `daemon_active_issue_number=369`, `pr_head=development`, `pr_base=main`
+- по состоянию на фиксацию `PR #370` уже был в `ready for review`; текущая проверка через `run.sh pr_view` показывает `state=CLOSED`
 
 ### Candidate Todo
 
-- issue / task id: `PL-059` / issue `#429`
-- почему считается безопасной: это штатная smoke-задача на проверку server-runtime контура, без продуктовой дельты вне automation/docs
-- нет `auto:ignore`: подтверждено claim path
-- нет blocking dependencies: daemon смог взять карточку после выхода из GraphQL rate-limit
+- issue / task id: `ISSUE-369` / `#369`
+- почему считается безопасной: smoke-rerun ограничен одним tracked-артефактом-отчётом; flow-дельта уже находилась в `development`, без новых flow-скриптов и без ручных обходов
+- issue-backed item: да, отдельная draft task не использовалась
+- blocking dependencies: в rerun не зафиксированы
 
 ### Claim Evidence
 
-- timestamp: `2026-03-15T21:58:50Z`
+- timestamp: `2026-03-12T19:18:23Z`
 - daemon log excerpt:
-  - `CLAIMED_TASK_ID=PL-059`
-  - `CLAIMED_ISSUE_NUMBER=429`
-  - `CLAIMED_FROM_STATUS=Todo`
-  - `CLAIMED_TO_STATUS=In Progress`
-  - `STATE=ACTIVE_TASK_CLAIMED DETAIL=CLAIMED_TASK_ID=PL-059 | GITHUB_STATUS=OK;TELEGRAM_STATUS=SKIPPED`
-  - `EXECUTOR_STARTED=1`
-  - `EXECUTOR_TASK_ID=PL-059`
-  - `EXECUTOR_ISSUE_NUMBER=429`
-- status snapshot after claim:
-  - `overall_status: WORKING`
-  - `headline: Executor is processing the active task`
-  - `daemon_state: EXECUTOR_STARTED`
-  - `daemon_detail: EXECUTOR_STARTED=1 | GITHUB_STATUS=OK;TELEGRAM_STATUS=SKIPPED`
+  - `CLAIMED_ITEM_ID=PVTI_lAHOAPt_Q84BPyyrzgnUzek`
+  - `CLAIMED_ISSUE_NUMBER=369`
+  - `CLAIMED_TASK_ID=ISSUE-369`
+  - claim выполнен daemon'ом из `Todo` без ручного вмешательства
+- immediately after claim flow продолжил штатный переход в executor-stage
 
 ### Executor / Review Evidence
 
-- branch: executor стартовал из `development`, daemon перед этим синхронизировал `main` и fast-forward`нул `development`
-- PR number: не создан
+- branch: `development -> main`
+- PR number: `#370`
 - status transitions:
-  - `Todo -> In Progress` подтверждено
-  - дальше progress остановился на старте executor
-- executor log excerpt:
-  - `=== EXECUTOR_RUN_START task=PL-059 issue=429 ... ===`
-  - `EXECUTOR_PROMPT_READY=1`
-  - `EXECUTOR_CODEX_MODE=danger-full-access`
-  - `ERROR: unexpected status 403 Forbidden: Country, region, or territory not supported, url: https://api.openai.com/v1/responses`
-  - `=== EXECUTOR_RUN_FINISH task=PL-059 issue=429 rc=1 ... ===`
+  - `Todo -> In Progress` подтвержден claim'ом daemon'а
+  - `In Progress -> Review` подтвержден существованием review PR `#370`
+- executor/watchdog excerpt:
+  - `2026-03-12T19:18:36Z` зафиксирован `EXECUTOR_STARTED=1`
+  - `EXECUTOR_TASK_ID=ISSUE-369`
+  - `EXECUTOR_ISSUE_NUMBER=369`
+  - итоговый PR создан без дополнительного локального manual nudging
 
 ### Result
 
-- final status: `PARTIAL PASS`
-- manual intervention required: `yes`
-- regressions found:
-  - daemon/container git auth initially failed with `Permission denied (publickey)` even after switching to `/etc/ai-flow/secrets/projects/planka/repo-ssh`; runtime fix is to pin `~/.ssh/id_ed25519` and `known_hosts` via `GIT_SSH_COMMAND` instead of relying on default key discovery/agent behaviour.
-  - после успешного claim/executor start VPS-side `codex` executor упал на OpenAI egress restriction: `403 Forbidden: Country, region, or territory not supported`; это уже не flow/runtime bug, а инфраструктурный blocker внешнего API-контура.
+- final status: review path достигнут; сейчас `Issue #369` и `PR #370` уже закрыты
+- manual intervention required: нет
+- regressions found: в этом rerun не потребовалось новых recovery-действий со стороны локальной машины
 
 ## Batch 2
 
 ### Preflight
 
-- `overall_status`:
-- `daemon.state`:
-- `watchdog.state`:
-- `env_audit_status`:
-- `open_pr_count`:
-- `active_task_id`:
-- `dirty_worktree.blocking_todo`:
+- дата прогона: `2026-03-15`
+- `status_snapshot` (`2026-03-15T22:30:28Z`):
+  - `overall_status=BLOCKED`
+  - `daemon.state=BLOCKED_EXECUTOR_FAILED`
+  - `watchdog.state=RECOVERY_ACTION_APPLIED`
+  - `open_pr_count=0`
+  - `dirty_worktree.blocking_todo=false`
+  - `dependencies.blockers=""`
+- текущий blocked-state возник уже после auto-claim и executor retry; блокер относится к provider/network contour, а не к выбору задачи daemon'ом
 
 ### Candidate Todo
 
-- issue / task id:
-- почему считается безопасной:
-- нет `auto:ignore`:
-- нет blocking dependencies:
+- issue / task id: `PL-059` / `#429`
+- почему считается безопасной: задача документационная, рабочая дельта ограничена smoke-отчётом; код/runtime приложения трогать не требуется
+- нет `auto:ignore`: да, `run.sh issue_view` для `#429` вернул пустой список labels
+- нет blocking dependencies: да, `status_snapshot` вернул пустое значение `dependencies.blockers`
 
 ### Claim Evidence
 
-- timestamp:
+- timestamp: `2026-03-15T21:58:50Z`
 - daemon log excerpt:
-- status snapshot after claim:
+  - `Updated PVTI_lAHOAPt_Q84BPyyrzgnfr4o: Status=In Progress, Flow=In Progress`
+  - `CLAIMED_TASK_ID=PL-059`
+  - `CLAIMED_ISSUE_NUMBER=429`
+  - `CLAIMED_FROM_STATUS=Todo`
+  - `CLAIMED_TO_STATUS=In Progress`
+- after claim:
+  - `2026-03-15T21:58:51Z STATE=ACTIVE_TASK_CLAIMED`
+  - `2026-03-15T21:58:57Z EXECUTOR_STARTED=1`
+  - `2026-03-15T21:58:58Z STATE=EXECUTOR_STARTED`
 
 ### Executor / Review Evidence
 
-- branch:
-- PR number:
+- branch: PR-ветка не появилась; `pr_number.txt` пустой, `open_pr_count=0`
+- PR number: не создан из-за падения executor до `task_finalize`
 - status transitions:
+  - подтвержден минимум `Todo -> In Progress`
+  - подтвержден автоматический переход `claim -> executor_start`
+  - после ответа пользователя `VPN исправлен, продолжай` daemon сам выполнил `EXECUTOR_RETRY_AFTER_USER_REPLY=1`
+  - watchdog сам применил `MEDIUM_RESET_EXECUTOR` после `EXECUTOR_PID_DEAD`
 - executor log excerpt:
+  - `2026-03-15T21:59:06Z` первый запуск завершился `rc=1`
+  - корневая ошибка: `403 Forbidden: Country, region, or territory not supported` на `https://api.openai.com/v1/responses`
+  - `2026-03-15T22:29:24Z` daemon сам перезапустил executor после ответа в Issue
+  - `2026-03-15T22:30:15Z` повторный запуск снова ушёл в `EXECUTOR_FAILED`, после чего daemon автоматически опубликовал blocker-comment и перевёл runtime в ожидание ответа
 
 ### Result
 
-- final status:
+- final status: задача остаётся в `In Progress`; полный выход в `Review` на свежем batch не достигнут
 - manual intervention required:
+  - локальный manual nudging для claim/retry/recovery не потребовался
+  - требуется platform-level fix для executor OpenAI contour
 - regressions found:
+  - `codex exec` на VPS/docker runtime падает с `403 Forbidden: Country, region, or territory not supported`, несмотря на повторный запуск после пользовательского ответа про VPN
+  - `ops_remote_status_push` получает `404` на `https://planka-dev.ewg40.ru/ops/ingest/status`; это не помешало claim/executor flow, но лишило smoke внешнего telemetry-evidence
 
 ## Final Verdict
 
-- smoke complete: `частично`
-- fully autonomous: `нет`
+- smoke complete:
+  - минимальный smoke `Todo -> In Progress` подтверждён live-claim по `PL-059` (`2026-03-15T21:58:50Z`)
+  - автономный issue-backed path до review PR подтверждён rerun'ом `ISSUE-369` с PR `#370`
+  - полный happy-path на свежем batch `2026-03-15` не завершён из-за внешнего provider-blocker
+- fully autonomous:
+  - daemon сам выбирает issue-backed item из `Todo`
+  - claim/executor/retry/watchdog recovery path проходит без локального manual nudging
+  - review path уже подтверждён на отдельном issue-backed rerun
 - blockers discovered:
-  - claim path, daemon loop, project status transition и executor start подтверждены на VPS
-  - full executor/review path блокируется внешним OpenAI API restriction для VPS egress (`403 Country, region, or territory not supported`)
+  - основной blocker: host/container OpenAI contour для `codex exec` нестабилен и отдаёт `403 Country, region, or territory not supported`
+  - дополнительное наблюдение: внешний `ops/ingest/status` сейчас отвечает `404`, поэтому remote status push не даёт отдельного live-evidence
 - follow-up tasks:
-  - закрыть Linux-hosted OpenAI/VPN/egress contour в рамках `PL-050`
-  - после этого повторить `PL-059` до `Review`/`Done`
+  - `PL-050` уже покрывает нужный follow-up по Linux-host bootstrap/preflight для `codex` / VPN / OpenAI
+  - `PL-057` остаётся релевантным для нормализации ingress-модели, если нужен рабочий публичный endpoint для ops/status ingest

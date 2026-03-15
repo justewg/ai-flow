@@ -167,6 +167,7 @@ network_mode: host
 - `planka` в путях вида `/var/sites/.ai-flow/workspaces/planka` здесь означает конкретный consumer-project profile.
 - host-level surfaces (`ops-bot`, `gh-app-auth`, `/ops/status`, `/ops/debug/*`, `/telegram/webhook`) не должны называться доменом проекта по умолчанию.
 - для публичного ingress host-level контур лучше вешать на отдельный хост, например `aiflow.ewg40.ru`, а не смешивать с project-domain.
+- для read-only внешней AI-диагностики поверх этого контура можно опционально поднять отдельный `aiflow` SSH user + forced-command gateway + sudo allowlist только на `remote_probe`; подробности в [ai-flow-remote-agent-access.md](/private/var/sites/PLANKA/docs/ai-flow-remote-agent-access.md).
 
 Штатный путь такой:
 

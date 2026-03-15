@@ -77,17 +77,31 @@ Linux-hosted automation не должна жить из deploy snapshot (`/var/s
 
 Конфиг runtime должен жить вне git и вне deploy snapshot.
 
-Канонический пример:
+Нужно разделять два слоя конфигурации:
+
+- host-level platform env:
+
+```bash
+/var/sites/.ai-flow/config/ai-flow.platform.env
+```
+
+- project env для конкретного consumer-project:
 
 ```bash
 /var/sites/.ai-flow/config/planka.flow.env
 ```
 
-Этот файл:
+Project env:
 
 - не коммитится;
 - не приезжает через app deploy;
 - может быть создан из перенесённого локального `flow.env`, но затем нормализуется под Linux paths.
+
+Platform env:
+
+- не привязан к одному consumer-project;
+- хранит host-level/public/service defaults;
+- должен использовать `ai-flow` как platform identity, а не имя конкретного проекта.
 
 ### Secrets и auth artifacts
 

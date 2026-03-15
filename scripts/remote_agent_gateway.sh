@@ -15,6 +15,9 @@ Modes:
 EOF
 }
 
+echo "remote_agent_gateway v1 is disabled; use /usr/local/sbin/ai-flow-remote-agent-v2-gateway" >&2
+exit 1
+
 json_escape() {
   printf '%s' "${1:-}" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g; s/"/\\"/g'
 }

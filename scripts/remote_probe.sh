@@ -36,6 +36,9 @@ Notes:
 EOF
 }
 
+echo "remote_probe v1 is disabled; use Remote Agent v2 SSH probes via aiflow" >&2
+exit 1
+
 require_jq() {
   command -v jq >/dev/null 2>&1 || {
     echo "jq is required" >&2

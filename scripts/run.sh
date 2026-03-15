@@ -623,7 +623,8 @@ case "$cmd" in
 
   remote_agent_access_bootstrap)
     shift 1
-    "${CODEX_SHARED_SCRIPTS_DIR}/remote_agent_access_bootstrap.sh" "$@"
+    echo "remote_agent_access_bootstrap is disabled; use remote_agent_v2_bootstrap" >&2
+    exit 1
     ;;
 
   remote_agent_v2_bootstrap)
@@ -643,7 +644,8 @@ case "$cmd" in
 
   remote_probe)
     shift 1
-    "${CODEX_SHARED_SCRIPTS_DIR}/remote_probe.sh" "$@"
+    echo "remote_probe v1 is disabled; use Remote Agent v2 SSH probes via aiflow" >&2
+    exit 1
     ;;
 
   remote_agent_v2_publisher)

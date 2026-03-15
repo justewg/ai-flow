@@ -41,6 +41,9 @@ Options:
 EOF
 }
 
+echo "remote_agent_access_bootstrap v1 is disabled; use remote_agent_v2_bootstrap" >&2
+exit 1
+
 require_root() {
   if [[ "$(id -u)" -ne 0 ]]; then
     echo "This script must be run as root." >&2

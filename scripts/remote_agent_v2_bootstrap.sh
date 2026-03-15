@@ -272,21 +272,22 @@ verify_sshd_policy() {
   local sshd_dump
   sshd_dump="$(sshd -T -C "user=${agent_user},host=127.0.0.1,addr=127.0.0.1" 2>/dev/null || true)"
   [[ -n "$sshd_dump" ]] || {
-    echo "Unable to verify effective SSH policy for ${agent_user}" >&2
-    exit 1
+    echo "WARN: Unable to verify effective SSH policy for ${agent_user}" >&2
+    return 1
   }
   grep -Eq '^forcecommand /usr/local/sbin/ai-flow-remote-agent-v2-gateway$' <<< "$sshd_dump" || {
-    echo "Effective SSH policy missing expected ForceCommand for ${agent_user}" >&2
-    exit 1
+    echo "WARN: Effective SSH policy missing expected ForceCommand for ${agent_user}" >&2
+    return 1
   }
   grep -Eq '^permittty no$' <<< "$sshd_dump" || {
-    echo "Effective SSH policy missing PermitTTY no for ${agent_user}" >&2
-    exit 1
+    echo "WARN: Effective SSH policy missing PermitTTY no for ${agent_user}" >&2
+    return 1
   }
   grep -Eq '^allowtcpforwarding no$' <<< "$sshd_dump" || {
-    echo "Effective SSH policy missing AllowTcpForwarding no for ${agent_user}" >&2
-    exit 1
+    echo "WARN: Effective SSH policy missing AllowTcpForwarding no for ${agent_user}" >&2
+    return 1
   }
+  return 0
 }
 
 install_sudoers() {
@@ -308,7 +309,7 @@ install_systemd_units() {
 
 append_authorized_key() {
   local key_file="$1"
-  local home_dir ssh_dir authorized_keys key_line
+  local home_dir ssh_dir authorized_keys key_line managed_prefix
   home_dir="$(home_dir_for_user "$agent_user")"
   ssh_dir="${home_dir}/.ssh"
   authorized_keys="${ssh_dir}/authorized_keys"
@@ -320,10 +321,11 @@ append_authorized_key() {
   while IFS= read -r key_line || [[ -n "$key_line" ]]; do
     [[ -n "${key_line//[[:space:]]/}" ]] || continue
     [[ "$key_line" =~ ^# ]] && continue
-    if grep -Fqx "restrict ${key_line}" "$authorized_keys"; then
+    managed_prefix="command=\"${gateway_install_path}\",restrict "
+    if grep -Fqx "${managed_prefix}${key_line}" "$authorized_keys"; then
       continue
     fi
-    printf 'restrict %s\n' "$key_line" >> "$authorized_keys"
+    printf '%s%s\n' "$managed_prefix" "$key_line" >> "$authorized_keys"
   done < "$key_file"
 }
 
@@ -419,7 +421,10 @@ install_project_public_env
 copy_secret_material
 install_sshd_fragment
 reload_ssh_service
-verify_sshd_policy
+sshd_policy_effective="0"
+if verify_sshd_policy; then
+  sshd_policy_effective="1"
+fi
 install_sudoers
 install_systemd_units
 
@@ -452,3 +457,4 @@ echo "PROJECT_PUBLIC_ENV=${public_projects_root}/${profile_name}.env"
 echo "PROJECT_SECRETS_ENV=${secrets_projects_root}/${profile_name}/runtime.env"
 echo "PLATFORM_SECRETS_ENV=${secrets_platform_root}/runtime.env"
 echo "AUDIT_LOG=${audit_log_path}"
+echo "SSHD_POLICY_EFFECTIVE=${sshd_policy_effective}"

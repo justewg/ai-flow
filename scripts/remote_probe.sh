@@ -169,24 +169,24 @@ emit_runtime_log_tail_bundle() {
 }
 
 emit_docker_compose_contract_surface() {
-  local resolved_compose services_output mount_excerpt
+  local resolved_compose services_output mount_excerpt runtime_home_pattern
   local platform_env_wired="0" whole_home_mount_present="0"
   resolved_compose="$(capture_compose config)"
   services_output="$(capture_compose config --services)"
+  runtime_home_pattern="$(read_env_key "$COMPOSE_ENV_FILE" "RUNTIME_HOME")"
+  [[ -n "$runtime_home_pattern" ]] || runtime_home_pattern="/home/unknown"
 
   if [[ -f "$COMPOSE_FILE" ]] && grep -Eq '^[[:space:]]*-[[:space:]]*\$\{PLATFORM_ENV_FILE\}' "$COMPOSE_FILE"; then
     platform_env_wired="1"
   fi
-  if [[ -n "${resolved_compose}" ]] && printf '%s\n' "$resolved_compose" | grep -Fq '/home/ewg:/home/ewg'; then
+  if [[ -n "${resolved_compose}" ]] && printf '%s\n' "$resolved_compose" | grep -Fq "${runtime_home_pattern}:${runtime_home_pattern}"; then
     whole_home_mount_present="1"
-  elif [[ -f "$COMPOSE_FILE" ]] && grep -Fq '/home/ewg:/home/ewg' "$COMPOSE_FILE"; then
+  elif [[ -f "$COMPOSE_FILE" ]] && grep -Fq "${runtime_home_pattern}:${runtime_home_pattern}" "$COMPOSE_FILE"; then
     whole_home_mount_present="1"
   fi
 
   mount_excerpt="$(
-    printf '%s\n' "$resolved_compose" | awk '
-      /source: \/(var\/sites\/\.ai-flow|home\/ewg)/ || /target: \/(var\/sites\/\.ai-flow|home\/ewg)/ { print }
-    ' || true
+    printf '%s\n' "$resolved_compose" | grep -E 'source: /(var/sites/\.ai-flow|home/)|target: /(var/sites/\.ai-flow|home/)' || true
   )"
 
   jq -n \
@@ -196,6 +196,7 @@ emit_docker_compose_contract_surface() {
     --arg platform_env_file "$PLATFORM_ENV_FILE" \
     --arg project_env_file "$PROJECT_ENV_FILE" \
     --arg openai_env_file "$(read_env_key "$COMPOSE_ENV_FILE" "OPENAI_ENV_FILE")" \
+    --arg runtime_home "$runtime_home_pattern" \
     --arg resolved_mount_excerpt "$mount_excerpt" \
     --argjson compose_root_exists "$(file_exists_json "$COMPOSE_ROOT")" \
     --argjson compose_env_exists "$(file_exists_json "$COMPOSE_ENV_FILE")" \
@@ -214,6 +215,7 @@ emit_docker_compose_contract_surface() {
       platform_env_file: $platform_env_file,
       project_env_file: $project_env_file,
       openai_env_file: $openai_env_file,
+      runtime_home: $runtime_home,
       platform_env_wired: $platform_env_wired,
       whole_home_mount_present: $whole_home_mount_present,
       services: $services,

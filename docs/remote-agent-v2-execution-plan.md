@@ -1,0 +1,212 @@
+# Remote Agent v2 Execution Plan
+
+## Статус по факту
+
+Ниже зафиксирован execution-plan для `RA2-001..RA2-006` и текущее состояние реализации.
+
+Важно:
+
+- задачи на GitHub Project созданы как draft items;
+- их enrichment на доске временно заблокирован GitHub GraphQL rate limit;
+- каноническая детализация до снятия rate limit лежит в этом файле и в `TODO.md`.
+
+## RA2-001
+
+### Название
+
+`RA2-001 Remote Agent v2: bootstrap immutable paths and server-side layout`
+
+### Что должно быть сделано
+
+- root-only bootstrap:
+  - ставит immutable gateway/helper/publisher в `/usr/local`
+  - создает `/etc/ai-flow/public`
+  - создает `/etc/ai-flow/secrets`
+  - создает `/var/lib/ai-flow/diagnostics/<profile>`
+  - пишет `sshd_config.d` fragment
+  - пишет sudoers fragment
+- repo не входит в root trust boundary runtime-контура
+
+### Что уже сделано
+
+- реализован [remote_agent_v2_bootstrap.sh](/private/var/sites/PLANKA/.flow/shared/scripts/remote_agent_v2_bootstrap.sh)
+- реализованы шаблоны immutable v2 компонентов
+- обновлен [run.sh](/private/var/sites/PLANKA/.flow/shared/scripts/run.sh)
+- обновлен runbook
+
+### Что ещё не сделано
+
+- не прогнан реальный bootstrap на VPS
+- не проверены `sshd` reload, sudoers install и `systemd` timer install на живом сервере
+
+### Текущий статус
+
+`In Progress`
+
+## RA2-002
+
+### Название
+
+`RA2-002 Remote Agent v2: add deterministic diagnostics publisher and snapshot store`
+
+### Что должно быть сделано
+
+- root-owned publisher через `systemd timer`
+- sanitized snapshots в `/var/lib/ai-flow/diagnostics/<profile>`
+- TTL = `2x interval`
+- max snapshot size = `256 KB`
+- helper читает только published snapshots
+
+### Что уже сделано
+
+- реализован [remote_agent_v2_publisher.sh](/private/var/sites/PLANKA/.flow/shared/scripts/remote_agent_v2_publisher.sh)
+- реализованы [remote_agent_v2_publisher.service](/private/var/sites/PLANKA/.flow/shared/scripts/remote_agent_v2_publisher.service) и [remote_agent_v2_publisher.timer](/private/var/sites/PLANKA/.flow/shared/scripts/remote_agent_v2_publisher.timer)
+- реализован atomic snapshot write и bounded snapshot size check
+
+### Что ещё не сделано
+
+- не прогнан publisher на VPS
+- не проверено содержимое snapshots на живом профиле
+- не проверено stale/oversize поведение end-to-end
+
+### Текущий статус
+
+`Planned`
+
+## RA2-003
+
+### Название
+
+`RA2-003 Remote Agent v2: cut SSH diagnostics over to immutable helper and loopback snapshots`
+
+### Что должно быть сделано
+
+- `Match User + ForceCommand`
+- key-only `aiflow`
+- immutable gateway вызывает immutable helper
+- probes читают только sanitized snapshots
+- shell/arbitrary command/file/docker path запрещены
+
+### Что уже сделано
+
+- реализован [remote_agent_v2_gateway.sh](/private/var/sites/PLANKA/.flow/shared/scripts/remote_agent_v2_gateway.sh)
+- реализован [remote_agent_v2_helper.sh](/private/var/sites/PLANKA/.flow/shared/scripts/remote_agent_v2_helper.sh)
+- helper работает только с fixed v2 probe names
+- helper реализует degraded response для missing/stale/oversize snapshots
+
+### Что ещё не сделано
+
+- не установлен `aiflow` SSH contour на VPS
+- не прогнаны реальные negative tests через `ssh aiflow@host ...`
+- legacy v1 contour ещё не отключён
+
+### Текущий статус
+
+`Planned`
+
+## RA2-004
+
+### Название
+
+`RA2-004 Remote Agent v2: move public config and secrets into /etc/ai-flow authority`
+
+### Что должно быть сделано
+
+- `/etc/ai-flow/public/platform.env`
+- `/etc/ai-flow/public/projects/<profile>.env`
+- `/etc/ai-flow/secrets/platform`
+- `/etc/ai-flow/secrets/projects/<profile>`
+- diagnostics path не читает secrets
+
+### Что уже сделано
+
+- bootstrap готовит этот layout
+- добавлен [ai-flow-server-secrets-layout.md](/private/var/sites/PLANKA/docs/ai-flow-server-secrets-layout.md)
+- v2 docs зафиксировали separation model
+
+### Что ещё не сделано
+
+- runtime на VPS ещё не переключен на новый secrets authority
+- ротация prod secrets ещё не выполнена
+
+### Текущий статус
+
+`Planned`
+
+## RA2-005
+
+### Название
+
+`RA2-005 Remote Agent v2: remove external diagnostics ingress and keep loopback-only surfaces`
+
+### Что должно быть сделано
+
+- `/health`, `/ops/status`, `/ops/status.json`, `/ops/debug/*` не проксируются наружу
+- diagnostics HTTP остаётся только на `127.0.0.1`
+- снаружи остаются только non-diagnostic surfaces
+
+### Что уже сделано
+
+- docs и `TODO` переведены на v2 trust model
+- docker-hosted runbook больше не считает публичный status/debug каноном
+
+### Что ещё не сделано
+
+- nginx на VPS ещё не вычищен до loopback-only diagnostics model
+- public diagnostics ingress всё ещё существует
+
+### Текущий статус
+
+`Planned`
+
+## RA2-006
+
+### Название
+
+`RA2-006 Remote Agent v2: run negative tests, disable legacy access, and document cutover`
+
+### Что должно быть сделано
+
+- negative tests:
+  - no shell
+  - no arbitrary command
+  - no arbitrary file read
+  - no docker
+  - no secret leakage
+  - no oversized output
+- cutover на v2
+- disable legacy remote-agent v1
+- documented rollback/kill switch
+
+### Что уже сделано
+
+- negative scenarios описаны архитектурно и в runbook
+- kill switch и rollback path задокументированы для v2
+
+### Что ещё не сделано
+
+- tests не прогнаны на VPS
+- v1 ещё не отключён
+- финальный cutover report не написан
+
+### Текущий статус
+
+`Planned`
+
+## Что реально уже протестировано
+
+Протестировано только локально и статически:
+
+- `bash -n` новых shell-скриптов
+- `--help` / usage новых v2 entrypoints
+- `git diff --check`
+- создание `RA2-001..RA2-006` на GitHub Project board
+
+Не протестировано пока:
+
+- запуск bootstrap на VPS
+- работа `systemd timer`
+- публикация snapshot files
+- SSH forced-command через `aiflow`
+- cutover nginx/loopback-only diagnostics
+- отказ от legacy v1 на живом сервере

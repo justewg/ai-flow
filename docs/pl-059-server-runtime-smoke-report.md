@@ -65,7 +65,9 @@
 
 - final status: review path достигнут; сейчас `Issue #369` и `PR #370` уже закрыты
 - manual intervention required: нет
-- regressions found: в этом rerun не потребовалось новых recovery-действий со стороны локальной машины
+- regressions found:
+  - в этом rerun не потребовалось новых recovery-действий со стороны локальной машины
+  - позднее, уже на свежем batch `PL-059`, выяснилось, что stale waiting-context с `QUESTION_KIND=BLOCKER` после merge review PR не очищался автоматически и удерживал задачу в `Review`; post-merge auto-clear был завязан только на `REVIEW_FEEDBACK`. Этот дефект относится не к Batch 1, а к следующему smoke и закрыт отдельным toolkit fix.
 
 ## Batch 2
 

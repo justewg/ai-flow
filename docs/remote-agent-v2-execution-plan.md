@@ -6,11 +6,15 @@
 
 Важно:
 
-- задачи на GitHub Project созданы как draft items;
-- их enrichment на доске временно заблокирован GitHub GraphQL rate limit;
-- каноническая детализация до снятия rate limit лежит в этом файле и в `TODO.md`.
+- задачи `RA2-001..RA2-006` синхронизированы в отдельные GitHub Issues `#433..#438`;
+- их тела перенесены из этого плана, а статус по факту завершения выставлен как `Done`;
+- каноническая детализация по-прежнему лежит в этом файле и в `TODO.md`.
 
 ## RA2-001
+
+### GitHub Issue
+
+`#433`
 
 ### Название
 
@@ -38,6 +42,10 @@
 `Done`
 
 ## RA2-002
+
+### GitHub Issue
+
+`#434`
 
 ### Название
 
@@ -67,6 +75,10 @@
 
 ## RA2-003
 
+### GitHub Issue
+
+`#435`
+
 ### Название
 
 `RA2-003 Remote Agent v2: cut SSH diagnostics over to immutable helper and loopback snapshots`
@@ -95,6 +107,10 @@
 `Done`
 
 ## RA2-004
+
+### GitHub Issue
+
+`#436`
 
 ### Название
 
@@ -126,6 +142,10 @@
 
 ## RA2-005
 
+### GitHub Issue
+
+`#437`
+
 ### Название
 
 `RA2-005 Remote Agent v2: remove external diagnostics ingress and keep loopback-only surfaces`
@@ -152,6 +172,10 @@
 `Done`
 
 ## RA2-006
+
+### GitHub Issue
+
+`#438`
 
 ### Название
 
@@ -187,7 +211,7 @@
 - `bash -n` новых shell-скриптов
 - `--help` / usage новых v2 entrypoints
 - `git diff --check`
-- создание `RA2-001..RA2-006` на GitHub Project board
+- создание и синхронизация `RA2-001..RA2-006` как GitHub Issues
 
 Не протестировано пока:
 

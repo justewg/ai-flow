@@ -2,7 +2,7 @@
 
 ## Назначение
 
-Этот файл фиксирует фактический прогресс по `RA2-*`, пока GitHub Project board недоступен для нормального update из-за GraphQL rate limit.
+Этот файл фиксирует фактический прогресс по `RA2-*` и служит каноническим подтверждением готовности после переноса `RA2-001..RA2-006` в отдельные GitHub Issues `#433..#438`.
 
 Формат:
 
@@ -16,6 +16,10 @@
 ### Статус
 
 `Done`
+
+### GitHub Issue
+
+`#433`
 
 ### Подтверждено
 
@@ -48,6 +52,10 @@
 
 `Done`
 
+### GitHub Issue
+
+`#434`
+
 ### Подтверждено
 
 - publisher пишет snapshots в `/var/lib/ai-flow/diagnostics/planka`
@@ -76,6 +84,10 @@
 
 `Done`
 
+### GitHub Issue
+
+`#435`
+
 ### Подтверждено
 
 - `ssh -i ~/.ssh/aiflow_remote_agent aiflow@127.0.0.1 runtime_snapshot_v2 --profile planka | jq .`
@@ -96,6 +108,10 @@
 ### Статус
 
 `Done`
+
+### GitHub Issue
+
+`#436`
 
 ### Уже сделано
 
@@ -142,6 +158,10 @@
 
 `Done`
 
+### GitHub Issue
+
+`#437`
+
 ### Подтверждено
 
 - ранний `ingress_metadata.json` ещё показывал старое состояние до nginx-cutover; фактическая проверка после reload подтверждает наружный `404`
@@ -158,6 +178,10 @@
 ### Статус
 
 `Done`
+
+### GitHub Issue
+
+`#438`
 
 ### Уже есть
 

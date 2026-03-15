@@ -151,7 +151,7 @@ install_immutable_binaries() {
 install_public_and_secret_layout() {
   install -d -o root -g root -m 0755 /etc/ai-flow
   install -d -o root -g root -m 0755 /etc/ai-flow/public "$public_projects_root"
-  install -d -o root -g root -m 0700 "$secrets_platform_root" "${secrets_projects_root}/${profile_name}"
+  install -d -o root -g root -m 0700 /etc/ai-flow/secrets "$secrets_platform_root" "${secrets_projects_root}/${profile_name}"
   install -d -o root -g root -m 0750 "${diagnostics_root}/${profile_name}"
   install -d -o root -g root -m 0750 /var/log/ai-flow
   touch "$audit_log_path"

@@ -950,6 +950,61 @@ first_status_token() {
   printf '%s' "${summary%% *}"
 }
 
+runtime_mode_value() {
+  codex_resolve_config_value "FLOW_HOST_RUNTIME_MODE" ""
+}
+
+status_snapshot_summary() {
+  local component="$1"
+  local snapshot_json snapshot_overall snapshot_headline component_state
+  if ! snapshot_json="$("${CODEX_SHARED_SCRIPTS_DIR}/status_snapshot.sh" 2>&1)"; then
+    printf 'ERROR status_snapshot_failed %s' "$(printf '%s' "$snapshot_json" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/[[:space:]]+$//')"
+    return 1
+  fi
+
+  if ! jq -e . >/dev/null 2>&1 <<< "$snapshot_json"; then
+    printf 'ERROR invalid_status_snapshot_json'
+    return 1
+  fi
+
+  snapshot_overall="$(jq -r '.overall_status // "UNKNOWN"' <<< "$snapshot_json")"
+  snapshot_headline="$(jq -r '.headline // ""' <<< "$snapshot_json")"
+  case "$component" in
+    daemon)
+      component_state="$(jq -r '.daemon.state // "UNKNOWN"' <<< "$snapshot_json")"
+      ;;
+    watchdog)
+      component_state="$(jq -r '.watchdog.state // "UNKNOWN"' <<< "$snapshot_json")"
+      ;;
+    *)
+      printf 'ERROR unknown_snapshot_component=%s' "$component"
+      return 1
+      ;;
+  esac
+
+  if [[ -z "$component_state" || "$component_state" == "UNKNOWN" ]]; then
+    printf 'ERROR linux-docker-hosted SNAPSHOT_OVERALL=%s %s_STATE=%s HEADLINE=%s' \
+      "$snapshot_overall" "$(printf '%s' "$component" | tr '[:lower:]' '[:upper:]')" "$component_state" "$snapshot_headline"
+    return 1
+  fi
+
+  printf 'RUNNING linux-docker-hosted SNAPSHOT_OVERALL=%s %s_STATE=%s HEADLINE=%s' \
+    "$snapshot_overall" "$(printf '%s' "$component" | tr '[:lower:]' '[:upper:]')" "$component_state" "$snapshot_headline"
+}
+
+runtime_status_summary() {
+  local component="$1"
+  local label="$2"
+  local script_path="$3"
+  local runtime_mode
+  runtime_mode="$(runtime_mode_value)"
+  if [[ "$runtime_mode" == "linux-docker-hosted" ]]; then
+    status_snapshot_summary "$component"
+    return $?
+  fi
+  status_summary "$label" "$script_path"
+}
+
 emit_prefixed_entries() {
   local output_file="$1"
   local marker="$2"
@@ -1044,17 +1099,23 @@ EOF
 
   validate_required_env || true
 
-  local daemon_status watchdog_status daemon_status_head watchdog_status_head runtime_ready
+  local daemon_status watchdog_status daemon_status_head watchdog_status_head runtime_ready runtime_mode
   local linux_host_preflight_out linux_host_preflight_rc
-  daemon_status="$(status_summary "$daemon_label" "${CODEX_SHARED_SCRIPTS_DIR}/daemon_status.sh")"
-  watchdog_status="$(status_summary "$watchdog_label" "${CODEX_SHARED_SCRIPTS_DIR}/watchdog_status.sh")"
+  local state_dir_check_path
+  runtime_mode="$(runtime_mode_value)"
+  daemon_status="$(runtime_status_summary daemon "$daemon_label" "${CODEX_SHARED_SCRIPTS_DIR}/daemon_status.sh")"
+  watchdog_status="$(runtime_status_summary watchdog "$watchdog_label" "${CODEX_SHARED_SCRIPTS_DIR}/watchdog_status.sh")"
   daemon_status_head="$(first_status_token "$daemon_status")"
   watchdog_status_head="$(first_status_token "$watchdog_status")"
   runtime_ready="1"
+  state_dir_check_path="$state_dir"
+  if [[ "$runtime_mode" == "linux-docker-hosted" ]]; then
+    state_dir_check_path="$(resolve_ai_flow_state_dir_for_profile)"
+  fi
 
   echo "CHECKLIST daemon_status=${daemon_status}"
   echo "CHECKLIST watchdog_status=${watchdog_status}"
-  if [[ -d "$state_dir" ]]; then
+  if [[ -d "$state_dir_check_path" ]]; then
     echo "CHECKLIST state_dir_exists=1"
   else
     echo "CHECKLIST state_dir_exists=0"
@@ -1164,8 +1225,8 @@ orchestrate_profile() {
   emit_prefixed_entries "$audit_output" "ACTION" "AUDIT_ACTION"
 
   if [[ "$audit_rc" -ne 0 || "$audit_ready" != "1" ]]; then
-    daemon_status="$(status_summary "$daemon_label" "${CODEX_SHARED_SCRIPTS_DIR}/daemon_status.sh")"
-    watchdog_status="$(status_summary "$watchdog_label" "${CODEX_SHARED_SCRIPTS_DIR}/watchdog_status.sh")"
+    daemon_status="$(runtime_status_summary daemon "$daemon_label" "${CODEX_SHARED_SCRIPTS_DIR}/daemon_status.sh")"
+    watchdog_status="$(runtime_status_summary watchdog "$watchdog_label" "${CODEX_SHARED_SCRIPTS_DIR}/watchdog_status.sh")"
     orchestrate_result="blocked"
     manual_action_count="$(grep -c 'ACTION ' "$audit_output" || true)"
     blocker_count="$(grep -c 'CHECK_FAIL ' "$audit_output" || true)"
@@ -1207,8 +1268,8 @@ orchestrate_profile() {
   cat "$install_output"
   echo "ORCHESTRATION_STEP install=$([[ "$install_rc" -eq 0 ]] && printf '%s' COMPLETED || printf '%s' FAILED)"
 
-  daemon_status="$(status_summary "$daemon_label" "${CODEX_SHARED_SCRIPTS_DIR}/daemon_status.sh")"
-  watchdog_status="$(status_summary "$watchdog_label" "${CODEX_SHARED_SCRIPTS_DIR}/watchdog_status.sh")"
+  daemon_status="$(runtime_status_summary daemon "$daemon_label" "${CODEX_SHARED_SCRIPTS_DIR}/daemon_status.sh")"
+  watchdog_status="$(runtime_status_summary watchdog "$watchdog_label" "${CODEX_SHARED_SCRIPTS_DIR}/watchdog_status.sh")"
   daemon_status_head="$(first_status_token "$daemon_status")"
   watchdog_status_head="$(first_status_token "$watchdog_status")"
 

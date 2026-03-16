@@ -163,6 +163,11 @@ Acceptance:
 - после первичной настройки headless runtime не требует ручного браузерного логина на сервере;
 - preflight явно показывает, чего не хватает.
 
+Текущий срез:
+- базовый Linux-host preflight уже материализован в `.flow/shared/scripts/linux_host_codex_preflight.sh`;
+- `profile_init preflight` начал включать этот набор проверок для `linux-hosted` / `linux-docker-hosted`;
+- следующий шаг по задаче: добить branch/runtime drift и повторить `PL-059` до полного happy-path.
+
 ### PL-051. Single-runtime ownership и защита от dual-daemon
 
 Цель:

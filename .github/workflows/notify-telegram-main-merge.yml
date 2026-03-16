@@ -26,6 +26,9 @@ jobs:
       WF_REPOSITORY: ${{ github.event.workflow_run.repository.full_name }}
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Validate required secrets
         run: |
           : "${TG_BOT_TOKEN:?TG_BOT_TOKEN is required}"
@@ -45,6 +48,7 @@ jobs:
           PR_NUMBER: ${{ steps.extract.outputs.pr_number }}
           PR_URL: ${{ steps.extract.outputs.pr_url }}
           SHORT_SHA: ${{ steps.extract.outputs.short_sha }}
+          TELEGRAM_SOFT_FAIL: "1"
         run: |
           html_escape() {
             jq -rn --arg v "${1:-}" '$v|@html'
@@ -79,13 +83,7 @@ jobs:
           MESSAGE+="<blockquote><code>$(html_escape "${AUX}")</code></blockquote>"
 
           payload="$(
-            jq -n \
-              --arg chat_id "${TG_CHAT_ID}" \
-              --arg text "${MESSAGE}" \
-              '{chat_id: $chat_id, text: $text, parse_mode: "HTML", disable_web_page_preview: true}'
+            mktemp
           )"
-
-          curl -fsS \
-            -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
-            -H "Content-Type: application/json" \
-            --data "${payload}" >/dev/null
+          printf '%s' "${MESSAGE}" > "${payload}"
+          bash scripts/github/send_telegram_message.sh "${payload}"

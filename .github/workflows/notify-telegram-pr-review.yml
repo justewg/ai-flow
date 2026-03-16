@@ -26,6 +26,9 @@ jobs:
       PR_DRAFT: ${{ github.event.pull_request.draft }}
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Validate required secrets
         run: |
           : "${TG_BOT_TOKEN:?TG_BOT_TOKEN is required}"
@@ -47,6 +50,7 @@ jobs:
       - name: Send Telegram push
         env:
           TASK_IDS: ${{ steps.extract.outputs.task_ids }}
+          TELEGRAM_SOFT_FAIL: "1"
         run: |
           html_escape() {
             jq -rn --arg v "${1:-}" '$v|@html'
@@ -146,13 +150,7 @@ jobs:
           MESSAGE+="<blockquote><code>$(html_escape "${AUX}")</code></blockquote>"
 
           payload="$(
-            jq -n \
-              --arg chat_id "${TG_CHAT_ID}" \
-              --arg text "${MESSAGE}" \
-              '{chat_id: $chat_id, text: $text, parse_mode: "HTML", disable_web_page_preview: true}'
+            mktemp
           )"
-
-          curl -fsS \
-            -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
-            -H "Content-Type: application/json" \
-            --data "${payload}" >/dev/null
+          printf '%s' "${MESSAGE}" > "${payload}"
+          bash scripts/github/send_telegram_message.sh "${payload}"

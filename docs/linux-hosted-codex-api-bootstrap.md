@@ -251,6 +251,29 @@ chmod 700 /home/<runtime-user>/.secrets/gh-apps
 - host-local secrets вне git;
 - право создавать и владеть `/var/sites/.ai-flow` для runtime user.
 
+## Канонический preflight
+
+После первичной настройки Linux-host contour нужно уметь одним вызовом проверить:
+
+- что `codex` установлен;
+- что `CODEX_HOME` существует и логин выполнен;
+- что найден authority-файл для OpenAI;
+- что safe VPN wrapper доступен и умеет показать route-info/ip.
+
+Канонический вызов:
+
+```bash
+.flow/shared/scripts/linux_host_codex_preflight.sh
+```
+
+Для уже установленного profile тот же набор включён в общий preflight:
+
+```bash
+.flow/shared/scripts/run.sh profile_init preflight --profile planka
+```
+
+Если Linux-host prerequisites не готовы, preflight должен возвращать `CHECK_FAIL ...` и опускать `PREFLIGHT_READY=0`, а не доводить проблему до падения executor.
+
 ## Почему не `auth.json`
 
 Проверенный факт:

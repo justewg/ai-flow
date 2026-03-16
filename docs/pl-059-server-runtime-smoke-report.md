@@ -140,8 +140,9 @@
   - claim/executor/retry/watchdog recovery path проходит без локального manual nudging
   - review path уже подтверждён на отдельном issue-backed rerun
 - blockers discovered:
-  - основной blocker: host/container OpenAI contour для `codex exec` нестабилен и отдаёт `403 Country, region, or territory not supported`
+  - исторический blocker batch `2026-03-15`: host/container OpenAI contour для `codex exec` отдавал `403 Country, region, or territory not supported`; этот слой закрыт задачей `PL-050`
   - дополнительное наблюдение: внешний `ops/ingest/status` сейчас отвечает `404`, поэтому remote status push не даёт отдельного live-evidence
 - follow-up tasks:
-  - `PL-050` уже покрывает нужный follow-up по Linux-host bootstrap/preflight для `codex` / VPN / OpenAI
+  - `PL-050` закрыта: VPS preflight для `codex` / VPN / OpenAI теперь зелёный (`PREFLIGHT_READY=1`)
+  - следующий практический шаг для нового smoke batch: подготовить новую issue-backed карточку в `Todo`, потому что текущий runtime-state на VPS healthy и находится в `IDLE_NO_TASKS`
   - `PL-057` остаётся релевантным для нормализации ingress-модели, если нужен рабочий публичный endpoint для ops/status ingest

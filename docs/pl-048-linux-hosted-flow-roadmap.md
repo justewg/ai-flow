@@ -164,9 +164,11 @@ Acceptance:
 - preflight явно показывает, чего не хватает.
 
 Текущий срез:
-- базовый Linux-host preflight уже материализован в `.flow/shared/scripts/linux_host_codex_preflight.sh`;
-- `profile_init preflight` начал включать этот набор проверок для `linux-hosted` / `linux-docker-hosted`;
-- следующий шаг по задаче: добить branch/runtime drift и повторить `PL-059` до полного happy-path.
+- базовый Linux-host preflight материализован в `.flow/shared/scripts/linux_host_codex_preflight.sh`;
+- `profile_init preflight` включает этот набор проверок для `linux-hosted` / `linux-docker-hosted`;
+- для `linux-docker-hosted` daemon/watchdog status теперь берутся из `status_snapshot`, а не из host user `systemd` unit checks;
+- на reg.ru VPS подтверждён green-run: `PREFLIGHT_READY=1`, `VPN_IP_CHECK=151.236.4.33`, `CODEX_LOGIN_STATUS=api_key`, `DAEMON_STATUS=RUNNING`, `WATCHDOG_STATUS=RUNNING`;
+- следующий шаг уже вне `PL-050`: дать runtime новую issue-backed карточку в `Todo` и повторить `PL-059` до полного happy-path.
 
 ### PL-051. Single-runtime ownership и защита от dual-daemon
 

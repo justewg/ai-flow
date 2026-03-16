@@ -16,6 +16,17 @@
 - генерирует `docker-compose.yml`, `Dockerfile`, helper scripts и env files;
 - при желании сразу запускает контейнеры.
 
+## Текущий статус для planka
+
+Для `planka` этот режим уже не является экспериментом: текущий authoritative runtime живёт на VPS `ewg40` в `docker-hosted` contour, а локальный macOS runtime больше не считается рабочим контуром для очереди задач.
+
+Зафиксированное состояние:
+
+- рабочий contour для `planka`: `/var/sites/.ai-flow/docker/planka`;
+- authoritative workspace: `/var/sites/.ai-flow/workspaces/planka`;
+- post-bootstrap update path: `git pull --ff-only origin main` в `/.flow/shared`, затем `./up.sh` в `/var/sites/.ai-flow/docker/planka`;
+- host-side `ops-bot`/PM2 contour снят, а `127.0.0.1:8790` закреплён за docker `ops-bot`.
+
 ## Что это даёт
 
 - воспроизводимый runtime image;
@@ -137,7 +148,7 @@ network_mode: host
 
 ## Что пока не обещается
 
-Первый рабочий срез не обещает полного вытеснения host-native режима.
+Как platform-mode `docker-hosted` всё ещё описывает первый рабочий срез и не обещает полного вытеснения host-native режима для всех профилей.
 
 Пока это:
 
@@ -153,20 +164,23 @@ network_mode: host
 
 ## Текущий milestone
 
-На текущем срезе уже подтверждено:
+Для `planka` cutover уже считается завершённым. На текущем срезе подтверждено:
 
 - raw launcher `bash <(curl -fsSL ...)` реально поднимает compose-root на VPS;
 - authoritative workspace и host-local `flow.env` материализуются под `/.ai-flow`;
 - `gh-app-auth` внутри compose получает и refresh-ит GitHub App token;
 - `daemon/watchdog` работают в контейнерах с тем же toolkit;
-- `ops-bot` тоже входит в compose и использует тот же status/state контур.
+- `ops-bot` тоже входит в compose и использует тот же status/state контур;
 - `status_snapshot` на VPS может выйти в `HEALTHY` с `daemon=IDLE_NO_TASKS` и `watchdog=HEALTHY`.
+- для `planka` authoritative runtime теперь: VPS `ewg40` + `docker-hosted` contour;
+- локальные `launchd`-юниты `daemon/watchdog` для `planka` сняты и не должны возвращаться как active runtime;
+- старый host-side `ops-bot`/PM2 contour снят, канонический `127.0.0.1:8790` теперь занят docker `ops-bot`.
 
 Если после этого `status_snapshot` показывает `WAIT_GITHUB_RATE_LIMIT`, это уже не проблема docker-инфраструктуры: runtime жив и упёрся в обычный GitHub GraphQL rate limit.
 
 ## Штатный update path
 
-После первого bootstrap повторный `curl|bash` не нужен для обычного обновления runtime.
+После первого bootstrap повторный `curl|bash` не нужен для обычного обновления runtime. Для `planka` post-bootstrap update path теперь такой и считается штатным способом обновить authoritative VPS runtime:
 
 Важно по семантике:
 
@@ -189,44 +203,30 @@ cd /var/sites/.ai-flow/docker/planka
 docker compose --env-file .env -f docker-compose.yml ps
 ```
 
+Смысл этого порядка такой:
+
+- сначала подтягивается актуальный shared toolkit в authoritative workspace `planka`;
+- затем compose-контур на VPS перечитывает обновлённые scripts/env wiring через `./up.sh`;
+- после этого именно docker-контур остаётся единственным рабочим runtime для `planka`.
+
 Если `git status --short` внутри authoritative workspace показывает только `M .flow/shared`, для `linux-docker-hosted` это допустимый runtime-update и не должно блокировать daemon/watchdog.
 
-## Временный ops-bot port split
+## Зафиксированный ops-bot contour для planka
 
-Если на хосте уже живёт старый host-side `ops-bot` на `127.0.0.1:8790`, безопасный первый cutover такой:
+Переходный host-side contour для `planka` больше не актуален:
 
-- docker `ops-bot` временно переводится на `8791` через `OPS_BOT_PORT=8791` в host-local `flow.env`;
-- старый host-side contour продолжает жить на `8790`;
-- новый compose contour проверяется отдельно через `curl http://127.0.0.1:8791/health`.
+- старый host-side `ops-bot`/PM2 runtime снят;
+- `OPS_BOT_PORT` для рабочего контура должен оставаться каноническим `8790`;
+- listener `127.0.0.1:8790` теперь зарезервирован под docker `ops-bot`;
+- любые старые runbook-и со split `8791 -> 8790` нужно трактовать как исторический этап cutover, а не как текущую штатную схему.
 
-После подтверждения работы docker `ops-bot` перенос на канонический `8790` делается отдельным шагом.
-
-## Cutover 8791 -> 8790
-
-Безопасный порядок:
-
-1. Найти старый listener:
-   - `ss -ltnp | grep 8790`
-   - `ps -ef | grep ops_bot | grep -v grep`
-   - при необходимости `pm2 ls`
-2. Остановить старый host-side `ops-bot` или его supervisor.
-3. Вернуть в `/var/sites/.ai-flow/config/planka.flow.env`:
-   - `OPS_BOT_PORT=8790`
-4. Переподнять compose:
-
-```bash
-cd /var/sites/.ai-flow/docker/planka
-./up.sh
-docker compose --env-file .env -f docker-compose.yml ps
-```
-
-5. Проверить:
+Минимальная smoke-проверка после update/restart:
 
 ```bash
 curl -fsS http://127.0.0.1:8790/health
 ```
 
-Если health отвечает из docker contour, старый ops runtime можно считать полностью заменённым.
+Если health отвечает из compose-контура и `docker compose ... ps` показывает `ops-bot` в `Up`, это и есть текущий рабочий state для `planka`.
 
 ## Запуск
 

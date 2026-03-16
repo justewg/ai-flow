@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### Added
+- `[PL-050]` Добавлен и подтверждён Linux-host bootstrap/preflight для VPS executor contour: `linux_host_codex_preflight.sh` проверяет `codex`, `CODEX_HOME`, `OPENAI_ENV_FILE`, safe VPN wrapper и базовый OpenAI/VPN path, а `profile_init preflight` в режиме `linux-docker-hosted` использует docker-hosted `status_snapshot` вместо ложных host `systemd` unit checks.
 - `[PL-063]` Publisher Remote Agent v2 теперь валидирует JSON от loopback `/health` и `/ops/status.json` до публикации `runtime_snapshot.json`; при невалидном upstream JSON пишет degraded snapshot с `publisher_degraded=true` и флагами `invalid_*_json`.
 - `[PL-062]` Helper Remote Agent v2 теперь валидирует JSON snapshot перед выдачей probe-ответа; при битом snapshot возвращает degraded payload с `snapshot_invalid_json=true` вместо повреждённого JSON.
 - `[PL-061]` Добавлен optional Remote Agent v2 для self-hosted ai-flow: отдельный пользователь `aiflow`, deterministic `authorized_keys` forced-command, immutable gateway/helper/publisher вне repo, sanitized snapshots в `/var/lib/ai-flow/diagnostics/<profile>`, server-side authority `/etc/ai-flow/public` + `/etc/ai-flow/secrets`, loopback-only diagnostics surfaces и отключённый legacy remote-agent v1.

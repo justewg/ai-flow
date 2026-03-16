@@ -1045,6 +1045,7 @@ EOF
   validate_required_env || true
 
   local daemon_status watchdog_status daemon_status_head watchdog_status_head runtime_ready
+  local linux_host_preflight_out linux_host_preflight_rc
   daemon_status="$(status_summary "$daemon_label" "${CODEX_SHARED_SCRIPTS_DIR}/daemon_status.sh")"
   watchdog_status="$(status_summary "$watchdog_label" "${CODEX_SHARED_SCRIPTS_DIR}/watchdog_status.sh")"
   daemon_status_head="$(first_status_token "$daemon_status")"
@@ -1072,6 +1073,18 @@ SMOKE_STEP 4 env DAEMON_GH_ENV_FILE=${env_file} CODEX_STATE_DIR=${state_dir} FLO
 SMOKE_STEP 5 env DAEMON_GH_ENV_FILE=${env_file} CODEX_STATE_DIR=${state_dir} FLOW_STATE_DIR=${state_dir} .flow/shared/scripts/gh_app_auth_token.sh >/dev/null
 EOF
 
+  linux_host_preflight_out="$("${CODEX_SHARED_SCRIPTS_DIR}/linux_host_codex_preflight.sh" 2>&1 || true)"
+  linux_host_preflight_rc=0
+  if [[ -n "$linux_host_preflight_out" ]]; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "$line"
+    done <<< "$linux_host_preflight_out"
+  fi
+  if printf '%s\n' "$linux_host_preflight_out" | grep -q '^CHECK_FAIL '; then
+    linux_host_preflight_rc=1
+  fi
+
   if [[ "$daemon_status_head" != "RUNNING" ]]; then
     report_fail "DAEMON_STATUS" "${daemon_status}"
     runtime_ready="0"
@@ -1084,6 +1097,10 @@ EOF
     runtime_ready="0"
   else
     report_ok "WATCHDOG_STATUS" "${watchdog_status}"
+  fi
+
+  if [[ "$linux_host_preflight_rc" != "0" ]]; then
+    runtime_ready="0"
   fi
 
   if [[ "$validation_failed" != "0" || "$runtime_ready" != "1" ]]; then

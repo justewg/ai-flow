@@ -825,8 +825,8 @@ query($projectId: ID!, $itemsFirst: Int!) {
     def ignore_labels: ($ignore_labels_csv | split(",") | map(norm) | map(select(length > 0)));
     def has_auto_ignore($labels):
       any(($labels // [])[];
-        (. | norm) as $label
-        | (ignore_labels | index($label)) != null
+        (. | norm) as $label_name
+        | (ignore_labels | index($label_name)) != null
       );
     [
       .data.node.items.nodes[]

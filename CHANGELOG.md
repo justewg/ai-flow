@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### Added
+- `[PL-051]` Зафиксирован single-runtime ownership contract для одного profile: `FLOW_AUTOMATION_RUNTIME_ROLE=authoritative|interactive-only`, `FLOW_AUTHORITATIVE_RUNTIME_ID`, early guard в `daemon/watchdog`, skip-install для неauthoritative checkout и ownership summary в `profile_init`/`status_snapshot`.
 - `[PL-052]` `gh_app_auth` и `ops-bot` закреплены как штатный Linux-host/server-side runtime contour для `planka`: auth/token surface, `/ops/status` и Telegram webhook работают на VPS и не требуют возврата к локальному host-side runtime.
 - `[PL-049]` Введён канонический host runtime mode для Linux-path: `profile_init`, `onboarding_audit` и preflight различают Linux/macOS runtime backend и поддерживают `linux-hosted` / `linux-docker-hosted` как first-class сценарий.
 - `[PL-048]` Добавлен Linux `systemd` service-layer для daemon/watchdog с сохранением `launchd`-совместимости: install/status/uninstall path теперь симметричен между macOS и Linux.

@@ -144,6 +144,12 @@
   - public status page недоступна (`/ops/status(.json)` отдаёт `404`);
   - нет manual rollout comment file.
 
+Дополнительное наблюдение:
+
+- Telegram webhook сейчас зарегистрирован на `https://planka-dev.ewg40.ru/...`, а aggregated smoke проверяет public status surface на `https://aiflow.ewg40.ru/ops/status(.json)` и получает `404`.
+
+Это выглядит как невыровненный public ingress / host placement contract для ops contour.
+
 ### 6. Preflight и direct host-status дают расходящиеся сигналы
 
 Проверки:

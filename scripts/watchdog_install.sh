@@ -9,6 +9,10 @@ RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
 watchdog_state_dir="$(codex_resolve_state_watchdog_dir "$CODEX_DIR")"
 lock_dir="${watchdog_state_dir}/lock"
 service_manager="$(codex_resolve_flow_service_manager)"
+runtime_role="$(codex_resolve_flow_automation_runtime_role)"
+runtime_instance_id="$(codex_resolve_flow_runtime_instance_id)"
+authoritative_runtime_id="$(codex_resolve_flow_authoritative_runtime_id)"
+runtime_ownership_state="$(codex_resolve_flow_runtime_ownership_state)"
 launchd_dir="$(codex_resolve_flow_launchd_dir)"
 launchagents_dir="$(codex_resolve_flow_launchagents_dir)"
 systemd_dir="$(codex_resolve_flow_systemd_dir)"
@@ -26,6 +30,21 @@ unit_path="${systemd_unit_dir}/${label}.service"
 profile_env_file="${DAEMON_GH_ENV_FILE:-}"
 daemon_label="${WATCHDOG_DAEMON_LABEL:-$default_daemon_label}"
 daemon_interval="${WATCHDOG_DAEMON_INTERVAL_SEC:-45}"
+
+if [[ "$runtime_ownership_state" == "INTERACTIVE_ONLY" ]]; then
+  echo "SKIPPED_INTERACTIVE_ONLY=1"
+  echo "RUNTIME_ROLE=${runtime_role}"
+  echo "RUNTIME_INSTANCE_ID=${runtime_instance_id}"
+  exit 0
+fi
+
+if [[ "$runtime_ownership_state" == "OWNER_MISMATCH" ]]; then
+  echo "SKIPPED_RUNTIME_OWNERSHIP=1"
+  echo "RUNTIME_ROLE=${runtime_role}"
+  echo "RUNTIME_INSTANCE_ID=${runtime_instance_id}"
+  echo "AUTHORITATIVE_RUNTIME_ID=${authoritative_runtime_id}"
+  exit 0
+fi
 
 if ! [[ "$interval" =~ ^[0-9]+$ ]] || (( interval < 10 )); then
   echo "Invalid interval: '$interval' (expected integer >= 10 sec)"

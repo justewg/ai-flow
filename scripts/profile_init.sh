@@ -203,6 +203,15 @@ GITHUB_REPO=
 FLOW_BASE_BRANCH=main
 FLOW_HEAD_BRANCH=development
 
+# Runtime ownership contract:
+# - authoritative: этот checkout имеет право запускать daemon/watchdog и брать задачи;
+# - interactive-only: checkout остаётся только для ручной интерактивной работы, automation здесь не стартует.
+# Для Linux/VPS authoritative runtime bootstrap обычно сам прописывает FLOW_AUTHORITATIVE_RUNTIME_ID.
+# Если этот checkout не должен владеть automation-очередью, выставь:
+#   FLOW_AUTOMATION_RUNTIME_ROLE=interactive-only
+FLOW_AUTOMATION_RUNTIME_ROLE=authoritative
+FLOW_AUTHORITATIVE_RUNTIME_ID=
+
 # PROJECT_NUMBER и PROJECT_OWNER возьми из URL Project v2 в GitHub UI:
 #   https://github.com/users/<owner>/projects/<number>
 #   https://github.com/orgs/<owner>/projects/<number>
@@ -954,6 +963,23 @@ runtime_mode_value() {
   codex_resolve_config_value "FLOW_HOST_RUNTIME_MODE" ""
 }
 
+runtime_ownership_state_value() {
+  codex_resolve_flow_runtime_ownership_state
+}
+
+runtime_ownership_summary() {
+  local ownership_state runtime_role runtime_instance_id authoritative_runtime_id
+  ownership_state="$(runtime_ownership_state_value)"
+  runtime_role="$(codex_resolve_flow_automation_runtime_role)"
+  runtime_instance_id="$(codex_resolve_flow_runtime_instance_id)"
+  authoritative_runtime_id="$(codex_resolve_flow_authoritative_runtime_id)"
+
+  printf '%s role=%s instance=%s' "$ownership_state" "$runtime_role" "$runtime_instance_id"
+  if [[ -n "$authoritative_runtime_id" ]]; then
+    printf ' authoritative=%s' "$authoritative_runtime_id"
+  fi
+}
+
 status_snapshot_summary() {
   local component="$1"
   local snapshot_json snapshot_overall snapshot_headline component_state
@@ -1021,7 +1047,11 @@ emit_prefixed_entries() {
 }
 
 install_profile() {
+  local ownership_state ownership_summary
   emit_profile_summary
+  ownership_state="$(runtime_ownership_state_value)"
+  ownership_summary="$(runtime_ownership_summary)"
+  echo "CHECKLIST runtime_ownership=${ownership_summary}"
   if [[ "$dry_run" == "1" && ! -f "$env_file" ]]; then
     echo "CHECK_WARN ENV_FILE=missing:${env_file}"
     ensure_dir "$state_dir"
@@ -1040,6 +1070,19 @@ install_profile() {
     echo "INSTALL_ABORTED=1"
     return 1
   fi
+
+  case "$ownership_state" in
+    INTERACTIVE_ONLY)
+      echo "INSTALL_SKIP_RUNTIME_OWNERSHIP=INTERACTIVE_ONLY"
+      echo "INSTALL_RUNTIME_OWNERSHIP=${ownership_summary}"
+      return 0
+      ;;
+    OWNER_MISMATCH)
+      echo "INSTALL_SKIP_RUNTIME_OWNERSHIP=OWNER_MISMATCH"
+      echo "INSTALL_RUNTIME_OWNERSHIP=${ownership_summary}"
+      return 0
+      ;;
+  esac
 
   local host_state_dir host_service_dir
   host_state_dir="$(resolve_ai_flow_state_dir_for_profile)"
@@ -1099,10 +1142,12 @@ EOF
 
   validate_required_env || true
 
-  local daemon_status watchdog_status daemon_status_head watchdog_status_head runtime_ready runtime_mode
+  local daemon_status watchdog_status daemon_status_head watchdog_status_head runtime_ready runtime_mode ownership_state ownership_summary
   local linux_host_preflight_out linux_host_preflight_rc
   local state_dir_check_path
   runtime_mode="$(runtime_mode_value)"
+  ownership_state="$(runtime_ownership_state_value)"
+  ownership_summary="$(runtime_ownership_summary)"
   daemon_status="$(runtime_status_summary daemon "$daemon_label" "${CODEX_SHARED_SCRIPTS_DIR}/daemon_status.sh")"
   watchdog_status="$(runtime_status_summary watchdog "$watchdog_label" "${CODEX_SHARED_SCRIPTS_DIR}/watchdog_status.sh")"
   daemon_status_head="$(first_status_token "$daemon_status")"
@@ -1113,6 +1158,7 @@ EOF
     state_dir_check_path="$(resolve_ai_flow_state_dir_for_profile)"
   fi
 
+  echo "CHECKLIST runtime_ownership=${ownership_summary}"
   echo "CHECKLIST daemon_status=${daemon_status}"
   echo "CHECKLIST watchdog_status=${watchdog_status}"
   if [[ -d "$state_dir_check_path" ]]; then
@@ -1146,19 +1192,29 @@ EOF
     linux_host_preflight_rc=1
   fi
 
-  if [[ "$daemon_status_head" != "RUNNING" ]]; then
-    report_fail "DAEMON_STATUS" "${daemon_status}"
-    runtime_ready="0"
-  else
-    report_ok "DAEMON_STATUS" "${daemon_status}"
-  fi
+  case "$ownership_state" in
+    INTERACTIVE_ONLY|OWNER_MISMATCH)
+      report_ok "RUNTIME_OWNERSHIP" "${ownership_summary}"
+      report_ok "DAEMON_STATUS" "${daemon_status}"
+      report_ok "WATCHDOG_STATUS" "${watchdog_status}"
+      ;;
+    *)
+      report_ok "RUNTIME_OWNERSHIP" "${ownership_summary}"
+      if [[ "$daemon_status_head" != "RUNNING" ]]; then
+        report_fail "DAEMON_STATUS" "${daemon_status}"
+        runtime_ready="0"
+      else
+        report_ok "DAEMON_STATUS" "${daemon_status}"
+      fi
 
-  if [[ "$watchdog_status_head" != "RUNNING" ]]; then
-    report_fail "WATCHDOG_STATUS" "${watchdog_status}"
-    runtime_ready="0"
-  else
-    report_ok "WATCHDOG_STATUS" "${watchdog_status}"
-  fi
+      if [[ "$watchdog_status_head" != "RUNNING" ]]; then
+        report_fail "WATCHDOG_STATUS" "${watchdog_status}"
+        runtime_ready="0"
+      else
+        report_ok "WATCHDOG_STATUS" "${watchdog_status}"
+      fi
+      ;;
+  esac
 
   if [[ "$linux_host_preflight_rc" != "0" ]]; then
     runtime_ready="0"

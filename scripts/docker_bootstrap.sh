@@ -110,6 +110,19 @@ expand_path() {
   esac
 }
 
+runtime_identity_for() {
+  local runtime_mode="${1:-unknown-runtime}"
+  local workspace_dir="${2:-unknown-root}"
+  local host_name root_id
+  host_name="$(hostname -s 2>/dev/null || hostname 2>/dev/null || uname -n 2>/dev/null || printf '%s' unknown-host)"
+  if [[ -d "$workspace_dir" ]]; then
+    root_id="$(cd "$workspace_dir" && pwd -P)"
+  else
+    root_id="$workspace_dir"
+  fi
+  printf '%s@%s:%s' "$runtime_mode" "$host_name" "$root_id"
+}
+
 preferred_github_git_protocol() {
   if [[ -n "${AI_FLOW_GIT_PROTOCOL:-}" ]]; then
     printf '%s' "${AI_FLOW_GIT_PROTOCOL}"
@@ -469,11 +482,12 @@ read_env_key() {
 }
 
 normalize_host_env() {
-  local state_dir logs_dir runtime_logs_dir pm2_logs_dir
+  local state_dir logs_dir runtime_logs_dir pm2_logs_dir authoritative_runtime_id
   state_dir="${ai_flow_root}/state/${profile}"
   logs_dir="${ai_flow_root}/logs/${profile}"
   runtime_logs_dir="${logs_dir}/runtime"
   pm2_logs_dir="${logs_dir}/pm2"
+  authoritative_runtime_id="$(runtime_identity_for "linux-docker-hosted" "$workspace_path")"
 
   ensure_dir_owned "$(dirname "$host_env_file")"
 
@@ -497,6 +511,8 @@ normalize_host_env() {
   upsert_env_key "$host_env_file" "FLOW_RUNTIME_LOG_DIR" "$runtime_logs_dir"
   upsert_env_key "$host_env_file" "FLOW_PM2_LOG_DIR" "$pm2_logs_dir"
   upsert_env_key "$host_env_file" "FLOW_HOST_RUNTIME_MODE" "linux-docker-hosted"
+  upsert_env_key "$host_env_file" "FLOW_AUTOMATION_RUNTIME_ROLE" "authoritative"
+  upsert_env_key "$host_env_file" "FLOW_AUTHORITATIVE_RUNTIME_ID" "$authoritative_runtime_id"
   upsert_env_key "$host_env_file" "OPS_BOT_USE_DEFAULT" "0"
 
   remove_env_key "$host_env_file" "FLOW_LAUNCHAGENTS_DIR"
@@ -508,12 +524,16 @@ normalize_host_env() {
 }
 
 ensure_platform_env() {
+  local authoritative_runtime_id
+  authoritative_runtime_id="$(runtime_identity_for "linux-docker-hosted" "$workspace_path")"
   ensure_dir_owned "$(dirname "$platform_env_file")"
   if [[ ! -f "$platform_env_file" ]]; then
     : > "$platform_env_file"
   fi
   upsert_env_key "$platform_env_file" "AI_FLOW_ROOT_DIR" "$ai_flow_root"
   upsert_env_key "$platform_env_file" "FLOW_HOST_RUNTIME_MODE" "linux-docker-hosted"
+  upsert_env_key "$platform_env_file" "FLOW_AUTOMATION_RUNTIME_ROLE" "authoritative"
+  upsert_env_key "$platform_env_file" "FLOW_AUTHORITATIVE_RUNTIME_ID" "$authoritative_runtime_id"
   upsert_env_key "$platform_env_file" "GH_APP_PM2_APP_NAME" "ai-flow-gh-app-auth"
   upsert_env_key "$platform_env_file" "OPS_BOT_PM2_APP_NAME" "ai-flow-ops-bot"
   if ! chown "$runtime_user:$(runtime_group)" "$platform_env_file" 2>/dev/null; then

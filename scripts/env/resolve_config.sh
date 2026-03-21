@@ -253,6 +253,88 @@ codex_resolve_flow_service_manager() {
   esac
 }
 
+codex_resolve_flow_host_runtime_mode() {
+  local value=""
+  value="$(codex_try_config_value "FLOW_HOST_RUNTIME_MODE" || true)"
+  if [[ -n "$value" ]]; then
+    printf '%s' "$value"
+    return 0
+  fi
+
+  case "$(uname -s)" in
+    Darwin) printf '%s' "macos-local" ;;
+    Linux) printf '%s' "linux-hosted" ;;
+    *) printf '%s' "unknown-runtime" ;;
+  esac
+}
+
+codex_resolve_flow_automation_runtime_role() {
+  local value=""
+  value="$(codex_try_config_value "FLOW_AUTOMATION_RUNTIME_ROLE" || true)"
+  value="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]' | tr -d '\r\n')"
+  case "$value" in
+    authoritative|interactive-only)
+      printf '%s' "$value"
+      ;;
+    "")
+      printf '%s' "authoritative"
+      ;;
+    *)
+      printf '%s' "authoritative"
+      ;;
+  esac
+}
+
+codex_resolve_flow_runtime_host_name() {
+  local value=""
+  value="$(hostname -s 2>/dev/null || true)"
+  [[ -n "$value" ]] || value="$(hostname 2>/dev/null || true)"
+  [[ -n "$value" ]] || value="$(uname -n 2>/dev/null || true)"
+  [[ -n "$value" ]] || value="unknown-host"
+  printf '%s' "$value"
+}
+
+codex_resolve_flow_runtime_root_id() {
+  local root_dir="${ROOT_DIR:-}"
+  if [[ -n "$root_dir" && -d "$root_dir" ]]; then
+    (cd "$root_dir" && pwd -P) 2>/dev/null || printf '%s' "$root_dir"
+    return 0
+  fi
+  printf '%s' "${root_dir:-unknown-root}"
+}
+
+codex_resolve_flow_runtime_instance_id() {
+  local runtime_mode host_name root_id
+  runtime_mode="$(codex_resolve_flow_host_runtime_mode)"
+  [[ -n "$runtime_mode" ]] || runtime_mode="unknown-runtime"
+  host_name="$(codex_resolve_flow_runtime_host_name)"
+  root_id="$(codex_resolve_flow_runtime_root_id)"
+  printf '%s@%s:%s' "$runtime_mode" "$host_name" "$root_id"
+}
+
+codex_resolve_flow_authoritative_runtime_id() {
+  codex_resolve_config_value "FLOW_AUTHORITATIVE_RUNTIME_ID" ""
+}
+
+codex_resolve_flow_runtime_ownership_state() {
+  local role current_runtime_id authoritative_runtime_id
+  role="$(codex_resolve_flow_automation_runtime_role)"
+  current_runtime_id="$(codex_resolve_flow_runtime_instance_id)"
+  authoritative_runtime_id="$(codex_resolve_flow_authoritative_runtime_id)"
+
+  if [[ "$role" == "interactive-only" ]]; then
+    printf '%s' "INTERACTIVE_ONLY"
+    return 0
+  fi
+
+  if [[ -n "$authoritative_runtime_id" && "$authoritative_runtime_id" != "$current_runtime_id" ]]; then
+    printf '%s' "OWNER_MISMATCH"
+    return 0
+  fi
+
+  printf '%s' "AUTHORITATIVE"
+}
+
 codex_resolve_flow_launchd_dir() {
   local value="" ai_flow_launchd_root_dir project_namespace_slug
   value="$(codex_try_config_value "FLOW_LAUNCHD_DIR" || true)"

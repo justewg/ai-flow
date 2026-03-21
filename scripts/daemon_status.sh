@@ -6,6 +6,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/env/bootstrap.sh"
 default_label="$(codex_resolve_default_daemon_label)"
 service_manager="$(codex_resolve_flow_service_manager)"
+runtime_role="$(codex_resolve_flow_automation_runtime_role)"
+runtime_instance_id="$(codex_resolve_flow_runtime_instance_id)"
+authoritative_runtime_id="$(codex_resolve_flow_authoritative_runtime_id)"
+runtime_ownership_state="$(codex_resolve_flow_runtime_ownership_state)"
 launchd_dir="$(codex_resolve_flow_launchd_dir)"
 launchagents_dir="$(codex_resolve_flow_launchagents_dir)"
 systemd_dir="$(codex_resolve_flow_systemd_dir)"
@@ -17,6 +21,27 @@ canonical_plist_path="${launchd_dir}/${label}.plist"
 plist_path="${launchagents_dir}/${label}.plist"
 canonical_unit_path="${systemd_dir}/${label}.service"
 unit_path="${systemd_unit_dir}/${label}.service"
+
+emit_runtime_identity_lines() {
+  echo "RUNTIME_ROLE ${runtime_role}"
+  echo "RUNTIME_INSTANCE_ID ${runtime_instance_id}"
+  if [[ -n "${authoritative_runtime_id}" ]]; then
+    echo "AUTHORITATIVE_RUNTIME_ID ${authoritative_runtime_id}"
+  fi
+}
+
+case "$runtime_ownership_state" in
+  INTERACTIVE_ONLY)
+    echo "INTERACTIVE_ONLY ${label}"
+    emit_runtime_identity_lines
+    exit 0
+    ;;
+  OWNER_MISMATCH)
+    echo "REMOTE_OWNER ${label}"
+    emit_runtime_identity_lines
+    exit 0
+    ;;
+esac
 
 if [[ "$service_manager" == "launchd" ]]; then
   if [[ ! -f "${plist_path}" ]]; then

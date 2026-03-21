@@ -10,6 +10,9 @@ FLOW_LOGS_DIR="$(codex_resolve_flow_logs_dir)"
 project_profile="$(codex_resolve_project_profile_name)"
 project_repo="$(codex_resolve_project_repo_slug)"
 project_label="$(codex_resolve_project_display_label)"
+runtime_role="$(codex_resolve_flow_automation_runtime_role)"
+runtime_instance_id="$(codex_resolve_flow_runtime_instance_id)"
+authoritative_runtime_id="$(codex_resolve_flow_authoritative_runtime_id)"
 
 now_epoch="$(date +%s)"
 now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -277,6 +280,16 @@ case "$daemon_state" in
     action_required="user_reply"
     headline="Waiting for user feedback in issue comments"
     ;;
+  INTERACTIVE_ONLY)
+    overall_status="HEALTHY"
+    action_required="none"
+    headline="Interactive-only checkout; automation disabled"
+    ;;
+  WAIT_RUNTIME_OWNERSHIP)
+    overall_status="WAITING_SYSTEM"
+    action_required="fix_runtime_ownership"
+    headline="Runtime ownership points to another host"
+    ;;
   WAIT_DIRTY_WORKTREE)
     if [[ "$dirty_blocking_todo" == "1" ]]; then
       overall_status="BLOCKED"
@@ -334,6 +347,12 @@ case "$watchdog_state" in
   PAUSED_DIRTY_WORKTREE)
     watchdog_effect="WAITING_SYSTEM"
     ;;
+  INTERACTIVE_ONLY)
+    watchdog_effect="HEALTHY"
+    ;;
+  WAIT_RUNTIME_OWNERSHIP)
+    watchdog_effect="WAITING_SYSTEM"
+    ;;
   WAIT_AUTH_SERVICE|DEGRADED*|RECOVERY*|ERROR*)
     watchdog_effect="DEGRADED"
     ;;
@@ -358,6 +377,9 @@ jq -n \
   --arg project_profile "$project_profile" \
   --arg project_repo "$project_repo" \
   --arg project_label "$project_label" \
+  --arg runtime_role "$runtime_role" \
+  --arg runtime_instance_id "$runtime_instance_id" \
+  --arg authoritative_runtime_id "$authoritative_runtime_id" \
   --arg state_dir "$CODEX_DIR" \
   --arg flow_logs_dir "$FLOW_LOGS_DIR" \
   --arg runtime_log_dir "$RUNTIME_LOG_DIR" \
@@ -401,6 +423,9 @@ jq -n \
       profile: $project_profile,
       repo: $project_repo,
       label: $project_label,
+      runtime_role: $runtime_role,
+      runtime_instance_id: $runtime_instance_id,
+      authoritative_runtime_id: $authoritative_runtime_id,
       state_dir: $state_dir,
       log_dir: $flow_logs_dir,
       runtime_log_dir: $runtime_log_dir

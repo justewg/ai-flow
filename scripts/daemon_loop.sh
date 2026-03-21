@@ -246,6 +246,39 @@ set_state() {
   fi
 }
 
+runtime_ownership_detail() {
+  local runtime_role runtime_instance_id authoritative_runtime_id
+  runtime_role="$(codex_resolve_flow_automation_runtime_role)"
+  runtime_instance_id="$(codex_resolve_flow_runtime_instance_id)"
+  authoritative_runtime_id="$(codex_resolve_flow_authoritative_runtime_id)"
+
+  printf 'FLOW_AUTOMATION_RUNTIME_ROLE=%s; RUNTIME_INSTANCE_ID=%s' \
+    "$runtime_role" "$runtime_instance_id"
+  if [[ -n "$authoritative_runtime_id" ]]; then
+    printf '; FLOW_AUTHORITATIVE_RUNTIME_ID=%s' "$authoritative_runtime_id"
+  fi
+}
+
+enforce_runtime_ownership() {
+  local ownership_state detail
+  ownership_state="$(codex_resolve_flow_runtime_ownership_state)"
+  detail="$(runtime_ownership_detail)"
+
+  case "$ownership_state" in
+    INTERACTIVE_ONLY)
+      set_state "INTERACTIVE_ONLY" "INTERACTIVE_ONLY=1; ${detail}"
+      return 1
+      ;;
+    OWNER_MISMATCH)
+      set_state "WAIT_RUNTIME_OWNERSHIP" "WAIT_RUNTIME_OWNERSHIP=1; RUNTIME_OWNERSHIP_REASON=OWNER_MISMATCH; ${detail}"
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
 classify_success_state() {
   local output="$1"
   if printf '%s' "$output" | grep -q '^WAIT_GITHUB_RATE_LIMIT=1'; then
@@ -1019,6 +1052,10 @@ fi
 set_state "BOOTING" "daemon_loop started"
 
 while true; do
+  if ! enforce_runtime_ownership; then
+    sleep "$interval"
+    continue
+  fi
   log "heartbeat"
   if refresh_daemon_github_token; then
     :

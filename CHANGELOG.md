@@ -7,6 +7,9 @@
 ## [Unreleased]
 
 ### Added
+- `[PL-052]` `gh_app_auth` и `ops-bot` закреплены как штатный Linux-host/server-side runtime contour для `planka`: auth/token surface, `/ops/status` и Telegram webhook работают на VPS и не требуют возврата к локальному host-side runtime.
+- `[PL-049]` Введён канонический host runtime mode для Linux-path: `profile_init`, `onboarding_audit` и preflight различают Linux/macOS runtime backend и поддерживают `linux-hosted` / `linux-docker-hosted` как first-class сценарий.
+- `[PL-048]` Добавлен Linux `systemd` service-layer для daemon/watchdog с сохранением `launchd`-совместимости: install/status/uninstall path теперь симметричен между macOS и Linux.
 - `[PL-050]` Добавлен и подтверждён Linux-host bootstrap/preflight для VPS executor contour: `linux_host_codex_preflight.sh` проверяет `codex`, `CODEX_HOME`, `OPENAI_ENV_FILE`, safe VPN wrapper и базовый OpenAI/VPN path, а `profile_init preflight` в режиме `linux-docker-hosted` использует docker-hosted `status_snapshot` вместо ложных host `systemd` unit checks.
 - `[PL-063]` Publisher Remote Agent v2 теперь валидирует JSON от loopback `/health` и `/ops/status.json` до публикации `runtime_snapshot.json`; при невалидном upstream JSON пишет degraded snapshot с `publisher_degraded=true` и флагами `invalid_*_json`.
 - `[PL-062]` Helper Remote Agent v2 теперь валидирует JSON snapshot перед выдачей probe-ответа; при битом snapshot возвращает degraded payload с `snapshot_invalid_json=true` вместо повреждённого JSON.

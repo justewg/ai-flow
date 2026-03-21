@@ -172,18 +172,21 @@ Acceptance:
 
 ### PL-051. Single-runtime ownership и защита от dual-daemon
 
-Цель:
-- не дать двум хостам одновременно быть authoritative automation runtime для одного profile.
+Статус:
+- реализовано в shared toolkit.
 
-Что должно появиться:
-- machine/host identity в runtime state;
-- guard, который запрещает local и remote daemon одновременно брать одну и ту же очередь;
-- явный режим `interactive-only` для локального checkout;
-- recovery/override path, если host сменился.
+Что уже есть:
+- явный ownership contract в env:
+  - `FLOW_AUTOMATION_RUNTIME_ROLE=authoritative|interactive-only`
+  - `FLOW_AUTHORITATIVE_RUNTIME_ID=<runtime-id>`
+- runtime identity считается из `FLOW_HOST_RUNTIME_MODE + hostname + ROOT_DIR`;
+- `daemon_loop` и `watchdog_loop` перед каждым тиком проверяют ownership и в режимах `INTERACTIVE_ONLY` / `WAIT_RUNTIME_OWNERSHIP` не трогают очередь;
+- `daemon_install` / `watchdog_install` не стартуют automation на checkout, который помечен как `interactive-only` или уже не совпадает с authoritative runtime id;
+- `profile_init preflight` и `status_snapshot` показывают ownership summary, так что видно, какой checkout authoritative, а какой только interactive.
 
-Acceptance:
-- локальный интерактивный checkout не мешает server-side executor-run;
-- случайный второй daemon не забирает ту же задачу.
+Итог:
+- локальный интерактивный checkout можно держать рядом с VPS runtime без конкуренции за один profile;
+- accidental second daemon на другом checkout не должен забирать ту же очередь, пока ownership contract настроен в env.
 
 ### PL-052. Linux-host auth/ops contour как штатный runtime
 

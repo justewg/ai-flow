@@ -391,3 +391,21 @@ CODEX_HOME="$HOME/.codex-server-api" codex exec "Ответь ровно стр�
 - host preflight для `codex`/VPN/OpenAI;
 - tmux/session layout для server runtime;
 - single-runtime ownership между MacBook и VPS.
+
+## Ownership contract после cutover
+
+После перевода automation на VPS один profile должен иметь только один authoritative runtime.
+
+Практически это означает:
+
+- на authoritative Linux/VPS checkout:
+  - `FLOW_AUTOMATION_RUNTIME_ROLE=authoritative`
+  - `FLOW_AUTHORITATIVE_RUNTIME_ID=<runtime-id authoritative checkout>`
+- на локальном MacBook checkout того же profile:
+  - `FLOW_AUTOMATION_RUNTIME_ROLE=interactive-only`
+
+Shared toolkit использует эти ключи как ранний guard:
+
+- `daemon/watchdog` не трогают очередь в состояниях `INTERACTIVE_ONLY` или `WAIT_RUNTIME_OWNERSHIP`;
+- `daemon_install/watchdog_install` не поднимают automation на неauthoritative checkout;
+- `profile_init preflight` и `status_snapshot` показывают ownership summary явно.

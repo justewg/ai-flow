@@ -105,6 +105,21 @@
 - `ops-bot` живёт в том же compose-контуре и использует тот же workspace/state/log layout.
 - host-level переменные сервисов приходят из `ai-flow.platform.env`, project-specific — из `<profile>.flow.env`.
 
+## Ownership contract
+
+Для `docker-hosted` authoritative runtime bootstrap теперь фиксирует ownership прямо в env:
+
+- `FLOW_AUTOMATION_RUNTIME_ROLE=authoritative`
+- `FLOW_AUTHORITATIVE_RUNTIME_ID=linux-docker-hosted@<host>:<workspace-path>`
+
+Если рядом существует локальный interactive checkout того же profile, его нужно держать в режиме:
+
+```env
+FLOW_AUTOMATION_RUNTIME_ROLE=interactive-only
+```
+
+Тогда `daemon/watchdog` на локальном checkout не будут конкурировать с VPS runtime за ту же очередь, а `profile_init preflight` и `status_snapshot` покажут ownership явно.
+
 ## Ключевое предположение
 
 По умолчанию считается, что host уже имеет доступ к OpenAI:

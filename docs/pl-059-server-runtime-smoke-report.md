@@ -129,20 +129,64 @@
   - `codex exec` на VPS/docker runtime падает с `403 Forbidden: Country, region, or territory not supported`, несмотря на повторный запуск после пользовательского ответа про VPN
   - `ops_remote_status_push` получает `404` на `https://planka-dev.ewg40.ru/ops/ingest/status`; это не помешало claim/executor flow, но лишило smoke внешнего telemetry-evidence
 
+## Batch 3
+
+### Preflight
+
+- дата прогона: `2026-03-16`
+- precondition fixes, пришедшие между Batch 2 и Batch 3:
+  - `PL-050` закрыла VPS contour для `codex` / VPN / OpenAI;
+  - `PL-051` закрепила single-runtime ownership, поэтому local checkout больше не конкурирует с server-side queue ownership;
+  - authoritative runtime для `planka` остался на VPS / `docker-hosted`.
+
+### Candidate Todo
+
+- issue / task id: `ISSUE-427` / `#427`
+- title: `Smoke: зафиксировать cutover docker-hosted runtime как рабочий контур`
+- почему считается валидным smoke:
+  - issue-backed item реально был взят server-side daemon'ом из `Todo`;
+  - рабочая дельта касалась только authoritative runtime/cutover документации, без ручного queue surgery;
+  - завершение шло через обычный `executor -> PR -> merge -> post-merge cleanup` path.
+
+### Claim / Review / Merge Evidence
+
+- issue state:
+  - `#427` сейчас `closed`
+  - `closed_at=2026-03-16T13:07:19Z`
+  - `state_reason=completed`
+- review PR:
+  - `PR #440`
+  - title: `docs: зафиксировать authoritative docker-hosted runtime для planka`
+  - `merged=true`
+  - `merged_at=2026-03-16T13:07:06Z`
+- project state:
+  - item `#427` сейчас `Status=Closed`, `Flow=Done`
+
+### Result
+
+- final status:
+  - full authoritative issue-backed smoke path подтверждён:
+    - `Todo -> In Progress -> Review -> merge -> Done`
+- manual intervention required:
+  - нет; после подготовки VPS contour и ownership contract queue path завершился штатно
+- regressions found:
+  - в этом batch уже не потребовалось ручное recovery/reset queue ownership между MacBook и VPS
+  - внешний `ops/ingest/status` оставался вторичным non-blocking наблюдением, а не blocker'ом самого smoke path
+
 ## Final Verdict
 
 - smoke complete:
   - минимальный smoke `Todo -> In Progress` подтверждён live-claim по `PL-059` (`2026-03-15T21:58:50Z`)
   - автономный issue-backed path до review PR подтверждён rerun'ом `ISSUE-369` с PR `#370`
-  - полный happy-path на свежем batch `2026-03-15` не завершён из-за внешнего provider-blocker
+  - полный authoritative happy-path подтверждён Batch 3 через `ISSUE-427 -> PR #440 -> merge -> Done`
 - fully autonomous:
   - daemon сам выбирает issue-backed item из `Todo`
   - claim/executor/retry/watchdog recovery path проходит без локального manual nudging
-  - review path уже подтверждён на отдельном issue-backed rerun
+  - после `PL-050` и `PL-051` authoritative VPS runtime проходит и полный merge/close cycle без вмешательства локального queue owner
 - blockers discovered:
   - исторический blocker batch `2026-03-15`: host/container OpenAI contour для `codex exec` отдавал `403 Country, region, or territory not supported`; этот слой закрыт задачей `PL-050`
   - дополнительное наблюдение: внешний `ops/ingest/status` сейчас отвечает `404`, поэтому remote status push не даёт отдельного live-evidence
 - follow-up tasks:
   - `PL-050` закрыта: VPS preflight для `codex` / VPN / OpenAI теперь зелёный (`PREFLIGHT_READY=1`)
-  - следующий практический шаг для нового smoke batch: подготовить новую issue-backed карточку в `Todo`, потому что текущий runtime-state на VPS healthy и находится в `IDLE_NO_TASKS`
+  - `PL-053` можно считать закрытой: authoritative cutover и full smoke уже подтверждены
   - `PL-057` остаётся релевантным для нормализации ingress-модели, если нужен рабочий публичный endpoint для ops/status ingest

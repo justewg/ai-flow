@@ -220,14 +220,23 @@ Acceptance:
 
 ### PL-054. Runbook, rollback и эксплуатационный режим
 
-Цель:
-- оформить Linux-hosted automation как поддерживаемый эксплуатационный сценарий.
+Статус:
+- `Done`
 
-Что должно появиться:
-- канонический runbook запуска/обновления/rollback;
-- инструкция переключения `authoritative runtime` между Mac и VPS;
-- checklist диагностики;
-- policy, какой host считается рабочим для конкретного profile.
+Что уже зафиксировано:
+- канонический operations runbook:
+  - [linux-hosted-automation-operations-runbook.md](/private/var/sites/PLANKA/docs/linux-hosted-automation-operations-runbook.md)
+- явная ownership policy для одного profile:
+  - authoritative VPS runtime;
+  - local MacBook как `interactive-only` / fallback contour;
+- пошаговый cutover `MacBook -> VPS`;
+- rollback `VPS -> MacBook` без reverse-engineering;
+- checklist диагностики для:
+  - `daemon/watchdog`
+  - auth / GitHub
+  - `/ops/status`
+  - OpenAI / Codex
+  - VPN contour
 
 Acceptance:
 - новый инженер может поднять или вернуть runtime по документированному сценарию;

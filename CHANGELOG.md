@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### Added
+- `[PL-054]` Добавлен явный operations runbook для Linux-hosted automation: authoritative VPS runtime, `interactive-only` MacBook fallback, cutover/rollback между хостами, daily update path и troubleshooting по `daemon/watchdog`, auth, `/ops/status`, OpenAI/Codex и VPN.
 - `[PL-053]` Зафиксирован authoritative cutover `planka` на reg.ru VPS: `docker-hosted` runtime стал единственным automation-owner, а full issue-backed smoke подтверждён прогоном `#427 -> PR #440 -> merge -> Done` без локального queue ownership.
 - `[PL-051]` Зафиксирован single-runtime ownership contract для одного profile: `FLOW_AUTOMATION_RUNTIME_ROLE=authoritative|interactive-only`, `FLOW_AUTHORITATIVE_RUNTIME_ID`, early guard в `daemon/watchdog`, skip-install для неauthoritative checkout и ownership summary в `profile_init`/`status_snapshot`.
 - `[PL-052]` `gh_app_auth` и `ops-bot` закреплены как штатный Linux-host/server-side runtime contour для `planka`: auth/token surface, `/ops/status` и Telegram webhook работают на VPS и не требуют возврата к локальному host-side runtime.

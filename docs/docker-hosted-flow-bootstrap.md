@@ -131,6 +131,10 @@ FLOW_AUTOMATION_RUNTIME_ROLE=interactive-only
 
 Тогда `daemon/watchdog` на локальном checkout не будут конкурировать с VPS runtime за ту же очередь, а `profile_init preflight` и `status_snapshot` покажут ownership явно.
 
+Подробный эксплуатационный сценарий cutover/rollback между VPS и MacBook:
+
+- [linux-hosted-automation-operations-runbook.md](/private/var/sites/PLANKA/docs/linux-hosted-automation-operations-runbook.md)
+
 ## Ключевое предположение
 
 По умолчанию считается, что host уже имеет доступ к OpenAI:

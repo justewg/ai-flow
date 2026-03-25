@@ -77,6 +77,30 @@ age_from_epoch() {
   printf '%s' "$(( now_epoch - ts ))"
 }
 
+format_duration_human() {
+  local total_sec="${1:-0}"
+  local hours minutes seconds
+
+  if ! [[ "$total_sec" =~ ^-?[0-9]+$ ]]; then
+    total_sec=0
+  fi
+  if (( total_sec < 0 )); then
+    total_sec=0
+  fi
+
+  hours=$(( total_sec / 3600 ))
+  minutes=$(( (total_sec % 3600) / 60 ))
+  seconds=$(( total_sec % 60 ))
+
+  if (( hours > 0 )); then
+    printf '%sh %sm %ss' "$hours" "$minutes" "$seconds"
+  elif (( minutes > 0 )); then
+    printf '%sm %ss' "$minutes" "$seconds"
+  else
+    printf '%ss' "$seconds"
+  fi
+}
+
 detail_value() {
   local detail="$1"
   local key="$2"
@@ -227,12 +251,27 @@ open_pr_count="$(detail_value "$daemon_detail" "WAIT_OPEN_PR_COUNT")"
 dependencies_blockers="$(detail_value "$daemon_detail" "WAIT_DEPENDENCIES_BLOCKERS")"
 active_task_id="$(detail_value "$daemon_detail" "WAIT_ACTIVE_TASK_ID")"
 auth_degraded="$(detail_value "$daemon_detail" "AUTH_DEGRADED")"
+github_rate_limit_stage="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_LIMIT_STAGE")"
+github_rate_limit_msg="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_LIMIT_MSG")"
+github_rate_limit_remaining="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_LIMIT_REMAINING")"
+github_rate_limit_reset_epoch="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_LIMIT_RESET_EPOCH")"
+github_rate_limit_reset_at="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_LIMIT_RESET_AT")"
+github_rate_limit_reset_human="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_LIMIT_RESET_IN_HUMAN")"
 
 [[ -z "$github_status" ]] && github_status="UNKNOWN"
 [[ -z "$telegram_status" ]] && telegram_status="SKIPPED"
 [[ -z "$dirty_blocking_todo" ]] && dirty_blocking_todo="0"
 [[ -z "$dirty_tracked_count" ]] && dirty_tracked_count="0"
 [[ -z "$open_pr_count" ]] && open_pr_count="0"
+[[ -z "$github_rate_limit_remaining" ]] && github_rate_limit_remaining="0"
+
+github_rate_limit_reset_in_sec="0"
+if [[ "$github_rate_limit_reset_epoch" =~ ^[0-9]+$ ]] && (( github_rate_limit_reset_epoch > now_epoch )); then
+  github_rate_limit_reset_in_sec="$(( github_rate_limit_reset_epoch - now_epoch ))"
+fi
+if [[ -z "$github_rate_limit_reset_human" || "$github_rate_limit_reset_human" == "0s" ]] && [[ "$github_rate_limit_reset_in_sec" =~ ^[0-9]+$ ]]; then
+  github_rate_limit_reset_human="$(format_duration_human "$github_rate_limit_reset_in_sec")"
+fi
 
 outbox_pending="$(count_pending_outbox)"
 runtime_pending="$(runtime_queue_pending)"
@@ -269,6 +308,9 @@ case "$daemon_state" in
     overall_status="DEGRADED"
     action_required="wait_github"
     headline="GitHub GraphQL rate limit; daemon is waiting"
+    if [[ -n "$github_rate_limit_reset_human" && "$github_rate_limit_reset_human" != "0s" ]]; then
+      headline="GitHub GraphQL rate limit; reset in ${github_rate_limit_reset_human}"
+    fi
     ;;
   WAIT_GITHUB_OFFLINE|WAIT_AUTH_SERVICE)
     overall_status="DEGRADED"
@@ -400,6 +442,11 @@ jq -n \
   --arg open_pr_count "$open_pr_count" \
   --arg dependencies_blockers "$dependencies_blockers" \
   --arg active_task_id "$active_task_id" \
+  --arg github_rate_limit_stage "$github_rate_limit_stage" \
+  --arg github_rate_limit_msg "$github_rate_limit_msg" \
+  --arg github_rate_limit_remaining "$github_rate_limit_remaining" \
+  --arg github_rate_limit_reset_at "$github_rate_limit_reset_at" \
+  --arg github_rate_limit_reset_human "$github_rate_limit_reset_human" \
   --arg rate_window_state "$rate_window_state" \
   --arg rate_window_start_utc "$rate_window_start_utc" \
   --arg rate_last_success_utc "$rate_last_success_utc" \
@@ -414,6 +461,7 @@ jq -n \
   --argjson outbox_pending "$outbox_pending" \
   --argjson runtime_pending "$runtime_pending" \
   --argjson rate_window_requests "$rate_window_requests" \
+  --argjson github_rate_limit_reset_in_sec "$github_rate_limit_reset_in_sec" \
   --argjson backlog_remaining "$backlog_remaining" \
   --argjson executor_pid_alive "$executor_pid_alive" \
   --argjson backlog_plan_present "$backlog_plan_present" \
@@ -474,6 +522,12 @@ jq -n \
       active_task_id: $active_task_id
     },
     rate_limit: {
+      wait_stage: $github_rate_limit_stage,
+      wait_message: $github_rate_limit_msg,
+      wait_remaining: ($github_rate_limit_remaining | tonumber? // 0),
+      wait_reset_at_utc: $github_rate_limit_reset_at,
+      wait_reset_in_sec: $github_rate_limit_reset_in_sec,
+      wait_reset_in_human: $github_rate_limit_reset_human,
       window_state: $rate_window_state,
       window_requests: $rate_window_requests,
       window_start_utc: $rate_window_start_utc,

@@ -373,10 +373,14 @@ build_success_detail() {
       line="$(printf '%s\n' "$output" | grep -m1 -E '^(WAIT_GITHUB_STAGE=|WAIT_GITHUB_API_UNSTABLE=1)' || true)"
       ;;
     WAIT_GITHUB_RATE_LIMIT)
-      local stage_line msg_line req_line dur_line raw_rate_line
+      local stage_line msg_line req_line dur_line raw_rate_line reset_epoch_line reset_at_line reset_human_line remaining_line
       local parts=()
       stage_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_RATE_LIMIT_STAGE=' || true)"
       msg_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_RATE_LIMIT_MSG=' || true)"
+      remaining_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_RATE_LIMIT_REMAINING=' || true)"
+      reset_epoch_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_RATE_LIMIT_RESET_EPOCH=' || true)"
+      reset_at_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_RATE_LIMIT_RESET_AT=' || true)"
+      reset_human_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_RATE_LIMIT_RESET_IN_HUMAN=' || true)"
       req_line="$(printf '%s\n' "$output" | grep -m1 '^GQL_STATS_WINDOW_REQUESTS=' || true)"
       dur_line="$(printf '%s\n' "$output" | grep -m1 '^GQL_STATS_WINDOW_DURATION_SEC=' || true)"
       raw_rate_line="$(printf '%s\n' "$output" | grep -m1 -Ei 'graphql:.*rate limit|api rate limit already exceeded|graphql_rate_limit|rate limit exceeded' || true)"
@@ -387,6 +391,10 @@ build_success_detail() {
       fi
       [[ -n "$stage_line" ]] && parts+=("$stage_line")
       [[ -n "$msg_line" ]] && parts+=("$msg_line")
+      [[ -n "$remaining_line" ]] && parts+=("$remaining_line")
+      [[ -n "$reset_epoch_line" ]] && parts+=("$reset_epoch_line")
+      [[ -n "$reset_at_line" ]] && parts+=("$reset_at_line")
+      [[ -n "$reset_human_line" ]] && parts+=("$reset_human_line")
       [[ -n "$req_line" ]] && parts+=("$req_line")
       [[ -n "$dur_line" ]] && parts+=("$dur_line")
       line="$(IFS=';'; echo "${parts[*]}")"

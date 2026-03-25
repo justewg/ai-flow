@@ -368,6 +368,82 @@ graphql_payload_first_rate_limit_message() {
   sanitize_for_log "$message"
 }
 
+format_duration_human() {
+  local total_sec="${1:-0}"
+  local hours minutes seconds
+
+  if ! [[ "$total_sec" =~ ^-?[0-9]+$ ]]; then
+    total_sec=0
+  fi
+  if (( total_sec < 0 )); then
+    total_sec=0
+  fi
+
+  hours=$(( total_sec / 3600 ))
+  minutes=$(( (total_sec % 3600) / 60 ))
+  seconds=$(( total_sec % 60 ))
+
+  if (( hours > 0 )); then
+    printf '%sh %sm %ss' "$hours" "$minutes" "$seconds"
+  elif (( minutes > 0 )); then
+    printf '%sm %ss' "$minutes" "$seconds"
+  else
+    printf '%ss' "$seconds"
+  fi
+}
+
+epoch_to_utc() {
+  local epoch="${1:-0}"
+  if ! [[ "$epoch" =~ ^[0-9]+$ ]] || (( epoch <= 0 )); then
+    printf ''
+    return 0
+  fi
+
+  if date -u -r "$epoch" '+%Y-%m-%dT%H:%M:%SZ' >/dev/null 2>&1; then
+    date -u -r "$epoch" '+%Y-%m-%dT%H:%M:%SZ'
+  elif date -u -d "@$epoch" '+%Y-%m-%dT%H:%M:%SZ' >/dev/null 2>&1; then
+    date -u -d "@$epoch" '+%Y-%m-%dT%H:%M:%SZ'
+  else
+    printf ''
+  fi
+}
+
+github_graphql_rate_limit_probe() {
+  local probe_json reset_epoch remaining now_epoch reset_at reset_in_sec reset_in_human
+
+  if ! probe_json="$(run_gh_retry_capture_project gh api rate_limit --jq '.resources.graphql // {}' 2>/dev/null)"; then
+    return 1
+  fi
+  [[ -n "$probe_json" ]] || return 1
+  if ! json_payload_is_valid "$probe_json"; then
+    return 1
+  fi
+
+  reset_epoch="$(printf '%s' "$probe_json" | jq -r '(.reset // 0) | floor | tostring' 2>/dev/null || echo 0)"
+  remaining="$(printf '%s' "$probe_json" | jq -r '(.remaining // 0) | floor | tostring' 2>/dev/null || echo 0)"
+  now_epoch="$(date +%s)"
+  reset_in_sec=0
+  if [[ "$reset_epoch" =~ ^[0-9]+$ ]] && (( reset_epoch > now_epoch )); then
+    reset_in_sec=$(( reset_epoch - now_epoch ))
+  fi
+  reset_at="$(epoch_to_utc "$reset_epoch")"
+  reset_in_human="$(format_duration_human "$reset_in_sec")"
+
+  printf '%s|%s|%s|%s' "$remaining" "$reset_epoch" "$reset_at" "$reset_in_human"
+}
+
+emit_wait_github_rate_limit_probe() {
+  local probe_payload remaining reset_epoch reset_at reset_in_human
+  if ! probe_payload="$(github_graphql_rate_limit_probe)"; then
+    return 0
+  fi
+  IFS='|' read -r remaining reset_epoch reset_at reset_in_human <<< "$probe_payload"
+  [[ "$remaining" =~ ^[0-9]+$ ]] && echo "WAIT_GITHUB_RATE_LIMIT_REMAINING=$remaining"
+  [[ "$reset_epoch" =~ ^[0-9]+$ ]] && (( reset_epoch > 0 )) && echo "WAIT_GITHUB_RATE_LIMIT_RESET_EPOCH=$reset_epoch"
+  [[ -n "$reset_at" ]] && echo "WAIT_GITHUB_RATE_LIMIT_RESET_AT=$reset_at"
+  [[ -n "$reset_in_human" ]] && echo "WAIT_GITHUB_RATE_LIMIT_RESET_IN_HUMAN=$reset_in_human"
+}
+
 gql_stats_on_success() {
   local now_epoch now_utc state requests
   now_epoch="$(date +%s)"
@@ -2627,6 +2703,7 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
     echo "WAIT_GITHUB_RATE_LIMIT=1"
     echo "WAIT_GITHUB_RATE_LIMIT_STAGE=PROJECT_QUERY"
     echo "WAIT_GITHUB_RATE_LIMIT_MSG=$rate_msg"
+    emit_wait_github_rate_limit_probe
     echo "GQL_STATS_WINDOW_REQUESTS=$stats_requests"
     echo "GQL_STATS_WINDOW_DURATION_SEC=$stats_duration"
     [[ -n "$stats_start_utc" ]] && echo "GQL_STATS_WINDOW_START_UTC=$stats_start_utc"
@@ -2728,11 +2805,12 @@ fi
     exit "$rc"
   fi
 
-  if ! json_payload_is_valid "$fallback_items_json"; then
+    if ! json_payload_is_valid "$fallback_items_json"; then
     if printf '%s' "$fallback_items_json" | grep -Eiq 'api rate limit already exceeded|graphql_rate_limit|rate limit'; then
       echo "WAIT_GITHUB_RATE_LIMIT=1"
       echo "WAIT_GITHUB_RATE_LIMIT_STAGE=PROJECT_ITEM_LIST_FALLBACK"
       echo "WAIT_GITHUB_RATE_LIMIT_MSG=$(sanitize_for_log "$fallback_items_json")"
+      emit_wait_github_rate_limit_probe
       exit 0
     fi
 

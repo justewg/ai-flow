@@ -7,6 +7,8 @@
 ## [Unreleased]
 
 ### Added
+- `[PL-070]` Зафиксирован канонический APK update flow для Android shell: отдельный документ `docs/pl-070-android-apk-update-flow.md` описывает manual update UX, `sha256`/package/version validation, trusted signing path через Android installer, failure policy и publish invariants для будущего HTTPS release channel.
+- `[PL-068]` Зафиксирован HTTPS manifest contract для Android shell в `docs/pl-068-android-manifest-contract.md`: schema v1, manual check semantics, config/APK decision table, rollback policy и publish invariants для Android update contour.
 - `[PL-050]` Добавлен и подтверждён Linux-host bootstrap/preflight для VPS executor contour: `linux_host_codex_preflight.sh` проверяет `codex`, `CODEX_HOME`, `OPENAI_ENV_FILE`, safe VPN wrapper и базовый OpenAI/VPN path, а `profile_init preflight` в режиме `linux-docker-hosted` использует docker-hosted `status_snapshot` вместо ложных host `systemd` unit checks.
 - `[PL-063]` Publisher Remote Agent v2 теперь валидирует JSON от loopback `/health` и `/ops/status.json` до публикации `runtime_snapshot.json`; при невалидном upstream JSON пишет degraded snapshot с `publisher_degraded=true` и флагами `invalid_*_json`.
 - `[PL-062]` Helper Remote Agent v2 теперь валидирует JSON snapshot перед выдачей probe-ответа; при битом snapshot возвращает degraded payload с `snapshot_invalid_json=true` вместо повреждённого JSON.

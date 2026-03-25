@@ -65,6 +65,14 @@ Linux-hosted bootstrap launchers:
   - создание временных файлов/директорий через `mktemp`, `.flow/tmp` или `/tmp` не считается отдельным approval-поводом; approval может понадобиться только для внешнего действия в той же команде (`gh`, сеть, запись вне sandbox и т.п.).
   - approval-relevant action лучше выносить в отдельный shell-вызов: сначала подготовить temp/body/input файл, потом отдельной командой вызывать `gh`/`git push`/сетевой helper. Не склеивать подготовку и внешнее действие через `&&`, `;`, subshell, если это ухудшает сессионный approval.
   - по умолчанию title/body для новых задач и issue оформлять по-русски, если пользователь явно не запросил английский язык.
+- Для типовых GitHub sync-операций использовать fixed-input entrypoints:
+  - `.flow/shared/scripts/run.sh issue_comment`:
+    - читает `issue_number.txt` и `issue_comment_body.txt`;
+    - публикует comment без прямого `gh issue comment ...` в интерактивной сессии.
+  - `.flow/shared/scripts/run.sh project_item_view`:
+    - читает `issue_number.txt` или `project_task_id.txt`;
+    - возвращает matching Project item JSON через настроенный project token;
+    - при необходимости локальный `jq` накладывается уже на stdout этой команды, а не на прямой `gh project item-list ...`.
 - `.flow/shared/scripts/run.sh project_status_runtime <enqueue|apply|list|clear> ...` — runtime-очередь отложенных обновлений `Project Status/Flow`.
 - `.flow/shared/scripts/run.sh log_summary [--hours N|--from ISO|--to ISO]` — агрегированный отчет по логам daemon/watchdog/runtime/graphql за период (без аргументов берёт весь доступный диапазон логов).
 - `.flow/shared/scripts/run.sh status_snapshot` — нормализованный JSON snapshot состояния автоматики (daemon/watchdog/executor/очереди/blockers).

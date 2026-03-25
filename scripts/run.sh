@@ -23,6 +23,7 @@ Commands:
   dispatch
   issue_create
   issue_view
+  issue_comment
   issue_close
   sync_branches
   pr_list
@@ -36,6 +37,7 @@ Commands:
   git_delete_branch
   project_add_task
   project_add_issue
+  project_item_view
   project_set_status
   project_status_runtime
   log_summary
@@ -120,6 +122,7 @@ Fixed input files in state dir
   issue_number.txt
   issue_title.txt
   issue_body.txt
+  issue_comment_body.txt
   issue_view_json.txt
   issue_view_jq.txt
   issue_close_reason.txt
@@ -220,6 +223,21 @@ write_temp_body_file() {
   printf '%s' "$tmp_file"
 }
 
+run_project_gh() {
+  local project_token
+  codex_resolve_project_config
+  project_token="$(codex_resolve_config_value "DAEMON_GH_PROJECT_TOKEN" "")"
+  if [[ -z "$project_token" ]]; then
+    project_token="$(codex_resolve_config_value "CODEX_GH_PROJECT_TOKEN" "")"
+  fi
+  project_token="$(printf '%s' "$project_token" | tr -d '\r\n')"
+  if [[ -n "$project_token" ]]; then
+    GH_TOKEN="$project_token" gh "$@"
+  else
+    gh "$@"
+  fi
+}
+
 tail_runtime_log() {
   local log_name="$1"
   local lines="$2"
@@ -249,6 +267,7 @@ key_to_file() {
     issue_number) echo "${CODEX_DIR}/issue_number.txt" ;;
     issue_title) echo "${CODEX_DIR}/issue_title.txt" ;;
     issue_body) echo "${CODEX_DIR}/issue_body.txt" ;;
+    issue_comment_body) echo "${CODEX_DIR}/issue_comment_body.txt" ;;
     issue_view_json) echo "${CODEX_DIR}/issue_view_json.txt" ;;
     issue_view_jq) echo "${CODEX_DIR}/issue_view_jq.txt" ;;
     issue_close_reason) echo "${CODEX_DIR}/issue_close_reason.txt" ;;
@@ -374,6 +393,19 @@ case "$cmd" in
     else
       gh issue view "$issue_number" --repo "$repo"
     fi
+    ;;
+
+  issue_comment)
+    repo="$(require_flow_repo)"
+    issue_number="$(read_required_file "${CODEX_DIR}/issue_number.txt")"
+    issue_comment_file="$(key_to_file "issue_comment_body")"
+    if [[ ! -f "$issue_comment_file" ]]; then
+      echo "Missing file: $issue_comment_file"
+      exit 1
+    fi
+    tmp_body_file="$(write_temp_body_file "$issue_comment_file")"
+    trap 'rm -f "$tmp_body_file"' EXIT
+    gh issue comment "$issue_number" --repo "$repo" --body-file "$tmp_body_file"
     ;;
 
   issue_close)
@@ -539,6 +571,38 @@ case "$cmd" in
     if [[ "$added_auto_ignore_label" == "1" && "$had_auto_ignore_label" != "1" ]]; then
       gh issue edit "$issue_number" --repo "$repo" --remove-label "$auto_ignore_label" >/dev/null
     fi
+    ;;
+
+  project_item_view)
+    issue_number=""
+    task_id=""
+    if [[ -s "${CODEX_DIR}/issue_number.txt" ]]; then
+      issue_number="$(read_required_file "${CODEX_DIR}/issue_number.txt")"
+    fi
+    if [[ -s "${CODEX_DIR}/project_task_id.txt" ]]; then
+      task_id="$(read_required_file "${CODEX_DIR}/project_task_id.txt")"
+    fi
+    if [[ -z "$issue_number" && -z "$task_id" ]]; then
+      echo "project_item_view requires issue_number.txt or project_task_id.txt"
+      exit 1
+    fi
+    project_items_json="$(run_project_gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit 100 --format json)"
+    selected_item="$(printf '%s' "$project_items_json" | jq \
+      --arg issue_number "$issue_number" \
+      --arg task_id "$task_id" '
+        .items
+        | map(select(
+            (($issue_number != "") and ((.content.number? | tostring) == $issue_number))
+            or
+            (($task_id != "") and (."task ID"? == $task_id))
+          ))
+        | .[0] // empty
+      ')"
+    if [[ -z "$selected_item" ]]; then
+      echo "Project item not found for issue_number=${issue_number:-n/a} task_id=${task_id:-n/a}"
+      exit 1
+    fi
+    printf '%s\n' "$selected_item" | jq '.'
     ;;
 
   project_set_status)

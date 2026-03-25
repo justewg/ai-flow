@@ -143,6 +143,6 @@
 ## Принцип ограничений
 - Для операций удаления, сложных merge/rebase/cherry-pick и потенциально деструктивных действий требуется отдельное подтверждение.
 - Для минимизации confirm-шумов избегаем shell-chain команд (`&&`, `;`, heredoc) и используем только отдельные вызовы `.flow/shared/scripts/run.sh` или legacy wrapper `scripts/codex/run.sh`.
-- В интерактивном Codex-режиме `gh issue create/view/close`, `gh pr list/merge/view`, `git ls-remote --heads`, `git branch -D`, `gh project item-add`, `project_set_status` должны идти через fixed-input команды `run.sh` + `dispatch`, а не прямыми CLI-вызовами с плавающими аргументами.
+- В интерактивном Codex-режиме `gh issue create/view/comment/close`, `gh pr list/merge/view`, `git ls-remote --heads`, `git branch -D`, `gh project item-add/item-list`, `project_set_status` должны идти через fixed-input команды `run.sh` + `dispatch`, а не прямыми CLI-вызовами с плавающими аргументами.
 - Просмотр runtime-логов daemon/watchdog/executor должен идти через `run.sh log_tail_*`, а не через прямые `/bin/bash -lc ... tail ...`.
 - Очистка служебных `.flow/state/*` runtime-файлов должна идти через `run.sh runtime_clear_*` и `executor_reset`, а не через прямые `truncate`.

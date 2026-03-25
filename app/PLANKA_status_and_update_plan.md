@@ -121,6 +121,11 @@
    - запускает системную установку поверх текущего приложения.
 3. После установки пользователь возвращается в приложение.
 
+Канонический security/update contract для этого канала зафиксирован отдельно в `docs/pl-070-android-apk-update-flow.md`:
+- доверенным считается только APK с корректным `sha256`, правильным `packageName/versionCode` и непрерывным signing path;
+- silent install и downgrade через manifest в MVP не поддерживаются;
+- фактом успеха считается только следующий старт shell с новым фактическим `versionCode`.
+
 ## 6. Что важно заложить в серверный manifest
 
 Канонический MVP-contract для Android shell, publish infra и операторского runbook зафиксирован отдельно в `docs/pl-068-android-manifest-contract.md`.
@@ -179,6 +184,10 @@
 4. Инкрементировать версии.
 5. При необходимости публиковать только новый config payload без выпуска APK.
 6. Сообщать, что новая сборка готова к проверке с планшета.
+
+При этом publish path должен соблюдать два канонических документа:
+- `docs/pl-068-android-manifest-contract.md` — manifest schema и общая семантика каналов;
+- `docs/pl-070-android-apk-update-flow.md` — trust/signature/hash contract для APK.
 
 ## 9. Практическое решение для старта
 

@@ -348,9 +348,9 @@ Shell хранит локально как минимум:
 
 Этот contract задаёт базу для `PL-069`, `PL-070` и `PL-071`:
 
-- `PL-069`: клиентская реализация manual update check и UI-решений по состояниям;
-- `PL-070`: реализация config storage/apply/rollback;
-- `PL-071`: publish pipeline, hash generation и manifest publication.
+- `PL-069`: клиентская реализация config storage/apply/rollback и manual config update;
+- `PL-070`: APK trust model, hash/signature validation и install failure policy;
+- `PL-071`: publish pipeline, hash generation, signed APK publication и manifest publication.
 
 Канонический статус MVP:
 

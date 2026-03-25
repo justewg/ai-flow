@@ -161,3 +161,9 @@ vite.config.ts.timestamp-*
 # private keys (must never be committed)
 *.private-key.pem
 *.private-key.key
+
+# Android app
+.gradle/
+app/**/build/
+**/build/
+app/planka_quick_test_app/local.properties

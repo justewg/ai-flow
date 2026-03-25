@@ -3,6 +3,11 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val baseVersionCode = 1
+val baseVersionName = "0.1.0"
+val envVersionCode = providers.environmentVariable("PLANKA_ANDROID_VERSION_CODE").orNull?.toIntOrNull()
+val envVersionName = providers.environmentVariable("PLANKA_ANDROID_VERSION_NAME").orNull
+
 android {
     namespace = "com.planka.quicktest"
     compileSdk = 34
@@ -11,8 +16,8 @@ android {
         applicationId = "com.planka.quicktest"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = envVersionCode ?: baseVersionCode
+        versionName = envVersionName ?: baseVersionName
     }
 
     buildTypes {

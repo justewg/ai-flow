@@ -164,3 +164,8 @@ vite.config.ts.timestamp-*
 
 # Android app
 .gradle/
+**/build/
+app/planka_quick_test_app/.gradle/
+app/planka_quick_test_app/.idea/
+app/planka_quick_test_app/local.properties
+.idea/

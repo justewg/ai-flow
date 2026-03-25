@@ -161,3 +161,6 @@ vite.config.ts.timestamp-*
 # private keys (must never be committed)
 *.private-key.pem
 *.private-key.key
+
+# Android app
+.gradle/

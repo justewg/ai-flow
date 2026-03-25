@@ -1,5 +1,9 @@
 name: Build and Publish Android Dev Shell
 
+run-name: >-
+  Android dev shell
+  ${{ github.event_name == 'workflow_dispatch' && format('manual {0}', inputs.ref) || format('{0} {1}', github.ref_name, github.sha) }}
+
 on:
   push:
     branches:

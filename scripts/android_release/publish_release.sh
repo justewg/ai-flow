@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+umask 022
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MANIFEST_SCRIPT="${ROOT_DIR}/scripts/android_release/render_manifest.sh"
 
@@ -37,6 +39,19 @@ sha256_file() {
     return
   fi
   shasum -a 256 "$path" | awk '{print $1}'
+}
+
+ensure_web_tree_permissions() {
+  local path="$1"
+  [[ -e "$path" ]] || return 0
+
+  if [[ -d "$path" ]]; then
+    find "$path" -type d -exec chmod 755 {} +
+    find "$path" -type f -exec chmod 644 {} +
+    return
+  fi
+
+  chmod 644 "$path"
 }
 
 deploy_root=""
@@ -182,6 +197,10 @@ EOF
 
 cp "${release_root}/manifest.json" "${channel_root}/manifest.json.tmp"
 mv "${channel_root}/manifest.json.tmp" "${channel_root}/manifest.json"
+
+ensure_web_tree_permissions "$release_root"
+ensure_web_tree_permissions "${channel_root}/manifest.json"
+chmod 755 "$deploy_root" "$channel_root" "${channel_root}/releases" "$release_root"
 
 echo "PUBLISH_OK=1"
 echo "PUBLISH_CHANNEL=${channel}"

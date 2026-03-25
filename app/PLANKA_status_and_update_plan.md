@@ -127,6 +127,7 @@
 
 В нём зафиксированы как обязательный минимум:
 
+- manifest как полный snapshot двух каналов (`apk` + `config`);
 - версии приложения и конфига;
 - `minSupportedAppVersion`;
 - `apk/config url` и `sha256`;

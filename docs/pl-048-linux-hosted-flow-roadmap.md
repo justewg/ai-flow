@@ -205,30 +205,38 @@ Acceptance:
 
 ### PL-053. Smoke migration `planka -> reg.ru`
 
-Цель:
-- перевести `planka` на VPS как authoritative runtime и подтвердить end-to-end flow.
+Статус:
+- реализовано.
 
-Что должно быть проверено:
-- `Todo -> In Progress -> Review -> Done`;
-- branch sync, executor resume, review feedback, task finalize;
-- watchdog recovery;
-- coexistence с локальной интерактивной разработкой;
-- корректная работа ops/status и Telegram signals.
+Что подтверждено:
+- authoritative runtime для `planka` закреплён на reg.ru VPS в `docker-hosted` contour;
+- локальный checkout после `PL-051` может оставаться `interactive-only` и не конкурирует с server-side automation;
+- минимальный authoritative cutover зафиксирован задачей `#427`, которую daemon на VPS сам взял из `Todo`;
+- полный issue-backed путь дошёл до review PR `#440`, PR был merged в `main`, а smoke issue `#427` и project item ушли в `Closed/Done`.
 
-Acceptance:
-- минимум один полноценный smoke без ручного доталкивания;
-- локальный MacBook не ломает server runtime при отдельной interactive работе.
+Итог:
+- для `planka` migration на VPS как authoritative automation runtime состоялась;
+- дальнейшие улучшения относятся уже не к самому cutover, а к отдельным hardening/runbook задачам (`PL-054`, follow-up по ingress и operational drift).
 
 ### PL-054. Runbook, rollback и эксплуатационный режим
 
-Цель:
-- оформить Linux-hosted automation как поддерживаемый эксплуатационный сценарий.
+Статус:
+- `Done`
 
-Что должно появиться:
-- канонический runbook запуска/обновления/rollback;
-- инструкция переключения `authoritative runtime` между Mac и VPS;
-- checklist диагностики;
-- policy, какой host считается рабочим для конкретного profile.
+Что уже зафиксировано:
+- канонический operations runbook:
+  - [linux-hosted-automation-operations-runbook.md](/private/var/sites/PLANKA/docs/linux-hosted-automation-operations-runbook.md)
+- явная ownership policy для одного profile:
+  - authoritative VPS runtime;
+  - local MacBook как `interactive-only` / fallback contour;
+- пошаговый cutover `MacBook -> VPS`;
+- rollback `VPS -> MacBook` без reverse-engineering;
+- checklist диагностики для:
+  - `daemon/watchdog`
+  - auth / GitHub
+  - `/ops/status`
+  - OpenAI / Codex
+  - VPN contour
 
 Acceptance:
 - новый инженер может поднять или вернуть runtime по документированному сценарию;

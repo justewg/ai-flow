@@ -409,3 +409,7 @@ Shared toolkit использует эти ключи как ранний guard:
 - `daemon/watchdog` не трогают очередь в состояниях `INTERACTIVE_ONLY` или `WAIT_RUNTIME_OWNERSHIP`;
 - `daemon_install/watchdog_install` не поднимают automation на неauthoritative checkout;
 - `profile_init preflight` и `status_snapshot` показывают ownership summary явно.
+
+Operational runbook для authoritative VPS runtime и fallback на MacBook:
+
+- [linux-hosted-automation-operations-runbook.md](/private/var/sites/PLANKA/docs/linux-hosted-automation-operations-runbook.md)

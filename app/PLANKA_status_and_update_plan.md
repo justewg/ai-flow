@@ -189,6 +189,10 @@
 - `docs/pl-068-android-manifest-contract.md` — manifest schema и общая семантика каналов;
 - `docs/pl-070-android-apk-update-flow.md` — trust/signature/hash contract для APK.
 
+Минимальный publish skeleton для этого теперь фиксируется в `docs/pl-071-android-publish-infra.md` и скриптах:
+- `scripts/android_release/render_manifest.sh`
+- `scripts/android_release/publish_release.sh`
+
 ## 9. Практическое решение для старта
 
 Рекомендуется начинать не с полного OTA-механизма, а с такой лестницы:

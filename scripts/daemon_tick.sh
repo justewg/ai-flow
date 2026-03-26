@@ -1491,7 +1491,7 @@ set_dirty_gate_waiting_at_reply() {
 auto_commit_dirty_worktree() {
   local gate_issue_number="$1"
   local reply_comment_id="$2"
-  local current_branch blocked_issue commit_message commit_out rc retry_out retry_rc
+  local current_branch blocked_issue commit_message commit_out rc retry_out retry_rc start_head
   local -a stage_paths=()
 
   current_branch="$(git -C "${ROOT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
@@ -1522,6 +1522,7 @@ auto_commit_dirty_worktree() {
   else
     commit_message="chore: dirty-gate auto-commit tracked changes"
   fi
+  start_head="$(git -C "${ROOT_DIR}" rev-parse HEAD 2>/dev/null || true)"
 
   if commit_out="$("${CODEX_SHARED_SCRIPTS_DIR}/dev_commit_push.sh" "$commit_message" "${stage_paths[@]}" 2>&1)"; then
     emit_lines "$commit_out"
@@ -1559,6 +1560,17 @@ auto_commit_dirty_worktree() {
   if is_github_network_error "$commit_out"; then
     echo "WAIT_GITHUB_API_UNSTABLE=1"
     echo "WAIT_GITHUB_STAGE=DIRTY_GATE_AUTO_COMMIT_PUSH"
+  fi
+  git -C "${ROOT_DIR}" rebase --abort >/dev/null 2>&1 || true
+  git -C "${ROOT_DIR}" merge --abort >/dev/null 2>&1 || true
+  if [[ -n "$start_head" ]]; then
+    if git -C "${ROOT_DIR}" reset --mixed "$start_head" >/dev/null 2>&1; then
+      echo "WAIT_DIRTY_WORKTREE_COMMIT_ROLLBACK=1"
+      echo "WAIT_DIRTY_WORKTREE_COMMIT_ROLLBACK_HEAD=${start_head}"
+    else
+      echo "WAIT_DIRTY_WORKTREE_COMMIT_ROLLBACK_FAILED=1"
+      echo "WAIT_DIRTY_WORKTREE_COMMIT_ROLLBACK_HEAD=${start_head}"
+    fi
   fi
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
@@ -1959,6 +1971,7 @@ ensure_dirty_gate_issue() {
   local tracked_count="$3"
   local tracked_preview="$4"
   local signature="${5:-}"
+  local issue_candidates_json
 
   DIRTY_GATE_ISSUE_NUMBER=""
   DIRTY_GATE_ISSUE_URL=""
@@ -1983,6 +1996,52 @@ ensure_dirty_gate_issue() {
       if [[ "$rc" -eq 75 ]]; then
         echo "WAIT_GITHUB_API_UNSTABLE=1"
         echo "WAIT_GITHUB_STAGE=DIRTY_GATE_VIEW"
+      fi
+    fi
+  fi
+
+  if [[ -z "$DIRTY_GATE_ISSUE_NUMBER" ]]; then
+    if issue_candidates_json="$(
+      run_gh_retry_capture \
+        gh api "repos/${repo}/issues?state=open&per_page=100" \
+          --jq '.'
+    )"; then
+      DIRTY_GATE_ISSUE_NUMBER="$(
+        printf '%s' "$issue_candidates_json" | jq -r --arg blocked_ref "$blocked_ref" '
+          [
+            .[]
+            | select((.pull_request // null) == null)
+            | select((.title // "") == "DIRTY-GATE: resolve tracked worktree changes")
+            | select((.body // "") | contains("Blocked Todo task:\n- " + $blocked_ref))
+          ]
+          | sort_by(.number)
+          | .[0].number // ""
+        '
+      )"
+      DIRTY_GATE_ISSUE_URL="$(
+        printf '%s' "$issue_candidates_json" | jq -r --arg blocked_ref "$blocked_ref" '
+          [
+            .[]
+            | select((.pull_request // null) == null)
+            | select((.title // "") == "DIRTY-GATE: resolve tracked worktree changes")
+            | select((.body // "") | contains("Blocked Todo task:\n- " + $blocked_ref))
+          ]
+          | sort_by(.number)
+          | .[0].html_url // ""
+        '
+      )"
+      if [[ -n "$DIRTY_GATE_ISSUE_NUMBER" ]]; then
+        printf '%s\n' "$DIRTY_GATE_ISSUE_NUMBER" > "$dirty_gate_issue_file"
+        [[ -n "$DIRTY_GATE_ISSUE_URL" ]] && printf '%s\n' "$DIRTY_GATE_ISSUE_URL" > "$dirty_gate_issue_url_file"
+        echo "WAIT_DIRTY_WORKTREE_GATE_REUSED=1"
+        echo "WAIT_DIRTY_WORKTREE_GATE_ISSUE_NUMBER=${DIRTY_GATE_ISSUE_NUMBER}"
+      fi
+    else
+      local rc=$?
+      if [[ "$rc" -eq 75 ]]; then
+        echo "WAIT_GITHUB_API_UNSTABLE=1"
+        echo "WAIT_GITHUB_STAGE=DIRTY_GATE_DEDUPE_SCAN"
+        return 75
       fi
     fi
   fi

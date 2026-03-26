@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./env/bootstrap.sh
 source "${SCRIPT_DIR}/env/bootstrap.sh"
+# shellcheck source=./task_worktree_lib.sh
+source "${SCRIPT_DIR}/task_worktree_lib.sh"
 CODEX_DIR="$(codex_export_state_dir)"
 STATE_TMP_DIR="$(codex_resolve_state_tmp_dir "$CODEX_DIR")"
 mkdir -p "$STATE_TMP_DIR"
@@ -13,6 +15,9 @@ BASE_BRANCH="$FLOW_BASE_BRANCH"
 HEAD_BRANCH="$FLOW_HEAD_BRANCH"
 FINAL_STATUS="${FINAL_STATUS:-Review}"
 FINAL_FLOW="${FINAL_FLOW:-In Review}"
+TASK_ROOT_DIR="${ROOT_DIR}"
+PR_BASE_BRANCH="${FLOW_PR_BASE_BRANCH:-$BASE_BRANCH}"
+PR_HEAD_BRANCH="${FLOW_PR_HEAD_BRANCH:-$HEAD_BRANCH}"
 
 commit_file="${CODEX_DIR}/commit_message.txt"
 stage_file="${CODEX_DIR}/stage_paths.txt"
@@ -128,8 +133,10 @@ extract_pr_number_from_url() {
 }
 
 smoke_check_branch_mismatch() {
+  local repo_root="$1"
+  local expected_branch="$2"
   local current_branch
-  current_branch="$(git -C "${ROOT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  current_branch="$(git -C "${repo_root}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
   if [[ -z "$current_branch" || "$current_branch" == "HEAD" ]]; then
     echo "FLOW_SMOKE_BRANCH_UNRESOLVED=1"
     echo "FLOW_SMOKE_STAGE=TASK_FINALIZE_PRE_COMMIT"
@@ -139,6 +146,14 @@ smoke_check_branch_mismatch() {
     echo "FLOW_SMOKE_BRANCH_INVALID=1"
     echo "FLOW_SMOKE_INVALID_BRANCH_ROLE=BASE_BRANCH"
     echo "FLOW_SMOKE_BASE_BRANCH=${BASE_BRANCH}"
+    echo "FLOW_SMOKE_CURRENT_BRANCH=${current_branch}"
+    echo "FLOW_SMOKE_STAGE=TASK_FINALIZE_PRE_COMMIT"
+    return 1
+  fi
+  if [[ -n "$expected_branch" && "$current_branch" != "$expected_branch" ]]; then
+    echo "FLOW_SMOKE_BRANCH_INVALID=1"
+    echo "FLOW_SMOKE_INVALID_BRANCH_ROLE=EXPECTED_TASK_BRANCH"
+    echo "FLOW_SMOKE_EXPECTED_BRANCH=${expected_branch}"
     echo "FLOW_SMOKE_CURRENT_BRANCH=${current_branch}"
     echo "FLOW_SMOKE_STAGE=TASK_FINALIZE_PRE_COMMIT"
     return 1
@@ -315,97 +330,10 @@ emit_nonempty_lines() {
 }
 
 run_commit_push_for_branch() {
-  local branch="$1"
-  shift
-  FLOW_HEAD_BRANCH="$branch" "${CODEX_SHARED_SCRIPTS_DIR}/dev_commit_push.sh" "$@"
-}
-
-prepare_head_branch_for_pr() {
-  local task_branch="$1"
-  local head_branch="$2"
-  local out rc
-
-  echo "FLOW_TASK_BRANCH=${task_branch}"
-  echo "FLOW_PR_HEAD_BRANCH=${head_branch}"
-
-  if [[ "$task_branch" == "$head_branch" ]]; then
-    echo "FLOW_TASK_BRANCH_MODE=DIRECT_HEAD_BRANCH"
-    return 0
-  fi
-
-  echo "FLOW_TASK_BRANCH_MODE=FEATURE_BRANCH"
-
-  if out="$(git -C "${ROOT_DIR}" fetch origin "$head_branch" "$task_branch" 2>&1)"; then
-    emit_nonempty_lines "$out"
-  else
-    rc=$?
-    emit_nonempty_lines "$out"
-    echo "FLOW_TASK_BRANCH_FETCH_FAILED=1"
-    return "$rc"
-  fi
-
-  if out="$(git -C "${ROOT_DIR}" merge --no-edit "origin/${head_branch}" 2>&1)"; then
-    emit_nonempty_lines "$out"
-    echo "FLOW_TASK_BRANCH_MERGED_HEAD=1"
-  else
-    rc=$?
-    emit_nonempty_lines "$out"
-    echo "FLOW_TASK_BRANCH_MERGED_HEAD=0"
-    echo "FLOW_TASK_BRANCH_MERGE_HEAD_FAILED=1"
-    return "$rc"
-  fi
-
-  if out="$(git -C "${ROOT_DIR}" push origin "$task_branch" 2>&1)"; then
-    emit_nonempty_lines "$out"
-    echo "FLOW_TASK_BRANCH_PUSHED=1"
-  else
-    rc=$?
-    emit_nonempty_lines "$out"
-    echo "FLOW_TASK_BRANCH_PUSHED=0"
-    return "$rc"
-  fi
-
-  if out="$(git -C "${ROOT_DIR}" checkout "$head_branch" 2>&1)"; then
-    emit_nonempty_lines "$out"
-  else
-    rc=$?
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_CHECKOUT_FAILED=1"
-    return "$rc"
-  fi
-
-  if out="$(git -C "${ROOT_DIR}" pull --ff-only origin "$head_branch" 2>&1)"; then
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_SYNCED=1"
-  else
-    rc=$?
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_SYNCED=0"
-    return "$rc"
-  fi
-
-  if out="$(git -C "${ROOT_DIR}" merge --ff-only "$task_branch" 2>&1)"; then
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_FAST_FORWARDED=1"
-  else
-    rc=$?
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_FAST_FORWARDED=0"
-    echo "FLOW_PR_HEAD_FAST_FORWARD_FAILED=1"
-    return "$rc"
-  fi
-
-  if out="$(git -C "${ROOT_DIR}" push origin "$head_branch" 2>&1)"; then
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_PUSHED=1"
-  else
-    rc=$?
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_PUSHED=0"
-    return "$rc"
-  fi
-
-  return 0
+  local repo_root="$1"
+  local branch="$2"
+  shift 2
+  ROOT_DIR="$repo_root" FLOW_HEAD_BRANCH="$branch" "${CODEX_SHARED_SCRIPTS_DIR}/dev_commit_push.sh" "$@"
 }
 
 normalize_repo_path() {
@@ -424,8 +352,8 @@ is_path_within_narrative() {
 
 collect_tracked_diff_paths() {
   {
-    git -C "${ROOT_DIR}" diff --name-only --ignore-submodules -- || true
-    git -C "${ROOT_DIR}" diff --cached --name-only --ignore-submodules -- || true
+    git -C "${TASK_ROOT_DIR}" diff --name-only --ignore-submodules -- || true
+    git -C "${TASK_ROOT_DIR}" diff --cached --name-only --ignore-submodules -- || true
   } | awk 'NF' | sort -u
 }
 
@@ -604,6 +532,13 @@ if [[ -z "$task_id" ]]; then
   exit 1
 fi
 
+if [[ -n "$active_issue_number" ]]; then
+  maybe_task_root="$(task_worktree_repo_dir "$task_id" "$active_issue_number")"
+  if [[ -d "$maybe_task_root/.git" ]]; then
+    TASK_ROOT_DIR="$maybe_task_root"
+  fi
+fi
+
 pr_title="$(read_if_present "$title_file" || true)"
 if [[ -z "$pr_title" ]]; then
   pr_title="$(build_default_pr_title "$task_id" "$commit_message")"
@@ -628,36 +563,36 @@ trap 'rm -f "$tmp_title" "$tmp_body"' EXIT
 printf '%s\n' "$pr_title" > "$tmp_title"
 printf '%s\n' "$pr_body" > "$tmp_body"
 
-if ! smoke_check_branch_mismatch; then
-  exit 1
-fi
-
-task_branch="$(git -C "${ROOT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+task_branch="$(git -C "${TASK_ROOT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 if [[ -z "$task_branch" || "$task_branch" == "HEAD" ]]; then
   echo "Cannot determine task branch for finalize."
   exit 1
 fi
 
-run_commit_push_for_branch "$task_branch" "$commit_message" "${stage_paths[@]}"
-prepare_head_branch_for_pr "$task_branch" "$HEAD_BRANCH"
+if ! smoke_check_branch_mismatch "$TASK_ROOT_DIR" "$task_branch"; then
+  exit 1
+fi
+
+run_commit_push_for_branch "$TASK_ROOT_DIR" "$task_branch" "$commit_message" "${stage_paths[@]}"
+PR_HEAD_BRANCH="$task_branch"
 
 echo "FLOW_OPEN_PR_CHECK=1"
 echo "FLOW_OPEN_PR_CHECK_REPO=$REPO"
-echo "FLOW_OPEN_PR_CHECK_BASE=$BASE_BRANCH"
-echo "FLOW_OPEN_PR_CHECK_HEAD=$HEAD_BRANCH"
+echo "FLOW_OPEN_PR_CHECK_BASE=$PR_BASE_BRANCH"
+echo "FLOW_OPEN_PR_CHECK_HEAD=$PR_HEAD_BRANCH"
 open_prs_json="$(
   gh pr list \
     --repo "$REPO" \
     --state open \
-    --base "$BASE_BRANCH" \
-    --head "$HEAD_BRANCH" \
+    --base "$PR_BASE_BRANCH" \
+    --head "$PR_HEAD_BRANCH" \
     --json number,title,url \
     --jq '.'
 )"
 open_pr_count="$(printf '%s' "$open_prs_json" | jq 'length')"
 
 if (( open_pr_count == 0 )); then
-  create_out="$("${CODEX_SHARED_SCRIPTS_DIR}/pr_create.sh" "$tmp_title" "$tmp_body")"
+  create_out="$(FLOW_PR_BASE_BRANCH="$PR_BASE_BRANCH" FLOW_PR_HEAD_BRANCH="$PR_HEAD_BRANCH" "${CODEX_SHARED_SCRIPTS_DIR}/pr_create.sh" "$tmp_title" "$tmp_body")"
   pr_url="$(printf '%s' "$create_out" | tail -n1)"
   pr_number="$(extract_pr_number_from_url "$pr_url")"
   if [[ -z "$pr_number" || "$pr_number" == "$pr_url" ]]; then

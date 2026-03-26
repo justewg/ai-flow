@@ -77,6 +77,7 @@ Commands:
   watchdog_uninstall
   watchdog_status
   executor_reset
+  task_worktree_materialize
   runtime_clear_active
   runtime_clear_waiting
   runtime_clear_review
@@ -865,10 +866,21 @@ case "$cmd" in
     "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh"
     ;;
 
+  task_worktree_materialize)
+    if [[ $# -lt 3 || $# -gt 4 ]]; then
+      echo "Usage: .flow/shared/scripts/run.sh task_worktree_materialize <task-id> <issue-number> [title]"
+      exit 1
+    fi
+    "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "${@:2}"
+    ;;
+
   runtime_clear_active)
     clear_runtime_state_file "daemon_active_task.txt"
     clear_runtime_state_file "daemon_active_item_id.txt"
     clear_runtime_state_file "daemon_active_issue_number.txt"
+    clear_runtime_state_file "daemon_active_task_key.txt"
+    clear_runtime_state_file "daemon_active_worktree_path.txt"
+    clear_runtime_state_file "daemon_active_task_branch.txt"
     ;;
 
   runtime_clear_waiting)

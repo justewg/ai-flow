@@ -2647,6 +2647,8 @@ if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
     fi
     printf '%s\n' "$review_issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
     printf '%s\n' "$review_task_id" > "${CODEX_DIR}/project_task_id.txt"
+    materialize_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$review_task_id" "$review_issue_number" 2>&1)"
+    emit_lines "$materialize_out"
     "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
 
     : > "$review_task_file"
@@ -3257,6 +3259,9 @@ rm -f "${CODEX_DIR}/daemon_dependency_blocked_signature.txt"
 : > "$review_issue_file"
 : > "$review_pr_file"
 : > "$review_branch_file"
+
+materialize_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$task_id" "$issue_number" "$title" 2>&1)"
+emit_lines "$materialize_out"
 
 printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_active_task.txt"
 printf '%s\n' "$item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"

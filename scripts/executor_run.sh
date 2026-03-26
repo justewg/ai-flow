@@ -12,6 +12,8 @@ issue_number="$2"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./env/bootstrap.sh
 source "${SCRIPT_DIR}/env/bootstrap.sh"
+# shellcheck source=./task_worktree_lib.sh
+source "${SCRIPT_DIR}/task_worktree_lib.sh"
 codex_load_flow_env
 CODEX_DIR="$(codex_export_state_dir)"
 RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
@@ -28,6 +30,20 @@ DETACH_FILE="${CODEX_DIR}/executor_detach_requested.txt"
 
 mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
 : > "$DETACH_FILE"
+
+task_repo="$(task_worktree_repo_dir "$task_id" "$issue_number")"
+if [[ ! -d "$task_repo/.git" ]]; then
+  {
+    echo "EXECUTOR_TASK_WORKTREE_MISSING=1"
+    echo "EXECUTOR_TASK_WORKTREE_PATH=${task_repo}"
+    echo "=== EXECUTOR_RUN_FINISH task=${task_id} issue=${issue_number} rc=1 at $(date -u '+%Y-%m-%dT%H:%M:%SZ') ==="
+  } >>"$LOG_FILE" 2>&1
+  printf '%s\n' "FAILED" > "$STATE_FILE"
+  printf '%s\n' "1" > "$EXIT_FILE"
+  date -u '+%Y-%m-%dT%H:%M:%SZ' > "$FINISH_FILE"
+  : > "${CODEX_DIR}/executor_pid.txt"
+  exit 0
+fi
 
 is_truthy() {
   local raw_value="${1:-}"
@@ -60,7 +76,7 @@ if ! [[ "$heartbeat_sec" =~ ^[0-9]+$ ]] || (( heartbeat_sec < 3 )); then
   heartbeat_sec=8
 fi
 
-codex_args=(codex exec -C "$ROOT_DIR" --output-last-message "$LAST_MSG_FILE")
+codex_args=(codex exec -C "$task_repo" --output-last-message "$LAST_MSG_FILE")
 executor_mode="full-auto"
 if is_truthy "${EXECUTOR_CODEX_BYPASS_SANDBOX:-0}"; then
   codex_args+=(--dangerously-bypass-approvals-and-sandbox)
@@ -72,6 +88,7 @@ fi
 {
   echo "EXECUTOR_CODEX_MODE=${executor_mode}"
   echo "EXECUTOR_CODEX_BYPASS_SANDBOX=${EXECUTOR_CODEX_BYPASS_SANDBOX:-0}"
+  echo "EXECUTOR_TASK_WORKTREE_PATH=${task_repo}"
 } >>"$LOG_FILE" 2>&1
 
 "${codex_args[@]}" - < "$PROMPT_FILE" >>"$LOG_FILE" 2>&1 &

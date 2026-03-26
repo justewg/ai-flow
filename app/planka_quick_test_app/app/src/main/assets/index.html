@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>PLANKA Quick Test</title>
+  <style>
+    :root{
+      --bg:#11161d;
+      --panel:#18202a;
+      --key:#36414f;
+      --key-border:#566273;
+      --text:#f2f5f8;
+      --muted:#8fa0b3;
+      --section-gap:10px;
+      --keyboard-row-gap:8px;
+      --key-gap:8px;
+      --radius:14px;
+      --app-padding:8px;
+      --text-size-multiplier:1;
+      --key-size-multiplier:1;
+    }
+    * { box-sizing:border-box; user-select:none; -webkit-user-select:none; }
+    html,body{
+      margin:0; padding:0; width:100%; height:100%;
+      background:var(--bg); color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+      overflow:hidden;
+    }
+    body{ padding:var(--app-padding); }
+    .app{
+      width:100%;
+      height:100%;
+      display:grid;
+      grid-template-rows:1fr 0.95fr;
+      gap:var(--section-gap);
+    }
+    .screen{
+      position:relative;
+      background:linear-gradient(180deg,#151c25,#11161d);
+      border:1px solid #44505e;
+      border-radius:18px;
+      overflow:hidden;
+    }
+    .topbar{
+      position:absolute; inset:var(--app-padding) var(--app-padding) auto var(--app-padding);
+      display:flex; justify-content:flex-end; gap:var(--key-gap);
+      z-index:3;
+    }
+    .chip{
+      min-width:52px;
+      height:40px;
+      border-radius:12px;
+      border:1px solid #586577;
+      background:#1a2330;
+      color:var(--text);
+      display:flex; align-items:center; justify-content:center;
+      font-size:calc(22px * var(--key-size-multiplier)); font-weight:700;
+    }
+    .text{
+      position:absolute; inset:calc(var(--app-padding) * 2.25);
+      padding-top:calc(34px + var(--app-padding));
+      font-size:clamp(
+        calc(32px * var(--text-size-multiplier)),
+        calc(5vw * var(--text-size-multiplier)),
+        calc(74px * var(--text-size-multiplier))
+      );
+      line-height:1.04;
+      font-weight:700;
+      letter-spacing:0.5px;
+      word-break:break-word;
+      white-space:pre-wrap;
+      overflow:hidden;
+    }
+    .text.empty::before{
+      content:attr(data-placeholder);
+      color:var(--muted);
+    }
+    .keyboard{
+      display:grid;
+      grid-template-rows:repeat(5, 1fr);
+      gap:var(--keyboard-row-gap, var(--key-gap));
+      min-height:0;
+    }
+    .row{
+      display:grid;
+      gap:var(--key-gap);
+    }
+    .key{
+      border-radius:var(--radius);
+      border:1px solid var(--key-border);
+      background:var(--key);
+      color:var(--text);
+      font-weight:700;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-width:0;
+      min-height:0;
+      font-size:clamp(
+        calc(16px * var(--key-size-multiplier)),
+        calc(2.2vw * var(--key-size-multiplier)),
+        calc(30px * var(--key-size-multiplier))
+      );
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+    }
+    .key:active{ transform:translateY(1px); filter:brightness(1.07); }
+    .fatal{
+      width:100%;
+      height:100%;
+      display:grid;
+      place-items:center;
+      padding:24px;
+      text-align:center;
+      color:var(--text);
+      font:600 24px/1.4 "Segoe UI",sans-serif;
+      white-space:pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="screen">
+      <div class="topbar" id="topbar"></div>
+      <div class="text empty" id="text"></div>
+    </div>
+    <div class="keyboard" id="keyboard"></div>
+  </div>
+
+  <script>
+    const appEl = document.querySelector(".app");
+    const textEl = document.getElementById("text");
+    const keyboardEl = document.getElementById("keyboard");
+    const topbarEl = document.getElementById("topbar");
+
+    const state = {
+      config: null,
+      diagnostics: null,
+      locale: "ru",
+      locales: [],
+      text: "",
+    };
+
+    function renderFatal(message) {
+      document.body.innerHTML = `<div class="fatal">${message}</div>`;
+    }
+
+    function parseBridgePayload(methodName) {
+      if (!window.AndroidApp || typeof window.AndroidApp[methodName] !== "function") {
+        return null;
+      }
+      return window.AndroidApp[methodName]();
+    }
+
+    async function loadUiShellConfig() {
+      const bridgePayload = parseBridgePayload("getUiShellConfig");
+      if (bridgePayload) {
+        return JSON.parse(bridgePayload);
+      }
+
+      const response = await fetch("./ui-shell-config.default.json", { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`Не удалось загрузить built-in config: HTTP ${response.status}`);
+      }
+      return response.json();
+    }
+
+    function loadDiagnostics() {
+      const payload = parseBridgePayload("getUiShellConfigDiagnostics");
+      if (!payload) {
+        return {
+          requestedSource: "web_fallback",
+          resolvedSource: "web_fallback",
+          fallbackReason: null,
+        };
+      }
+      return JSON.parse(payload);
+    }
+
+    function localize(textMap) {
+      return textMap[state.locale] ?? textMap[state.config.keyboard.defaultLocale] ?? "";
+    }
+
+    function applyLayoutConfig() {
+      const { layout } = state.config;
+      const rootStyle = document.documentElement.style;
+      rootStyle.setProperty("--app-padding", `${layout.appPaddingPx}px`);
+      rootStyle.setProperty("--section-gap", `${layout.sectionGapPx}px`);
+      rootStyle.setProperty("--key-gap", `${layout.keyGapPx}px`);
+      rootStyle.setProperty("--keyboard-row-gap", `${layout.keyboardRowGapPx}px`);
+      rootStyle.setProperty("--text-size-multiplier", String(layout.textSizeMultiplier));
+      rootStyle.setProperty("--key-size-multiplier", String(layout.keySizeMultiplier));
+      appEl.style.gridTemplateRows = `${layout.textRatio}fr ${layout.keyboardRatio}fr`;
+    }
+
+    function renderText() {
+      document.documentElement.lang = state.locale;
+      textEl.textContent = state.text;
+      textEl.dataset.placeholder = localize(state.config.labels.placeholder);
+      textEl.classList.toggle("empty", state.text.length === 0);
+    }
+
+    function clearText() {
+      state.text = "";
+      renderText();
+    }
+
+    function exitApp() {
+      if (window.AndroidApp && typeof window.AndroidApp.exitApp === "function") {
+        window.AndroidApp.exitApp();
+      }
+    }
+
+    function cycleLocale() {
+      if (state.locales.length <= 1) {
+        return;
+      }
+      const currentIndex = state.locales.indexOf(state.locale);
+      const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % state.locales.length;
+      state.locale = state.locales[nextIndex];
+      renderTopbar();
+      renderKeyboard();
+      renderText();
+    }
+
+    function createChip(label, title, onClick) {
+      const button = document.createElement("button");
+      button.className = "chip";
+      button.type = "button";
+      button.textContent = label;
+      button.title = title;
+      button.onclick = onClick;
+      return button;
+    }
+
+    function shouldShowServiceButton(buttonId) {
+      const flags = state.config.shell.featureFlags;
+      if (buttonId === "clear") {
+        return flags.showClearButton;
+      }
+      if (buttonId === "locale") {
+        return flags.showLocaleButton && state.locales.length > 1;
+      }
+      if (buttonId === "exit") {
+        return flags.showExitButton;
+      }
+      return false;
+    }
+
+    function renderTopbar() {
+      topbarEl.replaceChildren();
+      const labels = state.config.labels.serviceButtons;
+      state.config.shell.serviceButtonOrder.forEach((buttonId) => {
+        if (!shouldShowServiceButton(buttonId)) {
+          return;
+        }
+
+        if (buttonId === "clear") {
+          topbarEl.appendChild(createChip(labels.clear.label, localize(labels.clear.titles), clearText));
+          return;
+        }
+
+        if (buttonId === "locale") {
+          const localeLabel = state.config.keyboard.locales[state.locale].displayName;
+          topbarEl.appendChild(createChip(localeLabel, localize(labels.locale.titles), cycleLocale));
+          return;
+        }
+
+        if (buttonId === "exit") {
+          topbarEl.appendChild(createChip(labels.exit.label, localize(labels.exit.titles), exitApp));
+        }
+      });
+    }
+
+    function appendText(value) {
+      state.text += value;
+      renderText();
+    }
+
+    function handleKeyPress(key) {
+      if (key.kind === "input") {
+        appendText(key.value);
+        return;
+      }
+      if (key.kind === "space") {
+        appendText(" ");
+        return;
+      }
+      if (key.kind === "enter") {
+        appendText("\n");
+        return;
+      }
+      if (key.kind === "backspace") {
+        state.text = state.text.slice(0, -1);
+        renderText();
+      }
+    }
+
+    function getKeyLabel(key) {
+      if (key.kind === "input") {
+        return key.value;
+      }
+      return localize(state.config.labels.specialKeys[key.kind]);
+    }
+
+    function renderKeyboard() {
+      keyboardEl.replaceChildren();
+      const localeConfig = state.config.keyboard.locales[state.locale];
+      keyboardEl.style.gridTemplateRows = `repeat(${localeConfig.rows.length}, 1fr)`;
+
+      localeConfig.rows.forEach((row) => {
+        const rowEl = document.createElement("div");
+        rowEl.className = "row";
+        rowEl.style.gridTemplateColumns = row.template.columns.map((weight) => `${weight}fr`).join(" ");
+
+        row.keys.forEach((key) => {
+          const button = document.createElement("button");
+          button.className = "key";
+          button.type = "button";
+          button.textContent = getKeyLabel(key);
+          button.onclick = () => handleKeyPress(key);
+          rowEl.appendChild(button);
+        });
+
+        keyboardEl.appendChild(rowEl);
+      });
+    }
+
+    async function bootstrap() {
+      state.config = await loadUiShellConfig();
+      state.diagnostics = loadDiagnostics();
+      state.locales = Object.keys(state.config.keyboard.locales);
+      state.locale = state.config.keyboard.defaultLocale;
+      applyLayoutConfig();
+      renderTopbar();
+      renderKeyboard();
+      renderText();
+      window.__plankaUiConfigDiagnostics = state.diagnostics;
+      console.info("PLANKA UI shell config", state.diagnostics);
+    }
+
+    window.__plankaBack = () => true;
+
+    bootstrap().catch((error) => {
+      console.error(error);
+      renderFatal(`UI shell config error\n${error.message}`);
+    });
+  </script>
+</body>
+</html>

@@ -1223,6 +1223,7 @@ maybe_release_active_task_on_status_mismatch() {
   local executor_state_file="${CODEX_DIR}/executor_state.txt"
   local executor_pid_file="${CODEX_DIR}/executor_pid.txt"
   local executor_state="" executor_pid="" executor_alive="0"
+  local cleanup_out=""
 
   [[ -s "$active_task_file" ]] || return 0
   active_task="$(<"$active_task_file")"
@@ -1273,6 +1274,10 @@ maybe_release_active_task_on_status_mismatch() {
         : > "$review_pr_file"
         : > "$review_branch_file"
         echo "ACTIVE_TASK_RELEASED_REVIEW_CONTEXT_CLEARED=1"
+      fi
+      if [[ "$active_issue_number" =~ ^[0-9]+$ ]]; then
+        cleanup_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$active_task" "$active_issue_number" "auto-ignore-release" 2>&1 || true)"
+        emit_lines "$cleanup_out"
       fi
       return 0
     fi
@@ -1338,6 +1343,10 @@ maybe_release_active_task_on_status_mismatch() {
     : > "$active_item_file"
     : > "$active_issue_file"
     : > "${CODEX_DIR}/project_task_id.txt"
+    if [[ "$active_issue_number" =~ ^[0-9]+$ ]]; then
+      cleanup_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$active_task" "$active_issue_number" "status-empty-or-missing" 2>&1 || true)"
+      emit_lines "$cleanup_out"
+    fi
     return 0
   fi
 
@@ -1390,6 +1399,10 @@ maybe_release_active_task_on_status_mismatch() {
   : > "$active_item_file"
   : > "$active_issue_file"
   : > "${CODEX_DIR}/project_task_id.txt"
+  if [[ "$active_issue_number" =~ ^[0-9]+$ ]]; then
+    cleanup_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$active_task" "$active_issue_number" "status-mismatch" 2>&1 || true)"
+    emit_lines "$cleanup_out"
+  fi
 
   # Если уже был выставлен waiting/review по этой же задаче, очищаем контекст,
   # чтобы daemon ушел в idle и мог взять следующую карточку.

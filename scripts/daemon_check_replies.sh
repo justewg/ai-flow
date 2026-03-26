@@ -290,8 +290,6 @@ emit_nonempty_lines() {
 
 cleanup_review_task_branch_if_merged() {
   local task_branch="$1"
-  local current_branch fetch_out delete_out local_out
-  local remote_branch_present="0"
 
   [[ -n "$task_branch" ]] || return 0
 
@@ -300,78 +298,8 @@ cleanup_review_task_branch_if_merged() {
     echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
     return 0
   fi
-
-  if fetch_out="$(git -C "${ROOT_DIR}" fetch origin "$HEAD_BRANCH" "$task_branch" 2>&1)"; then
-    emit_nonempty_lines "$fetch_out"
-  else
-    emit_nonempty_lines "$fetch_out"
-    if printf '%s' "$fetch_out" | grep -Eiq 'couldn.t find remote ref|remote ref does not exist|fatal: couldn.t find remote ref'; then
-      echo "REVIEW_TASK_BRANCH_REMOTE_ABSENT=1"
-      echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-    else
-      echo "REVIEW_TASK_BRANCH_FETCH_FAILED=1"
-      echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-      return 0
-    fi
-  fi
-
-  if git -C "${ROOT_DIR}" rev-parse --verify --quiet "refs/remotes/origin/${task_branch}" >/dev/null; then
-    remote_branch_present="1"
-  fi
-
-  if [[ "$remote_branch_present" == "1" ]]; then
-    if ! git -C "${ROOT_DIR}" merge-base --is-ancestor "origin/${task_branch}" "origin/${HEAD_BRANCH}" >/dev/null 2>&1; then
-      echo "REVIEW_TASK_BRANCH_DELETE_SKIPPED=NOT_MERGED_IN_HEAD"
-      echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-      return 0
-    fi
-
-    if delete_out="$(git -C "${ROOT_DIR}" push origin --delete "$task_branch" 2>&1)"; then
-      emit_nonempty_lines "$delete_out"
-      echo "REVIEW_TASK_BRANCH_REMOTE_DELETED=1"
-      echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-    else
-      emit_nonempty_lines "$delete_out"
-      if printf '%s' "$delete_out" | grep -Eiq 'remote ref does not exist|remote ref not found'; then
-        echo "REVIEW_TASK_BRANCH_REMOTE_ABSENT=1"
-        echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-      else
-        echo "REVIEW_TASK_BRANCH_REMOTE_DELETE_FAILED=1"
-        echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-        return 0
-      fi
-    fi
-  else
-    echo "REVIEW_TASK_BRANCH_REMOTE_ABSENT=1"
-    echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-  fi
-
-  current_branch="$(git -C "${ROOT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
-  if [[ "$current_branch" == "$task_branch" ]]; then
-    if local_out="$(git -C "${ROOT_DIR}" checkout "$HEAD_BRANCH" 2>&1)"; then
-      emit_nonempty_lines "$local_out"
-    else
-      emit_nonempty_lines "$local_out"
-      echo "REVIEW_TASK_BRANCH_LOCAL_DELETE_SKIPPED=CURRENT_BRANCH_CHECKOUT_FAILED"
-      echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-      return 0
-    fi
-  fi
-
-  if git -C "${ROOT_DIR}" rev-parse --verify --quiet "refs/heads/${task_branch}" >/dev/null; then
-    if local_out="$(git -C "${ROOT_DIR}" branch -D "$task_branch" 2>&1)"; then
-      emit_nonempty_lines "$local_out"
-      echo "REVIEW_TASK_BRANCH_LOCAL_DELETED=1"
-      echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-    else
-      emit_nonempty_lines "$local_out"
-      echo "REVIEW_TASK_BRANCH_LOCAL_DELETE_FAILED=1"
-      echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-    fi
-  else
-    echo "REVIEW_TASK_BRANCH_LOCAL_ABSENT=1"
-    echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-  fi
+  echo "REVIEW_TASK_BRANCH_CLEANUP_DEFERRED=1"
+  echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
 }
 
 clear_waiting_for_terminal_review_pr() {
@@ -382,9 +310,16 @@ clear_waiting_for_terminal_review_pr() {
   local review_pr_state="$5"
   local review_pr_merged_at="$6"
   local review_pr_closed_at="$7"
+  local task_id=""
+
+  [[ -s "$review_task_file" ]] && task_id="$(<"$review_task_file")"
 
   if [[ "$review_pr_state" == "MERGED" || -n "$review_pr_merged_at" ]]; then
     cleanup_review_task_branch_if_merged "$review_branch_name"
+    if [[ -n "$task_id" && "$issue_number" =~ ^[0-9]+$ ]]; then
+      cleanup_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$task_id" "$issue_number" "review-pr-merged" 2>&1 || true)"
+      emit_nonempty_lines "$cleanup_out"
+    fi
     clear_waiting_state
     clear_review_context
     echo "STALE_WAITING_CONTEXT_CLEARED=REVIEW_PR_MERGED"
@@ -396,6 +331,10 @@ clear_waiting_for_terminal_review_pr() {
   fi
 
   if [[ "$review_pr_state" == "CLOSED" || -n "$review_pr_closed_at" ]]; then
+    if [[ -n "$task_id" && "$issue_number" =~ ^[0-9]+$ ]]; then
+      cleanup_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$task_id" "$issue_number" "review-pr-closed" 2>&1 || true)"
+      emit_nonempty_lines "$cleanup_out"
+    fi
     clear_waiting_state
     clear_review_context
     echo "STALE_WAITING_CONTEXT_CLEARED=REVIEW_PR_CLOSED"

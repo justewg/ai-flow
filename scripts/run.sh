@@ -78,6 +78,7 @@ Commands:
   watchdog_status
   executor_reset
   task_worktree_materialize
+  task_worktree_cleanup
   runtime_clear_active
   runtime_clear_waiting
   runtime_clear_review
@@ -872,6 +873,14 @@ case "$cmd" in
       exit 1
     fi
     "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "${@:2}"
+    ;;
+
+  task_worktree_cleanup)
+    if [[ $# -lt 3 || $# -gt 4 ]]; then
+      echo "Usage: .flow/shared/scripts/run.sh task_worktree_cleanup <task-id> <issue-number> [reason]"
+      exit 1
+    fi
+    "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "${@:2}"
     ;;
 
   runtime_clear_active)

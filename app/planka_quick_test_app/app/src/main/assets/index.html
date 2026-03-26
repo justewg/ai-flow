@@ -13,6 +13,7 @@
       --text:#f2f5f8;
       --muted:#8fa0b3;
       --section-gap:10px;
+      --keyboard-row-gap:8px;
       --key-gap:8px;
       --radius:14px;
       --app-padding:8px;
@@ -165,7 +166,7 @@
     }
 
     function loadDiagnostics() {
-      const payload = parseBridgePayload("getUiShellDiagnostics");
+      const payload = parseBridgePayload("getUiShellConfigDiagnostics");
       if (!payload) {
         return {
           requestedSource: "web_fallback",

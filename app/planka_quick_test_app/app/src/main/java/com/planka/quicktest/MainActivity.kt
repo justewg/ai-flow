@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
+import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
@@ -42,7 +43,12 @@ class MainActivity : AppCompatActivity() {
         webView.isHorizontalScrollBarEnabled = false
         webView.setBackgroundColor(0x0011161D)
         webView.webChromeClient = WebChromeClient()
-        webView.webViewClient = object : WebViewClient() {}
+        webView.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                hideSystemUi()
+            }
+        }
         webView.addJavascriptInterface(AppBridge(resolvedUiShellConfig), "AndroidApp")
         webView.loadUrl("file:///android_asset/index.html")
 
@@ -75,9 +81,6 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun getUiShellConfig(): String = resolvedConfig.payload
-
-        @JavascriptInterface
-        fun getUiShellDiagnostics(): String = resolvedConfig.diagnosticsPayload
 
         @JavascriptInterface
         fun getUiShellConfigDiagnostics(): String = resolvedConfig.diagnosticsPayload

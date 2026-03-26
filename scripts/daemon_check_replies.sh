@@ -37,8 +37,16 @@ is_blocker_kind() {
 
 has_resume_intent() {
   local body="$1"
-  printf '%s' "$body" | grep -Eq \
-    '(^|[[:space:]])(go|lgtm|approve|approved)($|[[:space:]])|([Пп][Рр][Оо][Дд][Оо][Лл][Жж][Аа][Йй])|([Вв][Оо][Зз][Оо][Бб][Нн][Оо][Вв][Ии])|([Вв][Ыы][Пп][Оо][Лл][Нн][Яя][Йй])|([Дд][Ее][Лл][Аа][Йй][[:space:]]+[Дд][Аа][Лл][Ьь][Шш][Ее])|([Мм][Оо][Жж][Нн][Оо][[:space:]]+[Пп][Рр][Оо][Дд][Оо][Лл][Жж][Аа][Тт][Ьь])|([Рр][Аа][Зз][Рр][Ее][Шш][Аа][Юю])|([Оо][Кк][, ]*[Пп][Рр][Оо][Дд][Оо][Лл][Жж])'
+  printf '%s' "$body" | grep -Eiq \
+    '(^|[[:space:][:punct:]])(go|lgtm|approve|approved)($|[[:space:][:punct:]])|продолж|возобнов|выполняй|делай[[:space:]]+дальше|можно[[:space:]]+продолж|разрешаю|ок[, ]*продолж'
+}
+
+executor_is_live() {
+  local exec_pid=""
+  [[ -s "${CODEX_DIR}/executor_pid.txt" ]] || return 1
+  exec_pid="$(<"${CODEX_DIR}/executor_pid.txt")"
+  [[ "$exec_pid" =~ ^[0-9]+$ ]] || return 1
+  kill -0 "$exec_pid" 2>/dev/null
 }
 
 detect_reply_mode() {
@@ -88,6 +96,13 @@ detect_reply_mode() {
     if printf '%s' "$body" | grep -q '?' ||
       printf '%s' "$body" | grep -Eiq '(^|[[:space:]])(что|как|почему|зачем|когда|где|какой|какая|какие|можно ли|все ли|опиши|поясни|уточни|расскажи|объясни)\b'; then
       printf 'QUESTION'
+      return 0
+    fi
+
+    # If executor is still alive, non-question replies should not keep the task
+    # stuck in blocker clarification mode.
+    if executor_is_live; then
+      printf 'REWORK'
       return 0
     fi
 
@@ -173,6 +188,11 @@ build_answer_comment() {
     exec_state="${exec_state} (pid ${exec_pid})"
   fi
 
+  local executor_live="0"
+  if executor_is_live; then
+    executor_live="1"
+  fi
+
   local pr_line=""
   if [[ -n "$pr_number" && -n "$pr_url" ]]; then
     pr_line="- PR #${pr_number}: ${pr_state} (${pr_url})"
@@ -197,6 +217,26 @@ build_answer_comment() {
   fi
 
   if is_blocker_kind "$kind_label"; then
+    if [[ "$executor_live" == "1" ]]; then
+      cat <<EOF
+CODEX_SIGNAL: AGENT_ANSWER
+CODEX_TASK: ${task_id}
+CODEX_SOURCE_REPLY_COMMENT_ID: ${reply_id}
+CODEX_MODE: QUESTION
+
+Короткий ответ: executor уже продолжает работу, новый blocker не требуется.
+
+Текущий контекст:
+- Задача #${issue_number}: ${status_hint} / ${flow_hint}
+${blocker_line}
+${last_note_line}
+- Executor: ${exec_state}
+
+Дополнительный комментарий не нужен, если не появился новый содержательный вопрос.
+EOF
+      return 0
+    fi
+
     cat <<EOF
 CODEX_SIGNAL: AGENT_ANSWER
 CODEX_TASK: ${task_id}

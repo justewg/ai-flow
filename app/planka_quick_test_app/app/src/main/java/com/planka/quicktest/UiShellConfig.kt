@@ -266,8 +266,8 @@ object UiShellConfigResolver {
             throw IllegalArgumentException("$path.keys не может быть пустым")
         }
         for (index in 0 until columns.length()) {
-            val weight = columns.optDouble(index, Double.NaN)
-            if (!weight.isFinite() || weight <= 0.0) {
+            val weight = columns.opt(index).asStrictDouble()
+            if (weight == null || weight <= 0.0) {
                 throw IllegalArgumentException("$path.template.columns[$index] должен быть положительным числом")
             }
         }
@@ -300,7 +300,8 @@ object UiShellConfigResolver {
         }
         val seen = linkedSetOf<String>()
         for (index in 0 until buttonOrder.length()) {
-            val buttonId = buttonOrder.optString(index, "")
+            val buttonId = buttonOrder.opt(index) as? String
+                ?: throw IllegalArgumentException("shell.serviceButtonOrder[$index] должен быть строкой")
             if (buttonId !in supportedServiceButtonIds) {
                 throw IllegalArgumentException("shell.serviceButtonOrder[$index] содержит неподдерживаемый id: $buttonId")
             }
@@ -361,7 +362,8 @@ object UiShellConfigResolver {
         if (!parent.has(key) || parent.isNull(key)) {
             throw IllegalArgumentException("$path.$key должен быть строкой")
         }
-        val value = parent.optString(key, "")
+        val value = parent.opt(key) as? String
+            ?: throw IllegalArgumentException("$path.$key должен быть строкой")
         if (value.length !in minLength..maxLength) {
             throw IllegalArgumentException("$path.$key должен иметь длину в диапазоне $minLength..$maxLength")
         }
@@ -381,8 +383,9 @@ object UiShellConfigResolver {
         if (!parent.has(key) || parent.isNull(key)) {
             throw IllegalArgumentException("$path.$key должен быть целым числом")
         }
-        val value = parent.optInt(key, Int.MIN_VALUE)
-        if (value == Int.MIN_VALUE || value !in min..max) {
+        val value = parent.opt(key).asStrictInt()
+            ?: throw IllegalArgumentException("$path.$key должен быть целым числом")
+        if (value !in min..max) {
             throw IllegalArgumentException("$path.$key должен быть в диапазоне $min..$max")
         }
         return value
@@ -398,8 +401,9 @@ object UiShellConfigResolver {
         if (!parent.has(key) || parent.isNull(key)) {
             throw IllegalArgumentException("$path.$key должен быть числом")
         }
-        val value = parent.optDouble(key, Double.NaN)
-        if (!value.isFinite() || value < min || value > max) {
+        val value = parent.opt(key).asStrictDouble()
+            ?: throw IllegalArgumentException("$path.$key должен быть числом")
+        if (value < min || value > max) {
             throw IllegalArgumentException("$path.$key должен быть в диапазоне $min..$max")
         }
         return value
@@ -417,6 +421,25 @@ object UiShellConfigResolver {
     }
 
     private fun JSONObject.keySetCompat(): Set<String> = keys().asSequence().toSet()
+
+    private fun Any?.asStrictInt(): Int? {
+        val number = this as? Number ?: return null
+        val doubleValue = number.toDouble()
+        if (!doubleValue.isFinite() || doubleValue % 1.0 != 0.0) {
+            return null
+        }
+        val longValue = number.toLong()
+        if (longValue !in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) {
+            return null
+        }
+        return longValue.toInt()
+    }
+
+    private fun Any?.asStrictDouble(): Double? {
+        val number = this as? Number ?: return null
+        val doubleValue = number.toDouble()
+        return doubleValue.takeIf { it.isFinite() }
+    }
 
     private data class ValidatedConfig(
         val configVersion: Int,

@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://planka.local/contracts/ui-shell-config.schema.json",
   "title": "PLANKA UI Shell Config v1",
+  "$comment": "Schema v1 combines standard JSON Schema constraints with x-planka-invariants for cross-field rules consumed by the Android shell runtime validator.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -29,6 +30,13 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["minShellVersion", "maxShellVersion"],
+      "x-planka-invariants": [
+        {
+          "rule": "orderedProperties",
+          "lowerProperty": "minShellVersion",
+          "upperProperty": "maxShellVersion"
+        }
+      ],
       "properties": {
         "minShellVersion": {
           "type": "integer",
@@ -100,6 +108,13 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["defaultLocale", "locales"],
+      "x-planka-invariants": [
+        {
+          "rule": "propertyMatchesObjectKey",
+          "property": "defaultLocale",
+          "objectProperty": "locales"
+        }
+      ],
       "properties": {
         "defaultLocale": {
           "type": "string",
@@ -181,6 +196,12 @@
     "localizedTextMap": {
       "type": "object",
       "minProperties": 1,
+      "x-planka-invariants": [
+        {
+          "rule": "exactObjectKeysFrom",
+          "jsonPointer": "/keyboard/locales"
+        }
+      ],
       "additionalProperties": {
         "type": "string",
         "maxLength": 120
@@ -234,6 +255,13 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["id", "template", "keys"],
+      "x-planka-invariants": [
+        {
+          "rule": "equalArrayLengths",
+          "left": "/template/columns",
+          "right": "/keys"
+        }
+      ],
       "properties": {
         "id": {
           "type": "string",

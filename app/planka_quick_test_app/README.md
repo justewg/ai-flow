@@ -36,6 +36,12 @@
 - `app/src/main/assets/ui-shell-config.schema.json` — machine-readable contract `v1`
 - `<filesDir>/ui-shell-config.active.json` — active override path для shell без пересборки APK
 
+Инварианты contract `v1`:
+- numeric и integer поля принимают только JSON numbers, без string coercion
+- `keyboard.defaultLocale` обязан совпадать с одним из ключей `keyboard.locales`
+- все locale-dependent label map обязаны содержать ровно тот же набор locale keys, что и `keyboard.locales`
+- `keyboard.locales.*.rows[*].template.columns` обязан совпадать по длине с `keys`
+
 Допустимо менять через config:
 - `layout.textRatio`, `layout.keyboardRatio` и остальные интервалы из `layout.*`
 - `shell.serviceButtonOrder`

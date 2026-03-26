@@ -47,6 +47,24 @@ Contract v1 задаётся полями:
 
 Для MVP shell v1 использует strict validation: структура должна совпадать с schema v1 без лишних или пропущенных обязательных полей. Это намеренно повышает предсказуемость клавиатуры.
 
+Machine-readable contract v1 задаётся одним файлом `ui-shell-config.schema.json`. В нём есть два слоя:
+
+- стандартные JSON Schema ограничения для типов, required-полей и enum;
+- `x-planka-invariants` для cross-field правил, которые vanilla JSON Schema не выражает напрямую, но которые shell runtime валидирует детерминированно.
+
+Ключевые `x-planka-invariants`:
+
+- `compatibility.minShellVersion <= compatibility.maxShellVersion`
+- `keyboard.defaultLocale` обязан ссылаться на существующий ключ в `keyboard.locales`
+- каждый `localizedTextMap` обязан содержать ровно тот же набор locale keys, что и `keyboard.locales`
+- `keyboard.locales[*].rows[*].template.columns` обязан совпадать по длине с `keys`
+
+Типовая strictness для v1:
+
+- `integer` и `number` принимаются только как JSON numbers;
+- строковые числа вроде `"8"` или `"1.0"` не допускаются;
+- частичного coercion между schema и runtime нет.
+
 ## Параметры, разрешённые к изменению через config
 
 ### Layout

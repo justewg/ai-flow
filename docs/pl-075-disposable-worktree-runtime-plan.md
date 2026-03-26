@@ -1,323 +1,271 @@
-# PL-075 Disposable Per-Task Worktree Runtime Contract
+# PL-075 Disposable Task Worktree Runtime Contract
 
 ## Контекст
 
-Текущий authoritative runtime checkout на VPS совмещает две роли:
+Live-инциденты `PL-067`/`PL-069` показали, что текущая модель, где authoritative checkout на VPS одновременно служит:
 
-- control-plane база для `daemon/watchdog`, `sync_branches`, `task_finalize`;
-- обычное рабочее дерево executor.
+- control-plane базой для `sync_branches`;
+- рабочим каталогом executor;
+- источником dirty-gate;
+- carrier'ом review/rework residue,
 
-Из-за этого blocker, review/rework и post-merge residue оставляют tracked diff в том же checkout, который потом пытается брать следующую задачу. Даже при корректном результате на GitHub (`PR merged`, `Issue Done`) рантайм может требовать ручной `git reset --hard` / `git clean -fd`.
-
-`PL-075` фиксирует целевой contract, чтобы следующие задачи `PL-076..PL-078` реализовывали один и тот же lifecycle и safety model.
+ломает runtime recovery. Даже когда GitHub уже консистентен (`PR merged`, `Issue Done`, `Fix-task closed`), authoritative checkout может остаться с merge residue, divergence или stale waiting state.
 
 ## Цель
 
-Нужна модель, где:
+Зафиксировать execution model, в которой:
 
-- authoritative checkout используется только как control-plane база;
-- каждая claim-задача materialize-ится в отдельный disposable worktree;
-- executor, dirty-state, коммиты и rework живут только внутри task worktree;
-- review path сохраняет незавершённую работу, но не загрязняет authoritative checkout;
-- cleanup делает daemon по строгим guard-условиям и без потери локальной ценности.
+- authoritative checkout используется только как stable control-plane clone;
+- каждая claim-задача materialize-ится в отдельный disposable task worktree;
+- executor, rework, commits и PR flow живут только внутри task worktree;
+- cleanup task residue не требует ручного `git reset --hard` в authoritative checkout.
 
 ## Термины
 
-- `authoritative checkout` — основной runtime checkout profile, который владеет очередью и state-файлами.
-- `task key` — канонический идентификатор задачи для branch/path/state.
-- `task worktree` — disposable git worktree, созданный только для одной active/review задачи.
-- `task branch` — отдельная ветка задачи, checkout-нутая в task worktree.
-- `head branch` — рабочая интеграционная ветка flow, сейчас `FLOW_HEAD_BRANCH` (`development`).
-- `base branch` — целевая ветка PR, сейчас `FLOW_BASE_BRANCH` (`main`).
-- `task metadata` — runtime-файлы, по которым daemon может продолжить review/rework или безопасно выполнить cleanup.
+### Authoritative checkout
 
-## Канонический runtime contract
+Постоянный runtime clone профиля, из которого daemon:
 
-### 1. Authoritative checkout
+- синхронизирует `main` и `development`;
+- читает project/task state;
+- materialize-ит task worktree;
+- никогда не использует task diff как рабочее дерево.
 
-Authoritative checkout обязан:
+### Task worktree
 
-- оставаться синхронным с `origin/<head-branch>` и использоваться как control-plane база;
-- хранить `.flow/state`, логи, queue ownership и shared git object store;
-- не быть местом пользовательских правок executor по конкретной задаче;
-- не использоваться как источник `git status` активной task-дельты;
-- после завершения задачи возвращаться в состояние `no task diff`.
+Одноразовый git worktree, привязанный к одной claim-задаче и существующий до terminal state этой задачи.
 
-Допустимое содержимое authoritative checkout:
+### Task key
 
-- toolkit/runtime state;
-- service updates уровня `.flow/shared` и конфигурации runtime;
-- временное control-plane действие daemon, которое не превращает checkout в carrier task diff.
+Канонический идентификатор runtime execution unit:
 
-Недопустимое содержимое authoritative checkout:
+`<profile>-<task-id>-issue-<issue-number>`
 
-- незавершённый diff task-ветки;
-- review/rework residue после открытого PR;
-- tracked изменения, которые требуются для продолжения конкретной issue-задачи.
+Пример:
 
-### 2. Task key, branch naming и path layout
+`planka-PL-075-issue-462`
 
-`task key` строится так:
+### Task branch
 
-1. взять `Task ID` из project item, если он есть;
-2. иначе взять `PL-xxx` из title issue;
-3. иначе использовать `ISSUE-<number>`;
-4. нормализовать в slug для путей и веток: lowercase ASCII, separator `-`, без пробелов.
+Изолированная ветка для task worktree:
 
-Канонические имена:
+`task/<task-id>-issue-<issue-number>-<slug>`
 
-- task branch: `task/<task-key>`;
-- worktree path: `<workspace-root>.worktrees/<task-key>`;
-- metadata dir: `<state-dir>/tasks/<task-key>/`.
+Пример:
 
-Пример для `PL-075`:
+`task/pl-075-issue-462-disposable-worktree-runtime`
 
-- `task key`: `pl-075`;
-- `task branch`: `task/pl-075`;
-- `worktree path`: `<workspace-root>.worktrees/pl-075`;
-- `metadata dir`: `<state-dir>/tasks/pl-075/`.
+## Path layout
 
-Почему так:
+Disposable worktree не живёт внутри authoritative checkout. Канонический layout:
 
-- branch и path детерминированы и переиспользуются при rework;
-- worktree лежит вне authoritative checkout и не засоряет repo root;
-- cleanup можно делать по одному `task key` без эвристик по случайным каталогам.
+```text
+<HOST_STATE_DIR>/task-worktrees/<task-key>/
+  repo/                  # git worktree root
+  meta/
+    task.env             # canonical metadata
+    task.json            # structured state snapshot
+    executor.pid
+    cleanup.lock
+  logs/
+    executor.log
+    cleanup.log
+```
 
-### 3. Task metadata
+Для `planka` это означает путь вида:
 
-Для каждого materialized task worktree daemon хранит metadata минимум с такими полями:
+```text
+/var/sites/.ai-flow/state/planka/task-worktrees/planka-PL-075-issue-462/
+```
 
-- `task_id`;
-- `task_key`;
-- `issue_number`;
-- `project_item_id`;
-- `task_branch`;
-- `head_branch`;
-- `base_branch`;
-- `worktree_path`;
-- `base_commit` — commit authoritative checkout в момент materialize;
-- `materialized_at`;
-- `last_resumed_at`;
-- `runtime_state` — `materialized|running|waiting_user|in_review|rework|merge_pending|aborted|merged|cleanup_pending|cleaned`;
-- `pr_number`/`pr_url` при наличии;
-- `executor_pid` и/или другой runtime ownership marker активного процесса.
+Authoritative checkout остаётся в:
 
-Metadata — это источник правды для resume/cleanup. Наличие только каталога worktree без metadata не считается валидной активной задачей.
+```text
+/var/sites/.ai-flow/workspaces/planka
+```
 
-### 4. Ownership
+## Canonical metadata
 
-Распределение ответственности фиксируется так:
+Каждый task worktree обязан иметь `meta/task.env` со следующими полями:
 
-- daemon владеет `claim`, `materialize`, lifecycle state, cleanup scheduling и terminal decisions;
-- executor владеет только изменениями внутри task worktree и не удаляет worktree сам;
-- `task_finalize`/review path используют task worktree как источник task diff, но не меняют ownership cleanup;
-- watchdog может инициировать recovery только по правилам daemon и не должен удалять worktree с живой локальной ценностью.
+- `TASK_KEY`
+- `TASK_ID`
+- `ISSUE_NUMBER`
+- `PROFILE`
+- `BASE_BRANCH`
+- `HEAD_BRANCH`
+- `TASK_BRANCH`
+- `TASK_SLUG`
+- `WORKTREE_PATH`
+- `BASE_COMMIT`
+- `CLAIMED_AT`
+- `CLAIMED_BY_RUNTIME_ID`
+- `EXECUTION_MODE`
+- `PR_NUMBER` (пусто до открытия PR)
+- `STATE`
 
-Итог: worktree живёт дольше одного запуска executor, но всегда принадлежит одной задаче и одному daemon-owned lifecycle.
+`meta/task.json` дублирует эти данные в machine-readable виде и добавляет:
+
+- `review_comment_id`
+- `blocker_comment_id`
+- `last_executor_exit_code`
+- `cleanup_started_at`
+- `cleanup_finished_at`
+- `terminal_reason`
+
+## Runtime contract
+
+### Authoritative checkout разрешено
+
+- `git fetch origin`
+- `sync_branches`
+- чтение backlog/project state
+- `git worktree add/remove`
+- bootstrap runtime metadata
+- safe self-heal только в явно безопасных состояниях
+
+### Authoritative checkout запрещено
+
+- task edits
+- `git add/commit` task diff
+- PR branch publishing
+- dirty-gate against unrelated historical task residue
+- review/rework patch application
+
+### Task worktree разрешено
+
+- executor edits
+- tests/lint
+- `git add/commit`
+- task branch push
+- PR create/update
+- review/rework resume
+- dirty-gate и blocker analysis только для активной задачи
 
 ## Lifecycle
 
-### Канонические переходы state machine
+Канонический lifecycle:
 
-| From | Event | To | Примечание |
-| --- | --- | --- | --- |
-| `claiming` | worktree materialized | `materialized` | metadata и worktree согласованы |
-| `materialized` | executor started | `running` | executor работает только в task worktree |
-| `running` | blocker/question | `waiting_user` | worktree сохраняется для resume |
-| `running` | task finalized / PR opened | `in_review` | review path не триггерит cleanup |
-| `in_review` | review feedback rework | `rework` | используется тот же task branch/worktree |
-| `rework` | executor resumed | `running` | без пересоздания task key |
-| `in_review` | PR merged | `merged` | cleanup ещё не выполнен |
-| `running` / `waiting_user` / `in_review` / `rework` | abort/release/superseded/unrecoverable fail | `aborted` | terminal reason фиксируется отдельно |
-| `merged` / `aborted` | cleanup scheduled | `cleanup_pending` | daemon владеет удалением worktree |
-| `cleanup_pending` | cleanup finished | `cleaned` | task residue локально удалён |
+```text
+claim
+  -> materialize
+  -> executor_running
+  -> review_wait
+  -> rework_requested
+  -> executor_running
+  -> review_wait
+  -> merged
+  -> cleanup
+  -> released
+```
 
-### 1. Claim
+Альтернативные terminal paths:
 
-Daemon при выборе `Status=Todo`:
+```text
+claim -> materialize -> executor_failed -> cleanup -> released
+claim -> materialize -> blocked_wait_user -> executor_running -> ...
+claim -> materialize -> superseded -> cleanup -> released
+claim -> materialize -> aborted -> cleanup -> released
+```
 
-- резервирует `task_id`, `issue_number`, `project_item_id`;
-- вычисляет `task key`;
-- проверяет, что по этому `task key` нет другого active lifecycle;
-- переводит карточку в `In Progress`;
-- создаёт metadata skeleton со state `claiming`.
+## Ownership
 
-На этом этапе authoritative checkout ещё не становится рабочим деревом задачи.
+### Daemon владеет
 
-### 2. Materialize
+- claim/release задачи;
+- materialize task worktree;
+- запись canonical metadata;
+- открытие cleanup phase;
+- удаление worktree после safe terminal decision;
+- reconciliation между GitHub state и local runtime state.
 
-Daemon materialize-ит task worktree из authoritative checkout:
+### Executor владеет
 
-- синхронизирует authoritative control-plane базу с `origin/<head-branch>`;
-- фиксирует `base_commit`;
-- создаёт или переиспользует task branch `task/<task-key>`;
-- создаёт worktree по пути `<workspace-root>.worktrees/<task-key>`;
-- записывает metadata и ownership markers;
-- запускает executor с `cwd=<task-worktree>`.
+- кодовыми правками только внутри `repo/`;
+- commit/push/PR path для task branch;
+- локальными test artifacts внутри task worktree;
+- update `last_executor_exit_code` и task-local logs.
 
-Materialize завершён только когда metadata и worktree согласованы. Если каталог создан, а metadata нет, cleanup имеет право удалить такой полусостоявшийся worktree как orphan.
+### Watchdog владеет
 
-### 3. Executor
-
-Во время выполнения задачи:
-
-- все `git status`, `git diff`, `git add`, `git commit`, локальные генерации файлов и временные артефакты относятся только к task worktree;
-- dirty-gate смотрит только в active task worktree;
-- authoritative checkout не участвует в проверке task diff и не блокирует очередь residue этой задачи;
-- промежуточные коммиты живут в task branch.
-
-### 4. Review
-
-Когда дельта готова к ревью:
-
-- daemon/`task_finalize` берут diff из task worktree;
-- task branch остаётся каноническим местом незавершённой работы;
-- интеграция в `head branch` и PR `head -> base` делается как отдельный control-plane шаг, но без превращения authoritative checkout в обычное рабочее дерево задачи;
-- metadata переводится в `in_review`, worktree не удаляется.
-
-Это ключевое правило: открытый review не означает cleanup. Worktree должен переживать ожидание review-feedback.
-
-### 5. Rework
-
-Если в `Review` приходит `REWORK`:
-
-- daemon не создаёт новый task key и не пересоздаёт branch без причины;
-- executor возобновляется в том же task worktree;
-- новые коммиты продолжают task branch;
-- после обновления дельты интеграция в `head branch` повторяется, а PR обновляется.
-
-То есть review/rework path обязан быть resumable без потери локальной истории и без residue в authoritative checkout.
-
-### 6. Merge
-
-После merge PR:
-
-- GitHub-side сигнал переводит карточку в terminal state;
-- daemon помечает task lifecycle как `merged`;
-- только после этого начинается cleanup task worktree и metadata.
-
-Merge считается успешным завершением задачи, но не равен немедленному удалению локального состояния без guard-проверок.
-
-### 7. Abort / Release / Superseded
-
-Если задача снята с исполнения без merge:
-
-- metadata переводится в `aborted` или другой terminal reason;
-- daemon решает, нужна ли консервация branch/worktree для ручного разбора;
-- автоматический cleanup допустим только если нет локальной ценности, которую нельзя восстановить из remote/metadata.
-
-Если такой гарантии нет, daemon оставляет task lifecycle в `cleanup_blocked` и требует явного ручного решения.
-
-### 8. Cleanup
-
-После terminal state daemon:
-
-- останавливает executor и снимает task-local locks;
-- убеждается, что worktree больше не нужен для review/rework;
-- удаляет task worktree;
-- удаляет task-local metadata и ownership markers;
-- удаляет task branch только если её содержимое уже safely preserved;
-- возвращает authoritative checkout в состояние `ready for next claim`.
-
-Cleanup owner всегда daemon. Executor не должен сам решать, что задачу можно физически удалить.
+- обнаружением stale executor pid/lock;
+- сигналом, что task worktree сиротский;
+- cleanup только если daemon подтверждает safe terminal state;
+- never performs task merge/rebase logic самостоятельно.
 
 ## Safe cleanup rules
 
-Автоматическая очистка разрешена только если одновременно истинно всё ниже:
+Cleanup task worktree разрешён только если одновременно выполняется одно из terminal conditions:
 
-- нет `active_task_id` для этого `task key`;
-- нет live `executor_pid`, привязанного к worktree;
-- lifecycle находится в terminal state (`merged|aborted|released|superseded|unrecoverable_failed`);
-- нет ожидания review-feedback или user reply;
-- нет pending PR/update action, который ещё читает локальный diff;
-- task branch либо уже интегрирована/сохранена в remote, либо локальная история признана disposable по явному правилу.
+1. PR merged и issue закрыта.
+2. Issue/Project item переведены в `Done` или `Closed` без активного rework.
+3. Task помечена `superseded` и новая claim уже authoritative.
+4. Executor завершился unrecoverable failure, пользователь явно выбрал `ABORT`/`IGNORE`.
+5. Daemon восстановилась после crash и task metadata показывает, что live executor/push/PR action уже отсутствуют.
 
-Cleanup обязан быть идемпотентным:
+Cleanup запрещён, если:
 
-- повторный запуск не должен ломать соседние задачи;
-- отсутствие каталога worktree не считается ошибкой, если metadata уже terminal;
-- orphan metadata и orphan worktree должны безопасно доочищаться только по совпадающему `task key`.
+- есть живой `executor.pid`;
+- открыт незавершённый PR и task в review/rework;
+- есть локальный task diff без commit и ещё нет terminal decision;
+- daemon не может доказать, что именно этот worktree больше не нужен текущей задаче.
 
-### Матрица terminal cleanup-решений
+## Terminal cleanup matrix
 
-| Terminal reason | Auto-cleanup | Почему |
-| --- | --- | --- |
-| `merged` | да | локальная ценность уже сохранена в целевой ветке/PR |
-| `released` / `superseded` без локального уникального diff | да | worktree больше не нужен для resume |
-| `aborted` с чистым или полностью disposable diff | да | незавершённая работа не теряется |
-| `unrecoverable_failed`, но все commit-ы уже есть в remote | да | можно безопасно удалить локальный worktree |
-| `aborted` с незакоммиченным diff | нет | нужен явный manual decision |
-| metadata mismatch / потеря ownership | нет | auto-heal не может доказать безопасность |
-| active review/rework wait | нет | lifecycle не terminal, cleanup запрещён |
+| Terminal state | Что остаётся | Что удаляется | Кто инициирует |
+| --- | --- | --- | --- |
+| `merged` | issue/pr metadata, final logs | `repo/`, temp locks, pid | daemon |
+| `closed_without_merge` | final reason, logs | `repo/`, task branch ref on runtime side | daemon |
+| `superseded` | pointer на новый task key | старый `repo/`, stale locks | daemon |
+| `executor_failed_recoverable` | worktree и metadata | ничего | никто, task resumes |
+| `executor_failed_unrecoverable` | logs, terminal reason | `repo/` после explicit decision | daemon |
+| `aborted_by_user` | final logs | `repo/`, pending local locks | daemon |
+| `daemon_restart_mid_task` | весь worktree | ничего до reconciliation | daemon/watchdog |
 
-## Границы auto-heal
+## Review and rework semantics
 
-Auto-heal разрешён:
+- Review comments, blocker replies и rework не создают новый authoritative diff.
+- Если задача уже имеет materialized worktree, resume обязан происходить в том же `TASK_KEY`.
+- Новый fix-task issue не должен materialize-ить новый authoritative residue; он либо:
+  - продолжает существующий task worktree,
+  - либо помечает исходный worktree `superseded` и создаёт новый `TASK_KEY` с явной связью в metadata.
 
-- доудалить orphan worktree без metadata;
-- доудалить metadata после уже завершённого cleanup;
-- восстановить authoritative checkout до clean control-plane state, если нет активной задачи и нет локальной ценности task diff;
-- пере-materialize task worktree для resume, если metadata жива и branch/history можно восстановить без потери локальной работы.
+## Dirty-gate contract
 
-Auto-heal запрещён:
+- Dirty-gate анализирует только активный task worktree.
+- Authoritative checkout считается dirty-blocker только если в нём есть runtime-level drift, не связанный с task worktree materialization.
+- Service issue про dirty worktree не создаётся повторно, если signature уже привязана к тому же `TASK_KEY` и worktree отсутствует/очищен.
 
-- делать `reset --hard` authoritative checkout, если есть признаки незавершённой локальной работы;
-- удалять active/review worktree только потому, что GitHub уже показывает `Review`;
-- silently пересоздавать task branch поверх локальных commit-ов, не зафиксированных в remote;
-- считать authoritative checkout местом для cleanup task residue за счёт потери worktree-истории.
+## Safe self-heal boundaries
 
-Если daemon не может доказать безопасность auto-heal, он обязан перейти в blocked/manual state, а не пытаться "починить" рантайм эвристикой.
+PL-075 фиксирует только policy:
 
-## Матрица ответственности по каталогам и операциям
+- authoritative checkout можно auto-heal'ить только при `no active task`, `no live executor`, `no task worktree awaiting review/rework`;
+- task worktree можно reattach/reconcile после restart по `meta/task.env` и `executor.pid`;
+- unconditional `git reset --hard` в authoritative checkout запрещён.
 
-### Операции только в authoritative checkout
+Реализация policy остаётся в `PL-077`.
 
-- queue scan;
-- `sync_branches` и поддержание control-plane базы;
-- чтение/запись `.flow/state`;
-- materialize/remove worktree;
-- финальное решение по cleanup и auto-heal;
-- диагностика ownership/runtime health.
+## Acceptance criteria
 
-### Операции только в task worktree
+`PL-075` считается завершённой, когда зафиксированы:
 
-- запуск executor;
-- `git status`, `git diff`, `git add`, `git commit`;
-- генерация task-артефактов;
-- локальная проверка diff конкретной задачи;
-- blocker/rework resume.
+- branch naming pattern;
+- path layout disposable worktree;
+- canonical metadata contract;
+- lifecycle state machine;
+- ownership cleanup между daemon/executor/watchdog;
+- safe cleanup rules и terminal matrix;
+- границы dirty-gate и safe self-heal;
+- явное разделение операций authoritative checkout vs task worktree.
 
-### Операции control-plane, но со ссылкой на task worktree
+## Вне scope
 
-- `task_finalize`;
-- review/update PR;
-- перевод `In Progress -> Review`;
-- merge/abort cleanup decisions.
+Не входит в `PL-075`:
 
-Для этих шагов authoritative checkout может читать metadata и управлять git refs, но task diff источником остаётся именно task worktree.
+- реальная реализация `git worktree add/remove`;
+- запуск executor внутри task worktree;
+- auto-heal authoritative checkout;
+- smoke/recovery tests новой модели.
 
-## Что считается выполнением acceptance criteria
-
-По итогам `PL-075` зафиксировано:
-
-- authoritative checkout vs task worktree contract;
-- lifecycle `claim -> materialize -> executor -> review/rework -> merge/abort -> cleanup`;
-- branch naming, path layout и task metadata;
-- cleanup ownership;
-- safe cleanup rules;
-- границы auto-heal.
-
-## Вне scope `PL-075`
-
-Эта задача не внедряет кодом:
-
-- реальный `git worktree add/remove` path;
-- модификацию `task_finalize`, который сейчас ещё опирается на authoritative checkout как на checkout `head branch`;
-- self-heal implementation;
-- smoke coverage.
-
-Это работа следующих задач:
-
-- `PL-076` — materialize executor в task worktree и review/rework resume;
-- `PL-077` — guarded cleanup и self-heal;
-- `PL-078` — smoke/recovery coverage.
+Это scope задач `PL-076`, `PL-077`, `PL-078`.

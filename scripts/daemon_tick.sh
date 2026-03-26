@@ -2234,11 +2234,15 @@ dirty_worktree_override_active() {
   [[ "$(<"$dirty_gate_override_signature_file")" == "$signature" ]]
 }
 
+DIRTY_WORKTREE_BLOCKING_TODO="0"
+
 maybe_handle_dirty_worktree_gate() {
   local tracked_count="$1"
   local tracked_preview="$2"
   local gate_enabled_raw blocked_json blocked_issue blocked_title blocked_item_id blocked_type blocked_ref signature
   local rc
+
+  DIRTY_WORKTREE_BLOCKING_TODO="0"
 
   gate_enabled_raw="$(resolve_config_value "DIRTY_WORKTREE_GATE_ENABLED" "1")"
   if ! is_truthy_flag "$gate_enabled_raw"; then
@@ -2268,6 +2272,8 @@ maybe_handle_dirty_worktree_gate() {
   else
     return 0
   fi
+
+  DIRTY_WORKTREE_BLOCKING_TODO="1"
 
   if [[ "$blocked_type" == "Issue" ]]; then
     printf '%s\n' "$blocked_issue" > "$dirty_gate_blocked_issue_file"
@@ -2367,14 +2373,16 @@ if [[ -n "$tracked_lines" ]]; then
       fi
       # Explicit override from dirty-gate issue: continue regular daemon flow on current signature.
     else
-      DIRTY_SKIP_NEW_CLAIM="1"
       echo "WAIT_DIRTY_WORKTREE_TRACKED=1"
       echo "WAIT_DIRTY_WORKTREE_TRACKED_COUNT=${tracked_count}"
       if [[ -n "$tracked_preview" ]]; then
         echo "WAIT_DIRTY_WORKTREE_TRACKED_FILES=${tracked_preview}"
       fi
       maybe_handle_dirty_worktree_gate "$tracked_count" "$tracked_preview" || true
-      if [[ "$dirty_allow_context_continue" != "1" ]]; then
+      if [[ "$DIRTY_WORKTREE_BLOCKING_TODO" == "1" ]]; then
+        DIRTY_SKIP_NEW_CLAIM="1"
+      fi
+      if [[ "$dirty_allow_context_continue" != "1" && "$DIRTY_WORKTREE_BLOCKING_TODO" == "1" ]]; then
         exit 0
       fi
       echo "WAIT_DIRTY_WORKTREE_CONTEXT_CONTINUE=1"

@@ -37,6 +37,7 @@ Commands:
   git_delete_branch
   project_add_task
   project_add_issue
+  project_item_list
   project_item_view
   project_set_status
   project_status_runtime
@@ -138,6 +139,8 @@ Fixed input files in state dir
   git_refs.txt
   branch_name.txt
   project_task_id.txt
+  project_item_limit.txt (optional; defaults to 250)
+  project_item_jq.txt (optional; jq filter applied to project item list output)
   project_status.txt
   project_flow.txt (optional; defaults to project_status.txt)
   project_new_task_id.txt
@@ -283,6 +286,8 @@ key_to_file() {
     git_refs) echo "${CODEX_DIR}/git_refs.txt" ;;
     branch_name) echo "${CODEX_DIR}/branch_name.txt" ;;
     project_task_id) echo "${CODEX_DIR}/project_task_id.txt" ;;
+    project_item_limit) echo "${CODEX_DIR}/project_item_limit.txt" ;;
+    project_item_jq) echo "${CODEX_DIR}/project_item_jq.txt" ;;
     project_status) echo "${CODEX_DIR}/project_status.txt" ;;
     project_flow) echo "${CODEX_DIR}/project_flow.txt" ;;
     project_new_task_id) echo "${CODEX_DIR}/project_new_task_id.txt" ;;
@@ -586,7 +591,7 @@ case "$cmd" in
       echo "project_item_view requires issue_number.txt or project_task_id.txt"
       exit 1
     fi
-    project_items_json="$(run_project_gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit 100 --format json)"
+    project_items_json="$(run_project_gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit 250 --format json)"
     selected_item="$(printf '%s' "$project_items_json" | jq \
       --arg issue_number "$issue_number" \
       --arg task_id "$task_id" '
@@ -603,6 +608,28 @@ case "$cmd" in
       exit 1
     fi
     printf '%s\n' "$selected_item" | jq '.'
+    ;;
+
+  project_item_list)
+    project_item_limit_file="$(key_to_file "project_item_limit")"
+    project_item_jq_file="$(key_to_file "project_item_jq")"
+    project_item_limit="250"
+
+    if [[ -f "$project_item_limit_file" ]]; then
+      project_item_limit="$(read_required_file "$project_item_limit_file")"
+    fi
+    if ! [[ "$project_item_limit" =~ ^[0-9]+$ ]]; then
+      echo "project_item_limit must be an integer"
+      exit 1
+    fi
+
+    project_items_json="$(run_project_gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit "$project_item_limit" --format json)"
+    if [[ -f "$project_item_jq_file" ]]; then
+      project_item_jq="$(read_required_file "$project_item_jq_file")"
+      printf '%s\n' "$project_items_json" | jq "$project_item_jq"
+    else
+      printf '%s\n' "$project_items_json" | jq '.'
+    fi
     ;;
 
   project_set_status)

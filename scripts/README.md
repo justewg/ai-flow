@@ -45,6 +45,9 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh git_delete_branch`
 - `.flow/shared/scripts/run.sh project_add_task`
 - `.flow/shared/scripts/run.sh project_add_issue`
+- `.flow/shared/scripts/run.sh project_item_list`
+- `.flow/shared/scripts/run.sh project_item_view`
+- `.flow/shared/scripts/run.sh issue_comment`
 - `.flow/shared/scripts/run.sh project_set_status`
 - `.flow/shared/scripts/run.sh log_tail_executor`
 - `.flow/shared/scripts/run.sh log_tail_daemon_executor`
@@ -62,6 +65,7 @@ Linux-hosted bootstrap launchers:
   - записывать имя команды в `.flow/tmp/run/dispatch_command.txt`;
   - при необходимости записывать аргументы по одному в `.flow/tmp/run/dispatch_args.txt`;
   - выполнять один стабильный entrypoint: `.flow/shared/scripts/run.sh dispatch`.
+  - hard rule: GitHub flow-действия (`issue_view/comment/close`, `project_item_list/view`, `project_set_status`, `project_add_issue`, PR sync) считаются штатной частью выполнения задачи и не требуют отдельного пользовательского подтверждения на каждый body-file, temp-file или набор аргументов; сначала materialize-им fixed-input файлы, потом вызываем wrapper.
   - создание временных файлов/директорий через `mktemp`, `.flow/tmp` или `/tmp` не считается отдельным approval-поводом; approval может понадобиться только для внешнего действия в той же команде (`gh`, сеть, запись вне sandbox и т.п.).
   - approval-relevant action лучше выносить в отдельный shell-вызов: сначала подготовить temp/body/input файл, потом отдельной командой вызывать `gh`/`git push`/сетевой helper. Не склеивать подготовку и внешнее действие через `&&`, `;`, subshell, если это ухудшает сессионный approval.
   - по умолчанию title/body для новых задач и issue оформлять по-русски, если пользователь явно не запросил английский язык.
@@ -72,6 +76,11 @@ Linux-hosted bootstrap launchers:
   - `.flow/shared/scripts/run.sh project_item_view`:
     - читает `issue_number.txt` или `project_task_id.txt`;
     - возвращает matching Project item JSON через настроенный project token;
+    - использует enlarged `--limit 250`, чтобы не резаться первым page default.
+  - `.flow/shared/scripts/run.sh project_item_list`:
+    - читает optional `project_item_limit.txt` (по умолчанию `250`);
+    - читает optional `project_item_jq.txt` и применяет jq filter уже внутри wrapper;
+    - нужен для project list/view sync без прямого `gh project item-list ... --limit ... --jq ...`.
     - при необходимости локальный `jq` накладывается уже на stdout этой команды, а не на прямой `gh project item-list ...`.
 - `.flow/shared/scripts/run.sh project_status_runtime <enqueue|apply|list|clear> ...` — runtime-очередь отложенных обновлений `Project Status/Flow`.
 - `.flow/shared/scripts/run.sh log_summary [--hours N|--from ISO|--to ISO]` — агрегированный отчет по логам daemon/watchdog/runtime/graphql за период (без аргументов берёт весь доступный диапазон логов).

@@ -5,6 +5,7 @@
 Что внутри:
 - полноэкранное приложение
 - локальный HTML/CSS/JS в assets
+- versioned UI config-contract с built-in defaults и fallback на defaults
 - поле текста сверху
 - тестовая клавиатура снизу
 - кнопка штатного выхода `×` справа сверху
@@ -29,7 +30,22 @@
 6. Работает ли штатный выход `×`.
 
 ## Что менять быстро
-В `app/src/main/assets/index.html`:
-- `TEXT_RATIO` — доля верхней зоны
-- `KEYBOARD_RATIO` — доля нижней зоны
-- массив `ROWS` — состав клавиш
+
+Через config-contract:
+- `app/src/main/assets/ui-shell-config.default.json` — built-in defaults для APK
+- `app/src/main/assets/ui-shell-config.schema.json` — machine-readable contract `v1`
+- `<filesDir>/ui-shell-config.active.json` — active override path для shell без пересборки APK
+
+Допустимо менять через config:
+- `layout.textRatio`, `layout.keyboardRatio` и остальные интервалы из `layout.*`
+- `shell.serviceButtonOrder`
+- `shell.featureFlags.*`
+- `keyboard.defaultLocale`
+- `keyboard.locales.*.displayName`
+- `keyboard.locales.*.rows[*].template.columns`
+- `keyboard.locales.*.rows[*].keys`
+- `labels.placeholder.*`
+- `labels.serviceButtons.*`
+- `labels.specialKeys.*`
+
+Если `ui-shell-config.active.json` отсутствует, несовместим с shell или не проходит валидацию, приложение откатывается на built-in defaults из assets. Если повреждён и bundled asset, shell использует emergency defaults, зашитые в `UiShellConfig.kt`.

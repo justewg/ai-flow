@@ -1523,7 +1523,7 @@ set_dirty_gate_waiting_at_reply() {
 auto_commit_dirty_worktree() {
   local gate_issue_number="$1"
   local reply_comment_id="$2"
-  local current_branch blocked_issue commit_message commit_out rc retry_out retry_rc start_head
+  local current_branch blocked_issue commit_message commit_out rc retry_out retry_rc start_head restore_patch
   local -a stage_paths=()
 
   current_branch="$(git -C "${ROOT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
@@ -1555,6 +1555,10 @@ auto_commit_dirty_worktree() {
     commit_message="chore: dirty-gate auto-commit tracked changes"
   fi
   start_head="$(git -C "${ROOT_DIR}" rev-parse HEAD 2>/dev/null || true)"
+  restore_patch="$(mktemp "${STATE_TMP_DIR}/dirty_gate_restore.XXXXXX.patch")"
+  if ! git -C "${ROOT_DIR}" diff --binary HEAD -- "${stage_paths[@]}" > "$restore_patch" 2>/dev/null; then
+    : > "$restore_patch"
+  fi
 
   if commit_out="$("${CODEX_SHARED_SCRIPTS_DIR}/dev_commit_push.sh" "$commit_message" "${stage_paths[@]}" 2>&1)"; then
     emit_lines "$commit_out"
@@ -1596,14 +1600,22 @@ auto_commit_dirty_worktree() {
   git -C "${ROOT_DIR}" rebase --abort >/dev/null 2>&1 || true
   git -C "${ROOT_DIR}" merge --abort >/dev/null 2>&1 || true
   if [[ -n "$start_head" ]]; then
-    if git -C "${ROOT_DIR}" reset --mixed "$start_head" >/dev/null 2>&1; then
+    if git -C "${ROOT_DIR}" reset --hard "$start_head" >/dev/null 2>&1; then
       echo "WAIT_DIRTY_WORKTREE_COMMIT_ROLLBACK=1"
       echo "WAIT_DIRTY_WORKTREE_COMMIT_ROLLBACK_HEAD=${start_head}"
+      if [[ -s "$restore_patch" ]]; then
+        if git -C "${ROOT_DIR}" apply --binary "$restore_patch" >/dev/null 2>&1; then
+          echo "WAIT_DIRTY_WORKTREE_COMMIT_RESTORE_APPLIED=1"
+        else
+          echo "WAIT_DIRTY_WORKTREE_COMMIT_RESTORE_FAILED=1"
+        fi
+      fi
     else
       echo "WAIT_DIRTY_WORKTREE_COMMIT_ROLLBACK_FAILED=1"
       echo "WAIT_DIRTY_WORKTREE_COMMIT_ROLLBACK_HEAD=${start_head}"
     fi
   fi
+  rm -f "$restore_patch" >/dev/null 2>&1 || true
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
     echo "DIRTY_GATE_COMMIT_ERROR(rc=$rc): $line"

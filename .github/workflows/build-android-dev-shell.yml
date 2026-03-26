@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, planka-deploy]
     outputs:
       app_version_code: ${{ steps.version.outputs.app_version_code }}
       app_version_name: ${{ steps.version.outputs.app_version_name }}
@@ -217,7 +217,7 @@ jobs:
 
   notify_telegram:
     needs: publish
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, planka-deploy]
     env:
       TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
       TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}

@@ -10,7 +10,7 @@ on:
 jobs:
   close_project_tasks:
     if: ${{ github.event.pull_request.merged == true }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, planka-deploy]
     env:
       GH_TOKEN: ${{ secrets.PROJECT_AUTOMATION_TOKEN }}
       PR_NUMBER: ${{ github.event.pull_request.number }}

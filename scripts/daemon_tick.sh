@@ -1039,6 +1039,38 @@ clear_dirty_gate_waiting_state_if_any() {
   fi
 }
 
+clear_idle_stale_dirty_gate_waiting_if_any() {
+  local waiting_task=""
+  local waiting_issue=""
+  local waiting_kind=""
+  local active_task_present="0"
+  local review_task_present="0"
+
+  [[ -s "${CODEX_DIR}/daemon_waiting_task_id.txt" ]] && waiting_task="$(<"${CODEX_DIR}/daemon_waiting_task_id.txt")"
+  [[ -s "${CODEX_DIR}/daemon_waiting_issue_number.txt" ]] && waiting_issue="$(<"${CODEX_DIR}/daemon_waiting_issue_number.txt")"
+  [[ -s "${CODEX_DIR}/daemon_waiting_kind.txt" ]] && waiting_kind="$(<"${CODEX_DIR}/daemon_waiting_kind.txt")"
+  [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]] && active_task_present="1"
+  [[ -s "$review_task_file" ]] && review_task_present="1"
+
+  [[ "$active_task_present" == "0" ]] || return 0
+  [[ "$review_task_present" == "0" ]] || return 0
+  [[ -n "$waiting_task" || -n "$waiting_issue" ]] || return 0
+
+  if is_dirty_gate_waiting_context "$waiting_task" "$waiting_issue"; then
+    : > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
+    : > "${CODEX_DIR}/daemon_waiting_task_id.txt"
+    : > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
+    : > "${CODEX_DIR}/daemon_waiting_kind.txt"
+    : > "${CODEX_DIR}/daemon_waiting_pending_post.txt"
+    : > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
+    : > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
+    echo "WAIT_IDLE_STALE_DIRTY_GATE_CLEARED=1"
+    [[ -n "$waiting_task" ]] && echo "WAIT_IDLE_STALE_DIRTY_GATE_TASK=${waiting_task}"
+    [[ -n "$waiting_issue" ]] && echo "WAIT_IDLE_STALE_DIRTY_GATE_ISSUE=${waiting_issue}"
+    [[ -n "$waiting_kind" ]] && echo "WAIT_IDLE_STALE_DIRTY_GATE_KIND=${waiting_kind}"
+  fi
+}
+
 find_project_issue_item_id() {
   local issue_number="$1"
   local project_json
@@ -2483,6 +2515,7 @@ if [[ -n "$tracked_lines" ]]; then
   fi
 else
   clear_dirty_gate_waiting_state_if_any
+  clear_idle_stale_dirty_gate_waiting_if_any
   if [[ ! -s "$dirty_gate_finalize_pending_file" ]] && has_dirty_gate_local_state; then
     clear_dirty_gate_local_state
     echo "WAIT_DIRTY_WORKTREE_CLEAN_LOCAL_STATE_CLEARED=1"

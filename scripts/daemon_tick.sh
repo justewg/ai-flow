@@ -990,10 +990,42 @@ has_dirty_gate_local_state() {
     [[ -s "$dirty_gate_last_reply_id_file" ]]
 }
 
+is_dirty_gate_waiting_context() {
+  local waiting_task="$1"
+  local waiting_issue="$2"
+  local local_gate_issue=""
+  local issue_json issue_title
+
+  if [[ "$waiting_task" == DIRTY-GATE-ISSUE-* ]]; then
+    return 0
+  fi
+
+  [[ -s "$dirty_gate_issue_file" ]] && local_gate_issue="$(<"$dirty_gate_issue_file")"
+  if [[ -n "$local_gate_issue" && "$waiting_issue" == "$local_gate_issue" ]]; then
+    return 0
+  fi
+
+  if [[ "$waiting_issue" =~ ^[0-9]+$ ]]; then
+    issue_json="$(
+      run_gh_retry_capture \
+        gh api "repos/${repo}/issues/${waiting_issue}" \
+          --jq '{title: (.title // ""), state: (.state // "")}' 2>/dev/null || true
+    )"
+    issue_title="$(printf '%s' "$issue_json" | jq -r '.title // ""' 2>/dev/null || true)"
+    if [[ "$issue_title" == DIRTY-GATE:* ]]; then
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
 clear_dirty_gate_waiting_state_if_any() {
   local waiting_task=""
+  local waiting_issue=""
   [[ -s "${CODEX_DIR}/daemon_waiting_task_id.txt" ]] && waiting_task="$(<"${CODEX_DIR}/daemon_waiting_task_id.txt")"
-  if [[ "$waiting_task" == DIRTY-GATE-ISSUE-* ]]; then
+  [[ -s "${CODEX_DIR}/daemon_waiting_issue_number.txt" ]] && waiting_issue="$(<"${CODEX_DIR}/daemon_waiting_issue_number.txt")"
+  if is_dirty_gate_waiting_context "$waiting_task" "$waiting_issue"; then
     : > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
     : > "${CODEX_DIR}/daemon_waiting_task_id.txt"
     : > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
@@ -1002,6 +1034,8 @@ clear_dirty_gate_waiting_state_if_any() {
     : > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
     : > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
     echo "WAIT_DIRTY_WORKTREE_STALE_WAITING_CLEARED=1"
+    [[ -n "$waiting_task" ]] && echo "WAIT_DIRTY_WORKTREE_STALE_WAITING_TASK=${waiting_task}"
+    [[ -n "$waiting_issue" ]] && echo "WAIT_DIRTY_WORKTREE_STALE_WAITING_ISSUE=${waiting_issue}"
   fi
 }
 

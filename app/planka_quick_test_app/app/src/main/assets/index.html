@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>PLANKA Quick Test</title>
+  <title>PLANKA Diagnostic Shell</title>
   <style>
     :root{
       --bg:#11161d;
@@ -19,6 +19,10 @@
       --app-padding:8px;
       --text-size-multiplier:1;
       --key-size-multiplier:1;
+      --shell-panel-bg:rgba(9,14,20,.92);
+      --shell-panel-border:rgba(121,146,166,.44);
+      --shell-accent:#d7e7f8;
+      --shell-action:#243343;
     }
     * { box-sizing:border-box; user-select:none; -webkit-user-select:none; }
     html,body{
@@ -116,6 +120,97 @@
       font:600 24px/1.4 "Segoe UI",sans-serif;
       white-space:pre-wrap;
     }
+    .shell-dock{
+      position:absolute;
+      right:calc(var(--app-padding) * 1.5);
+      bottom:calc(var(--app-padding) * 1.5);
+      z-index:4;
+      display:flex;
+      flex-direction:column;
+      align-items:flex-end;
+      gap:8px;
+    }
+    .shell-toggle{
+      min-width:62px;
+      height:38px;
+      padding:0 14px;
+      border-radius:12px;
+      border:1px solid #6d8094;
+      background:rgba(17,26,36,.88);
+      color:var(--shell-accent);
+      font:700 13px/1 "Segoe UI",sans-serif;
+      letter-spacing:.08em;
+    }
+    .shell-panel{
+      width:min(240px, calc(100vw - 36px));
+      border-radius:16px;
+      border:1px solid var(--shell-panel-border);
+      background:var(--shell-panel-bg);
+      box-shadow:0 20px 50px rgba(0,0,0,.32);
+      padding:12px;
+      display:grid;
+      gap:10px;
+      backdrop-filter:blur(10px);
+    }
+    .shell-panel[hidden]{ display:none; }
+    .shell-header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+    }
+    .shell-title{
+      font:700 12px/1 "Segoe UI",sans-serif;
+      letter-spacing:.14em;
+      color:var(--shell-accent);
+    }
+    .shell-badge{
+      min-width:54px;
+      padding:4px 8px;
+      border-radius:999px;
+      background:#1a2733;
+      border:1px solid #425667;
+      color:#c8d8e7;
+      text-align:center;
+      font:600 11px/1 "Segoe UI",sans-serif;
+    }
+    .shell-status{
+      display:grid;
+      gap:4px;
+      color:#e2e8ee;
+      font:600 11px/1.3 "Segoe UI",sans-serif;
+    }
+    .shell-status strong{
+      color:#88a9c6;
+      font-weight:700;
+    }
+    .shell-actions{
+      display:grid;
+      grid-template-columns:repeat(2, minmax(0, 1fr));
+      gap:8px;
+    }
+    .shell-action{
+      min-height:40px;
+      padding:8px 10px;
+      border-radius:12px;
+      border:1px solid #51687b;
+      background:var(--shell-action);
+      color:#eff5fa;
+      font:700 12px/1.1 "Segoe UI",sans-serif;
+      text-align:center;
+    }
+    .shell-action:disabled{
+      opacity:.55;
+    }
+    .shell-feedback{
+      min-height:30px;
+      padding:8px 10px;
+      border-radius:10px;
+      background:rgba(36,52,67,.66);
+      color:#a9bbcb;
+      font:600 11px/1.35 "Segoe UI",sans-serif;
+      white-space:pre-wrap;
+    }
   </style>
 </head>
 <body>
@@ -123,6 +218,23 @@
     <div class="screen">
       <div class="topbar" id="topbar"></div>
       <div class="text empty" id="text"></div>
+      <div class="shell-dock">
+        <button class="shell-toggle" id="shellToggle" type="button">DBG</button>
+        <div class="shell-panel" id="shellPanel" hidden>
+          <div class="shell-header">
+            <div class="shell-title">DIAGNOSTIC SHELL</div>
+            <div class="shell-badge" id="shellBadge">WEB</div>
+          </div>
+          <div class="shell-status" id="shellStatus"></div>
+          <div class="shell-actions">
+            <button class="shell-action" id="shellDiagnosticsButton" type="button">DIAG</button>
+            <button class="shell-action" id="shellFullscreenButton" type="button">FULL</button>
+            <button class="shell-action" id="shellExportButton" type="button">EXPORT</button>
+            <button class="shell-action" id="shellReloadButton" type="button">RELOAD</button>
+          </div>
+          <div class="shell-feedback" id="shellFeedback">bridge: ожидание bootstrap</div>
+        </div>
+      </div>
     </div>
     <div class="keyboard" id="keyboard"></div>
   </div>
@@ -132,10 +244,22 @@
     const textEl = document.getElementById("text");
     const keyboardEl = document.getElementById("keyboard");
     const topbarEl = document.getElementById("topbar");
+    const shellToggleEl = document.getElementById("shellToggle");
+    const shellPanelEl = document.getElementById("shellPanel");
+    const shellBadgeEl = document.getElementById("shellBadge");
+    const shellStatusEl = document.getElementById("shellStatus");
+    const shellFeedbackEl = document.getElementById("shellFeedback");
+    const shellDiagnosticsButtonEl = document.getElementById("shellDiagnosticsButton");
+    const shellFullscreenButtonEl = document.getElementById("shellFullscreenButton");
+    const shellExportButtonEl = document.getElementById("shellExportButton");
+    const shellReloadButtonEl = document.getElementById("shellReloadButton");
 
     const state = {
       config: null,
       diagnostics: null,
+      shell: null,
+      shellPanelOpen: false,
+      shellFeedback: "bridge: ожидание bootstrap",
       locale: "ru",
       locales: [],
       text: "",
@@ -150,6 +274,20 @@
         return null;
       }
       return window.AndroidApp[methodName]();
+    }
+
+    function parseBridgeJson(methodName, ...args) {
+      const bridge = window.AndroidApp;
+      if (!bridge || typeof bridge[methodName] !== "function") {
+        return null;
+      }
+
+      const raw = bridge[methodName](...args);
+      if (!raw) {
+        return null;
+      }
+
+      return JSON.parse(raw);
     }
 
     async function loadUiShellConfig() {
@@ -175,6 +313,34 @@
         };
       }
       return JSON.parse(payload);
+    }
+
+    function loadShellSnapshot() {
+      const payload = parseBridgeJson("getShellSnapshot");
+      if (payload) {
+        return payload;
+      }
+      return {
+        appVersionCode: 0,
+        appVersionName: "web-fallback",
+        configVersion: 0,
+        requestedConfigSource: "web_fallback",
+        resolvedConfigSource: "web_fallback",
+        diagnosticsPanelVisible: false,
+        webViewReady: true,
+        bridgeReady: false,
+        hasWindowFocus: true,
+        activityStarted: true,
+        activityResumed: true,
+        topResumed: null,
+        lastEvent: "web_bootstrap",
+        lastImmersiveReason: "web_fallback",
+        immersiveRecoveryDelaysMs: [],
+        supportedActions: [],
+        diagnosticsSessionId: "browser",
+        diagnosticsInternalPath: "n/a",
+        diagnosticsExportPath: null,
+      };
     }
 
     function localize(textMap) {
@@ -272,6 +438,109 @@
       });
     }
 
+    function setShellFeedback(message) {
+      state.shellFeedback = message;
+      renderShellPanel();
+    }
+
+    function applyShellSnapshot(snapshot) {
+      if (!snapshot) {
+        return;
+      }
+      state.shell = snapshot;
+      renderShellPanel();
+    }
+
+    function bridgeAction(methodName, ...args) {
+      try {
+        const response = parseBridgeJson(methodName, ...args);
+        if (!response) {
+          setShellFeedback("bridge: native shell недоступен");
+          return null;
+        }
+        if (response.snapshot) {
+          applyShellSnapshot(response.snapshot);
+        }
+        if (response.message) {
+          setShellFeedback(`${response.action}: ${response.message}`);
+        } else {
+          setShellFeedback(`${response.action}: ok=${response.ok}`);
+        }
+        return response;
+      } catch (error) {
+        setShellFeedback(`${methodName}: ${error.message}`);
+        return null;
+      }
+    }
+
+    function shellStatusLine(label, value) {
+      return `<div><strong>${label}</strong> ${value}</div>`;
+    }
+
+    function renderShellPanel() {
+      const shell = state.shell ?? loadShellSnapshot();
+      const bridgeAvailable = Boolean(window.AndroidApp);
+      shellBadgeEl.textContent = bridgeAvailable ? "NATIVE" : "WEB";
+      shellPanelEl.hidden = !state.shellPanelOpen;
+      shellToggleEl.textContent = state.shellPanelOpen ? "CLOSE" : "DBG";
+      shellDiagnosticsButtonEl.disabled = !bridgeAvailable;
+      shellFullscreenButtonEl.disabled = !bridgeAvailable;
+      shellExportButtonEl.disabled = !bridgeAvailable;
+      shellReloadButtonEl.disabled = !bridgeAvailable;
+      shellDiagnosticsButtonEl.textContent = shell.diagnosticsPanelVisible ? "HIDE DIAG" : "DIAG";
+      shellStatusEl.innerHTML = [
+        shellStatusLine("event", shell.lastEvent),
+        shellStatusLine("cfg", `${shell.configVersion} · ${shell.resolvedConfigSource}`),
+        shellStatusLine("bridge", `${shell.webViewReady ? "web" : "wait"} / ${shell.bridgeReady ? "ready" : "sync"}`),
+        shellStatusLine("activity", `${shell.activityStarted ? "started" : "stopped"} / ${shell.activityResumed ? "resumed" : "paused"}`),
+        shellStatusLine("focus", `${shell.hasWindowFocus ? "focus" : "blur"} / top=${shell.topResumed === null ? "?" : shell.topResumed ? "1" : "0"}`),
+        shellStatusLine("immersive", shell.lastImmersiveReason),
+        shellStatusLine("diag", shell.diagnosticsExportPath ?? shell.diagnosticsInternalPath),
+      ].join("");
+      shellFeedbackEl.textContent = state.shellFeedback;
+    }
+
+    function toggleShellPanel() {
+      state.shellPanelOpen = !state.shellPanelOpen;
+      renderShellPanel();
+    }
+
+    function toggleDiagnosticsPanel() {
+      if (!state.shell) {
+        return;
+      }
+      if (window.AndroidApp && typeof window.AndroidApp.performServiceAction === "function") {
+        bridgeAction("performServiceAction", "toggleDiagnostics");
+        return;
+      }
+      bridgeAction("setDiagnosticsPanelVisible", !state.shell.diagnosticsPanelVisible);
+    }
+
+    function requestFullscreenRefresh() {
+      if (window.AndroidApp && typeof window.AndroidApp.performServiceAction === "function") {
+        bridgeAction("performServiceAction", "requestFullscreenRefresh");
+        return;
+      }
+      bridgeAction("requestFullscreenRefresh", "web_shell_tools");
+    }
+
+    function exportDiagnosticsLog() {
+      const response = window.AndroidApp && typeof window.AndroidApp.performServiceAction === "function"
+        ? bridgeAction("performServiceAction", "exportDiagnosticsLog")
+        : bridgeAction("exportDiagnosticsLog");
+      if (response && response.exportPath) {
+        setShellFeedback(`exportDiagnosticsLog: ${response.exportPath}`);
+      }
+    }
+
+    function reloadShell() {
+      if (window.AndroidApp && typeof window.AndroidApp.performServiceAction === "function") {
+        bridgeAction("performServiceAction", "reloadShell");
+        return;
+      }
+      bridgeAction("reloadShell");
+    }
+
     function appendText(value) {
       state.text += value;
       renderText();
@@ -326,20 +595,47 @@
       });
     }
 
+    function bindShellUi() {
+      shellToggleEl.onclick = toggleShellPanel;
+      shellDiagnosticsButtonEl.onclick = toggleDiagnosticsPanel;
+      shellFullscreenButtonEl.onclick = requestFullscreenRefresh;
+      shellExportButtonEl.onclick = exportDiagnosticsLog;
+      shellReloadButtonEl.onclick = reloadShell;
+      window.__plankaShellDispatch = (payload) => {
+        const detail = JSON.parse(payload);
+        if (detail && detail.snapshot) {
+          applyShellSnapshot(detail.snapshot);
+        }
+        window.dispatchEvent(new CustomEvent("planka:shell-bridge", { detail }));
+      };
+      window.addEventListener("planka:shell-status", (event) => {
+        applyShellSnapshot(event.detail);
+      });
+    }
+
     async function bootstrap() {
       state.config = await loadUiShellConfig();
       state.diagnostics = loadDiagnostics();
+      state.shell = loadShellSnapshot();
       state.locales = Object.keys(state.config.keyboard.locales);
       state.locale = state.config.keyboard.defaultLocale;
       applyLayoutConfig();
       renderTopbar();
       renderKeyboard();
       renderText();
+      renderShellPanel();
       window.__plankaUiConfigDiagnostics = state.diagnostics;
+      window.__plankaShellStatus = state.shell;
+      if (window.AndroidApp && typeof window.AndroidApp.markShellReady === "function") {
+        bridgeAction("markShellReady");
+      }
       console.info("PLANKA UI shell config", state.diagnostics);
+      console.info("PLANKA shell snapshot", state.shell);
     }
 
     window.__plankaBack = () => true;
+
+    bindShellUi();
 
     bootstrap().catch((error) => {
       console.error(error);

@@ -1,12 +1,16 @@
-# PLANKA Quick Test
+# PLANKA Diagnostic Shell
 
-Быстрый Android shell для ручного прогона на планшете.
+Диагностический Android shell baseline для ручного прогона на планшете.
 
 Что внутри:
 - fullscreen `WebView` c локальным `HTML/CSS/JS` из `assets`
 - versioned `ui-shell-config` с built-in defaults и fallback
 - service-кнопка штатного выхода `×`
 - on-screen breakout diagnostics overlay по кнопке `DIAG`
+- `DBG` drawer внутри WebView с service actions `DIAG` / `FULL` / `EXPORT` / `RELOAD`
+- JS/native service bridge c live shell snapshot и manual actions
+- `singleTask` lifecycle + `FLAG_KEEP_SCREEN_ON`
+- повторный immersive restore после `resume/focus/top-resumed/system-bars`
 - внутренний rolling log в `<filesDir>/breakout-diagnostics/`
 - экспорт текущего прогона в `Downloads/planka-breakout-<session>.txt` на Android 10+ (на более старых версиях fallback идёт в app-specific documents dir)
 
@@ -21,14 +25,21 @@
 2. Поведение при верхней шторке и transient system bars.
 3. Попытки ухода в `Home`, `Recent Apps` и launcher.
 4. Возврат в shell после системного breakout.
-5. События в `DIAG` и экспорт итогового текстового лога.
+5. `DBG` drawer: `DIAG`, `FULL`, `EXPORT`, `RELOAD`.
+6. События в `DIAG` и экспорт итогового текстового лога.
+
+Baseline-документ для follow-up Android-задач:
+- [PL-072 Android diagnostic shell build](../../docs/pl-072-android-diagnostic-shell-build.md)
 
 ## Android Breakout Diagnostics
 
 Surface:
 - кнопка `DIAG` в левом верхнем углу
+- кнопка `DBG` внутри WebView для service drawer
 - overlay с live-логом и `session/internal/export path`
 - bridge-метод `AndroidApp.getBreakoutDiagnosticsLog()`
+- bridge-метод `AndroidApp.getShellSnapshot()`
+- bridge-service actions `setDiagnosticsPanelVisible` / `requestFullscreenRefresh` / `exportDiagnosticsLog` / `reloadShell`
 - экспорт по кнопке `Экспорт txt`
 
 События shell:
@@ -68,10 +79,11 @@ Surface:
 
 Smoke-flow:
 1. Нажать `DIAG`.
-2. Воспроизвести breakout: верхняя шторка, transient bars, `Home`, `Recent Apps`, возврат.
-3. Сверить `WINDOW_FOCUS_CHANGED`, `USER_LEAVE_HINT`, `ACTIVITY_STOP`, `RETURN_TO_FOREGROUND`.
-4. Проверить новый `HIDE_SYSTEM_UI_REQUEST` и `FULLSCREEN_RESTORED`.
-5. Сохранить лог через `Экспорт txt`.
+2. Открыть `DBG` и проверить snapshot shell-state.
+3. Воспроизвести breakout: верхняя шторка, transient bars, `Home`, `Recent Apps`, возврат.
+4. Сверить `WINDOW_FOCUS_CHANGED`, `USER_LEAVE_HINT`, `ACTIVITY_STOP`, `RETURN_TO_FOREGROUND`.
+5. Проверить новый `HIDE_SYSTEM_UI_REQUEST` и `FULLSCREEN_RESTORED`.
+6. Сохранить лог через `Экспорт txt` или `EXPORT`.
 
 Детальный event-contract и sample output:
 - [PL-066 Android breakout diagnostics](../../docs/pl-066-android-breakout-diagnostics.md)

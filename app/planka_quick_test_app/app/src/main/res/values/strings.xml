@@ -1,7 +1,10 @@
 <resources>
-    <string name="app_name">PLANKA Quick Test</string>
+    <string name="app_name">PLANKA Diagnostic Shell</string>
     <string name="diagnostics_title">Android breakout diagnostics</string>
+    <string name="diagnostics_recover">FS NOW</string>
+    <string name="diagnostics_reload">Reload UI</string>
     <string name="diagnostics_export">Экспорт txt</string>
+    <string name="diagnostics_close">Закрыть</string>
     <string name="diagnostics_toggle_show">DIAG</string>
     <string name="diagnostics_toggle_hide">HIDE</string>
     <string name="diagnostics_export_success">Лог сохранён: %1$s</string>
@@ -9,5 +12,11 @@
     <string name="diagnostics_meta_template">session=%1$s
 internal=%2$s
 export=%3$s</string>
+    <string name="diagnostics_shell_status_template">shell=%1$s (%2$d)
+ready web=%3$s bridge=%4$s diag=%5$s
+state focus=%6$s start=%7$s resume=%8$s top=%9$s
+event=%10$s
+immersive=%11$s
+config=%12$s</string>
     <string name="diagnostics_export_not_yet">ещё не экспортирован</string>
 </resources>

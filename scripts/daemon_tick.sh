@@ -1278,7 +1278,7 @@ maybe_release_active_task_on_status_mismatch() {
         echo "ACTIVE_TASK_RELEASED_REVIEW_CONTEXT_CLEARED=1"
       fi
       if [[ "$active_issue_number" =~ ^[0-9]+$ ]]; then
-        cleanup_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$active_task" "$active_issue_number" "auto-ignore-release" 2>&1 || true)"
+        cleanup_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$active_task" "$active_issue_number" "auto-ignore-release" 2>&1 || true)"
         emit_lines "$cleanup_out"
       fi
       return 0
@@ -1346,7 +1346,7 @@ maybe_release_active_task_on_status_mismatch() {
     : > "$active_issue_file"
     : > "${CODEX_DIR}/project_task_id.txt"
     if [[ "$active_issue_number" =~ ^[0-9]+$ ]]; then
-      cleanup_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$active_task" "$active_issue_number" "status-empty-or-missing" 2>&1 || true)"
+      cleanup_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$active_task" "$active_issue_number" "status-empty-or-missing" 2>&1 || true)"
       emit_lines "$cleanup_out"
     fi
     return 0
@@ -1402,7 +1402,7 @@ maybe_release_active_task_on_status_mismatch() {
   : > "$active_issue_file"
   : > "${CODEX_DIR}/project_task_id.txt"
   if [[ "$active_issue_number" =~ ^[0-9]+$ ]]; then
-    cleanup_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$active_task" "$active_issue_number" "status-mismatch" 2>&1 || true)"
+    cleanup_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$active_task" "$active_issue_number" "status-mismatch" 2>&1 || true)"
     emit_lines "$cleanup_out"
   fi
 
@@ -2662,7 +2662,7 @@ if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
     fi
     printf '%s\n' "$review_issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
     printf '%s\n' "$review_task_id" > "${CODEX_DIR}/project_task_id.txt"
-    materialize_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$review_task_id" "$review_issue_number" 2>&1)"
+    materialize_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$review_task_id" "$review_issue_number" 2>&1)"
     emit_lines "$materialize_out"
     /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
 
@@ -3295,7 +3295,7 @@ rm -f "${CODEX_DIR}/daemon_dependency_blocked_signature.txt"
 : > "$review_pr_file"
 : > "$review_branch_file"
 
-materialize_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$task_id" "$issue_number" "$title" 2>&1)"
+materialize_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$task_id" "$issue_number" "$title" 2>&1)"
 emit_lines "$materialize_out"
 
 printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_active_task.txt"

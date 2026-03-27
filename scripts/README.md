@@ -367,18 +367,18 @@ Rollback нового профиля:
 ## Команды
 - `dev_commit_push.sh "message" <path...>`
   - `git add` + `git commit` + `git push origin <current-branch>`
-  - `task_finalize` при необходимости вызывает его с явным override для task-ветки, а финальный PR все равно остается `development -> main`
+  - `task_finalize` при необходимости вызывает его с явным override для task-ветки; для task-ветки review PR публикуется как `task/<id> -> development`, а release PR `development -> main` живет отдельно
   - для agent-коммитов использует отдельную identity (env): `CODEX_GIT_AUTHOR_NAME`, `CODEX_GIT_AUTHOR_EMAIL`, `CODEX_GIT_COMMITTER_NAME`, `CODEX_GIT_COMMITTER_EMAIL`
 - `sync_branches.sh`
   - `fetch/pull/merge/push` для выравнивания `main` и `development` после merge PR
   - если `main` уже включен в `development`, merge пропускается
   - при merge-конфликте возвращает `BRANCH_SYNC_CONFLICT=1` (код 78)
 - `pr_list_open.sh`
-  - список открытых PR `development -> main`
+  - список открытых PR для `FLOW_PR_HEAD_BRANCH -> FLOW_PR_BASE_BRANCH` (или `FLOW_HEAD_BRANCH -> FLOW_BASE_BRANCH`, если override не задан)
 - `pr_view.sh <pr-number>`
   - просмотр PR в фиксированном JSON-формате
 - `pr_create.sh <title-file> <body-file>`
-  - создание PR `development -> main`
+  - создание PR для `FLOW_PR_HEAD_BRANCH -> FLOW_PR_BASE_BRANCH` (или для flow default branch pair без override)
 - `pr_edit.sh <pr-number> <title-file> <body-file>`
   - обновление title/body PR
 - `project_set_status.sh <task-id|project-item-id> <status-name> [flow-name]`
@@ -418,6 +418,8 @@ Rollback нового профиля:
   - печатает стандартный двойной хвост `daemon.log + executor.log`
 - `.flow/shared/scripts/run.sh log_tail_all`
   - печатает стандартный хвост `daemon.log + watchdog.log + executor.log`
+- `.flow/shared/scripts/run.sh log_follow <daemon|watchdog|executor|d|w|e> [lines]`
+  - делает `tail -f` по одному runtime-логу; второй аргумент опционален, по умолчанию `50`
 - `.flow/shared/scripts/run.sh runtime_clear_active`
   - очищает active runtime-context daemon без прямых `truncate`
 - `.flow/shared/scripts/run.sh runtime_clear_waiting`
@@ -446,7 +448,7 @@ Rollback нового профиля:
   - при создании/линковке dirty-gate issue сразу переводит ее карточку в `Status/Flow=In Progress`
   - при рабочем ответе (`REWORK`) переводит карточку dirty-gate issue в `Status/Flow=In Progress`
   - при dirty-worktree больше не “глушит” обслуживание активного контекста: если есть `daemon_active_task`/waiting/review, тик продолжает `daemon_check_replies` и `executor_tick`; при этом новые claim остаются заблокированы (`WAIT_DIRTY_WORKTREE_SKIP_NEW_CLAIM=1`)
-  - `COMMIT` запускает полный dirty-gate flow: auto-commit tracked-файлов (`dev_commit_push.sh`) -> PR `development -> main` -> merge PR -> закрытие dirty-gate issue
+  - `COMMIT` запускает отдельный dirty-gate recovery flow для tracked-файлов в `development`; он не определяет PR topology обычных task-задач
   - если финальный `project_set_status(Done)` для dirty-gate не прошел, daemon фиксирует pending-finalize и ретраит завершение автоматически на следующих тиках (без нового user-reply)
   - по успешному завершению пишет `WAIT_DIRTY_WORKTREE_COMMIT_FLOW_DONE=1` и снимает dirty-gate state
   - auto-`COMMIT` выполняется только из ветки `development` (иначе пишет `WAIT_DIRTY_WORKTREE_COMMIT_BLOCKED_BRANCH=...`)
@@ -465,7 +467,7 @@ Rollback нового профиля:
   - для активной задачи вызывает `executor_tick.sh`, который запускает/мониторит headless executor (`codex exec`)
   - перед критичными GitHub-операциями делает preflight (`github_health_check.sh`)
   - сетевые вызовы к GitHub выполняет через `gh_retry.sh`, чтобы кратковременные DNS/API-сбои не роняли flow
-  - если активной задачи нет, проверяет открытые PR `development -> main` и при наличии ждет merge/close
+  - если активной/review задачи нет, открытые release PR не должны сами по себе блокировать claim новой задачи
   - не-Project проверки (`issues/labels/comments/open PR`) выполняет через REST (`gh api repos/...`); GraphQL оставлен для Project v2
   - читает Project через GraphQL (без нестабильного `gh project item-list`)
   - в hybrid mode для Project-операций использует `DAEMON_GH_PROJECT_TOKEN`/`CODEX_GH_PROJECT_TOKEN` (если задан), сохраняя App token для `Issue/PR`
@@ -557,8 +559,8 @@ Rollback нового профиля:
 - `task_finalize.sh`
   - читает `commit_message.txt`, `stage_paths.txt`, `project_task_id.txt` (или `daemon_active_task.txt`)
   - выполняет commit/push в текущую task-ветку
-  - если текущая ветка не `development`, подтягивает в неё актуальный `development`, затем fast-forward вливает task-ветку обратно в `development`
-  - создает PR `development -> main` или обновляет существующий
+  - если текущая ветка не `development`, подтягивает в неё актуальный `development` и публикует отдельный review PR `task/<id> -> development`
+  - если текущая ветка уже `development`, работает в прямом release-path `development -> main`
   - переводит задачу в `Status=Review`, `Flow=In Review` (можно переопределить через `FINAL_STATUS` и `FINAL_FLOW`)
   - если апдейт статуса временно недоступен, откладывает его в runtime-очередь без остановки финализации
   - публикует `CODEX_SIGNAL: AGENT_IN_REVIEW` и включает waiting-контекст `REVIEW_FEEDBACK` для комментариев в Issue

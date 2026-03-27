@@ -73,11 +73,12 @@ Bridge публикуется в `WebView` как `AndroidApp`.
 
 ## Install / smoke на Lenovo
 
-1. Собрать `debug` APK.
-2. Передать APK на планшет через USB в `Download`.
-3. Установить APK обычным Android installer.
-4. Запустить `PLANKA Diagnostic Shell`.
-5. Проверить:
+1. Поднять локальную Android-сборку на JDK 17.
+2. Собрать `debug` APK.
+3. Передать APK на планшет через USB в `Download`.
+4. Установить APK обычным Android installer.
+5. Запустить `PLANKA Diagnostic Shell`.
+6. Проверить:
    - старт без сети;
    - landscape shell;
    - `DBG` drawer и `DIAG`;

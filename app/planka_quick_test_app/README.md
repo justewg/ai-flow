@@ -17,8 +17,9 @@
 ## Сборка
 1. Открой папку проекта в Android Studio.
 2. Дождись синхронизации Gradle.
-3. Запусти `Run app` или `Build > Build APK(s)`.
-4. APK будет в `app/build/outputs/apk/debug/app-debug.apk`.
+3. Убедись, что локально доступен JDK 17 и `JAVA_HOME` указывает на установленный Java 17 runtime/toolchain.
+4. Запусти `Run app` или `Build > Build APK(s)`.
+5. APK будет в `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Что проверять на планшете
 1. Запуск в landscape и восстановление fullscreen после `resume/focus`.

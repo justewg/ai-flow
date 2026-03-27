@@ -10,6 +10,7 @@ git fetch origin
 git checkout "$FLOW_BASE_BRANCH"
 git pull --ff-only origin "$FLOW_BASE_BRANCH"
 git checkout "$FLOW_HEAD_BRANCH"
+git pull --ff-only origin "$FLOW_HEAD_BRANCH"
 
 # Fast-forward only is too strict when base branch advances via merge commits.
 # If base is not yet an ancestor of head, do a regular merge.

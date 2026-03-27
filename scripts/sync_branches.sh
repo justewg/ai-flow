@@ -6,10 +6,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/env/bootstrap.sh"
 codex_resolve_flow_config
 
+sync_current_branch_submodules() {
+  git submodule sync --recursive
+  git submodule update --init --recursive --force --checkout .flow/shared
+}
+
 git fetch origin
 git checkout "$FLOW_BASE_BRANCH"
+sync_current_branch_submodules
 git pull --ff-only origin "$FLOW_BASE_BRANCH"
 git checkout "$FLOW_HEAD_BRANCH"
+sync_current_branch_submodules
 
 # Fast-forward only is too strict when base branch advances via merge commits.
 # If base is not yet an ancestor of head, do a regular merge.
@@ -22,6 +29,8 @@ else
     exit 78
   fi
 fi
+
+sync_current_branch_submodules
 
 git push origin "$FLOW_HEAD_BRANCH"
 git status --short --branch

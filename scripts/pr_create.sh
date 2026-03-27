@@ -11,6 +11,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/env/bootstrap.sh"
 codex_resolve_flow_config
 
+pr_base_branch="${FLOW_PR_BASE_BRANCH:-$FLOW_BASE_BRANCH}"
+pr_head_branch="${FLOW_PR_HEAD_BRANCH:-$FLOW_HEAD_BRANCH}"
+
 title_file="$1"
 body_file="$2"
 pr_base_branch="${FLOW_PR_BASE_BRANCH:-$FLOW_BASE_BRANCH}"

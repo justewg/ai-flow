@@ -5,6 +5,8 @@ import android.content.ComponentCallbacks2
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.os.Looper
+import android.provider.Settings
 import android.view.View
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
@@ -19,6 +21,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.planka.quicktest.databinding.ActivityMainBinding
+import java.util.concurrent.CountDownLatch
 import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
@@ -33,6 +36,7 @@ class MainActivity : AppCompatActivity() {
             "requestFullscreenRefresh",
             "exportDiagnosticsLog",
             "reloadShell",
+            "openSystemSettings",
             "closeShell",
         )
     }
@@ -300,6 +304,32 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+    private fun doOpenSystemSettingsActivity(): Result<Unit> = runCatching {
+        val settingsIntent = Intent(Settings.ACTION_SETTINGS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(settingsIntent)
+        publishShellSnapshot("system_settings_opened")
+        requestImmersiveRefresh("before_system_settings")
+    }.onFailure {
+        publishShellSnapshot("system_settings_open_failed")
+    }
+
+    private fun openSystemSettingsActivity(): Result<Unit> {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return doOpenSystemSettingsActivity()
+        }
+
+        var result: Result<Unit>? = null
+        val latch = CountDownLatch(1)
+        runOnUiThread {
+            result = doOpenSystemSettingsActivity()
+            latch.countDown()
+        }
+        latch.await()
+        return result ?: Result.failure(IllegalStateException("openSystemSettings result missing"))
+    }
+
     private fun setDiagnosticsPanelVisible(visible: Boolean, reason: String) {
         diagnosticsPanelVisible = visible
         updateDiagnosticsPanelVisibility()
@@ -483,6 +513,7 @@ class MainActivity : AppCompatActivity() {
             "requestFullscreenRefresh" -> requestFullscreenRefresh("bridge_service_action")
             "exportDiagnosticsLog" -> exportDiagnosticsLog()
             "reloadShell" -> reloadShell()
+            "openSystemSettings" -> openSystemSettingsViaBridge()
             "closeShell" -> {
                 runOnUiThread { finishAndRemoveTask() }
                 actionResponse(
@@ -547,6 +578,9 @@ class MainActivity : AppCompatActivity() {
                 message = "Локальный shell перезагружается",
             )
         }
+
+        @JavascriptInterface
+        fun openSystemSettings(): String = openSystemSettingsViaBridge()
     }
 
     override fun onBackPressed() {
@@ -562,5 +596,25 @@ class MainActivity : AppCompatActivity() {
         true -> "1"
         false -> "0"
         null -> "?"
+    }
+
+    private fun openSystemSettingsViaBridge(): String {
+        val result = openSystemSettingsActivity()
+        return result.fold(
+            onSuccess = {
+                actionResponse(
+                    action = "openSystemSettings",
+                    ok = true,
+                    message = "Открываем системные настройки Android",
+                )
+            },
+            onFailure = { error ->
+                actionResponse(
+                    action = "openSystemSettings",
+                    ok = false,
+                    message = error.message ?: "unknown",
+                )
+            },
+        )
     }
 }

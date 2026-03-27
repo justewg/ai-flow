@@ -26,7 +26,7 @@ class ShellBridgePayloadTest {
             lastEvent = "activity_pause",
             lastImmersiveReason = "on_resume",
             immersiveRecoveryDelaysMs = listOf(0L, 180L, 420L),
-            supportedActions = listOf("toggleDiagnostics", "reloadShell"),
+            supportedActions = listOf("toggleDiagnostics", "reloadShell", "openSystemSettings"),
             diagnosticsSessionId = "20260327-120005-421",
             diagnosticsInternalPath = "/tmp/internal.log",
             diagnosticsExportPath = null,
@@ -46,6 +46,7 @@ class ShellBridgePayloadTest {
         assertEquals("activity_pause", payload.getString("lastEvent"))
         assertEquals(3, payload.getJSONArray("immersiveRecoveryDelaysMs").length())
         assertEquals("reloadShell", payload.getJSONArray("supportedActions").getString(1))
+        assertEquals("openSystemSettings", payload.getJSONArray("supportedActions").getString(2))
         assertTrue(payload.isNull("topResumed"))
         assertTrue(payload.isNull("diagnosticsExportPath"))
     }
@@ -68,7 +69,7 @@ class ShellBridgePayloadTest {
             lastEvent = "diagnostics_export_success",
             lastImmersiveReason = "after_export",
             immersiveRecoveryDelaysMs = listOf(0L, 180L, 420L),
-            supportedActions = listOf("exportDiagnosticsLog", "reloadShell"),
+            supportedActions = listOf("exportDiagnosticsLog", "reloadShell", "openSystemSettings"),
             diagnosticsSessionId = "20260327-120005-421",
             diagnosticsInternalPath = "/tmp/internal.log",
             diagnosticsExportPath = "Downloads/planka-breakout.txt",

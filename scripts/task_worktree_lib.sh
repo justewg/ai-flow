@@ -39,6 +39,12 @@ task_worktree_repo_dir() {
   printf '%s/repo' "$(task_worktree_root_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
 }
 
+task_worktree_repo_ready() {
+  local repo_dir="$1"
+  [[ -n "$repo_dir" && -e "$repo_dir/.git" ]] || return 1
+  git -C "$repo_dir" rev-parse --git-dir >/dev/null 2>&1
+}
+
 task_worktree_meta_dir() {
   local task_id="$1"
   local issue_number="$2"

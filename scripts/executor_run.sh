@@ -43,7 +43,7 @@ emit_log_lines() {
 recover_task_worktree_if_missing() {
   local out=""
 
-  if [[ -d "$task_repo/.git" ]]; then
+  if task_worktree_repo_ready "$task_repo"; then
     return 0
   fi
 
@@ -54,7 +54,7 @@ recover_task_worktree_if_missing() {
 
   if out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$task_id" "$issue_number" 2>&1)"; then
     emit_log_lines "$out" >>"$LOG_FILE" 2>&1
-    if [[ -d "$task_repo/.git" ]]; then
+    if task_worktree_repo_ready "$task_repo"; then
       {
         echo "EXECUTOR_TASK_WORKTREE_RECOVERED=1"
         echo "EXECUTOR_TASK_WORKTREE_PATH=${task_repo}"
@@ -77,7 +77,7 @@ recover_task_worktree_if_missing() {
   exit 0
 }
 
-if [[ ! -d "$task_repo/.git" ]]; then
+if ! task_worktree_repo_ready "$task_repo"; then
   recover_task_worktree_if_missing
 fi
 

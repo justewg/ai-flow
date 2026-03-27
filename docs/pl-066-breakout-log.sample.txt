@@ -1,0 +1,26 @@
+# PLANKA Android breakout diagnostics
+# session=20260327-120005-421
+# internalPath=/data/user/0/com.planka.quicktest/files/breakout-diagnostics/planka-breakout-20260327-120005-421.log
+# exportPath=Downloads/planka-breakout-20260327-120005-421.txt
+2026-03-27T12:00:05.421Z | seq=0001 | session=20260327-120005-421 | event=SESSION_START | focus=0 | started=0 | resumed=0 | topResumed=? | bars=status:?,nav:? | leaveHint=0 | detail=cold_start
+2026-03-27T12:00:05.532Z | seq=0002 | session=20260327-120005-421 | event=ACTIVITY_START | focus=0 | started=1 | resumed=0 | topResumed=? | bars=status:?,nav:? | leaveHint=0
+2026-03-27T12:00:05.643Z | seq=0003 | session=20260327-120005-421 | event=ACTIVITY_RESUME | focus=0 | started=1 | resumed=1 | topResumed=? | bars=status:?,nav:? | leaveHint=0
+2026-03-27T12:00:05.754Z | seq=0004 | session=20260327-120005-421 | event=TOP_RESUMED_CHANGED | focus=0 | started=1 | resumed=1 | topResumed=1 | bars=status:?,nav:? | leaveHint=0 | detail=gained
+2026-03-27T12:00:05.865Z | seq=0005 | session=20260327-120005-421 | event=WINDOW_FOCUS_CHANGED | focus=1 | started=1 | resumed=1 | topResumed=1 | bars=status:?,nav:? | leaveHint=0 | detail=gained
+2026-03-27T12:00:05.976Z | seq=0006 | session=20260327-120005-421 | event=SYSTEM_BARS_CHANGED | focus=1 | started=1 | resumed=1 | topResumed=1 | bars=status:0,nav:0 | leaveHint=0 | detail=status=0,nav=0
+2026-03-27T12:00:06.087Z | seq=0007 | session=20260327-120005-421 | event=USER_LEAVE_HINT | focus=1 | started=1 | resumed=1 | topResumed=1 | bars=status:0,nav:0 | leaveHint=1 | detail=proxy_home_recents_launcher_or_external_surface
+2026-03-27T12:00:06.198Z | seq=0008 | session=20260327-120005-421 | event=ACTIVITY_PAUSE | focus=1 | started=1 | resumed=0 | topResumed=1 | bars=status:0,nav:0 | leaveHint=1 | detail=after_user_leave_hint
+2026-03-27T12:00:06.309Z | seq=0009 | session=20260327-120005-421 | event=TOP_RESUMED_CHANGED | focus=1 | started=1 | resumed=0 | topResumed=0 | bars=status:0,nav:0 | leaveHint=1 | detail=lost
+2026-03-27T12:00:06.420Z | seq=0010 | session=20260327-120005-421 | event=WINDOW_FOCUS_CHANGED | focus=0 | started=1 | resumed=0 | topResumed=0 | bars=status:0,nav:0 | leaveHint=1 | detail=lost
+2026-03-27T12:00:06.531Z | seq=0011 | session=20260327-120005-421 | event=ACTIVITY_STOP | focus=0 | started=0 | resumed=0 | topResumed=0 | bars=status:0,nav:0 | leaveHint=1 | detail=background_after_user_leave_hint
+2026-03-27T12:00:06.642Z | seq=0012 | session=20260327-120005-421 | event=TRIM_MEMORY | focus=0 | started=0 | resumed=0 | topResumed=0 | bars=status:0,nav:0 | leaveHint=1 | detail=ui_hidden
+2026-03-27T12:00:06.753Z | seq=0013 | session=20260327-120005-421 | event=ACTIVITY_RESTART | focus=0 | started=0 | resumed=0 | topResumed=0 | bars=status:0,nav:0 | leaveHint=1 | detail=after_background
+2026-03-27T12:00:06.864Z | seq=0014 | session=20260327-120005-421 | event=ACTIVITY_START | focus=0 | started=1 | resumed=0 | topResumed=0 | bars=status:0,nav:0 | leaveHint=1
+2026-03-27T12:00:06.975Z | seq=0015 | session=20260327-120005-421 | event=ACTIVITY_RESUME | focus=0 | started=1 | resumed=1 | topResumed=0 | bars=status:0,nav:0 | leaveHint=1 | detail=after_background
+2026-03-27T12:00:07.086Z | seq=0016 | session=20260327-120005-421 | event=RETURN_TO_FOREGROUND | focus=0 | started=1 | resumed=1 | topResumed=0 | bars=status:0,nav:0 | leaveHint=1 | detail=best_effort_after_pause_stop
+2026-03-27T12:00:07.197Z | seq=0017 | session=20260327-120005-421 | event=TOP_RESUMED_CHANGED | focus=0 | started=1 | resumed=1 | topResumed=1 | bars=status:0,nav:0 | leaveHint=1 | detail=gained
+2026-03-27T12:00:07.308Z | seq=0018 | session=20260327-120005-421 | event=WINDOW_FOCUS_CHANGED | focus=1 | started=1 | resumed=1 | topResumed=1 | bars=status:0,nav:0 | leaveHint=1 | detail=gained
+2026-03-27T12:00:07.419Z | seq=0019 | session=20260327-120005-421 | event=HIDE_SYSTEM_UI_REQUEST | focus=1 | started=1 | resumed=1 | topResumed=1 | bars=status:0,nav:0 | leaveHint=1 | detail=on_resume
+2026-03-27T12:00:07.530Z | seq=0020 | session=20260327-120005-421 | event=HIDE_SYSTEM_UI_APPLIED | focus=1 | started=1 | resumed=1 | topResumed=1 | bars=status:0,nav:0 | leaveHint=1 | detail=on_resume
+2026-03-27T12:00:07.641Z | seq=0021 | session=20260327-120005-421 | event=FULLSCREEN_RESTORED | focus=1 | started=1 | resumed=1 | topResumed=1 | bars=status:0,nav:0 | leaveHint=0 | detail=after_background_return_hide_request
+2026-03-27T12:00:07.752Z | seq=0022 | session=20260327-120005-421 | event=EXPORT_LOG_SUCCESS | focus=1 | started=1 | resumed=1 | topResumed=1 | bars=status:0,nav:0 | leaveHint=0 | detail=Downloads/planka-breakout-20260327-120005-421.txt

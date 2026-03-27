@@ -303,7 +303,7 @@ run_medium_recovery() {
   local rc=0
   local out
 
-  if out="$("${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" 2>&1)"; then
+  if out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" 2>&1)"; then
     emit_lines "$out"
   else
     rc=$?

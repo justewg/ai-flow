@@ -870,7 +870,7 @@ case "$cmd" in
     ;;
 
   executor_reset)
-    "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh"
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh"
     ;;
 
   task_worktree_materialize)

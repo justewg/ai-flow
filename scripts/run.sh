@@ -878,7 +878,7 @@ case "$cmd" in
       echo "Usage: .flow/shared/scripts/run.sh task_worktree_materialize <task-id> <issue-number> [title]"
       exit 1
     fi
-    "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "${@:2}"
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "${@:2}"
     ;;
 
   task_worktree_cleanup)
@@ -886,7 +886,7 @@ case "$cmd" in
       echo "Usage: .flow/shared/scripts/run.sh task_worktree_cleanup <task-id> <issue-number> [reason]"
       exit 1
     fi
-    "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "${@:2}"
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "${@:2}"
     ;;
 
   runtime_clear_active)

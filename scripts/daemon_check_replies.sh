@@ -357,7 +357,7 @@ clear_waiting_for_terminal_review_pr() {
   if [[ "$review_pr_state" == "MERGED" || -n "$review_pr_merged_at" ]]; then
     cleanup_review_task_branch_if_merged "$review_branch_name"
     if [[ -n "$task_id" && "$issue_number" =~ ^[0-9]+$ ]]; then
-      cleanup_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$task_id" "$issue_number" "review-pr-merged" 2>&1 || true)"
+      cleanup_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$task_id" "$issue_number" "review-pr-merged" 2>&1 || true)"
       emit_nonempty_lines "$cleanup_out"
     fi
     clear_waiting_state
@@ -372,7 +372,7 @@ clear_waiting_for_terminal_review_pr() {
 
   if [[ "$review_pr_state" == "CLOSED" || -n "$review_pr_closed_at" ]]; then
     if [[ -n "$task_id" && "$issue_number" =~ ^[0-9]+$ ]]; then
-      cleanup_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$task_id" "$issue_number" "review-pr-closed" 2>&1 || true)"
+      cleanup_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$task_id" "$issue_number" "review-pr-closed" 2>&1 || true)"
       emit_nonempty_lines "$cleanup_out"
     fi
     clear_waiting_state

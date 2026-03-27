@@ -54,6 +54,13 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh log_tail_all`
 - `.flow/shared/scripts/run.sh host_bootstrap`
 - `.flow/shared/scripts/run.sh docker_bootstrap`
+- `.flow/shared/scripts/run.sh android_builder <config|up|down|shell|run|exec> [command...]`
+  - standalone Android/Java builder в отдельном Docker image/service
+  - монтирует текущий repo в `/workspace`
+  - держит JDK 17 и Android SDK вне host runtime и вне основного Codex/runtime container
+  - кэш Gradle хранит в `<AI_FLOW_ROOT_DIR>/services/android-builder/<project>/home`
+  - канонический пример:
+    `./.flow/shared/scripts/run.sh android_builder run bash -lc 'cd app/planka_quick_test_app && ./gradlew --no-daemon testDebugUnitTest assembleDebug'`
 - `.flow/shared/scripts/run.sh remote_agent_access_bootstrap`
 - `.flow/shared/scripts/run.sh remote_agent_v2_bootstrap`
 - `.flow/shared/scripts/run.sh env_audit`

@@ -654,6 +654,7 @@ ensure_state_namespace_layout() {
     "watchdog:watchdog_state.txt"
     "watchdog:watchdog_state_detail.txt"
     "executor:executor_done_wait_notified_task.txt"
+    "executor:executor_auto_recover_key.txt"
     "executor:executor_failure_notified_task.txt"
     "executor:executor_heartbeat_epoch.txt"
     "executor:executor_heartbeat_pid.txt"

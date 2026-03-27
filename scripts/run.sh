@@ -894,6 +894,7 @@ case "$cmd" in
     clear_runtime_state_file "daemon_claim_pending_item_id.txt"
     clear_runtime_state_file "daemon_claim_pending_issue_number.txt"
     clear_runtime_state_file "daemon_claim_pending_started_utc.txt"
+    clear_runtime_state_file "executor_auto_recover_key.txt"
     ;;
 
   runtime_clear_waiting)

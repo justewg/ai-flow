@@ -32,9 +32,41 @@ mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
 : > "$DETACH_FILE"
 
 task_repo="$(task_worktree_repo_dir "$task_id" "$issue_number")"
-if [[ ! -d "$task_repo/.git" ]]; then
+emit_log_lines() {
+  local text="$1"
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "$line"
+  done <<< "$text"
+}
+
+recover_task_worktree_if_missing() {
+  local out=""
+
+  if [[ -d "$task_repo/.git" ]]; then
+    return 0
+  fi
+
   {
     echo "EXECUTOR_TASK_WORKTREE_MISSING=1"
+    echo "EXECUTOR_TASK_WORKTREE_PATH=${task_repo}"
+  } >>"$LOG_FILE" 2>&1
+
+  if out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$task_id" "$issue_number" 2>&1)"; then
+    emit_log_lines "$out" >>"$LOG_FILE" 2>&1
+    if [[ -d "$task_repo/.git" ]]; then
+      {
+        echo "EXECUTOR_TASK_WORKTREE_RECOVERED=1"
+        echo "EXECUTOR_TASK_WORKTREE_PATH=${task_repo}"
+      } >>"$LOG_FILE" 2>&1
+      return 0
+    fi
+  else
+    emit_log_lines "$out" >>"$LOG_FILE" 2>&1
+  fi
+
+  {
+    echo "EXECUTOR_TASK_WORKTREE_RECOVER_FAILED=1"
     echo "EXECUTOR_TASK_WORKTREE_PATH=${task_repo}"
     echo "=== EXECUTOR_RUN_FINISH task=${task_id} issue=${issue_number} rc=1 at $(date -u '+%Y-%m-%dT%H:%M:%SZ') ==="
   } >>"$LOG_FILE" 2>&1
@@ -43,6 +75,10 @@ if [[ ! -d "$task_repo/.git" ]]; then
   date -u '+%Y-%m-%dT%H:%M:%SZ' > "$FINISH_FILE"
   : > "${CODEX_DIR}/executor_pid.txt"
   exit 0
+}
+
+if [[ ! -d "$task_repo/.git" ]]; then
+  recover_task_worktree_if_missing
 fi
 
 is_truthy() {

@@ -13,6 +13,7 @@ PR_BODY_FILE="${CODEX_DIR}/pr_body.txt"
 PR_NUMBER_FILE="${CODEX_DIR}/pr_number.txt"
 PR_TITLE_FILE="${CODEX_DIR}/pr_title.txt"
 STAGE_PATHS_FILE="${CODEX_DIR}/stage_paths.txt"
+AUTO_RECOVER_FILE="${CODEX_DIR}/executor_auto_recover_key.txt"
 
 mkdir -p "$CODEX_DIR"
 
@@ -117,5 +118,6 @@ fi
 : > "$PR_NUMBER_FILE"
 : > "$PR_TITLE_FILE"
 : > "$STAGE_PATHS_FILE"
+: > "$AUTO_RECOVER_FILE"
 
 echo "EXECUTOR_RESET=1"

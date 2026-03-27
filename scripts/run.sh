@@ -79,6 +79,7 @@ Commands:
   executor_reset
   task_worktree_materialize
   task_worktree_cleanup
+  runtime_refresh_full
   runtime_clear_active
   runtime_clear_waiting
   runtime_clear_review
@@ -881,6 +882,9 @@ case "$cmd" in
       exit 1
     fi
     "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "${@:2}"
+
+  runtime_refresh_full)
+    "${CODEX_SHARED_SCRIPTS_DIR}/runtime_refresh_full.sh"
     ;;
 
   runtime_clear_active)

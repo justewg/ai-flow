@@ -124,6 +124,7 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh watchdog_uninstall [label]` — остановка и удаление watchdog service.
 - `.flow/shared/scripts/run.sh watchdog_status [label]` — проверка статуса watchdog.
 - `.flow/shared/scripts/run.sh executor_reset` — сброс состояния автономного executor.
+- `.flow/shared/scripts/run.sh runtime_refresh_full` — жёстко выровнять authoritative checkout на `origin/main` и `origin/development`, форсированно обновить `.flow/shared`, очистить active/waiting/review runtime-state и, если найден compose-root проекта, перезапустить `daemon`. Команда деструктивна для локальных несохранённых изменений в authoritative checkout.
 - `.flow/shared/scripts/run.sh runtime_clear_active` — очистка active-context daemon (`daemon_active_*`).
 - `.flow/shared/scripts/run.sh runtime_clear_waiting` — очистка waiting-context daemon (`daemon_waiting_*`).
 - `.flow/shared/scripts/run.sh runtime_clear_review` — очистка review-context daemon (`daemon_review_*`).
@@ -420,6 +421,10 @@ Rollback нового профиля:
   - печатает стандартный хвост `daemon.log + watchdog.log + executor.log`
 - `.flow/shared/scripts/run.sh runtime_clear_active`
   - очищает active runtime-context daemon без прямых `truncate`
+- `.flow/shared/scripts/run.sh runtime_refresh_full`
+  - выполняет канонический full refresh authoritative runtime: `git fetch`, `reset --hard` для `development/main`, `submodule sync/update --force` для `.flow/shared`, `git clean -fd`, очистку `daemon_active_*`, `daemon_waiting_*`, `daemon_review_*` и `docker compose ... restart daemon`, если compose root проекта найден автоматически
+  - предназначена именно для VPS/runtime recovery после flow hardening и перед повторным запуском `Todo`
+  - деструктивна для несохранённых локальных изменений в authoritative checkout
 - `.flow/shared/scripts/run.sh runtime_clear_waiting`
   - очищает waiting-context daemon без прямых `truncate`
 - `.flow/shared/scripts/run.sh runtime_clear_review`

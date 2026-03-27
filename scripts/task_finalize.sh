@@ -320,20 +320,39 @@ run_commit_push_for_branch() {
   FLOW_HEAD_BRANCH="$branch" "${CODEX_SHARED_SCRIPTS_DIR}/dev_commit_push.sh" "$@"
 }
 
-prepare_head_branch_for_pr() {
+PR_TARGET_BASE_BRANCH=""
+PR_TARGET_HEAD_BRANCH=""
+PR_TARGET_MODE=""
+
+resolve_pr_target_branches() {
+  local task_branch="$1"
+  local head_branch="$2"
+  local base_branch="$3"
+
+  if [[ "$task_branch" == "$head_branch" ]]; then
+    PR_TARGET_MODE="DIRECT_HEAD_BRANCH"
+    PR_TARGET_HEAD_BRANCH="$head_branch"
+    PR_TARGET_BASE_BRANCH="$base_branch"
+  else
+    PR_TARGET_MODE="TASK_BRANCH_REVIEW"
+    PR_TARGET_HEAD_BRANCH="$task_branch"
+    PR_TARGET_BASE_BRANCH="$head_branch"
+  fi
+
+  echo "FLOW_TASK_BRANCH=${task_branch}"
+  echo "FLOW_TASK_BRANCH_MODE=${PR_TARGET_MODE}"
+  echo "FLOW_PR_HEAD_BRANCH=${PR_TARGET_HEAD_BRANCH}"
+  echo "FLOW_PR_BASE_BRANCH=${PR_TARGET_BASE_BRANCH}"
+}
+
+prepare_pr_source_branch() {
   local task_branch="$1"
   local head_branch="$2"
   local out rc
 
-  echo "FLOW_TASK_BRANCH=${task_branch}"
-  echo "FLOW_PR_HEAD_BRANCH=${head_branch}"
-
   if [[ "$task_branch" == "$head_branch" ]]; then
-    echo "FLOW_TASK_BRANCH_MODE=DIRECT_HEAD_BRANCH"
     return 0
   fi
-
-  echo "FLOW_TASK_BRANCH_MODE=FEATURE_BRANCH"
 
   if out="$(git -C "${ROOT_DIR}" fetch origin "$head_branch" "$task_branch" 2>&1)"; then
     emit_nonempty_lines "$out"
@@ -362,46 +381,6 @@ prepare_head_branch_for_pr() {
     rc=$?
     emit_nonempty_lines "$out"
     echo "FLOW_TASK_BRANCH_PUSHED=0"
-    return "$rc"
-  fi
-
-  if out="$(git -C "${ROOT_DIR}" checkout "$head_branch" 2>&1)"; then
-    emit_nonempty_lines "$out"
-  else
-    rc=$?
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_CHECKOUT_FAILED=1"
-    return "$rc"
-  fi
-
-  if out="$(git -C "${ROOT_DIR}" pull --ff-only origin "$head_branch" 2>&1)"; then
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_SYNCED=1"
-  else
-    rc=$?
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_SYNCED=0"
-    return "$rc"
-  fi
-
-  if out="$(git -C "${ROOT_DIR}" merge --ff-only "$task_branch" 2>&1)"; then
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_FAST_FORWARDED=1"
-  else
-    rc=$?
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_FAST_FORWARDED=0"
-    echo "FLOW_PR_HEAD_FAST_FORWARD_FAILED=1"
-    return "$rc"
-  fi
-
-  if out="$(git -C "${ROOT_DIR}" push origin "$head_branch" 2>&1)"; then
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_PUSHED=1"
-  else
-    rc=$?
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_PUSHED=0"
     return "$rc"
   fi
 
@@ -639,25 +618,30 @@ if [[ -z "$task_branch" || "$task_branch" == "HEAD" ]]; then
 fi
 
 run_commit_push_for_branch "$task_branch" "$commit_message" "${stage_paths[@]}"
-prepare_head_branch_for_pr "$task_branch" "$HEAD_BRANCH"
+resolve_pr_target_branches "$task_branch" "$HEAD_BRANCH" "$BASE_BRANCH"
+prepare_pr_source_branch "$task_branch" "$HEAD_BRANCH"
 
 echo "FLOW_OPEN_PR_CHECK=1"
 echo "FLOW_OPEN_PR_CHECK_REPO=$REPO"
-echo "FLOW_OPEN_PR_CHECK_BASE=$BASE_BRANCH"
-echo "FLOW_OPEN_PR_CHECK_HEAD=$HEAD_BRANCH"
+echo "FLOW_OPEN_PR_CHECK_BASE=$PR_TARGET_BASE_BRANCH"
+echo "FLOW_OPEN_PR_CHECK_HEAD=$PR_TARGET_HEAD_BRANCH"
 open_prs_json="$(
   gh pr list \
     --repo "$REPO" \
     --state open \
-    --base "$BASE_BRANCH" \
-    --head "$HEAD_BRANCH" \
+    --base "$PR_TARGET_BASE_BRANCH" \
+    --head "$PR_TARGET_HEAD_BRANCH" \
     --json number,title,url \
     --jq '.'
 )"
 open_pr_count="$(printf '%s' "$open_prs_json" | jq 'length')"
 
 if (( open_pr_count == 0 )); then
-  create_out="$("${CODEX_SHARED_SCRIPTS_DIR}/pr_create.sh" "$tmp_title" "$tmp_body")"
+  create_out="$(
+    FLOW_PR_BASE_BRANCH="$PR_TARGET_BASE_BRANCH" \
+      FLOW_PR_HEAD_BRANCH="$PR_TARGET_HEAD_BRANCH" \
+      "${CODEX_SHARED_SCRIPTS_DIR}/pr_create.sh" "$tmp_title" "$tmp_body"
+  )"
   pr_url="$(printf '%s' "$create_out" | tail -n1)"
   pr_number="$(extract_pr_number_from_url "$pr_url")"
   if [[ -z "$pr_number" || "$pr_number" == "$pr_url" ]]; then
@@ -675,7 +659,7 @@ elif (( open_pr_count == 1 )); then
   echo "PR_NUMBER=$pr_number"
   echo "PR_URL=$pr_url"
 else
-  echo "More than one open PR ${HEAD_BRANCH}->${BASE_BRANCH}. Manual resolve required."
+  echo "More than one open PR ${PR_TARGET_HEAD_BRANCH}->${PR_TARGET_BASE_BRANCH}. Manual resolve required."
   printf '%s\n' "$open_prs_json"
   exit 1
 fi

@@ -295,8 +295,10 @@ run_project_item_list_fallback() {
 }
 
 list_open_flow_prs_json() {
+  local base_branch="${1:-$flow_base_branch}"
+  local head_branch="${2:-$flow_head_branch}"
   run_gh_retry_capture \
-    gh api "repos/${repo}/pulls?state=open&base=${flow_base_branch}&head=${repo_owner}:${flow_head_branch}&per_page=100"
+    gh api "repos/${repo}/pulls?state=open&base=${base_branch}&head=${repo_owner}:${head_branch}&per_page=100"
 }
 
 read_file_or_default() {
@@ -2719,9 +2721,30 @@ else
   exit "$rc"
 fi
 
+open_pr_base="$flow_base_branch"
+open_pr_head="$flow_head_branch"
+active_issue_number_for_review=""
+active_task_for_review=""
+active_item_for_review=""
+review_branch_for_open_pr=""
+review_task_for_open_pr=""
+review_pr_context_present="0"
+[[ -s "${CODEX_DIR}/daemon_active_issue_number.txt" ]] && active_issue_number_for_review="$(<"${CODEX_DIR}/daemon_active_issue_number.txt")"
+[[ -s "${CODEX_DIR}/daemon_active_task.txt" ]] && active_task_for_review="$(<"${CODEX_DIR}/daemon_active_task.txt")"
+[[ -s "${CODEX_DIR}/daemon_active_item_id.txt" ]] && active_item_for_review="$(<"${CODEX_DIR}/daemon_active_item_id.txt")"
+[[ -s "$review_branch_file" ]] && review_branch_for_open_pr="$(<"$review_branch_file")"
+[[ -s "$review_task_file" ]] && review_task_for_open_pr="$(<"$review_task_file")"
+if [[ -n "$review_branch_for_open_pr" ]]; then
+  open_pr_base="$flow_head_branch"
+  open_pr_head="$review_branch_for_open_pr"
+  review_pr_context_present="1"
+elif [[ -n "$review_task_for_open_pr" || -s "$review_pr_file" ]]; then
+  review_pr_context_present="1"
+fi
+
 open_prs_json=""
 if open_prs_json="$(
-  list_open_flow_prs_json
+  list_open_flow_prs_json "$open_pr_base" "$open_pr_head"
 )"; then
   :
 else
@@ -2736,17 +2759,11 @@ fi
 
 echo "FLOW_OPEN_PR_CHECK=1"
 echo "FLOW_OPEN_PR_CHECK_REPO=${repo}"
-echo "FLOW_OPEN_PR_CHECK_BASE=${flow_base_branch}"
-echo "FLOW_OPEN_PR_CHECK_HEAD=${flow_head_branch}"
+echo "FLOW_OPEN_PR_CHECK_BASE=${open_pr_base}"
+echo "FLOW_OPEN_PR_CHECK_HEAD=${open_pr_head}"
 open_pr_count="$(printf '%s' "$open_prs_json" | jq 'length')"
 if (( open_pr_count > 0 )); then
   if (( open_pr_count == 1 )) && [[ ! -s "$review_pr_file" ]]; then
-    active_issue_number_for_review=""
-    active_task_for_review=""
-    active_item_for_review=""
-    [[ -s "${CODEX_DIR}/daemon_active_issue_number.txt" ]] && active_issue_number_for_review="$(<"${CODEX_DIR}/daemon_active_issue_number.txt")"
-    [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]] && active_task_for_review="$(<"${CODEX_DIR}/daemon_active_task.txt")"
-    [[ -s "${CODEX_DIR}/daemon_active_item_id.txt" ]] && active_item_for_review="$(<"${CODEX_DIR}/daemon_active_item_id.txt")"
     if [[ -n "$active_issue_number_for_review" || -n "$active_task_for_review" ]]; then
       open_pr_number_for_review="$(printf '%s' "$open_prs_json" | jq -r '.[0].number // empty')"
       open_pr_url_for_review="$(printf '%s' "$open_prs_json" | jq -r '.[0].html_url // .[0].url // empty')"
@@ -2756,6 +2773,7 @@ if (( open_pr_count > 0 )); then
           --task-id "$active_task_for_review" \
           --issue-number "$active_issue_number_for_review" \
           --item-id "$active_item_for_review" \
+          --branch "$review_branch_for_open_pr" \
           --pr-number "$open_pr_number_for_review" \
           --pr-url "$open_pr_url_for_review" \
           --pr-title "$open_pr_title_for_review" 2>&1
@@ -2769,9 +2787,13 @@ if (( open_pr_count > 0 )); then
       echo "REVIEW_CONTEXT_RECOVER_AUTO_RC=${recover_rc}"
     fi
   fi
-  echo "WAIT_OPEN_PR_COUNT=$open_pr_count"
-  printf '%s' "$open_prs_json" | jq -r '.[] | "OPEN_PR=#\(.number) \(.title // "") \(.html_url // "")"'
-  exit 0
+  if [[ "$review_pr_context_present" == "1" || -n "$active_issue_number_for_review" || -n "$active_task_for_review" ]]; then
+    echo "WAIT_OPEN_PR_COUNT=$open_pr_count"
+    printf '%s' "$open_prs_json" | jq -r '.[] | "OPEN_PR=#\(.number) \(.title // "") \(.html_url // "")"'
+    exit 0
+  fi
+  echo "OPEN_PR_COUNT_IGNORED=$open_pr_count"
+  printf '%s' "$open_prs_json" | jq -r '.[] | "OPEN_PR_IGNORED=#\(.number) \(.title // "") \(.html_url // "")"'
 fi
 
 project_json=""

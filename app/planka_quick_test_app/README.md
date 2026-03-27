@@ -60,6 +60,7 @@ Surface:
 ```
 
 Интерпретация:
+- `TOP_RESUMED_CHANGED` доступен только на Android 10+; если callback не поддерживается, в строках остаётся `topResumed=?`
 - `USER_LEAVE_HINT` это proxy-сигнал для `Home` / `Recent Apps` / launcher / external surface
 - `TRIM_MEMORY` с `ui_hidden` это best-effort признак скрытия shell UI системой
 - `RETURN_TO_FOREGROUND` фиксирует восстановление после background/focus loss

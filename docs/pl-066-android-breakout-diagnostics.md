@@ -39,6 +39,7 @@ Lifecycle и shell:
 Focus / task ownership:
 - `WINDOW_FOCUS_CHANGED`
 - `TOP_RESUMED_CHANGED`
+  Доступен только на Android 10+ (`API 29+`); на более старых устройствах поле `topResumed` в строке лога остаётся `?`.
 
 System UI:
 - `SYSTEM_BARS_CHANGED`
@@ -73,6 +74,7 @@ Proxy / best-effort:
 
 Поля:
 - `focus`, `started`, `resumed`, `topResumed` это текущий activity-state на момент записи
+- `topResumed=?` означает, что значение ещё не наблюдалось или платформа не даёт этот callback
 - `bars=status:...,nav:...` это видимость status/navigation bars (`1` visible, `0` hidden, `?` пока неизвестно)
 - `leaveHint=1` означает pending proxy breakout до подтверждения возврата
 - `detail` уточняет причину, proxy-сигнал или recovery path

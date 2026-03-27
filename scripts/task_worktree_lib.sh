@@ -105,3 +105,9 @@ task_worktree_resolve_branch() {
 
   task_worktree_branch_name "$task_id" "$issue_number" "$title"
 }
+
+task_worktree_repo_present() {
+  local repo_path="${1:-}"
+  [[ -n "$repo_path" ]] || return 1
+  git -C "$repo_path" rev-parse --is-inside-work-tree >/dev/null 2>&1
+}

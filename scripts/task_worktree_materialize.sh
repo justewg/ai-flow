@@ -33,7 +33,7 @@ base_commit="$(git -C "${ROOT_DIR}" rev-parse "origin/${FLOW_HEAD_BRANCH}")"
 
 mkdir -p "$task_meta_dir" "$task_logs_dir"
 
-if [[ ! -d "$task_repo/.git" ]]; then
+if ! task_worktree_repo_present "$task_repo"; then
   rm -rf "$task_repo"
   git -C "${ROOT_DIR}" worktree add -B "$task_branch" "$task_repo" "origin/${FLOW_HEAD_BRANCH}"
   materialized_now="1"

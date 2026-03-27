@@ -147,30 +147,9 @@ if [[ "$state" == "FAILED" ]]; then
 
     notified_task="$(cat "$FAIL_NOTIFY_FILE" 2>/dev/null || true)"
     if [[ "$notified_task" != "$task_id" && "$is_waiting_user" != "1" ]]; then
-      msg_file="$(mktemp "${STATE_TMP_DIR}/executor_failed.XXXXXX")"
-      cat > "$msg_file" <<EOF
-Executor не смог продолжить задачу.
-Task: ${task_id}
-Issue: #${issue_number}
-Exit code: ${last_rc:-unknown}
-
-Проверь логи ${RUNTIME_LOG_DIR}/executor.log и дай команду как действовать дальше.
-EOF
-      if ask_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_ask.sh" blocker "$msg_file" 2>&1)"; then
-        echo "EXECUTOR_FAILURE_BLOCKER_POSTED=1"
-        while IFS= read -r line; do
-          [[ -z "$line" ]] && continue
-          echo "EXECUTOR: $line"
-        done <<<"$ask_out"
-        printf '%s\n' "$task_id" > "$FAIL_NOTIFY_FILE"
-      else
-        rc=$?
-        while IFS= read -r line; do
-          [[ -z "$line" ]] && continue
-          echo "EXECUTOR_BLOCKER_ERROR(rc=$rc): $line"
-        done <<<"$ask_out"
-      fi
-      rm -f "$msg_file"
+      echo "EXECUTOR_FAILURE_USER_REPLY_SUPPRESSED=1"
+      echo "EXECUTOR_FAILURE_ACTION=INTERNAL_RECOVERY_OR_MANUAL_INSPECTION"
+      printf '%s\n' "$task_id" > "$FAIL_NOTIFY_FILE"
     fi
     exit 0
   fi
@@ -197,33 +176,11 @@ if [[ "$state" == "DONE" ]]; then
     fi
     notified_task="$(cat "$DONE_NOTIFY_FILE" 2>/dev/null || true)"
     if [[ "$notified_task" != "$task_id" ]]; then
-      msg_file="$(mktemp "${STATE_TMP_DIR}/executor_done_wait.XXXXXX")"
-      cat > "$msg_file" <<EOF
-Executor завершил текущий прогон без финализации задачи.
-Task: ${task_id}
-Issue: #${issue_number}
-
-Сейчас он ждет твоего решения:
-- "продолжай" — запустить следующий прогон;
-- "финализируй" — переходить к завершению PR.
-EOF
-      if ask_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_ask.sh" blocker "$msg_file" 2>&1)"; then
-        echo "EXECUTOR_DONE_BLOCKER_POSTED=1"
-        while IFS= read -r line; do
-          [[ -z "$line" ]] && continue
-          echo "EXECUTOR: $line"
-        done <<<"$ask_out"
-        printf '%s\n' "$task_id" > "$DONE_NOTIFY_FILE"
-      else
-        rc=$?
-        while IFS= read -r line; do
-          [[ -z "$line" ]] && continue
-          echo "EXECUTOR_DONE_BLOCKER_ERROR(rc=$rc): $line"
-        done <<<"$ask_out"
-      fi
-      rm -f "$msg_file"
+      echo "EXECUTOR_DONE_USER_REPLY_SUPPRESSED=1"
+      echo "EXECUTOR_DONE_ACTION=WAIT_FOR_INTERNAL_FINALIZE_OR_NEXT_RUN"
+      printf '%s\n' "$task_id" > "$DONE_NOTIFY_FILE"
     fi
-    echo "EXECUTOR_DONE_WAITING_DECISION=1"
+    echo "EXECUTOR_DONE_WAITING_DECISION=0"
     exit 0
   fi
 fi

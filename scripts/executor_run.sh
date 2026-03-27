@@ -27,9 +27,11 @@ HEARTBEAT_FILE="${CODEX_DIR}/executor_heartbeat_utc.txt"
 HEARTBEAT_EPOCH_FILE="${CODEX_DIR}/executor_heartbeat_epoch.txt"
 HEARTBEAT_PID_FILE="${CODEX_DIR}/executor_heartbeat_pid.txt"
 DETACH_FILE="${CODEX_DIR}/executor_detach_requested.txt"
+WAIT_STOP_FILE="${CODEX_DIR}/executor_wait_user_reply_stop.txt"
 
 mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
 : > "$DETACH_FILE"
+: > "$WAIT_STOP_FILE"
 
 task_repo="$(task_worktree_repo_dir "$task_id" "$issue_number")"
 emit_log_lines() {
@@ -100,6 +102,26 @@ touch_heartbeat() {
   date +%s > "$HEARTBEAT_EPOCH_FILE"
 }
 
+waiting_reply_requested() {
+  local waiting_task waiting_issue
+  [[ -s "${CODEX_DIR}/daemon_waiting_task_id.txt" ]] || return 1
+  [[ -s "${CODEX_DIR}/daemon_waiting_issue_number.txt" ]] || return 1
+  waiting_task="$(<"${CODEX_DIR}/daemon_waiting_task_id.txt")"
+  waiting_issue="$(<"${CODEX_DIR}/daemon_waiting_issue_number.txt")"
+  [[ "$waiting_task" == "$task_id" && "$waiting_issue" == "$issue_number" ]]
+}
+
+request_wait_stop() {
+  if [[ ! -s "$WAIT_STOP_FILE" ]]; then
+    printf '%s\n' "wait-user-reply" > "$WAIT_STOP_FILE"
+    {
+      echo "EXECUTOR_WAIT_USER_REPLY_STOP_REQUESTED=1"
+      echo "EXECUTOR_WAIT_USER_REPLY_TASK_ID=${task_id}"
+      echo "EXECUTOR_WAIT_USER_REPLY_ISSUE_NUMBER=${issue_number}"
+    } >>"$LOG_FILE" 2>&1
+  fi
+}
+
 {
   echo "=== EXECUTOR_RUN_START task=${task_id} issue=${issue_number} at $(date -u '+%Y-%m-%dT%H:%M:%SZ') ==="
   "${CODEX_SHARED_SCRIPTS_DIR}/executor_build_prompt.sh" "$task_id" "$issue_number" "$PROMPT_FILE"
@@ -133,6 +155,15 @@ codex_pid="$!"
 (
   while kill -0 "$codex_pid" 2>/dev/null; do
     touch_heartbeat
+    if waiting_reply_requested; then
+      request_wait_stop
+      kill "$codex_pid" 2>/dev/null || true
+      sleep 2
+      if kill -0 "$codex_pid" 2>/dev/null; then
+        kill -9 "$codex_pid" 2>/dev/null || true
+      fi
+      break
+    fi
     sleep "$heartbeat_sec"
   done
 ) &
@@ -155,6 +186,11 @@ if [[ -s "$DETACH_FILE" ]]; then
   detach_requested="1"
 fi
 
+wait_reply_stop_requested="0"
+if [[ -s "$WAIT_STOP_FILE" ]]; then
+  wait_reply_stop_requested="1"
+fi
+
 if [[ "$detach_requested" == "1" ]]; then
   : > "${CODEX_DIR}/executor_pid.txt"
   : > "$HEARTBEAT_PID_FILE"
@@ -162,6 +198,21 @@ if [[ "$detach_requested" == "1" ]]; then
   {
     echo "EXECUTOR_RUN_DETACHED=1"
     echo "=== EXECUTOR_RUN_FINISH task=${task_id} issue=${issue_number} rc=${rc} detached=1 at $(date -u '+%Y-%m-%dT%H:%M:%SZ') ==="
+  } >>"$LOG_FILE" 2>&1
+  exit 0
+fi
+
+if [[ "$wait_reply_stop_requested" == "1" ]]; then
+  : > "$STATE_FILE"
+  printf '%s\n' "0" > "$EXIT_FILE"
+  date -u '+%Y-%m-%dT%H:%M:%SZ' > "$FINISH_FILE"
+  : > "${CODEX_DIR}/executor_pid.txt"
+  : > "$HEARTBEAT_PID_FILE"
+  : > "$DETACH_FILE"
+  : > "$WAIT_STOP_FILE"
+  {
+    echo "EXECUTOR_RUN_PAUSED_FOR_USER_REPLY=1"
+    echo "=== EXECUTOR_RUN_FINISH task=${task_id} issue=${issue_number} rc=${rc} waiting=1 at $(date -u '+%Y-%m-%dT%H:%M:%SZ') ==="
   } >>"$LOG_FILE" 2>&1
   exit 0
 fi
@@ -177,6 +228,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ' > "$FINISH_FILE"
 : > "${CODEX_DIR}/executor_pid.txt"
 : > "$HEARTBEAT_PID_FILE"
 : > "$DETACH_FILE"
+: > "$WAIT_STOP_FILE"
 
 {
   echo "=== EXECUTOR_RUN_FINISH task=${task_id} issue=${issue_number} rc=${rc} at $(date -u '+%Y-%m-%dT%H:%M:%SZ') ==="

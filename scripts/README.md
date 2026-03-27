@@ -131,7 +131,7 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh executor_start <task-id> <issue-number>` — запуск автономного executor.
 - `.flow/shared/scripts/run.sh executor_tick <task-id> <issue-number>` — проверка/перезапуск executor, обработка fail-state.
 - `.flow/shared/scripts/run.sh executor_build_prompt <task-id> <issue-number> <output-file>` — сбор prompt для executor из Issue.
-- `.flow/shared/scripts/run.sh task_ask <question|blocker> <message-file>` — отправить вопрос/блокер в comment Issue и включить режим ожидания ответа.
+- `.flow/shared/scripts/run.sh task_ask <question|blocker> <message-file>` — отправить вопрос/блокер в comment Issue и включить режим ожидания ответа; для `blocker` нужен структурированный файл (`ASK_REASON`, `ASK_QUESTION`, опционально `ASK_CONTEXT`), иначе публикация будет отклонена как malformed.
 - `.flow/shared/scripts/run.sh daemon_check_replies` — проверить ответы в Issue-комментах для ожидающего вопроса.
 - `.flow/shared/scripts/run.sh task_finalize` — финализация задачи: commit+push, create/update PR, перевод задачи в `Status=Review`, `Flow=In Review`.
 - `.flow/shared/scripts/run.sh gh_retry <command> [args...]` — выполнить GitHub-команду с retry/backoff.
@@ -579,16 +579,18 @@ Rollback нового профиля:
 - `executor_tick.sh <task-id> <issue-number>`
   - на каждом тике делает `project_status_runtime apply` (executor тоже подчищает отложенные status-апдейты)
   - проверяет живость executor по pid/state
-  - при `FAILED` автоматически публикует blocker-комментарий в Issue (один раз на задачу)
+  - при `FAILED` не публикует blocker по умолчанию: сначала оставляет internal failure/state для recovery, без ложного `USER_REPLY`
   - после нового ответа пользователя в Issue делает retry executor без ручного сброса state
-  - при `DONE` и активной задаче без финализации публикует blocker-комментарий и ждет явного решения пользователя (`продолжай`/`финализируй`)
-  - после нового ответа пользователя в этом состоянии запускает новый прогон executor
+  - при `DONE` и активной задаче без финализации не публикует blocker автоматически; `DONE` само по себе не считается поводом просить `USER_REPLY`
+  - после нового ответа пользователя в этом состоянии может запустить новый прогон executor
 - `executor_reset.sh`
   - останавливает живой executor-процесс (если есть) и очищает state-файлы
 - `task_ask.sh <question|blocker> <message-file>`
   - публикует структурированный комментарий в текущий Issue (`CODEX_SIGNAL: AGENT_QUESTION|AGENT_BLOCKER`)
+  - `AGENT_BLOCKER` допускается только для явных пользовательских причин: `needs_user_fact`, `needs_user_decision`, `needs_scope_decision`
+  - строки логов, кода, diff, sample/event output и `git status` не должны превращаться в blocker; malformed blocker автоматически отклоняется без `WAIT_USER_REPLY`
   - при временной недоступности GitHub кладет комментарий в outbox и включает pending-waiting state
-  - сохраняет waiting-state в `<state-dir>/`, чтобы daemon ждал ответ пользователя
+  - сохраняет waiting-state в `<state-dir>/`, чтобы daemon ждал ответ пользователя, и executor обязана реально остановиться после публикации waiting-comment
 - `daemon_check_replies.sh`
   - если daemon в waiting-state, проверяет новые комментарии Issue после вопроса/ревью
   - для `AGENT_QUESTION/AGENT_BLOCKER` первый пользовательский комментарий (без `CODEX_SIGNAL:`) классифицирует как `QUESTION` или `REWORK`

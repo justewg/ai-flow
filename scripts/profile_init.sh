@@ -668,6 +668,7 @@ ensure_state_namespace_layout() {
     "executor:executor_pid.txt"
     "executor:executor_prompt.txt"
     "executor:executor_state.txt"
+    "executor:executor_wait_user_reply_stop.txt"
     "executor:executor_task_id.txt"
     "project:project_status_runtime_queue.json"
     "project:project_status_runtime_queue.md"

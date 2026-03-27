@@ -8,6 +8,7 @@ CODEX_DIR="$(codex_export_state_dir)"
 PID_FILE="${CODEX_DIR}/executor_pid.txt"
 HEARTBEAT_PID_FILE="${CODEX_DIR}/executor_heartbeat_pid.txt"
 DETACH_FILE="${CODEX_DIR}/executor_detach_requested.txt"
+WAIT_STOP_FILE="${CODEX_DIR}/executor_wait_user_reply_stop.txt"
 COMMIT_FILE="${CODEX_DIR}/commit_message.txt"
 PR_BODY_FILE="${CODEX_DIR}/pr_body.txt"
 PR_NUMBER_FILE="${CODEX_DIR}/pr_number.txt"
@@ -108,6 +109,7 @@ fi
 if [[ "$preserve_current_tree" != "1" ]]; then
   : > "$DETACH_FILE"
 fi
+: > "$WAIT_STOP_FILE"
 : > "${CODEX_DIR}/executor_failure_notified_task.txt"
 : > "${CODEX_DIR}/executor_done_wait_notified_task.txt"
 : > "${CODEX_DIR}/executor_heartbeat_utc.txt"

@@ -47,6 +47,85 @@ project_task_file="${CODEX_DIR}/project_task_id.txt"
 active_issue_file="${CODEX_DIR}/daemon_active_issue_number.txt"
 pending_post_file="${CODEX_DIR}/daemon_waiting_pending_post.txt"
 
+extract_structured_field() {
+  local key="$1"
+  local text="$2"
+  printf '%s\n' "$text" \
+    | sed 's/\r$//' \
+    | awk -F= -v key="$key" '$1 == key { sub(/^[^=]*=/, "", $0); print; exit }'
+}
+
+strip_structured_fields() {
+  local text="$1"
+  printf '%s\n' "$text" \
+    | sed 's/\r$//' \
+    | grep -Ev '^ASK_[A-Z_]+=' \
+    | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' \
+    | sed '/^$/d'
+}
+
+is_valid_blocker_reason() {
+  local reason="$1"
+  case "$reason" in
+    needs_user_fact|needs_user_decision|needs_scope_decision)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+build_structured_options() {
+  local reason="$1"
+  case "$reason" in
+    needs_user_fact)
+      cat <<'EOF'
+Ответь одним комментарием с недостающим фактом или значением, которое нужно для продолжения.
+EOF
+      ;;
+    needs_user_decision)
+      cat <<'EOF'
+Ответь одним комментарием с выбранным вариантом или коротким решением, которое нужно для продолжения.
+EOF
+      ;;
+    needs_scope_decision)
+      cat <<'EOF'
+Ответь одним комментарием, что остаётся в scope текущей задачи, а что нужно вынести отдельно.
+EOF
+      ;;
+  esac
+}
+
+render_structured_message() {
+  local kind_label="$1"
+  local reason="$2"
+  local question="$3"
+  local context="$4"
+
+  if [[ -n "$context" ]]; then
+    cat <<EOF
+Контекст:
+${context}
+
+Вопрос executor:
+${question}
+
+Как ответить:
+$(build_structured_options "$reason")
+EOF
+    return 0
+  fi
+
+  cat <<EOF
+Вопрос executor:
+${question}
+
+Как ответить:
+$(build_structured_options "$reason")
+EOF
+}
+
 extract_question_line() {
   local text="$1"
   printf '%s\n' "$text" \
@@ -337,89 +416,6 @@ infer_executor_remark() {
   printf '%s' "$remark"
 }
 
-render_question_message() {
-  local text="$1"
-  local kind="$2"
-  local explicit_q=""
-  local explicit_decision=""
-  local inferred_q=""
-  local fallback_q=""
-  local selected_q=""
-  local context_line=""
-  local executor_remark=""
-  local smart_options=""
-  local recommended_option=""
-
-  explicit_q="$(extract_question_line "$text")"
-  explicit_decision="$(extract_decision_line "$text")"
-
-  if [[ -n "$explicit_q" ]]; then
-    selected_q="$explicit_q"
-  elif [[ -n "$explicit_decision" ]]; then
-    selected_q="$explicit_decision"
-  fi
-
-  if [[ -z "$selected_q" ]]; then
-    inferred_q="$(infer_executor_question)"
-    if [[ -n "$inferred_q" ]]; then
-      selected_q="$inferred_q"
-    fi
-  fi
-
-  if [[ -z "$selected_q" ]]; then
-    fallback_q="$(extract_context_line "$text")"
-    if [[ -z "$fallback_q" ]]; then
-      fallback_q="$(printf '%s\n' "$text" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' | sed '/^$/d' | head -n1)"
-    fi
-    selected_q="$fallback_q"
-  fi
-
-  selected_q="$(normalize_executor_question "$selected_q")"
-  if is_generic_executor_question "$selected_q"; then
-    selected_q="Выбери следующий шаг для executor."
-  fi
-  context_line="$(extract_context_line "$text")"
-  executor_remark="$(infer_executor_remark)"
-  smart_options="$(build_smart_options "$text" "$selected_q" "$executor_remark" "$kind")"
-  recommended_option="$(detect_recommended_option "$text" "$selected_q" "$executor_remark")"
-
-  if [[ -n "$selected_q" ]]; then
-    if [[ -n "$executor_remark" && "$executor_remark" != "$selected_q" && "$executor_remark" != "$context_line" ]]; then
-      cat <<EOF_RENDER
-Последние ремарки executor:
-${executor_remark}
-
-EOF_RENDER
-    fi
-
-    if [[ -n "$context_line" && "$context_line" != "$selected_q" ]]; then
-      cat <<EOF_RENDER
-Контекст:
-${context_line}
-
-Вопрос executor:
-${selected_q}
-
-Варианты ответа:
-${smart_options}
-Рекомендовано: ${recommended_option}
-EOF_RENDER
-    else
-      cat <<EOF_RENDER
-Вопрос executor:
-${selected_q}
-
-Варианты ответа:
-${smart_options}
-Рекомендовано: ${recommended_option}
-EOF_RENDER
-    fi
-    return 0
-  fi
-
-  printf '%s' "$text"
-}
-
 post_issue_comment() {
   local issue_number="$1"
   local body="$2"
@@ -494,8 +490,33 @@ fi
 now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
 comment_message_text="$message_text"
-if [[ "$kind_label" == "QUESTION" || "$kind_label" == "BLOCKER" ]]; then
-  comment_message_text="$(render_question_message "$message_text" "$kind_label")"
+structured_reason="$(extract_structured_field "ASK_REASON" "$message_text")"
+structured_question="$(extract_structured_field "ASK_QUESTION" "$message_text")"
+structured_context="$(extract_structured_field "ASK_CONTEXT" "$message_text")"
+structured_extra="$(strip_structured_fields "$message_text")"
+
+if [[ -n "$structured_context" && -n "$structured_extra" ]]; then
+  structured_context="${structured_context}"$'\n\n'"${structured_extra}"
+elif [[ -z "$structured_context" ]]; then
+  structured_context="$structured_extra"
+fi
+
+if [[ "$kind_label" == "BLOCKER" ]]; then
+  if [[ -z "$structured_reason" || -z "$structured_question" ]]; then
+    echo "TASK_ASK_REJECTED=1"
+    echo "TASK_ASK_REJECT_REASON=MALFORMED_BLOCKER"
+    echo "TASK_ASK_ACTION=CONTINUE_WITHOUT_USER_REPLY"
+    exit 0
+  fi
+  if ! is_valid_blocker_reason "$structured_reason"; then
+    echo "TASK_ASK_REJECTED=1"
+    echo "TASK_ASK_REJECT_REASON=UNSUPPORTED_BLOCKER_REASON"
+    echo "TASK_ASK_ACTION=CONTINUE_WITHOUT_USER_REPLY"
+    exit 0
+  fi
+  comment_message_text="$(render_structured_message "$kind_label" "$structured_reason" "$structured_question" "$structured_context")"
+elif [[ -n "$structured_question" ]]; then
+  comment_message_text="$(render_structured_message "$kind_label" "${structured_reason:-needs_user_decision}" "$structured_question" "$structured_context")"
 fi
 
 comment_body="$(cat <<EOF_COMMENT

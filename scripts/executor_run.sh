@@ -32,7 +32,7 @@ mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
 : > "$DETACH_FILE"
 
 task_repo="$(task_worktree_repo_dir "$task_id" "$issue_number")"
-if [[ ! -d "$task_repo/.git" ]]; then
+if ! task_worktree_repo_present "$task_repo"; then
   {
     echo "EXECUTOR_TASK_WORKTREE_MISSING=1"
     echo "EXECUTOR_TASK_WORKTREE_PATH=${task_repo}"

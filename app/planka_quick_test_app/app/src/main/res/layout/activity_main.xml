@@ -29,8 +29,8 @@
 
     <LinearLayout
         android:id="@+id/diagnosticsPanel"
-        android:layout_width="320dp"
-        android:layout_height="220dp"
+        android:layout_width="360dp"
+        android:layout_height="248dp"
         android:layout_gravity="bottom|start"
         android:layout_marginStart="10dp"
         android:layout_marginBottom="10dp"
@@ -57,13 +57,49 @@
                 android:textStyle="bold" />
 
             <Button
+                android:id="@+id/diagnosticsRecoverButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4dp"
+                android:text="@string/diagnostics_recover"
+                android:textAllCaps="false"
+                android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/diagnosticsReloadButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4dp"
+                android:text="@string/diagnostics_reload"
+                android:textAllCaps="false"
+                android:textSize="11sp" />
+
+            <Button
                 android:id="@+id/diagnosticsExportButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4dp"
+                android:text="@string/diagnostics_export"
+                android:textAllCaps="false"
+                android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/diagnosticsCloseButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:minHeight="0dp"
                 android:paddingHorizontal="10dp"
                 android:paddingVertical="4dp"
-                android:text="@string/diagnostics_export"
+                android:text="@string/diagnostics_close"
                 android:textAllCaps="false"
                 android:textSize="11sp" />
         </LinearLayout>
@@ -76,6 +112,16 @@
             android:maxLines="3"
             android:textColor="#A9B6C3"
             android:textSize="10sp" />
+
+        <TextView
+            android:id="@+id/diagnosticsShellStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:maxLines="4"
+            android:textColor="#C7D5E3"
+            android:textSize="10sp"
+            android:typeface="monospace" />
 
         <ScrollView
             android:id="@+id/diagnosticsScroll"

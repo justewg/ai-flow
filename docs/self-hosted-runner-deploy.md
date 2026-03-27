@@ -66,6 +66,35 @@ sudo ./svc.sh status
 5. Проверить, что runner online в GitHub UI:
    `Repository -> Settings -> Actions -> Runners`.
 
+## Docker access for builder-based workflows
+
+Если workflow на этом runner вызывает `docker compose` или `docker run` на хосте
+(например, Android builder), runner user должен иметь доступ к Docker daemon.
+
+Для пользователя из этого runbook:
+
+```bash
+sudo usermod -aG docker gha-runner
+id gha-runner
+```
+
+После добавления в группу `docker` нужно перезапустить service runner, иначе
+текущий процесс не увидит новую group membership:
+
+```bash
+cd /opt/actions-runner/planka-deploy
+sudo ./svc.sh restart
+```
+
+Smoke:
+
+```bash
+sudo -u gha-runner docker ps
+```
+
+Если здесь `permission denied while trying to connect to the Docker daemon
+socket`, builder-based workflow на этом runner тоже не взлетит.
+
 Важно:
 - runner, зарегистрированный для `justewg/planka`, автоматически не появится в `justewg/favs`;
 - для нового consumer-project нужен отдельный repo-level runner в его `Settings -> Actions -> Runners`, либо общий org-level runner;
@@ -112,6 +141,7 @@ ls -la /var/sites/planka-dev/.flow/shared/scripts/run.sh
 - Если workflow падает на шаге `Explain missing self-hosted runner`, это тот же случай: GitHub API не видит подходящий runner.
 - Если preflight пишет warning `Runner preflight skipped`, это нормально: стандартный `GITHUB_TOKEN` не имеет доступа к API списка repository runners. В этом случае workflow просто продолжает запуск self-hosted job без fail-fast проверки.
 - Если deploy прошёл, но на сервере нет `.flow/shared/scripts/run.sh`, значит workflow был выполнен без recursive submodule checkout или runner разложил не тот workspace snapshot.
+- Если builder-based workflow падает на `permission denied while trying to connect to the Docker daemon socket`, runner user не состоит в группе `docker` или service runner не был перезапущен после `usermod -aG docker ...`.
 - Проверить наличие runner можно в `Repository -> Settings -> Actions -> Runners`.
 - Проверить сервис на сервере:
 

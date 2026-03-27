@@ -882,6 +882,7 @@ case "$cmd" in
       exit 1
     fi
     "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "${@:2}"
+    ;;
 
   runtime_refresh_full)
     "${CODEX_SHARED_SCRIPTS_DIR}/runtime_refresh_full.sh"

@@ -6,6 +6,9 @@
 - fullscreen `WebView` c локальным `HTML/CSS/JS` из `assets`
 - versioned `ui-shell-config` с built-in defaults и fallback
 - service-кнопка штатного выхода `×`
+- parent-mode contour из `prototype/web`: `Р -> О -> Д` с удержанием, PIN gate и parent panel
+- local recent-session baseline: сохранение черновика, локали и последних фраз в `localStorage` WebView
+- reuse последних фраз через нижнюю recent-session ленту внутри shell
 - on-screen breakout diagnostics overlay по кнопке `DIAG`
 - `DBG` drawer внутри WebView с service actions `DIAG` / `FULL` / `EXPORT` / `RELOAD`
 - JS/native service bridge c live shell snapshot и manual actions
@@ -28,9 +31,13 @@
 4. Возврат в shell после системного breakout.
 5. `DBG` drawer: `DIAG`, `FULL`, `EXPORT`, `RELOAD`.
 6. События в `DIAG` и экспорт итогового текстового лога.
+7. Parent-mode: `Р -> О -> Д` + hold `Д` 3 секунды, затем PIN `2580`.
+8. Level-2 contour: из parent panel открыть Android settings через PIN `9000`.
+9. Возврат из parent panel в детский режим и восстановление последней сессии после reload/restart shell.
 
 Baseline-документ для follow-up Android-задач:
 - [PL-072 Android diagnostic shell build](../../docs/pl-072-android-diagnostic-shell-build.md)
+- [PL-083 Android parent-mode and recent-session port](../../docs/pl-083-android-parent-mode-and-recent-session.md)
 
 ## Android Breakout Diagnostics
 
@@ -40,7 +47,7 @@ Surface:
 - overlay с live-логом и `session/internal/export path`
 - bridge-метод `AndroidApp.getBreakoutDiagnosticsLog()`
 - bridge-метод `AndroidApp.getShellSnapshot()`
-- bridge-service actions `setDiagnosticsPanelVisible` / `requestFullscreenRefresh` / `exportDiagnosticsLog` / `reloadShell`
+- bridge-service actions `setDiagnosticsPanelVisible` / `requestFullscreenRefresh` / `exportDiagnosticsLog` / `reloadShell` / `openSystemSettings`
 - экспорт по кнопке `Экспорт txt`
 
 События shell:
@@ -89,6 +96,21 @@ Smoke-flow:
 Детальный event-contract и sample output:
 - [PL-066 Android breakout diagnostics](../../docs/pl-066-android-breakout-diagnostics.md)
 - [PL-066 breakout log sample](../../docs/pl-066-breakout-log.sample.txt)
+
+## PL-083 UX Port
+
+Что добавлено поверх диагностического baseline:
+- parent-mode entry contour из `prototype/web`: последовательность `Р -> О -> Д` и удержание `Д` 3 секунды
+- PIN gate уровня 1 и parent panel с быстрыми функциями для recent-session summary
+- level-2 PIN contour открывает Android system settings через native bridge `openSystemSettings`
+- recent-session storage в `localStorage`: текущий черновик, текущая локаль и до 6 последних фраз
+- нижняя лента `Недавние фразы` с сохранением текущего текста и быстрым восстановлением последней фразы
+- back/escape сначала закрывает parent overlays и `DBG`, не ломая существующий native back bridge
+
+Что осталось вне scope этой дельты:
+- более управляемый возврат из Android settings обратно в shell после level-2 breakout
+- backend sync для истории фраз и session payload
+- более широкий перенос UX из `prototype/web` за пределами parent-mode и recent-session slice
 
 ## Что менять быстро
 

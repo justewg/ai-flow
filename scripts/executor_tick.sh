@@ -52,7 +52,7 @@ reply_comment_id="$(cat "${CODEX_DIR}/daemon_user_reply_comment_id.txt" 2>/dev/n
 last_retry_reply_id="$(cat "$RETRY_REPLY_FILE" 2>/dev/null || true)"
 
 if [[ -n "$exec_task" && "$exec_task" != "$task_id" ]]; then
-  "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
   : > "$DONE_NOTIFY_FILE"
   state=""
   exec_task=""
@@ -89,7 +89,7 @@ if [[ "$state" == "FAILED" ]]; then
   if [[ "$is_waiting_user" != "1" && "$reply_task" == "$task_id" && "$reply_issue" == "$issue_number" &&
     -n "$reply_comment_id" && "$reply_comment_id" != "$last_retry_reply_id" ]]; then
     printf '%s\n' "$reply_comment_id" > "$RETRY_REPLY_FILE"
-    "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
     : > "$DONE_NOTIFY_FILE"
     : > "$FAIL_NOTIFY_FILE"
     echo "EXECUTOR_RETRY_AFTER_USER_REPLY=1"
@@ -135,7 +135,7 @@ if [[ "$state" == "DONE" ]]; then
   if [[ "$is_waiting_user" != "1" && "$reply_task" == "$task_id" && "$reply_issue" == "$issue_number" &&
     -n "$reply_comment_id" && "$reply_comment_id" != "$last_retry_reply_id" ]]; then
     printf '%s\n' "$reply_comment_id" > "$RETRY_REPLY_FILE"
-    "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
     : > "$DONE_NOTIFY_FILE"
     : > "$FAIL_NOTIFY_FILE"
     echo "EXECUTOR_RETRY_AFTER_USER_REPLY=1"

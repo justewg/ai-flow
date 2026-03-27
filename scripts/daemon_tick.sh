@@ -1248,7 +1248,7 @@ maybe_release_active_task_on_status_mismatch() {
       echo "ACTIVE_TASK_RELEASED_AUTO_IGNORE_LABEL=1"
       echo "ACTIVE_TASK_RELEASED_TASK_ID=${active_task}"
       echo "ACTIVE_TASK_RELEASED_ISSUE_NUMBER=${active_issue_number}"
-      "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
+      /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
       : > "$active_task_file"
       : > "$active_item_file"
       : > "$active_issue_file"
@@ -1340,7 +1340,7 @@ maybe_release_active_task_on_status_mismatch() {
     echo "ACTIVE_TASK_RELEASED_REASON=STATUS_EMPTY_OR_ITEM_MISSING"
     echo "ACTIVE_TASK_RELEASED_TASK_ID=${active_task}"
     echo "ACTIVE_TASK_EXPECTED_STATUS=${target_status}"
-    "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
     : > "$active_task_file"
     : > "$active_item_file"
     : > "$active_issue_file"
@@ -1396,7 +1396,7 @@ maybe_release_active_task_on_status_mismatch() {
   echo "ACTIVE_TASK_RELEASED_TASK_ID=${active_task}"
   echo "ACTIVE_TASK_RELEASED_STATUS=${status_name}"
   echo "ACTIVE_TASK_EXPECTED_STATUS=${target_status}"
-  "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
   : > "$active_task_file"
   : > "$active_item_file"
   : > "$active_issue_file"
@@ -2664,7 +2664,7 @@ if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
     printf '%s\n' "$review_task_id" > "${CODEX_DIR}/project_task_id.txt"
     materialize_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$review_task_id" "$review_issue_number" 2>&1)"
     emit_lines "$materialize_out"
-    "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
 
     : > "$review_task_file"
     : > "$review_item_file"
@@ -3303,7 +3303,7 @@ printf '%s\n' "$item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"
 printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
 printf '%s\n' "$task_id" > "${CODEX_DIR}/project_task_id.txt"
 project_issue_cache_upsert "$task_id" "$item_id" "$issue_number" "$title" "$target_status" "$target_flow" "daemon_claim"
-"${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
+/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
 date -u '+%Y-%m-%dT%H:%M:%SZ' > "${CODEX_DIR}/daemon_last_claim_utc.txt"
 date +%s > "$claim_epoch_file"
 

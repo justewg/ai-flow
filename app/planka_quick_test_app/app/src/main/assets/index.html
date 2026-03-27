@@ -5,211 +5,525 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>PLANKA Diagnostic Shell</title>
   <style>
-    :root{
-      --bg:#11161d;
-      --panel:#18202a;
-      --key:#36414f;
-      --key-border:#566273;
-      --text:#f2f5f8;
-      --muted:#8fa0b3;
-      --section-gap:10px;
-      --keyboard-row-gap:8px;
-      --key-gap:8px;
-      --radius:14px;
-      --app-padding:8px;
-      --text-size-multiplier:1;
-      --key-size-multiplier:1;
-      --shell-panel-bg:rgba(9,14,20,.92);
-      --shell-panel-border:rgba(121,146,166,.44);
-      --shell-accent:#d7e7f8;
-      --shell-action:#243343;
+    :root {
+      --bg: #11161d;
+      --panel: #18202a;
+      --key: #36414f;
+      --key-border: #566273;
+      --text: #f2f5f8;
+      --muted: #8fa0b3;
+      --section-gap: 10px;
+      --keyboard-row-gap: 8px;
+      --key-gap: 8px;
+      --radius: 14px;
+      --app-padding: 8px;
+      --text-size-multiplier: 1;
+      --key-size-multiplier: 1;
+      --shell-panel-bg: rgba(9, 14, 20, .92);
+      --shell-panel-border: rgba(121, 146, 166, .44);
+      --shell-accent: #d7e7f8;
+      --shell-action: #243343;
+      --recent-surface: rgba(12, 19, 28, .84);
+      --recent-border: rgba(104, 124, 144, .4);
+      --recent-chip: #243342;
+      --recent-chip-border: #52677a;
+      --overlay-bg: rgba(10, 14, 20, .9);
+      --overlay-card: #f5f0e7;
+      --overlay-line: #cbbfa7;
+      --overlay-text: #1f1c17;
+      --overlay-muted: #6a6255;
+      --overlay-soft: #ece2d0;
+      --overlay-primary: #1a6f61;
+      --overlay-primary-soft: #d7ede8;
+      --overlay-danger: #7f2727;
+      --screen-footer-clearance: 108px;
     }
-    * { box-sizing:border-box; user-select:none; -webkit-user-select:none; }
-    html,body{
-      margin:0; padding:0; width:100%; height:100%;
-      background:var(--bg); color:var(--text);
-      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
-      overflow:hidden;
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
     }
-    body{ padding:var(--app-padding); }
-    .app{
-      width:100%;
-      height:100%;
-      display:grid;
-      grid-template-rows:1fr 0.95fr;
-      gap:var(--section-gap);
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      overflow: hidden;
     }
-    .screen{
-      position:relative;
-      background:linear-gradient(180deg,#151c25,#11161d);
-      border:1px solid #44505e;
-      border-radius:18px;
-      overflow:hidden;
+
+    body {
+      padding: var(--app-padding);
     }
-    .topbar{
-      position:absolute; inset:var(--app-padding) var(--app-padding) auto var(--app-padding);
-      display:flex; justify-content:flex-end; gap:var(--key-gap);
-      z-index:3;
+
+    .app {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-rows: 1fr .95fr;
+      gap: var(--section-gap);
     }
-    .chip{
-      min-width:52px;
-      height:40px;
-      border-radius:12px;
-      border:1px solid #586577;
-      background:#1a2330;
-      color:var(--text);
-      display:flex; align-items:center; justify-content:center;
-      font-size:calc(22px * var(--key-size-multiplier)); font-weight:700;
+
+    .screen {
+      position: relative;
+      background: linear-gradient(180deg, #151c25, #11161d);
+      border: 1px solid #44505e;
+      border-radius: 18px;
+      overflow: hidden;
     }
-    .text{
-      position:absolute; inset:calc(var(--app-padding) * 2.25);
-      padding-top:calc(34px + var(--app-padding));
-      font-size:clamp(
+
+    .topbar {
+      position: absolute;
+      inset: var(--app-padding) var(--app-padding) auto var(--app-padding);
+      display: flex;
+      justify-content: flex-end;
+      gap: var(--key-gap);
+      z-index: 3;
+    }
+
+    .chip {
+      min-width: 52px;
+      height: 40px;
+      border-radius: 12px;
+      border: 1px solid #586577;
+      background: #1a2330;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: calc(22px * var(--key-size-multiplier));
+      font-weight: 700;
+    }
+
+    .text {
+      position: absolute;
+      inset: calc(var(--app-padding) * 2.25);
+      padding-top: calc(34px + var(--app-padding));
+      padding-bottom: calc(52px + var(--app-padding));
+      font-size: clamp(
         calc(32px * var(--text-size-multiplier)),
         calc(5vw * var(--text-size-multiplier)),
         calc(74px * var(--text-size-multiplier))
       );
-      line-height:1.04;
-      font-weight:700;
-      letter-spacing:0.5px;
-      word-break:break-word;
-      white-space:pre-wrap;
-      overflow:hidden;
+      line-height: 1.04;
+      font-weight: 700;
+      letter-spacing: .5px;
+      word-break: break-word;
+      white-space: pre-wrap;
+      overflow: hidden;
     }
-    .text.empty::before{
-      content:attr(data-placeholder);
-      color:var(--muted);
+
+    .text.empty::before {
+      content: attr(data-placeholder);
+      color: var(--muted);
     }
-    .keyboard{
-      display:grid;
-      grid-template-rows:repeat(5, 1fr);
-      gap:var(--keyboard-row-gap, var(--key-gap));
-      min-height:0;
+
+    .recent-strip {
+      position: absolute;
+      left: calc(var(--app-padding) * 1.5);
+      right: var(--screen-footer-clearance);
+      bottom: calc(var(--app-padding) * 1.5);
+      min-height: 52px;
+      padding: 10px 12px;
+      border-radius: 16px;
+      border: 1px solid var(--recent-border);
+      background: var(--recent-surface);
+      display: grid;
+      gap: 8px;
+      z-index: 3;
+      backdrop-filter: blur(10px);
     }
-    .row{
-      display:grid;
-      gap:var(--key-gap);
+
+    .recent-strip[hidden] {
+      display: none;
     }
-    .key{
-      border-radius:var(--radius);
-      border:1px solid var(--key-border);
-      background:var(--key);
-      color:var(--text);
-      font-weight:700;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      min-width:0;
-      min-height:0;
-      font-size:clamp(
+
+    .recent-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .recent-title {
+      color: #cbd9e6;
+      font: 700 11px/1 "Segoe UI", sans-serif;
+      letter-spacing: .12em;
+    }
+
+    .recent-meta {
+      color: #8da3b8;
+      font: 600 10px/1 "Segoe UI", sans-serif;
+    }
+
+    .recent-list {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .recent-list::-webkit-scrollbar {
+      display: none;
+    }
+
+    .recent-chip {
+      flex: 0 0 auto;
+      min-height: 30px;
+      max-width: 220px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--recent-chip-border);
+      background: var(--recent-chip);
+      color: #eef4f9;
+      font: 700 11px/1.2 "Segoe UI", sans-serif;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .recent-empty {
+      color: #8da3b8;
+      font: 600 11px/1.3 "Segoe UI", sans-serif;
+    }
+
+    .keyboard {
+      display: grid;
+      grid-template-rows: repeat(5, 1fr);
+      gap: var(--keyboard-row-gap, var(--key-gap));
+      min-height: 0;
+    }
+
+    .row {
+      display: grid;
+      gap: var(--key-gap);
+    }
+
+    .key {
+      border-radius: var(--radius);
+      border: 1px solid var(--key-border);
+      background: var(--key);
+      color: var(--text);
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+      min-height: 0;
+      font-size: clamp(
         calc(16px * var(--key-size-multiplier)),
         calc(2.2vw * var(--key-size-multiplier)),
         calc(30px * var(--key-size-multiplier))
       );
-      box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
     }
-    .key:active{ transform:translateY(1px); filter:brightness(1.07); }
-    .fatal{
-      width:100%;
-      height:100%;
-      display:grid;
-      place-items:center;
-      padding:24px;
-      text-align:center;
-      color:var(--text);
-      font:600 24px/1.4 "Segoe UI",sans-serif;
-      white-space:pre-wrap;
+
+    .key:active {
+      transform: translateY(1px);
+      filter: brightness(1.07);
     }
-    .shell-dock{
-      position:absolute;
-      right:calc(var(--app-padding) * 1.5);
-      bottom:calc(var(--app-padding) * 1.5);
-      z-index:4;
-      display:flex;
-      flex-direction:column;
-      align-items:flex-end;
-      gap:8px;
+
+    .fatal {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      text-align: center;
+      color: var(--text);
+      font: 600 24px/1.4 "Segoe UI", sans-serif;
+      white-space: pre-wrap;
     }
-    .shell-toggle{
-      min-width:62px;
-      height:38px;
-      padding:0 14px;
-      border-radius:12px;
-      border:1px solid #6d8094;
-      background:rgba(17,26,36,.88);
-      color:var(--shell-accent);
-      font:700 13px/1 "Segoe UI",sans-serif;
-      letter-spacing:.08em;
+
+    .shell-dock {
+      position: absolute;
+      right: calc(var(--app-padding) * 1.5);
+      bottom: calc(var(--app-padding) * 1.5);
+      z-index: 4;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
     }
-    .shell-panel{
-      width:min(240px, calc(100vw - 36px));
-      border-radius:16px;
-      border:1px solid var(--shell-panel-border);
-      background:var(--shell-panel-bg);
-      box-shadow:0 20px 50px rgba(0,0,0,.32);
-      padding:12px;
-      display:grid;
-      gap:10px;
-      backdrop-filter:blur(10px);
+
+    .shell-toggle {
+      min-width: 62px;
+      height: 38px;
+      padding: 0 14px;
+      border-radius: 12px;
+      border: 1px solid #6d8094;
+      background: rgba(17, 26, 36, .88);
+      color: var(--shell-accent);
+      font: 700 13px/1 "Segoe UI", sans-serif;
+      letter-spacing: .08em;
     }
-    .shell-panel[hidden]{ display:none; }
-    .shell-header{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:8px;
+
+    .shell-panel {
+      width: min(240px, calc(100vw - 36px));
+      border-radius: 16px;
+      border: 1px solid var(--shell-panel-border);
+      background: var(--shell-panel-bg);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, .32);
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+      backdrop-filter: blur(10px);
     }
-    .shell-title{
-      font:700 12px/1 "Segoe UI",sans-serif;
-      letter-spacing:.14em;
-      color:var(--shell-accent);
+
+    .shell-panel[hidden] {
+      display: none;
     }
-    .shell-badge{
-      min-width:54px;
-      padding:4px 8px;
-      border-radius:999px;
-      background:#1a2733;
-      border:1px solid #425667;
-      color:#c8d8e7;
-      text-align:center;
-      font:600 11px/1 "Segoe UI",sans-serif;
+
+    .shell-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
     }
-    .shell-status{
-      display:grid;
-      gap:4px;
-      color:#e2e8ee;
-      font:600 11px/1.3 "Segoe UI",sans-serif;
+
+    .shell-title {
+      font: 700 12px/1 "Segoe UI", sans-serif;
+      letter-spacing: .14em;
+      color: var(--shell-accent);
     }
-    .shell-status strong{
-      color:#88a9c6;
-      font-weight:700;
+
+    .shell-badge {
+      min-width: 54px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #1a2733;
+      border: 1px solid #425667;
+      color: #c8d8e7;
+      text-align: center;
+      font: 600 11px/1 "Segoe UI", sans-serif;
     }
-    .shell-actions{
-      display:grid;
-      grid-template-columns:repeat(2, minmax(0, 1fr));
-      gap:8px;
+
+    .shell-status {
+      display: grid;
+      gap: 4px;
+      color: #e2e8ee;
+      font: 600 11px/1.3 "Segoe UI", sans-serif;
     }
-    .shell-action{
-      min-height:40px;
-      padding:8px 10px;
-      border-radius:12px;
-      border:1px solid #51687b;
-      background:var(--shell-action);
-      color:#eff5fa;
-      font:700 12px/1.1 "Segoe UI",sans-serif;
-      text-align:center;
+
+    .shell-status strong {
+      color: #88a9c6;
+      font-weight: 700;
     }
-    .shell-action:disabled{
-      opacity:.55;
+
+    .shell-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
     }
-    .shell-feedback{
-      min-height:30px;
-      padding:8px 10px;
-      border-radius:10px;
-      background:rgba(36,52,67,.66);
-      color:#a9bbcb;
-      font:600 11px/1.35 "Segoe UI",sans-serif;
-      white-space:pre-wrap;
+
+    .shell-action {
+      min-height: 40px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid #51687b;
+      background: var(--shell-action);
+      color: #eff5fa;
+      font: 700 12px/1.1 "Segoe UI", sans-serif;
+      text-align: center;
+    }
+
+    .shell-action:disabled {
+      opacity: .55;
+    }
+
+    .shell-feedback {
+      min-height: 30px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(36, 52, 67, .66);
+      color: #a9bbcb;
+      font: 600 11px/1.35 "Segoe UI", sans-serif;
+      white-space: pre-wrap;
+    }
+
+    .parent-overlay {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      background: var(--overlay-bg);
+      z-index: 12;
+    }
+
+    .parent-overlay[hidden] {
+      display: none;
+    }
+
+    .parent-card {
+      width: min(640px, calc(100vw - 36px));
+      border-radius: 24px;
+      border: 2px solid var(--overlay-line);
+      background: var(--overlay-card);
+      color: var(--overlay-text);
+      padding: 20px;
+      display: grid;
+      gap: 14px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, .34);
+    }
+
+    .parent-panel-card {
+      gap: 16px;
+    }
+
+    .parent-title {
+      margin: 0;
+      font: 700 28px/1.1 "Segoe UI", sans-serif;
+    }
+
+    .parent-subtitle {
+      margin: 0;
+      color: var(--overlay-muted);
+      font: 600 14px/1.4 "Segoe UI", sans-serif;
+    }
+
+    .pin-dots {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .pin-dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      border: 2px solid var(--overlay-line);
+      background: transparent;
+    }
+
+    .pin-dot.filled {
+      background: var(--overlay-primary);
+      border-color: var(--overlay-primary);
+    }
+
+    .parent-error {
+      min-height: 20px;
+      margin: 0;
+      color: var(--overlay-danger);
+      font: 700 14px/1.4 "Segoe UI", sans-serif;
+      text-align: center;
+    }
+
+    .pin-pad {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .pin-key,
+    .parent-action-btn {
+      border-radius: 16px;
+      border: 2px solid var(--overlay-line);
+      background: var(--overlay-soft);
+      color: var(--overlay-text);
+      font: 700 16px/1.2 "Segoe UI", sans-serif;
+    }
+
+    .pin-key {
+      min-height: 58px;
+    }
+
+    .pin-key:disabled {
+      opacity: .42;
+    }
+
+    .pin-key-wide {
+      font-size: 14px;
+    }
+
+    .parent-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .parent-action-btn {
+      min-height: 58px;
+      padding: 12px 14px;
+      text-align: left;
+    }
+
+    .parent-action-btn-primary {
+      border-color: var(--overlay-primary);
+      background: var(--overlay-primary-soft);
+    }
+
+    .parent-recent {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border-radius: 18px;
+      border: 1px solid var(--overlay-line);
+      background: rgba(236, 226, 208, .72);
+    }
+
+    .parent-recent-title {
+      margin: 0;
+      color: var(--overlay-muted);
+      font: 700 12px/1 "Segoe UI", sans-serif;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .parent-recent-list {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .parent-recent-list::-webkit-scrollbar {
+      display: none;
+    }
+
+    .parent-status {
+      min-height: 20px;
+      margin: 0;
+      color: var(--overlay-muted);
+      font: 600 14px/1.4 "Segoe UI", sans-serif;
+    }
+
+    .parent-actions-footer {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .app-toast {
+      position: fixed;
+      left: 50%;
+      bottom: 18px;
+      transform: translateX(-50%);
+      max-width: min(560px, calc(100vw - 36px));
+      padding: 12px 16px;
+      border-radius: 14px;
+      color: #f5fafc;
+      font: 700 13px/1.3 "Segoe UI", sans-serif;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, .3);
+      z-index: 14;
+    }
+
+    .app-toast[hidden] {
+      display: none;
+    }
+
+    .toast-success {
+      background: rgba(16, 88, 69, .94);
+    }
+
+    .toast-error {
+      background: rgba(118, 37, 37, .96);
     }
   </style>
 </head>
@@ -218,6 +532,15 @@
     <div class="screen">
       <div class="topbar" id="topbar"></div>
       <div class="text empty" id="text"></div>
+
+      <div class="recent-strip" id="recentStrip" hidden>
+        <div class="recent-header">
+          <div class="recent-title">RECENT SESSION</div>
+          <div class="recent-meta" id="recentMeta"></div>
+        </div>
+        <div class="recent-list" id="recentList"></div>
+      </div>
+
       <div class="shell-dock">
         <button class="shell-toggle" id="shellToggle" type="button">DBG</button>
         <div class="shell-panel" id="shellPanel" hidden>
@@ -236,14 +559,91 @@
         </div>
       </div>
     </div>
+
     <div class="keyboard" id="keyboard"></div>
   </div>
 
+  <div class="parent-overlay" id="parentPinOverlay" hidden>
+    <section class="parent-card" role="dialog" aria-modal="true" aria-labelledby="parentPinTitle">
+      <h2 class="parent-title" id="parentPinTitle">Родительский контроль</h2>
+      <p class="parent-subtitle">Вход по скрытому контуру `Р` → `О` → `Д` с удержанием `Д`.</p>
+      <div class="pin-dots" id="parentPinDots" aria-live="polite" aria-label="Ввод PIN"></div>
+      <p class="parent-error" id="parentPinError" aria-live="polite"></p>
+      <div class="pin-pad">
+        <button class="pin-key" type="button" data-pin-digit="1">1</button>
+        <button class="pin-key" type="button" data-pin-digit="2">2</button>
+        <button class="pin-key" type="button" data-pin-digit="3">3</button>
+        <button class="pin-key" type="button" data-pin-digit="4">4</button>
+        <button class="pin-key" type="button" data-pin-digit="5">5</button>
+        <button class="pin-key" type="button" data-pin-digit="6">6</button>
+        <button class="pin-key" type="button" data-pin-digit="7">7</button>
+        <button class="pin-key" type="button" data-pin-digit="8">8</button>
+        <button class="pin-key" type="button" data-pin-digit="9">9</button>
+        <button class="pin-key pin-key-wide" type="button" data-pin-action="backspace">⌫</button>
+        <button class="pin-key" type="button" data-pin-digit="0">0</button>
+        <button class="pin-key pin-key-wide" type="button" id="parentPinCancel">Отмена</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="parent-overlay" id="parentPanel" hidden>
+    <section class="parent-card parent-panel-card" role="dialog" aria-modal="true" aria-labelledby="parentPanelTitle">
+      <h2 class="parent-title" id="parentPanelTitle">Панель родителя</h2>
+      <p class="parent-subtitle">Уровень 1: быстрые функции shell и recent-session.</p>
+
+      <div class="parent-actions">
+        <button class="parent-action-btn" type="button" data-parent-action="sync">Пометить recent-session к выгрузке</button>
+        <button class="parent-action-btn" type="button" data-parent-action="stats">Сводка текущей сессии</button>
+        <button class="parent-action-btn" type="button" data-parent-action="restoreDraft">Восстановить последний черновик</button>
+        <button class="parent-action-btn" type="button" data-parent-action="clearRecent">Очистить recent-session</button>
+      </div>
+
+      <div class="parent-recent">
+        <p class="parent-recent-title">Последние фразы</p>
+        <div class="parent-recent-list" id="parentRecentList"></div>
+      </div>
+
+      <p class="parent-status" id="parentPanelStatus" aria-live="polite"></p>
+
+      <div class="parent-actions-footer">
+        <button class="parent-action-btn parent-action-btn-primary" id="parentSystemBtn" type="button">
+          Системные настройки Android
+        </button>
+        <button class="parent-action-btn" id="parentCloseBtn" type="button">
+          Вернуться в режим Андрюши
+        </button>
+      </div>
+    </section>
+  </div>
+
+  <div class="app-toast" id="toast" role="status" aria-live="polite" hidden></div>
+
   <script>
+    const STORAGE_KEY = "planka-android-shell-state-v2";
+    const PARENT_TRIGGER_SEQUENCE = Object.freeze(["Р", "О", "Д"]);
+    const PARENT_TRIGGER_KEY_SET = new Set(PARENT_TRIGGER_SEQUENCE);
+    const DEFAULT_PARENT_ENTRY_PIN = "2580";
+    const SYSTEM_EXIT_PIN = "9000";
+    const PIN_LENGTH = 4;
+    const PIN_LOCKOUT_MS = 10000;
+    const PIN_RESULT_TOAST_MS = 5000;
+    const PARENT_TRIGGER_STEP_TIMEOUT_MS = 3000;
+    const PARENT_TRIGGER_HOLD_MS = 3000;
+    const RECENT_PHRASE_LIMIT = 6;
+    const RECENT_PHRASE_PREVIEW_LIMIT = 28;
+    const ENV_PARENT_PIN_KEYS = Object.freeze([
+      "PLANKA_PARENT_PIN",
+      "PARENT_ENTRY_PIN",
+      "PARENT_PIN",
+    ]);
+
     const appEl = document.querySelector(".app");
     const textEl = document.getElementById("text");
     const keyboardEl = document.getElementById("keyboard");
     const topbarEl = document.getElementById("topbar");
+    const recentStripEl = document.getElementById("recentStrip");
+    const recentMetaEl = document.getElementById("recentMeta");
+    const recentListEl = document.getElementById("recentList");
     const shellToggleEl = document.getElementById("shellToggle");
     const shellPanelEl = document.getElementById("shellPanel");
     const shellBadgeEl = document.getElementById("shellBadge");
@@ -253,6 +653,22 @@
     const shellFullscreenButtonEl = document.getElementById("shellFullscreenButton");
     const shellExportButtonEl = document.getElementById("shellExportButton");
     const shellReloadButtonEl = document.getElementById("shellReloadButton");
+    const parentPinOverlayEl = document.getElementById("parentPinOverlay");
+    const parentPinDotsEl = document.getElementById("parentPinDots");
+    const parentPinErrorEl = document.getElementById("parentPinError");
+    const parentPinCancelEl = document.getElementById("parentPinCancel");
+    const pinDigitEls = Array.from(document.querySelectorAll("[data-pin-digit]"));
+    const pinBackspaceEl = document.querySelector("[data-pin-action='backspace']");
+    const parentPanelEl = document.getElementById("parentPanel");
+    const parentPanelStatusEl = document.getElementById("parentPanelStatus");
+    const parentRecentListEl = document.getElementById("parentRecentList");
+    const parentSystemBtnEl = document.getElementById("parentSystemBtn");
+    const parentCloseBtnEl = document.getElementById("parentCloseBtn");
+    const parentActionEls = Array.from(document.querySelectorAll("[data-parent-action]"));
+    const toastEl = document.getElementById("toast");
+
+    let toastTimerId = null;
+    const PARENT_ENTRY_PIN = resolveParentEntryPin();
 
     const state = {
       config: null,
@@ -263,10 +679,75 @@
       locale: "ru",
       locales: [],
       text: "",
+      recentPhrases: [],
+      parentTrigger: {
+        active: false,
+        timerId: null,
+        holdTimerId: null,
+        holdSymbol: null,
+        sequenceIndex: 0,
+      },
+      parentControl: {
+        gateOpen: false,
+        panelOpen: false,
+        returnToPanelAfterGate: false,
+        pinMode: "parent",
+        pinInput: "",
+        pinError: "",
+        pinBlockUntil: 0,
+        pinBlockTimerId: null,
+        statusMessage: "",
+      },
     };
 
     function renderFatal(message) {
       document.body.innerHTML = `<div class="fatal">${message}</div>`;
+    }
+
+    function asValidPin(candidate) {
+      if (typeof candidate !== "string" && typeof candidate !== "number") {
+        return null;
+      }
+      const normalized = String(candidate).trim();
+      return /^\d{4}$/.test(normalized) ? normalized : null;
+    }
+
+    function resolveParentEntryPin() {
+      const runtimeConfig =
+        typeof globalThis.__PLANKA_ENV__ === "object" &&
+        globalThis.__PLANKA_ENV__ !== null
+          ? globalThis.__PLANKA_ENV__
+          : null;
+      const processEnv =
+        typeof globalThis.process === "object" &&
+        globalThis.process !== null &&
+        typeof globalThis.process.env === "object" &&
+        globalThis.process.env !== null
+          ? globalThis.process.env
+          : null;
+
+      const candidates = [
+        globalThis.__PLANKA_PARENT_PIN__,
+        globalThis.PLANKA_PARENT_PIN,
+      ];
+
+      for (const key of ENV_PARENT_PIN_KEYS) {
+        if (runtimeConfig && key in runtimeConfig) {
+          candidates.push(runtimeConfig[key]);
+        }
+        if (processEnv && key in processEnv) {
+          candidates.push(processEnv[key]);
+        }
+      }
+
+      for (const candidate of candidates) {
+        const pin = asValidPin(candidate);
+        if (pin) {
+          return pin;
+        }
+      }
+
+      return DEFAULT_PARENT_ENTRY_PIN;
     }
 
     function parseBridgePayload(methodName) {
@@ -359,6 +840,115 @@
       appEl.style.gridTemplateRows = `${layout.textRatio}fr ${layout.keyboardRatio}fr`;
     }
 
+    function sanitizePhrase(value) {
+      if (typeof value !== "string") {
+        return "";
+      }
+      return value.replace(/\s+/g, " ").trim();
+    }
+
+    function sanitizeRecentPhrases(value) {
+      if (!Array.isArray(value)) {
+        return [];
+      }
+      const seen = new Set();
+      const result = [];
+
+      for (const item of value) {
+        const normalized = sanitizePhrase(item);
+        if (!normalized || seen.has(normalized)) {
+          continue;
+        }
+        seen.add(normalized);
+        result.push(normalized);
+        if (result.length >= RECENT_PHRASE_LIMIT) {
+          break;
+        }
+      }
+
+      return result;
+    }
+
+    function persistState() {
+      const snapshot = {
+        text: state.text,
+        locale: state.locale,
+        recentPhrases: state.recentPhrases,
+      };
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+    }
+
+    function restoreState() {
+      try {
+        const raw = window.localStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+          return;
+        }
+        const saved = JSON.parse(raw);
+        if (typeof saved.text === "string") {
+          state.text = saved.text;
+        }
+        if (typeof saved.locale === "string" && state.config.keyboard.locales[saved.locale]) {
+          state.locale = saved.locale;
+        }
+        state.recentPhrases = sanitizeRecentPhrases(saved.recentPhrases);
+      } catch {
+        state.text = "";
+        state.locale = state.config.keyboard.defaultLocale;
+        state.recentPhrases = [];
+      }
+    }
+
+    function isParentUiOpen() {
+      return state.parentControl.gateOpen || state.parentControl.panelOpen;
+    }
+
+    function clearToastTimer() {
+      if (toastTimerId) {
+        window.clearTimeout(toastTimerId);
+        toastTimerId = null;
+      }
+    }
+
+    function showToast(message, type = "success") {
+      clearToastTimer();
+      toastEl.hidden = false;
+      toastEl.textContent = message;
+      toastEl.classList.remove("toast-success", "toast-error");
+      toastEl.classList.add(type === "error" ? "toast-error" : "toast-success");
+      toastTimerId = window.setTimeout(() => {
+        toastEl.hidden = true;
+        toastEl.textContent = "";
+        toastEl.classList.remove("toast-success", "toast-error");
+        toastTimerId = null;
+      }, PIN_RESULT_TOAST_MS);
+    }
+
+    function clipPhraseLabel(phrase) {
+      const normalized = sanitizePhrase(phrase);
+      if (normalized.length <= RECENT_PHRASE_PREVIEW_LIMIT) {
+        return normalized;
+      }
+      return `${normalized.slice(0, RECENT_PHRASE_PREVIEW_LIMIT - 1)}…`;
+    }
+
+    function pushRecentPhrase(phrase) {
+      const normalized = sanitizePhrase(phrase);
+      if (!normalized) {
+        return;
+      }
+      state.recentPhrases = [
+        normalized,
+        ...state.recentPhrases.filter((item) => item !== normalized),
+      ].slice(0, RECENT_PHRASE_LIMIT);
+      persistState();
+      renderRecentSession();
+    }
+
+    function rememberCurrentPhrase() {
+      pushRecentPhrase(state.text);
+    }
+
     function renderText() {
       document.documentElement.lang = state.locale;
       textEl.textContent = state.text;
@@ -366,9 +956,65 @@
       textEl.classList.toggle("empty", state.text.length === 0);
     }
 
-    function clearText() {
+    function renderRecentButtons(container, emptyLabel) {
+      container.replaceChildren();
+      if (state.recentPhrases.length === 0) {
+        const emptyEl = document.createElement("div");
+        emptyEl.className = "recent-empty";
+        emptyEl.textContent = emptyLabel;
+        container.appendChild(emptyEl);
+        return;
+      }
+
+      state.recentPhrases.forEach((phrase) => {
+        const button = document.createElement("button");
+        button.className = "recent-chip";
+        button.type = "button";
+        button.textContent = clipPhraseLabel(phrase);
+        button.title = phrase;
+        button.onclick = () => applyRecentPhrase(phrase);
+        container.appendChild(button);
+      });
+    }
+
+    function renderRecentSession() {
+      const hasItems = state.recentPhrases.length > 0;
+      recentStripEl.hidden = !hasItems;
+      recentMetaEl.textContent = hasItems ? `${state.recentPhrases.length} сохранено` : "";
+      renderRecentButtons(recentListEl, "История этой сессии пока пустая.");
+      renderRecentButtons(parentRecentListEl, "Пока нет сохранённых фраз.");
+    }
+
+    function applyRecentPhrase(phrase) {
+      if (isParentUiOpen()) {
+        return;
+      }
+      const normalized = sanitizePhrase(phrase);
+      if (!normalized) {
+        return;
+      }
+      if (state.text.trim() && state.text.trim() !== normalized) {
+        pushRecentPhrase(state.text);
+      }
+      state.text = normalized;
+      renderText();
+      persistState();
+      renderRecentSession();
+      showToast("Фраза восстановлена из recent-session.");
+    }
+
+    function clearText(options = {}) {
+      const { remember = true } = options;
+      if (isParentUiOpen()) {
+        return;
+      }
+      if (remember) {
+        rememberCurrentPhrase();
+      }
       state.text = "";
       renderText();
+      persistState();
+      renderRecentSession();
     }
 
     function exitApp() {
@@ -378,7 +1024,7 @@
     }
 
     function cycleLocale() {
-      if (state.locales.length <= 1) {
+      if (isParentUiOpen() || state.locales.length <= 1) {
         return;
       }
       const currentIndex = state.locales.indexOf(state.locale);
@@ -387,6 +1033,7 @@
       renderTopbar();
       renderKeyboard();
       renderText();
+      persistState();
     }
 
     function createChip(label, title, onClick) {
@@ -396,6 +1043,7 @@
       button.textContent = label;
       button.title = title;
       button.onclick = onClick;
+      button.addEventListener("pointerdown", cancelParentTriggerAttempt);
       return button;
     }
 
@@ -422,7 +1070,7 @@
         }
 
         if (buttonId === "clear") {
-          topbarEl.appendChild(createChip(labels.clear.label, localize(labels.clear.titles), clearText));
+          topbarEl.appendChild(createChip(labels.clear.label, localize(labels.clear.titles), () => clearText()));
           return;
         }
 
@@ -501,6 +1149,9 @@
     }
 
     function toggleShellPanel() {
+      if (isParentUiOpen()) {
+        return;
+      }
       state.shellPanelOpen = !state.shellPanelOpen;
       renderShellPanel();
     }
@@ -542,8 +1193,21 @@
     }
 
     function appendText(value) {
+      if (isParentUiOpen()) {
+        return;
+      }
       state.text += value;
       renderText();
+      persistState();
+    }
+
+    function backspace() {
+      if (isParentUiOpen() || !state.text) {
+        return;
+      }
+      state.text = state.text.slice(0, -1);
+      renderText();
+      persistState();
     }
 
     function handleKeyPress(key) {
@@ -560,8 +1224,7 @@
         return;
       }
       if (key.kind === "backspace") {
-        state.text = state.text.slice(0, -1);
-        renderText();
+        backspace();
       }
     }
 
@@ -570,6 +1233,316 @@
         return key.value;
       }
       return localize(state.config.labels.specialKeys[key.kind]);
+    }
+
+    function isParentTriggerSymbol(symbol) {
+      return PARENT_TRIGGER_KEY_SET.has(symbol);
+    }
+
+    function clearParentTriggerTimer() {
+      if (state.parentTrigger.timerId) {
+        window.clearTimeout(state.parentTrigger.timerId);
+        state.parentTrigger.timerId = null;
+      }
+    }
+
+    function clearParentTriggerHoldTimer() {
+      if (state.parentTrigger.holdTimerId) {
+        window.clearTimeout(state.parentTrigger.holdTimerId);
+        state.parentTrigger.holdTimerId = null;
+      }
+    }
+
+    function restartParentTriggerStepTimeout() {
+      clearParentTriggerTimer();
+      state.parentTrigger.timerId = window.setTimeout(() => {
+        resetParentTriggerState();
+      }, PARENT_TRIGGER_STEP_TIMEOUT_MS);
+    }
+
+    function resetParentTriggerState() {
+      clearParentTriggerTimer();
+      clearParentTriggerHoldTimer();
+      state.parentTrigger.active = false;
+      state.parentTrigger.holdSymbol = null;
+      state.parentTrigger.sequenceIndex = 0;
+    }
+
+    function startParentTriggerAttempt() {
+      state.parentTrigger.active = true;
+      state.parentTrigger.sequenceIndex = 1;
+      state.parentTrigger.holdSymbol = null;
+      restartParentTriggerStepTimeout();
+    }
+
+    function startParentTriggerHold(symbol) {
+      clearParentTriggerTimer();
+      clearParentTriggerHoldTimer();
+      state.parentTrigger.holdSymbol = symbol;
+      state.parentTrigger.holdTimerId = window.setTimeout(() => {
+        openPinGate("parent", false);
+        resetParentTriggerState();
+      }, PARENT_TRIGGER_HOLD_MS);
+    }
+
+    function onParentTriggerKeyPressed(symbol) {
+      if (!isParentTriggerSymbol(symbol) || isParentUiOpen() || state.locale !== "ru") {
+        return false;
+      }
+
+      if (!state.parentTrigger.active) {
+        if (symbol !== PARENT_TRIGGER_SEQUENCE[0]) {
+          return false;
+        }
+        startParentTriggerAttempt();
+        return true;
+      }
+
+      if (state.parentTrigger.holdSymbol) {
+        if (symbol === state.parentTrigger.holdSymbol) {
+          return true;
+        }
+        if (symbol === PARENT_TRIGGER_SEQUENCE[0]) {
+          startParentTriggerAttempt();
+          return true;
+        }
+        resetParentTriggerState();
+        return true;
+      }
+
+      const expected = PARENT_TRIGGER_SEQUENCE[state.parentTrigger.sequenceIndex];
+      if (symbol === expected) {
+        state.parentTrigger.sequenceIndex += 1;
+        if (state.parentTrigger.sequenceIndex === PARENT_TRIGGER_SEQUENCE.length) {
+          startParentTriggerHold(symbol);
+          return true;
+        }
+        restartParentTriggerStepTimeout();
+        return true;
+      }
+
+      if (symbol === PARENT_TRIGGER_SEQUENCE[0]) {
+        startParentTriggerAttempt();
+        return true;
+      }
+
+      resetParentTriggerState();
+      return true;
+    }
+
+    function onParentTriggerKeyReleased(symbol) {
+      if (!state.parentTrigger.active || !state.parentTrigger.holdSymbol || symbol !== state.parentTrigger.holdSymbol) {
+        return;
+      }
+      resetParentTriggerState();
+    }
+
+    function cancelParentTriggerAttempt() {
+      if (!state.parentTrigger.active) {
+        return;
+      }
+      resetParentTriggerState();
+    }
+
+    function getParentTriggerSymbolFromKeyboardKey(keyValue) {
+      const key = String(keyValue || "");
+      if (key === "р" || key === "Р" || key === "r" || key === "R") {
+        return "Р";
+      }
+      if (key === "о" || key === "О" || key === "o" || key === "O") {
+        return "О";
+      }
+      if (key === "д" || key === "Д" || key === "d" || key === "D") {
+        return "Д";
+      }
+      return null;
+    }
+
+    function isPinBlocked() {
+      return Date.now() < state.parentControl.pinBlockUntil;
+    }
+
+    function clearPinBlockTimer() {
+      if (state.parentControl.pinBlockTimerId) {
+        window.clearTimeout(state.parentControl.pinBlockTimerId);
+        state.parentControl.pinBlockTimerId = null;
+      }
+    }
+
+    function buildPinDots() {
+      parentPinDotsEl.innerHTML = "";
+      for (let index = 0; index < PIN_LENGTH; index += 1) {
+        const dotEl = document.createElement("span");
+        dotEl.className = "pin-dot";
+        if (index < state.parentControl.pinInput.length) {
+          dotEl.classList.add("filled");
+        }
+        parentPinDotsEl.appendChild(dotEl);
+      }
+    }
+
+    function renderParentControlUi() {
+      parentPinOverlayEl.hidden = !state.parentControl.gateOpen;
+      parentPanelEl.hidden = !state.parentControl.panelOpen;
+
+      if (state.parentControl.gateOpen) {
+        buildPinDots();
+        const blocked = isPinBlocked();
+        const hasError = state.parentControl.pinError.length > 0;
+        parentPinErrorEl.textContent = hasError ? state.parentControl.pinError : "";
+        parentPinErrorEl.hidden = !hasError;
+        pinDigitEls.forEach((pinDigitEl) => {
+          pinDigitEl.disabled = blocked;
+        });
+        pinBackspaceEl.disabled = blocked;
+      }
+
+      parentPanelStatusEl.textContent = state.parentControl.statusMessage;
+      renderRecentSession();
+    }
+
+    function openPinGate(mode, returnToParentPanel = false) {
+      state.parentControl.pinMode = mode;
+      state.parentControl.pinInput = "";
+      state.parentControl.returnToPanelAfterGate = Boolean(returnToParentPanel);
+      state.parentControl.pinError = isPinBlocked()
+        ? "Слишком много попыток. Подожди 10 секунд."
+        : "";
+      state.parentControl.gateOpen = true;
+      state.parentControl.panelOpen = false;
+      renderParentControlUi();
+    }
+
+    function closePinGate() {
+      state.parentControl.gateOpen = false;
+      state.parentControl.pinInput = "";
+      state.parentControl.pinError = "";
+      state.parentControl.panelOpen = state.parentControl.returnToPanelAfterGate;
+      state.parentControl.returnToPanelAfterGate = false;
+      renderParentControlUi();
+    }
+
+    function openParentPanel(statusMessage = "Режим родителя активирован.") {
+      state.parentControl.gateOpen = false;
+      state.parentControl.panelOpen = true;
+      state.parentControl.returnToPanelAfterGate = false;
+      state.parentControl.pinInput = "";
+      state.parentControl.pinError = "";
+      state.parentControl.statusMessage = statusMessage;
+      renderParentControlUi();
+    }
+
+    function closeParentPanel() {
+      state.parentControl.gateOpen = false;
+      state.parentControl.panelOpen = false;
+      state.parentControl.returnToPanelAfterGate = false;
+      state.parentControl.pinInput = "";
+      state.parentControl.pinError = "";
+      state.parentControl.statusMessage = "";
+      renderParentControlUi();
+    }
+
+    function lockPinInputWithDelay() {
+      state.parentControl.pinInput = "";
+      state.parentControl.pinBlockUntil = Date.now() + PIN_LOCKOUT_MS;
+      state.parentControl.pinError = "Неверный PIN. Повтори через 10 секунд.";
+      clearPinBlockTimer();
+      state.parentControl.pinBlockTimerId = window.setTimeout(() => {
+        state.parentControl.pinBlockUntil = 0;
+        state.parentControl.pinError = "";
+        state.parentControl.pinBlockTimerId = null;
+        renderParentControlUi();
+      }, PIN_LOCKOUT_MS);
+    }
+
+    function requestNativeSystemSettings() {
+      if (!window.AndroidApp) {
+        openParentPanel("Уровень 2 подтверждён, но native shell недоступен.");
+        showToast("Native bridge недоступен для системного выхода.", "error");
+        return;
+      }
+
+      let response = null;
+      if (typeof window.AndroidApp.performServiceAction === "function") {
+        response = bridgeAction("performServiceAction", "openSystemSettings");
+      } else if (typeof window.AndroidApp.openSystemSettings === "function") {
+        response = bridgeAction("openSystemSettings");
+      }
+
+      if (response && response.ok) {
+        closeParentPanel();
+        showToast("PIN принят. Открываем системные настройки Android.");
+        return;
+      }
+
+      openParentPanel("Уровень 2 подтверждён, но Android settings открыть не удалось.");
+      showToast("Не удалось открыть системные настройки.", "error");
+    }
+
+    function validatePin() {
+      const expectedPin = state.parentControl.pinMode === "system" ? SYSTEM_EXIT_PIN : PARENT_ENTRY_PIN;
+      if (state.parentControl.pinInput !== expectedPin) {
+        lockPinInputWithDelay();
+        showToast("PIN неверный. Попробуй снова через 10 секунд.", "error");
+        closePinGate();
+        return;
+      }
+
+      if (state.parentControl.pinMode === "system") {
+        requestNativeSystemSettings();
+        return;
+      }
+
+      openParentPanel();
+      showToast("PIN принят. Режим родителя активирован.");
+    }
+
+    function appendPinDigit(digit) {
+      if (!state.parentControl.gateOpen || isPinBlocked()) {
+        return;
+      }
+      if (state.parentControl.pinInput.length >= PIN_LENGTH) {
+        return;
+      }
+      state.parentControl.pinError = "";
+      state.parentControl.pinInput += digit;
+      renderParentControlUi();
+      if (state.parentControl.pinInput.length === PIN_LENGTH) {
+        validatePin();
+      }
+    }
+
+    function removePinDigit() {
+      if (!state.parentControl.gateOpen || isPinBlocked()) {
+        return;
+      }
+      state.parentControl.pinInput = state.parentControl.pinInput.slice(0, -1);
+      state.parentControl.pinError = "";
+      renderParentControlUi();
+    }
+
+    function handleParentAction(action) {
+      if (action === "sync") {
+        state.parentControl.statusMessage = `Recent-session помечен к выгрузке: ${state.recentPhrases.length} фраз.`;
+      } else if (action === "stats") {
+        state.parentControl.statusMessage = `Сейчас ${state.text.length} символов, recent-session=${state.recentPhrases.length}.`;
+      } else if (action === "restoreDraft") {
+        if (state.recentPhrases.length === 0) {
+          state.parentControl.statusMessage = "Сначала сформируй хотя бы одну фразу в recent-session.";
+        } else {
+          const [latestPhrase] = state.recentPhrases;
+          closeParentPanel();
+          applyRecentPhrase(latestPhrase);
+          return;
+        }
+      } else if (action === "clearRecent") {
+        state.recentPhrases = [];
+        persistState();
+        state.parentControl.statusMessage = "Recent-session очищен.";
+      } else {
+        state.parentControl.statusMessage = "";
+      }
+      renderParentControlUi();
     }
 
     function renderKeyboard() {
@@ -587,6 +1560,20 @@
           button.className = "key";
           button.type = "button";
           button.textContent = getKeyLabel(key);
+          if (key.kind === "input" && isParentTriggerSymbol(key.value)) {
+            button.addEventListener("pointerdown", (event) => {
+              event.preventDefault();
+              onParentTriggerKeyPressed(key.value);
+            });
+            button.addEventListener("pointerup", () => {
+              onParentTriggerKeyReleased(key.value);
+            });
+            button.addEventListener("pointercancel", () => {
+              onParentTriggerKeyReleased(key.value);
+            });
+          } else {
+            button.addEventListener("pointerdown", cancelParentTriggerAttempt);
+          }
           button.onclick = () => handleKeyPress(key);
           rowEl.appendChild(button);
         });
@@ -601,6 +1588,78 @@
       shellFullscreenButtonEl.onclick = requestFullscreenRefresh;
       shellExportButtonEl.onclick = exportDiagnosticsLog;
       shellReloadButtonEl.onclick = reloadShell;
+
+      parentPinCancelEl.addEventListener("click", closePinGate);
+      parentPinOverlayEl.addEventListener("click", (event) => {
+        if (event.target === parentPinOverlayEl && state.parentControl.gateOpen) {
+          closePinGate();
+        }
+      });
+      pinDigitEls.forEach((pinDigitEl) => {
+        pinDigitEl.addEventListener("click", () => {
+          appendPinDigit(pinDigitEl.dataset.pinDigit);
+        });
+      });
+      pinBackspaceEl.addEventListener("click", removePinDigit);
+      parentSystemBtnEl.addEventListener("click", () => openPinGate("system", true));
+      parentCloseBtnEl.addEventListener("click", closeParentPanel);
+      parentActionEls.forEach((parentActionEl) => {
+        parentActionEl.addEventListener("click", () => {
+          handleParentAction(parentActionEl.dataset.parentAction);
+        });
+      });
+
+      document.addEventListener("keydown", (event) => {
+        const triggerSymbol = getParentTriggerSymbolFromKeyboardKey(event.key);
+        if (triggerSymbol && !event.repeat) {
+          event.preventDefault();
+          onParentTriggerKeyPressed(triggerSymbol);
+          return;
+        }
+
+        if (state.parentTrigger.active && !event.repeat) {
+          event.preventDefault();
+          cancelParentTriggerAttempt();
+        }
+
+        if (isParentUiOpen()) {
+          return;
+        }
+
+        if (event.key === "Backspace") {
+          event.preventDefault();
+          backspace();
+          return;
+        }
+
+        if (event.key === " ") {
+          event.preventDefault();
+          appendText(" ");
+          return;
+        }
+
+        if (event.key === "Enter") {
+          event.preventDefault();
+          appendText("\n");
+        }
+      });
+
+      document.addEventListener("keyup", (event) => {
+        const triggerSymbol = getParentTriggerSymbolFromKeyboardKey(event.key);
+        if (!triggerSymbol) {
+          return;
+        }
+        event.preventDefault();
+        onParentTriggerKeyReleased(triggerSymbol);
+      });
+
+      window.addEventListener("blur", resetParentTriggerState);
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) {
+          resetParentTriggerState();
+        }
+      });
+
       window.__plankaShellDispatch = (payload) => {
         const detail = JSON.parse(payload);
         if (detail && detail.snapshot) {
@@ -608,6 +1667,7 @@
         }
         window.dispatchEvent(new CustomEvent("planka:shell-bridge", { detail }));
       };
+
       window.addEventListener("planka:shell-status", (event) => {
         applyShellSnapshot(event.detail);
       });
@@ -619,10 +1679,13 @@
       state.shell = loadShellSnapshot();
       state.locales = Object.keys(state.config.keyboard.locales);
       state.locale = state.config.keyboard.defaultLocale;
+      restoreState();
       applyLayoutConfig();
       renderTopbar();
       renderKeyboard();
       renderText();
+      renderRecentSession();
+      renderParentControlUi();
       renderShellPanel();
       window.__plankaUiConfigDiagnostics = state.diagnostics;
       window.__plankaShellStatus = state.shell;
@@ -633,7 +1696,22 @@
       console.info("PLANKA shell snapshot", state.shell);
     }
 
-    window.__plankaBack = () => true;
+    window.__plankaBack = () => {
+      if (state.parentControl.gateOpen) {
+        closePinGate();
+        return true;
+      }
+      if (state.parentControl.panelOpen) {
+        closeParentPanel();
+        return true;
+      }
+      if (state.shellPanelOpen) {
+        state.shellPanelOpen = false;
+        renderShellPanel();
+        return true;
+      }
+      return true;
+    };
 
     bindShellUi();
 

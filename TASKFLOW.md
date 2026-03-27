@@ -33,7 +33,7 @@ Execution-Mode: daemon
 5. В `Depends-On/Blocks` используем canonical-идентификатор `#issue_number` (не `APP-xx`), чтобы парсинг был стабильным.
 
 ## 2. Текущий рабочий flow (действует сейчас)
-1. Ты делаешь merge PR `development -> main`.
+1. Ты делаешь merge release PR `development -> main`.
 2. Ты пишешь `merged`.
 3. Я запускаю синхронизацию веток:
    - `.flow/shared/scripts/run.sh sync_branches`
@@ -43,7 +43,7 @@ Execution-Mode: daemon
 5. После подхвата:
    - реализую изменения в рабочем цикле.
 6. По готовности:
-   - запускаю `.flow/shared/scripts/run.sh task_finalize` (commit+push, при task-ветке сначала merge в `development`, затем create/update PR `development -> main`, перевод в `Status=Review`, `Flow=In Review`);
+   - запускаю `.flow/shared/scripts/run.sh task_finalize` (commit+push в task-ветку и create/update task PR `task/<id> -> development`; для прямой работы из `development` release-path остается `development -> main`, перевод в `Status=Review`, `Flow=In Review`);
    - перевожу PR в финальный сигнал ревью (`ready_for_review`);
    - отправляю ссылку на PR для ревью;
    - после merge цикл повторяется.
@@ -88,7 +88,7 @@ Execution-Mode: daemon
 ## 5. Контракт демона (что он должен делать)
 1. Периодически (например, каждые 30-60 сек) читать GitHub Project.
 2. Гарантировать single-run (lock-файл), чтобы не запускать две задачи одновременно.
-3. Если уже есть открытый PR `development -> main`, новую задачу не брать.
+3. Открытый release PR `development -> main` сам по себе не должен блокировать новые daemon-задачи; блокировать должны только active/review/waiting контексты конкретной задачи.
 4. Проверять очередь `Status=Todo`:
    - если `0` задач: ждать;
    - если `1` задача: забрать ее в работу;
@@ -98,8 +98,8 @@ Execution-Mode: daemon
    - поменять `Flow` на `In Progress`;
    - продолжить разработку по стандартному flow.
 6. При завершении разработки:
-   - выполнить `task_finalize` для commit/push; если работа велась в task-ветке, daemon сначала подтягивает `development` в неё и затем fast-forward вливает task-ветку обратно в `development`;
-   - создать/обновить только PR `development -> main`;
+   - выполнить `task_finalize` для commit/push; если работа велась в task-ветке, daemon подтягивает в неё актуальный `development` и публикует отдельный task PR `task/<id> -> development`;
+   - release PR `development -> main` создается отдельно и не является review-артефактом отдельной задачи;
    - перевести карточку в `Status=Review`, `Flow=In Review`.
 7. Логировать heartbeat и действия в `<state-dir>/daemon.log`.
 8. Корректно обрабатывать ошибки (retry/backoff, без дублирования действий).
@@ -195,7 +195,8 @@ Telegram-сигналы по Issue-вопросам:
 ## 7. Операционные правила безопасности
 - Автоматически разрешено:
   - коммиты и push в `development`;
-  - создание/обновление PR `development -> main`;
+  - создание/обновление task PR `task/<id> -> development`;
+  - отдельное ручное создание/обновление release PR `development -> main`;
   - sync веток после merge.
 - Обязательно спросить перед:
   - удалением файлов/директорий;

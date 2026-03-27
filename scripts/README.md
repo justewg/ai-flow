@@ -124,14 +124,13 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh watchdog_uninstall [label]` — остановка и удаление watchdog service.
 - `.flow/shared/scripts/run.sh watchdog_status [label]` — проверка статуса watchdog.
 - `.flow/shared/scripts/run.sh executor_reset` — сброс состояния автономного executor.
-- `.flow/shared/scripts/run.sh runtime_refresh_full` — жёстко выровнять authoritative checkout на `origin/main` и `origin/development`, форсированно обновить `.flow/shared`, очистить active/waiting/review runtime-state и, если найден compose-root проекта, перезапустить `daemon`. Команда деструктивна для локальных несохранённых изменений в authoritative checkout.
 - `.flow/shared/scripts/run.sh runtime_clear_active` — очистка active-context daemon (`daemon_active_*`).
 - `.flow/shared/scripts/run.sh runtime_clear_waiting` — очистка waiting-context daemon (`daemon_waiting_*`).
 - `.flow/shared/scripts/run.sh runtime_clear_review` — очистка review-context daemon (`daemon_review_*`).
 - `.flow/shared/scripts/run.sh executor_start <task-id> <issue-number>` — запуск автономного executor.
 - `.flow/shared/scripts/run.sh executor_tick <task-id> <issue-number>` — проверка/перезапуск executor, обработка fail-state.
 - `.flow/shared/scripts/run.sh executor_build_prompt <task-id> <issue-number> <output-file>` — сбор prompt для executor из Issue.
-- `.flow/shared/scripts/run.sh task_ask <question|blocker> <message-file>` — отправить вопрос/блокер в comment Issue и включить режим ожидания ответа; для `blocker` нужен структурированный файл (`ASK_REASON`, `ASK_QUESTION`, опционально `ASK_CONTEXT`), иначе публикация будет отклонена как malformed.
+- `.flow/shared/scripts/run.sh task_ask <question|blocker> <message-file>` — отправить вопрос/блокер в comment Issue и включить режим ожидания ответа.
 - `.flow/shared/scripts/run.sh daemon_check_replies` — проверить ответы в Issue-комментах для ожидающего вопроса.
 - `.flow/shared/scripts/run.sh task_finalize` — финализация задачи: commit+push, create/update PR, перевод задачи в `Status=Review`, `Flow=In Review`.
 - `.flow/shared/scripts/run.sh gh_retry <command> [args...]` — выполнить GitHub-команду с retry/backoff.
@@ -419,12 +418,10 @@ Rollback нового профиля:
   - печатает стандартный двойной хвост `daemon.log + executor.log`
 - `.flow/shared/scripts/run.sh log_tail_all`
   - печатает стандартный хвост `daemon.log + watchdog.log + executor.log`
+- `.flow/shared/scripts/run.sh log_follow <daemon|watchdog|executor|d|w|e> [lines]`
+  - делает `tail -f` по одному runtime-логу; второй аргумент опционален, по умолчанию `50`
 - `.flow/shared/scripts/run.sh runtime_clear_active`
   - очищает active runtime-context daemon без прямых `truncate`
-- `.flow/shared/scripts/run.sh runtime_refresh_full`
-  - выполняет канонический full refresh authoritative runtime: `git fetch`, `reset --hard` для `development/main`, `submodule sync/update --force` для `.flow/shared`, `git clean -fd`, очистку `daemon_active_*`, `daemon_waiting_*`, `daemon_review_*` и `docker compose ... restart daemon`, если compose root проекта найден автоматически
-  - предназначена именно для VPS/runtime recovery после flow hardening и перед повторным запуском `Todo`
-  - деструктивна для несохранённых локальных изменений в authoritative checkout
 - `.flow/shared/scripts/run.sh runtime_clear_waiting`
   - очищает waiting-context daemon без прямых `truncate`
 - `.flow/shared/scripts/run.sh runtime_clear_review`
@@ -579,25 +576,27 @@ Rollback нового профиля:
 - `executor_tick.sh <task-id> <issue-number>`
   - на каждом тике делает `project_status_runtime apply` (executor тоже подчищает отложенные status-апдейты)
   - проверяет живость executor по pid/state
-  - при `FAILED` не публикует blocker по умолчанию: сначала оставляет internal failure/state для recovery, без ложного `USER_REPLY`
+  - при `FAILED` автоматически публикует blocker-комментарий в Issue (один раз на задачу)
   - после нового ответа пользователя в Issue делает retry executor без ручного сброса state
-  - при `DONE` и активной задаче без финализации не публикует blocker автоматически; `DONE` само по себе не считается поводом просить `USER_REPLY`
-  - после нового ответа пользователя в этом состоянии может запустить новый прогон executor
+  - при `DONE` и активной задаче без финализации публикует blocker-комментарий и ждет явного решения пользователя (`продолжай`/`финализируй`)
+  - после нового ответа пользователя в этом состоянии запускает новый прогон executor
 - `executor_reset.sh`
   - останавливает живой executor-процесс (если есть) и очищает state-файлы
 - `task_ask.sh <question|blocker> <message-file>`
   - публикует структурированный комментарий в текущий Issue (`CODEX_SIGNAL: AGENT_QUESTION|AGENT_BLOCKER`)
-  - `AGENT_BLOCKER` допускается только для явных пользовательских причин: `needs_user_fact`, `needs_user_decision`, `needs_scope_decision`
-  - строки логов, кода, diff, sample/event output и `git status` не должны превращаться в blocker; malformed blocker автоматически отклоняется без `WAIT_USER_REPLY`
   - при временной недоступности GitHub кладет комментарий в outbox и включает pending-waiting state
-  - сохраняет waiting-state в `<state-dir>/`, чтобы daemon ждал ответ пользователя, и executor обязана реально остановиться после публикации waiting-comment
+  - сохраняет waiting-state в `<state-dir>/`, чтобы daemon ждал ответ пользователя
 - `daemon_check_replies.sh`
   - если daemon в waiting-state, проверяет новые комментарии Issue после вопроса/ревью
   - для `AGENT_QUESTION/AGENT_BLOCKER` первый пользовательский комментарий (без `CODEX_SIGNAL:`) классифицирует как `QUESTION` или `REWORK`
+    - `USER_REPLY` допустим только когда от пользователя реально нужен новый факт, выбор или решение
+    - если единственный разумный ответ был бы `продолжай`, blocker считается некорректным и должен авто-резолвиться как `REWORK`, а не требовать ручного ответа
+    - внутренние executor-сбои (`rate limit`, сеть, GitHub, обрыв stream, log fragment, строка кода без вопроса) не должны публиковаться как blocker-вопрос к пользователю
     - `QUESTION` -> публикует `CODEX_SIGNAL: AGENT_ANSWER` и оставляет задачу в `WAIT_USER_REPLY`
     - `REWORK` -> публикует `CODEX_SIGNAL: AGENT_RESUMED` и передает задачу в работу
     - команды dirty-gate (`COMMIT`/`STASH`/`REVERT`/`IGNORE`) считаются `REWORK`
     - для явного продолжения после blocker используй `CODEX_MODE: REWORK`
+    - если executor всё ещё жив, не-question reply не должен удерживать задачу в `WAIT_USER_REPLY`
   - для `REVIEW_FEEDBACK` принимает только не-системный комментарий автора Issue
   - для `REVIEW_FEEDBACK` различает режимы:
     - `QUESTION` -> публикует `CODEX_SIGNAL: AGENT_ANSWER` и оставляет задачу в `WAIT_REVIEW_FEEDBACK`

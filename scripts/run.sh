@@ -52,6 +52,7 @@ Commands:
   bootstrap_repo
   host_bootstrap
   docker_bootstrap
+  android_builder
   remote_agent_access_bootstrap
   remote_agent_v2_bootstrap
   onboarding_audit
@@ -713,6 +714,11 @@ case "$cmd" in
   docker_bootstrap)
     shift 1
     "${CODEX_SHARED_SCRIPTS_DIR}/docker_bootstrap.sh" "$@"
+    ;;
+
+  android_builder)
+    shift 1
+    "${CODEX_SHARED_SCRIPTS_DIR}/android_builder.sh" "$@"
     ;;
 
   remote_agent_access_bootstrap)

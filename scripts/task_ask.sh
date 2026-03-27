@@ -46,6 +46,60 @@ active_task_file="${CODEX_DIR}/daemon_active_task.txt"
 project_task_file="${CODEX_DIR}/project_task_id.txt"
 active_issue_file="${CODEX_DIR}/daemon_active_issue_number.txt"
 pending_post_file="${CODEX_DIR}/daemon_waiting_pending_post.txt"
+executor_pid_file="${CODEX_DIR}/executor_pid.txt"
+executor_heartbeat_pid_file="${CODEX_DIR}/executor_heartbeat_pid.txt"
+executor_detach_file="${CODEX_DIR}/executor_detach_requested.txt"
+
+trim_line() {
+  printf '%s' "$1" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g'
+}
+
+extract_structured_field() {
+  local field_name="$1"
+  local text="$2"
+  printf '%s\n' "$text" \
+    | sed 's/\r$//' \
+    | awk -F= -v key="$field_name" '$1 == key { sub(/^[^=]*=/, "", $0); print; exit }'
+}
+
+contains_user_prompt_keywords() {
+  local text
+  text="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  printf '%s' "$text" \
+    | grep -Eiq '\b(продолжай|продолжить|финализируй|финализировать|подтверди|выбери|как действовать|нужен ответ|ответь|какой|какая|какое|какие|что|нужно ли|можно ли|should|what|which|how|need your answer)\b'
+}
+
+is_malformed_question_candidate() {
+  local value
+  value="$(trim_line "$1")"
+
+  [[ -z "$value" ]] && return 0
+
+  if printf '%s' "$value" | grep -Eiq '^(null[[:space:]]*->[[:space:]]*".*\?"|\?\?[[:space:]]+.+|[0-9]{4}-[0-9]{2}-[0-9]{2}t[0-9:.+-]+.*\|.*event=|diff --git|index [0-9a-f]+\.\.[0-9a-f]+|@@|[+-]{3}[[:space:]]|override fun |versionname[[:space:]]*=|/bin/(ba|z)sh|[A-Za-z0-9_./-]+[[:space:]]*->[[:space:]]*".*")$'; then
+    return 0
+  fi
+
+  return 1
+}
+
+is_actionable_user_prompt_candidate() {
+  local value
+  value="$(trim_line "$1")"
+
+  if [[ -z "$value" ]] || is_malformed_question_candidate "$value"; then
+    return 1
+  fi
+
+  if contains_user_prompt_keywords "$value"; then
+    return 0
+  fi
+
+  if [[ "$value" == *"?"* ]] && printf '%s' "$value" | grep -Eq '[[:alpha:]]'; then
+    return 0
+  fi
+
+  return 1
+}
 
 extract_question_line() {
   local text="$1"
@@ -299,16 +353,28 @@ infer_executor_question() {
   if [[ -s "${CODEX_DIR}/executor_last_message.txt" ]]; then
     src_text="$(<"${CODEX_DIR}/executor_last_message.txt")"
     candidate="$(extract_question_line "$src_text")"
+    if [[ -n "$candidate" ]] && ! is_actionable_user_prompt_candidate "$candidate"; then
+      candidate=""
+    fi
     if [[ -z "$candidate" ]]; then
       candidate="$(extract_decision_line "$src_text")"
+      if [[ -n "$candidate" ]] && ! is_actionable_user_prompt_candidate "$candidate"; then
+        candidate=""
+      fi
     fi
   fi
 
   if [[ -z "$candidate" && -f "${RUNTIME_LOG_DIR}/executor.log" ]]; then
     src_text="$(tail -n 400 "${RUNTIME_LOG_DIR}/executor.log" 2>/dev/null || true)"
     candidate="$(extract_question_line "$src_text")"
+    if [[ -n "$candidate" ]] && ! is_actionable_user_prompt_candidate "$candidate"; then
+      candidate=""
+    fi
     if [[ -z "$candidate" ]]; then
       candidate="$(extract_decision_line "$src_text")"
+      if [[ -n "$candidate" ]] && ! is_actionable_user_prompt_candidate "$candidate"; then
+        candidate=""
+      fi
     fi
   fi
 
@@ -340,6 +406,7 @@ infer_executor_remark() {
 render_question_message() {
   local text="$1"
   local kind="$2"
+  local structured_q=""
   local explicit_q=""
   local explicit_decision=""
   local inferred_q=""
@@ -350,20 +417,39 @@ render_question_message() {
   local smart_options=""
   local recommended_option=""
 
-  explicit_q="$(extract_question_line "$text")"
-  explicit_decision="$(extract_decision_line "$text")"
+  structured_q="$(extract_structured_field "ASK_QUESTION" "$text")"
+  if [[ -n "$structured_q" ]] && ! is_actionable_user_prompt_candidate "$structured_q"; then
+    structured_q=""
+  fi
 
-  if [[ -n "$explicit_q" ]]; then
+  explicit_q="$(extract_question_line "$text")"
+  if [[ -n "$explicit_q" ]] && ! is_actionable_user_prompt_candidate "$explicit_q"; then
+    explicit_q=""
+  fi
+
+  explicit_decision="$(extract_decision_line "$text")"
+  if [[ -n "$explicit_decision" ]] && ! is_actionable_user_prompt_candidate "$explicit_decision"; then
+    explicit_decision=""
+  fi
+
+  if [[ -n "$structured_q" ]]; then
+    selected_q="$structured_q"
+  elif [[ -n "$explicit_q" ]]; then
     selected_q="$explicit_q"
   elif [[ -n "$explicit_decision" ]]; then
     selected_q="$explicit_decision"
   fi
 
-  if [[ -z "$selected_q" ]]; then
+  if [[ -z "$selected_q" && "$kind" != "BLOCKER" ]]; then
     inferred_q="$(infer_executor_question)"
     if [[ -n "$inferred_q" ]]; then
       selected_q="$inferred_q"
     fi
+  fi
+
+  if [[ -z "$selected_q" && "$kind" == "BLOCKER" ]]; then
+    printf '%s' "__TASK_ASK_REJECTED_MALFORMED_BLOCKER__"
+    return 0
   fi
 
   if [[ -z "$selected_q" ]]; then
@@ -444,6 +530,35 @@ post_issue_comment() {
   fi
 }
 
+kill_pid_gracefully() {
+  local pid="$1"
+  [[ -z "$pid" || ! "$pid" =~ ^[0-9]+$ ]] && return 0
+  if ! kill -0 "$pid" 2>/dev/null; then
+    return 0
+  fi
+  kill "$pid" 2>/dev/null || true
+  sleep 1
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -9 "$pid" 2>/dev/null || true
+  fi
+}
+
+request_executor_stop() {
+  local pid=""
+  local heartbeat_pid=""
+  pid="$(cat "$executor_pid_file" 2>/dev/null || true)"
+  heartbeat_pid="$(cat "$executor_heartbeat_pid_file" 2>/dev/null || true)"
+
+  printf '%s\n' "stop-requested" > "$executor_detach_file"
+  kill_pid_gracefully "$heartbeat_pid"
+  kill_pid_gracefully "$pid"
+
+  if [[ "$pid" =~ ^[0-9]+$ ]]; then
+    echo "EXECUTOR_STOP_REQUESTED=1"
+    echo "EXECUTOR_STOP_PID=$pid"
+  fi
+}
+
 task_id=""
 if [[ -s "$active_task_file" ]]; then
   task_id="$(<"$active_task_file")"
@@ -496,6 +611,11 @@ now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 comment_message_text="$message_text"
 if [[ "$kind_label" == "QUESTION" || "$kind_label" == "BLOCKER" ]]; then
   comment_message_text="$(render_question_message "$message_text" "$kind_label")"
+  if [[ "$comment_message_text" == "__TASK_ASK_REJECTED_MALFORMED_BLOCKER__" ]]; then
+    echo "TASK_ASK_REJECTED_MALFORMED_BLOCKER=1"
+    echo "TASK_ASK_REJECTED_KIND=${kind_label}"
+    exit 42
+  fi
 fi
 
 comment_body="$(cat <<EOF_COMMENT
@@ -523,6 +643,7 @@ if comment_json="$(post_issue_comment "$issue_number" "$comment_body")"; then
   printf '%s\n' "$now_utc" > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
   printf '%s\n' "$question_comment_url" > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
   : > "$pending_post_file"
+  request_executor_stop
 
   echo "QUESTION_POSTED=1"
   echo "TASK_ID=$task_id"

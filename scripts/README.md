@@ -596,10 +596,14 @@ Rollback нового профиля:
 - `daemon_check_replies.sh`
   - если daemon в waiting-state, проверяет новые комментарии Issue после вопроса/ревью
   - для `AGENT_QUESTION/AGENT_BLOCKER` первый пользовательский комментарий (без `CODEX_SIGNAL:`) классифицирует как `QUESTION` или `REWORK`
+    - `USER_REPLY` допустим только когда от пользователя реально нужен новый факт, выбор или решение
+    - если единственный разумный ответ был бы `продолжай`, blocker считается некорректным и должен авто-резолвиться как `REWORK`, а не требовать ручного ответа
+    - внутренние executor-сбои (`rate limit`, сеть, GitHub, обрыв stream, log fragment, строка кода без вопроса) не должны публиковаться как blocker-вопрос к пользователю
     - `QUESTION` -> публикует `CODEX_SIGNAL: AGENT_ANSWER` и оставляет задачу в `WAIT_USER_REPLY`
     - `REWORK` -> публикует `CODEX_SIGNAL: AGENT_RESUMED` и передает задачу в работу
     - команды dirty-gate (`COMMIT`/`STASH`/`REVERT`/`IGNORE`) считаются `REWORK`
     - для явного продолжения после blocker используй `CODEX_MODE: REWORK`
+    - если executor всё ещё жив, не-question reply не должен удерживать задачу в `WAIT_USER_REPLY`
   - для `REVIEW_FEEDBACK` принимает только не-системный комментарий автора Issue
   - для `REVIEW_FEEDBACK` различает режимы:
     - `QUESTION` -> публикует `CODEX_SIGNAL: AGENT_ANSWER` и оставляет задачу в `WAIT_REVIEW_FEEDBACK`

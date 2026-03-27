@@ -3,6 +3,7 @@ package com.planka.quicktest
 import java.io.File
 import java.io.IOException
 import java.time.Instant
+import kotlin.io.path.createTempDirectory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -15,7 +16,7 @@ class BreakoutDiagnosticsTest {
     fun `records breakout flow and exports stable text log`() {
         val sessionStartedAt = Instant.parse("2026-03-27T12:00:05.421Z")
         val clock = SequenceClock(sessionStartedAt)
-        val logDir = createTempDir(prefix = "planka-breakout-diagnostics-")
+        val logDir = createTempDirectory("planka-breakout-diagnostics-").toFile()
 
         try {
             val diagnostics = BreakoutDiagnostics(
@@ -92,7 +93,7 @@ class BreakoutDiagnosticsTest {
     fun `keeps export path empty when export fails`() {
         val sessionStartedAt = Instant.parse("2026-03-27T12:00:05.421Z")
         val clock = SequenceClock(sessionStartedAt)
-        val logDir = createTempDir(prefix = "planka-breakout-diagnostics-")
+        val logDir = createTempDirectory("planka-breakout-diagnostics-").toFile()
 
         try {
             val diagnostics = BreakoutDiagnostics(
@@ -128,7 +129,7 @@ class BreakoutDiagnosticsTest {
     fun `waits for hidden bars before logging fullscreen restored`() {
         val sessionStartedAt = Instant.parse("2026-03-27T12:00:05.421Z")
         val clock = SequenceClock(sessionStartedAt)
-        val logDir = createTempDir(prefix = "planka-breakout-restore-")
+        val logDir = createTempDirectory("planka-breakout-restore-").toFile()
 
         try {
             val diagnostics = BreakoutDiagnostics(

@@ -45,10 +45,10 @@ class BreakoutDiagnostics private constructor(
             )
         },
     ) : this(
-        logDir = logDir.apply { mkdirs() },
-        exportTargetFactory = exportTargetFactory,
-        nowProvider = nowProvider,
-        sessionStartedAt = sessionStartedAt,
+        logDir.apply { mkdirs() },
+        exportTargetFactory,
+        nowProvider,
+        sessionStartedAt,
     )
 
     data class Snapshot(

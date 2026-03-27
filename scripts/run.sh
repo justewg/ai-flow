@@ -77,6 +77,7 @@ Commands:
   watchdog_uninstall
   watchdog_status
   executor_reset
+  runtime_refresh_full
   runtime_clear_active
   runtime_clear_waiting
   runtime_clear_review
@@ -863,6 +864,10 @@ case "$cmd" in
 
   executor_reset)
     "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh"
+    ;;
+
+  runtime_refresh_full)
+    "${CODEX_SHARED_SCRIPTS_DIR}/runtime_refresh_full.sh"
     ;;
 
   runtime_clear_active)

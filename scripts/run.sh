@@ -890,6 +890,10 @@ case "$cmd" in
     clear_runtime_state_file "daemon_active_task_key.txt"
     clear_runtime_state_file "daemon_active_worktree_path.txt"
     clear_runtime_state_file "daemon_active_task_branch.txt"
+    clear_runtime_state_file "daemon_claim_pending_task_id.txt"
+    clear_runtime_state_file "daemon_claim_pending_item_id.txt"
+    clear_runtime_state_file "daemon_claim_pending_issue_number.txt"
+    clear_runtime_state_file "daemon_claim_pending_started_utc.txt"
     ;;
 
   runtime_clear_waiting)

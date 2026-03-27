@@ -377,6 +377,8 @@ fi
 
 active_task="$(read_file_or_default "${CODEX_DIR}/daemon_active_task.txt" "")"
 active_issue="$(read_file_or_default "${CODEX_DIR}/daemon_active_issue_number.txt" "")"
+pending_claim_task="$(read_file_or_default "${CODEX_DIR}/daemon_claim_pending_task_id.txt" "")"
+pending_claim_issue="$(read_file_or_default "${CODEX_DIR}/daemon_claim_pending_issue_number.txt" "")"
 daemon_state="$(read_file_or_default "${CODEX_DIR}/daemon_state.txt" "UNKNOWN")"
 daemon_detail="$(read_file_or_default "${CODEX_DIR}/daemon_state_detail.txt" "")"
 daemon_agent_status_out="$("${CODEX_SHARED_SCRIPTS_DIR}/daemon_status.sh" "$DAEMON_LABEL" 2>&1 || true)"
@@ -434,6 +436,11 @@ elif [[ "$daemon_agent_state" == "INSTALLED_NOT_LOADED" ]]; then
 elif [[ -d "$DAEMON_LOCK_DIR" && $daemon_log_age -gt $daemon_log_stale_threshold ]]; then
   action="HARD_RESTART_DAEMON"
   reason="DAEMON_LOG_STALE_WITH_LOCK"
+elif [[ -z "$active_task" && -n "$pending_claim_task" ]]; then
+  if [[ "$daemon_state" == "IDLE_NO_TASKS" || "$daemon_state" == "ERROR_LOCAL_FLOW" || "$daemon_state" == "BLOCKED_EXECUTOR_FAILED" ]]; then
+    action="SOFT_DAEMON_TICK"
+    reason="PENDING_CLAIM_WITHOUT_ACTIVE_TASK"
+  fi
 elif [[ -n "$active_task" ]]; then
   if [[ "$executor_state" == "RUNNING" && "$executor_pid_alive" != "1" ]]; then
     action="MEDIUM_RESET_EXECUTOR"
@@ -452,7 +459,7 @@ elif [[ -n "$active_task" ]]; then
   fi
 fi
 
-summary="active_task=${active_task:-none};active_issue=${active_issue:-none};daemon_agent_state=${daemon_agent_state};daemon_state=${daemon_state};daemon_state_age=${daemon_state_age_sec}s;executor_state=${executor_state:-none};executor_pid=${executor_pid:-none};executor_pid_alive=${executor_pid_alive};daemon_log_age=${daemon_log_age}s;daemon_log_stale_threshold=${daemon_log_stale_threshold}s;claim_age=${claim_age_sec}s;claim_grace_threshold=${ACTIVE_TASK_GRACE_SEC}s"
+summary="active_task=${active_task:-none};active_issue=${active_issue:-none};pending_claim_task=${pending_claim_task:-none};pending_claim_issue=${pending_claim_issue:-none};daemon_agent_state=${daemon_agent_state};daemon_state=${daemon_state};daemon_state_age=${daemon_state_age_sec}s;executor_state=${executor_state:-none};executor_pid=${executor_pid:-none};executor_pid_alive=${executor_pid_alive};daemon_log_age=${daemon_log_age}s;daemon_log_stale_threshold=${daemon_log_stale_threshold}s;claim_age=${claim_age_sec}s;claim_grace_threshold=${ACTIVE_TASK_GRACE_SEC}s"
 if [[ "${WATCHDOG_AUTH_DEGRADED:-0}" == "1" ]]; then
   auth_detail="${WATCHDOG_AUTH_LAST_DETAIL:-AUTH_UNAVAILABLE}"
   auth_fallback_reason="${WATCHDOG_AUTH_FALLBACK_REASON:-DISABLED}"

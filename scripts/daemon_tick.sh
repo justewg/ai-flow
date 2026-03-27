@@ -31,6 +31,10 @@ review_item_file="${CODEX_DIR}/daemon_review_item_id.txt"
 review_issue_file="${CODEX_DIR}/daemon_review_issue_number.txt"
 review_pr_file="${CODEX_DIR}/daemon_review_pr_number.txt"
 review_branch_file="${CODEX_DIR}/daemon_review_branch_name.txt"
+claim_pending_task_file="${CODEX_DIR}/daemon_claim_pending_task_id.txt"
+claim_pending_item_file="${CODEX_DIR}/daemon_claim_pending_item_id.txt"
+claim_pending_issue_file="${CODEX_DIR}/daemon_claim_pending_issue_number.txt"
+claim_pending_started_file="${CODEX_DIR}/daemon_claim_pending_started_utc.txt"
 dirty_gate_issue_file="${CODEX_DIR}/dirty_gate_issue_number.txt"
 dirty_gate_issue_url_file="${CODEX_DIR}/dirty_gate_issue_url.txt"
 dirty_gate_signature_file="${CODEX_DIR}/dirty_gate_signature.txt"
@@ -1140,6 +1144,82 @@ query($itemId: ID!) {
 normalize_status_name() {
   local value="$1"
   printf '%s' "$value" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'
+}
+
+clear_claim_pending_context() {
+  : > "$claim_pending_task_file"
+  : > "$claim_pending_item_file"
+  : > "$claim_pending_issue_file"
+  : > "$claim_pending_started_file"
+}
+
+write_claim_pending_context() {
+  local task_id="$1"
+  local item_id="$2"
+  local issue_number="$3"
+
+  printf '%s\n' "$task_id" > "$claim_pending_task_file"
+  printf '%s\n' "$item_id" > "$claim_pending_item_file"
+  printf '%s\n' "$issue_number" > "$claim_pending_issue_file"
+  date -u '+%Y-%m-%dT%H:%M:%SZ' > "$claim_pending_started_file"
+}
+
+recover_orphaned_pending_claim_if_any() {
+  local pending_task="" pending_item="" pending_issue="" pending_status="" pending_status_norm=""
+  local target_status_norm="" status_out="" cleanup_out=""
+
+  [[ -s "$claim_pending_task_file" ]] || return 0
+  [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]] && return 0
+
+  [[ -s "$claim_pending_task_file" ]] && pending_task="$(<"$claim_pending_task_file")"
+  [[ -s "$claim_pending_item_file" ]] && pending_item="$(<"$claim_pending_item_file")"
+  [[ -s "$claim_pending_issue_file" ]] && pending_issue="$(<"$claim_pending_issue_file")"
+
+  if [[ -z "$pending_task" ]]; then
+    clear_claim_pending_context
+    return 0
+  fi
+
+  if [[ -n "$pending_item" ]]; then
+    if ! pending_status="$(find_project_item_status_by_id "$pending_item")"; then
+      rc=$?
+      if [[ "$rc" -eq 75 ]]; then
+        echo "WAIT_GITHUB_API_UNSTABLE=1"
+        echo "WAIT_GITHUB_STAGE=PENDING_CLAIM_STATUS_CHECK"
+        return 75
+      fi
+      pending_status=""
+    fi
+    pending_status_norm="$(normalize_status_name "$pending_status")"
+    target_status_norm="$(normalize_status_name "$target_status")"
+    if [[ -n "$pending_status" && "$pending_status_norm" == "$target_status_norm" ]]; then
+      if status_out="$("${CODEX_SHARED_SCRIPTS_DIR}/project_set_status.sh" "$pending_item" "$trigger_status" "Backlog" 2>&1)"; then
+        emit_lines "$status_out"
+        echo "PENDING_CLAIM_STATUS_ROLLED_BACK=1"
+        echo "PENDING_CLAIM_RESTORE_STATUS=${trigger_status}"
+      else
+        rc=$?
+        emit_lines "$status_out"
+        if is_github_network_error "$status_out" || [[ "$rc" -eq 75 ]]; then
+          echo "WAIT_GITHUB_API_UNSTABLE=1"
+          echo "WAIT_GITHUB_STAGE=PENDING_CLAIM_STATUS_ROLLBACK"
+          return 75
+        fi
+        return "$rc"
+      fi
+    fi
+  fi
+
+  if [[ "$pending_issue" =~ ^[0-9]+$ ]]; then
+    cleanup_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$pending_task" "$pending_issue" "orphaned-claim" 2>&1 || true)"
+    emit_lines "$cleanup_out"
+  fi
+
+  clear_claim_pending_context
+  echo "PENDING_CLAIM_RECOVERED=1"
+  echo "PENDING_CLAIM_TASK_ID=${pending_task}"
+  [[ -n "$pending_issue" ]] && echo "PENDING_CLAIM_ISSUE_NUMBER=${pending_issue}"
+  return 0
 }
 
 is_resolved_project_status() {
@@ -2637,6 +2717,9 @@ if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
       status_target="$review_item_id"
     fi
 
+    materialize_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$review_task_id" "$review_issue_number" 2>&1)"
+    emit_lines "$materialize_out"
+
     if status_out="$("${CODEX_SHARED_SCRIPTS_DIR}/project_set_status.sh" "$status_target" "$target_status" "$target_flow" 2>&1)"; then
       emit_lines "$status_out"
     else
@@ -2645,9 +2728,12 @@ if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
       if is_github_network_error "$status_out" || [[ "$rc" -eq 75 ]]; then
         echo "WAIT_GITHUB_API_UNSTABLE=1"
         echo "WAIT_GITHUB_STAGE=REVIEW_RESUME_STATUS_UPDATE"
-        enqueue_project_status_runtime "$status_target" "$target_status" "$target_flow" "review-feedback-resume" || true
-        echo "REVIEW_FEEDBACK_STATUS_DEFERRED=1"
+        cleanup_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$review_task_id" "$review_issue_number" "review-resume-status-update-failed" 2>&1 || true)"
+        emit_lines "$cleanup_out"
+        exit 0
       else
+        cleanup_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$review_task_id" "$review_issue_number" "review-resume-status-update-failed" 2>&1 || true)"
+        emit_lines "$cleanup_out"
         exit "$rc"
       fi
     fi
@@ -2660,8 +2746,6 @@ if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
     fi
     printf '%s\n' "$review_issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
     printf '%s\n' "$review_task_id" > "${CODEX_DIR}/project_task_id.txt"
-    materialize_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$review_task_id" "$review_issue_number" 2>&1)"
-    emit_lines "$materialize_out"
     "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
 
     : > "$review_task_file"
@@ -2695,6 +2779,24 @@ if [[ "$active_release_rc" -ne 0 ]]; then
 fi
 if printf '%s' "$active_release_out" | grep -q '^ACTIVE_TASK_RELEASED_STATUS_MISMATCH=1'; then
   echo "ACTIVE_TASK_RELEASED_TICK_ABORTED=1"
+  exit 0
+fi
+
+pending_claim_out="$(
+  recover_orphaned_pending_claim_if_any 2>&1
+)"
+pending_claim_rc=$?
+if [[ -n "$pending_claim_out" ]]; then
+  emit_lines "$pending_claim_out"
+fi
+if [[ "$pending_claim_rc" -eq 75 ]]; then
+  exit 0
+fi
+if [[ "$pending_claim_rc" -ne 0 ]]; then
+  exit "$pending_claim_rc"
+fi
+if printf '%s' "$pending_claim_out" | grep -q '^PENDING_CLAIM_RECOVERED=1'; then
+  echo "PENDING_CLAIM_RECOVERY_TICK_ABORTED=1"
   exit 0
 fi
 
@@ -3251,6 +3353,11 @@ if (( skip_sync_branches == 0 )); then
   emit_lines "$sync_out"
 fi
 
+materialize_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$task_id" "$issue_number" "$title" 2>&1)"
+emit_lines "$materialize_out"
+
+write_claim_pending_context "$task_id" "$item_id" "$issue_number"
+
 if status_out="$("${CODEX_SHARED_SCRIPTS_DIR}/project_set_status.sh" "$item_id" "$target_status" "$target_flow" 2>&1)"; then
   emit_lines "$status_out"
 else
@@ -3259,9 +3366,14 @@ else
   if is_github_network_error "$status_out" || [[ "$rc" -eq 75 ]]; then
     echo "WAIT_GITHUB_API_UNSTABLE=1"
     echo "WAIT_GITHUB_STAGE=PROJECT_STATUS_UPDATE"
-    enqueue_project_status_runtime "$item_id" "$target_status" "$target_flow" "claim-task:${task_id}" || true
-    echo "PROJECT_STATUS_UPDATE_DEFERRED=1"
+    cleanup_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$task_id" "$issue_number" "claim-status-update-failed" 2>&1 || true)"
+    emit_lines "$cleanup_out"
+    clear_claim_pending_context
+    exit 0
   else
+    cleanup_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$task_id" "$issue_number" "claim-status-update-failed" 2>&1 || true)"
+    emit_lines "$cleanup_out"
+    clear_claim_pending_context
     exit "$rc"
   fi
 fi
@@ -3273,9 +3385,6 @@ rm -f "${CODEX_DIR}/daemon_dependency_blocked_signature.txt"
 : > "$review_pr_file"
 : > "$review_branch_file"
 
-materialize_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$task_id" "$issue_number" "$title" 2>&1)"
-emit_lines "$materialize_out"
-
 printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_active_task.txt"
 printf '%s\n' "$item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"
 printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
@@ -3284,6 +3393,7 @@ project_issue_cache_upsert "$task_id" "$item_id" "$issue_number" "$title" "$targ
 "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
 date -u '+%Y-%m-%dT%H:%M:%SZ' > "${CODEX_DIR}/daemon_last_claim_utc.txt"
 date +%s > "$claim_epoch_file"
+clear_claim_pending_context
 
 echo "CLAIMED_TASK_ID=$task_id"
 echo "CLAIMED_ITEM_ID=$item_id"

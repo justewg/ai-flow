@@ -23,10 +23,14 @@ task_root="$(task_worktree_root_dir "$task_id" "$issue_number" "$state_dir" "$pr
 task_repo="$(task_worktree_repo_dir "$task_id" "$issue_number" "$state_dir" "$profile_name")"
 task_meta_dir="$(task_worktree_meta_dir "$task_id" "$issue_number" "$state_dir" "$profile_name")"
 task_env_file="$(task_worktree_env_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
+task_key="$(task_worktree_key "$task_id" "$issue_number" "$profile_name")"
 task_branch="$(task_worktree_read_env_value "$task_env_file" "TASK_BRANCH" || true)"
 executor_pid="$(cat "${CODEX_DIR}/executor_pid.txt" 2>/dev/null || true)"
 executor_task_id="$(cat "${CODEX_DIR}/executor_task_id.txt" 2>/dev/null || true)"
 active_task_id="$(cat "${CODEX_DIR}/daemon_active_task.txt" 2>/dev/null || true)"
+active_task_key="$(cat "${CODEX_DIR}/daemon_active_task_key.txt" 2>/dev/null || true)"
+active_worktree_path="$(cat "${CODEX_DIR}/daemon_active_worktree_path.txt" 2>/dev/null || true)"
+active_task_branch="$(cat "${CODEX_DIR}/daemon_active_task_branch.txt" 2>/dev/null || true)"
 
 if [[ "$executor_task_id" == "$task_id" && "$executor_pid" =~ ^[0-9]+$ ]] && kill -0 "$executor_pid" 2>/dev/null; then
   echo "TASK_WORKTREE_CLEANUP_SKIPPED=EXECUTOR_RUNNING"
@@ -64,7 +68,7 @@ fi
 
 rm -rf "$task_root"
 
-if [[ "$active_task_id" == "$task_id" ]]; then
+if [[ "$active_task_id" == "$task_id" || "$active_task_key" == "$task_key" || "$active_worktree_path" == "$task_repo" || "$active_task_branch" == "$task_branch" ]]; then
   : > "${CODEX_DIR}/daemon_active_task.txt"
   : > "${CODEX_DIR}/daemon_active_item_id.txt"
   : > "${CODEX_DIR}/daemon_active_issue_number.txt"

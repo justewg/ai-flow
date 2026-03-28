@@ -67,3 +67,5 @@
 - `runtime_v2_reconcile_primary_context` теперь держит freshly claimed `daemon_active_*` в коротком grace-window, если `runtime-v2` ещё не успела materialize-ить `phase=executing`.
 - `PL-111 / Canary hotfix` завершена локально: исправлен shell-expansion crash в `executor_build_prompt.sh` и добавлен tolerant payload parsing в `runtime_v2_apply_event.js`.
 - Теперь backticks в issue/body не рвут prompt builder, а best-effort bridge не падает на payload с хвостовым мусором после первого JSON-объекта.
+- `PL-112 / Post-canary hardening` завершена локально: убраны три upstream хвоста, вскрытые forensic-анализом `110.log`.
+- Task worktree теперь materialize-ит `/.flow/shared` до старта executor, `executor_run` имеет fallback-guard на отсутствующий toolkit, `task_finalize` больше не требует live-patch по сигнатуре wrapper-а, а `runtime_v2_apply_event.sh` нормализует trailing-junk payload на shell boundary до canonical JSON.

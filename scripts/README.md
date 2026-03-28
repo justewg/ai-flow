@@ -125,6 +125,7 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh daemon_install [label] [interval-sec]` — установка и запуск service backend (`launchd` на macOS, `systemd` на Linux).
 - `.flow/shared/scripts/run.sh daemon_uninstall [label]` — остановка и удаление service backend.
 - `.flow/shared/scripts/run.sh daemon_status [label]` — проверка статуса service backend.
+- `.flow/shared/scripts/run.sh log_follow <daemon|watchdog|executor|d|w|e> [lines]` — follow одного runtime-лога, по умолчанию `50` строк.
 - `.flow/shared/scripts/run.sh watchdog_tick` — один цикл самодиагностики/самовосстановления.
 - `.flow/shared/scripts/run.sh watchdog_loop [interval-sec]` — непрерывный watchdog-цикл.
 - `.flow/shared/scripts/run.sh watchdog_install [label] [interval-sec]` — установка и запуск watchdog через выбранный service backend.
@@ -134,6 +135,7 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh runtime_clear_active` — очистка active-context daemon (`daemon_active_*`).
 - `.flow/shared/scripts/run.sh runtime_clear_waiting` — очистка waiting-context daemon (`daemon_waiting_*`).
 - `.flow/shared/scripts/run.sh runtime_clear_review` — очистка review-context daemon (`daemon_review_*`).
+- `.flow/shared/scripts/run.sh runtime_refresh_full` — канонический recovery-refresh VPS runtime: refresh `development/main`, sync `.flow/shared`, `git clean -fd`, clear runtime-state, restart daemon, short snapshot.
 - `.flow/shared/scripts/run.sh executor_start <task-id> <issue-number>` — запуск автономного executor.
 - `.flow/shared/scripts/run.sh executor_tick <task-id> <issue-number>` — проверка/перезапуск executor, обработка fail-state.
 - `.flow/shared/scripts/run.sh executor_build_prompt <task-id> <issue-number> <output-file>` — сбор prompt для executor из Issue.
@@ -433,6 +435,14 @@ Rollback нового профиля:
   - очищает waiting-context daemon без прямых `truncate`
 - `.flow/shared/scripts/run.sh runtime_clear_review`
   - очищает review-context daemon без прямых `truncate`
+- `.flow/shared/scripts/run.sh log_follow <daemon|watchdog|executor|d|w|e> [lines]`
+  - делает `tail -f` по одному runtime-логу; второй аргумент опционален, по умолчанию `50`
+- `.flow/shared/scripts/run.sh runtime_refresh_full`
+  - канонический VPS recovery-refresh: `fetch + reset --hard` для `development` и `main`, затем checkout обратно на `development`
+  - выполняет `git submodule sync/update --init --checkout` только для `.flow/shared`
+  - делает `git clean -fd`, очищает active/waiting/review runtime-state и перезапускает daemon через `daemon_uninstall` + `daemon_install`
+  - для перезапуска daemon использует `WATCHDOG_DAEMON_LABEL`/`WATCHDOG_DAEMON_INTERVAL_SEC`, если они заданы, иначе default label и `45`
+  - в конце печатает короткий `daemon_status` и сжатый `status_snapshot`
 - `next_task.sh`
   - выводит `NEXT_TASK_ID=...` и `NEXT_TITLE=...` для ближайшей задачи (статус `Planned`)
 - `generate_app_dependencies_mermaid.sh [output-file]`

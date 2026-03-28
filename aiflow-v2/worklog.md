@@ -65,3 +65,5 @@
 - После `PL-107` target validation оператору остаётся применить promotion script к `.flow/config/flow.env` на целевой площадке.
 - `PL-110 / Canary hotfix` завершена локально: найден и исправлен orphaned-claim gap между `CLAIMED_TASK_ID` и первым `executor_tick`.
 - `runtime_v2_reconcile_primary_context` теперь держит freshly claimed `daemon_active_*` в коротком grace-window, если `runtime-v2` ещё не успела materialize-ить `phase=executing`.
+- `PL-111 / Canary hotfix` завершена локально: исправлен shell-expansion crash в `executor_build_prompt.sh` и добавлен tolerant payload parsing в `runtime_v2_apply_event.js`.
+- Теперь backticks в issue/body не рвут prompt builder, а best-effort bridge не падает на payload с хвостовым мусором после первого JSON-объекта.

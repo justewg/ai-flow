@@ -145,5 +145,5 @@
 - Для минимизации confirm-шумов избегаем shell-chain команд (`&&`, `;`, heredoc) и используем только отдельные вызовы `.flow/shared/scripts/run.sh` или legacy wrapper `scripts/codex/run.sh`.
 - В интерактивном Codex-режиме `gh issue create/view/comment/close`, `gh pr list/merge/view`, `git ls-remote --heads`, `git branch -D`, `gh project item-add/item-list`, `project_set_status` должны идти через fixed-input команды `run.sh` + `dispatch`, а не прямыми CLI-вызовами с плавающими аргументами.
 - Жёсткое правило: для GitHub flow-операций не спрашивать пользователя отдельно, «можно ли» создать temp/body/input файлы и передать их wrapper-команде. Подготовка аргументов в файлы и вызов fixed-input wrapper — часть обычного выполнения задачи.
-- Просмотр runtime-логов daemon/watchdog/executor должен идти через `run.sh log_tail_*`, а не через прямые `/bin/bash -lc ... tail ...`.
+- Просмотр runtime-логов daemon/watchdog/executor должен идти через `run.sh log_tail_*` или `run.sh log_follow`, а не через прямые `/bin/bash -lc ... tail ...`.
 - Очистка служебных `.flow/state/*` runtime-файлов должна идти через `run.sh runtime_clear_*` и `executor_reset`, а не через прямые `truncate`.

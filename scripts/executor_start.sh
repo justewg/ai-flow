@@ -28,6 +28,17 @@ HEARTBEAT_PID_FILE="${CODEX_DIR}/executor_heartbeat_pid.txt"
 
 mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
 
+control_mode="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" get --raw 2>/dev/null || printf 'AUTO')"
+if [[ "$control_mode" != "AUTO" ]]; then
+  control_reason="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" get | awk -F= '/^CONTROL_REASON=/{print substr($0, index($0, "=")+1)}' 2>/dev/null || true)"
+  printf '%s\n' "FAILED" > "$STATE_FILE"
+  printf '%s\n' "control_mode_${control_mode}" > "${CODEX_DIR}/executor_last_exit_code.txt"
+  echo "EXECUTOR_START_BLOCKED=1"
+  echo "CONTROL_MODE=$control_mode"
+  [[ -n "$control_reason" ]] && echo "CONTROL_REASON=$control_reason"
+  exit 0
+fi
+
 if ! command -v codex >/dev/null 2>&1; then
   printf '%s\n' "FAILED" > "$STATE_FILE"
   printf '%s\n' "127" > "${CODEX_DIR}/executor_last_exit_code.txt"

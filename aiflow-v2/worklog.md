@@ -17,3 +17,43 @@
 - Локальные policy tests зелёные: budget breach реально стопает task, rollout modes ограничивают automation как задумано.
 - `PL-095 / Integration 1` завершена: добавлен отдельный `runtime_v2` shadow contour с persistent `file` adapter и `runtime_v2_*` wrappers для sync/snapshot/clear.
 - Локальный smoke подтвердил, что legacy waiting-state materialize-ится в отдельный `runtime_v2/store` как `waiting_human`, не смешиваясь с legacy state files.
+- `PL-096 / Integration 2` завершена: legacy `daemon/executor/watchdog` начали читать `runtime-v2` policy verdicts перед expensive/recovery paths через отдельный `runtime_v2_gate` bridge.
+- Shadow sync расширен до rough execution history из legacy `execution_ledger.jsonl`, поэтому `runtime-v2` budget gate теперь видит хотя бы execution count до полного cutover.
+- Локальный smoke подтвердил три критичных сценария:
+  - `daemon_claim` режется в `shadow`;
+  - `executor_start` режется по `max_executions_per_task`;
+  - `watchdog_recover` режется по `stale_execution_detected`.
+- `PL-097 / Integration 3` завершена: selected legacy lifecycle transitions теперь зеркалятся в `runtime-v2 applyEvent()` через отдельный `runtime_v2_apply_event` bridge.
+- Event bridge подключён к wait/reply/review/execution path в `task_ask`, `daemon_check_replies`, `task_finalize`, `executor_start` и `executor_run`.
+- Локальный end-to-end smoke через shell wrapper подтвердил цепочку `human.wait_requested -> human.response_received -> review.finalized` с итоговым `runtime-v2` state `reviewing`.
+- `PL-098 / Integration 4` завершена: `runtime-v2` стала primary source для selected `executing/reviewing` contexts через `runtime_v2_primary_context` и reconcile-wrapper в legacy files.
+- `daemon_tick` и `watchdog_tick` теперь перед основной логикой выравнивают `daemon_active_*` и `daemon_review_*` из `runtime-v2`, а не считают эти файлы единственным источником истины.
+- Локальный reconcile smoke подтвердил, что `runtime-v2` может восстановить `active/review` legacy context только из своего store, без ручной записи этих файлов.
+- `PL-099 / Integration 5` завершена: `WAIT_HUMAN` переведён в primary-source mode через `runtime-v2`, а waiting metadata теперь живёт в `taskState.meta.waiting`.
+- `runtime_v2_primary_context` и `runtime_v2_reconcile_primary_context` теперь восстанавливают legacy `daemon_waiting_*` из `runtime-v2`, включая `kind`, `commentUrl`, `pendingPost` и `waitingSince`.
+- `task_ask.sh` теперь отправляет полный `human.wait_requested` payload и для immediate-post, и для pending-post path, так что ordinary human wait больше не зависит только от legacy state files.
+- Локальный waiting reconcile smoke подтвердил, что `runtime-v2` может сама восстановить `daemon_waiting_*` для blocker/question flow без ручной записи этих файлов.
+- `PL-100 / Integration 6` завершена: review/wait business transitions переведены на `emit event -> reconcile`, а legacy shell перестала быть source of truth для ordinary wait и review-feedback waiting.
+- В orchestrator добавлен `review.feedback_wait_requested`, review-slice расширен anchor metadata, а reconcile теперь умеет материализовать `REVIEW_FEEDBACK` waiting прямо из `reviewing` state.
+- `task_ask`, `daemon_check_replies` и `task_finalize` теперь в основных review/wait ветках эмитят `runtime-v2` события и затем делают reconcile вместо прямого business-state ownership.
+- Локальный smoke подтвердил цепочку `review.finalized -> reconcile -> REVIEW_FEEDBACK wait` и последующее очищение review/wait через `human.response_received -> reconcile`.
+- `PL-101 / Integration 7` завершена: watchdog перестроена в supervisor-style слой и больше не лечит runtime через `daemon_tick`/`daemon_install` loops.
+- Anomaly path теперь переводит контур в `SAFE`/`EMERGENCY_STOP`, при необходимости гасит executor и пишет incident trail вместо restart/recovery cascade.
+- Для локальной валидации добавлен explicit harness override `WATCHDOG_IGNORE_DIRTY=1`, не меняющий default behaviour.
+- Local sandbox smoke подтвердил supervisor semantics: при `DAEMON_NOT_INSTALLED` watchdog уводит runtime в `EMERGENCY_STOP`, фиксирует `SUPERVISOR_ACTION_APPLIED` и оставляет audit trail в incident ledger.
+- `PL-102 / Integration 8` завершена: budget/quota/circuit-breaker authority переведена в `runtime-v2` через explicit `budget.breached` и global control-mode derivation из store.
+- Gate-path и provider quota path теперь сходятся в один канал: `runtime-v2 state -> runtime_v2_sync_control_mode -> containment mode`.
+- Local smoke подтвердил, что `budget.breached` в store сам переводит control mode в `EMERGENCY_STOP`, без отдельного shell-only stop path.
+- `PL-103 / Integration 9` завершена: добавлены operator-grade inspection surfaces поверх `runtime-v2`.
+- `runtime_v2_inspect` теперь отдаёт компактный summary по control mode, task counts, primary contexts, incidents и execution summary без чтения raw store вручную.
+- `status_snapshot.sh` теперь включает section `runtime_v2`, поэтому ops-bot и `/ops/status.json` автоматически получают v2-срез.
+- Local smoke подтвердил, что `runtime_v2` block materialize-ится в `status_snapshot` и показывает waiting/task counters из v2 store.
+- `PL-104 / Integration 10` завершена: добавлен единый `dry_run/shadow` validation harness.
+- `runtime_v2_validate_rollout` теперь прогоняет canonical rollout scenarios и пишет replayable report в `runtime_v2_validation_report.json`.
+- Local smoke подтвердил полный path: `dry_run` и `shadow` блокируют side effects как задумано, а inspection path и `WAIT_HUMAN` остаются видимыми.
+- `PL-105 / Integration 11` завершена: добавлен controlled single-task local loop harness.
+- `runtime_v2_single_task_loop` теперь прогоняет allowlisted task через canonical event chain до `reviewing` и отдельно подтверждает deny для non-allowlisted task.
+- Local smoke подтвердил, что `single_task` rollout пропускает ровно нужную задачу, а final `runtime-v2` primary context остаётся `reviewing`.
+- `PL-106 / Integration 12` завершена: собран PR-ready changeset package для `PL-096..PL-105`.
+- Добавлены отдельные PR body artifacts для `ai-flow` и `planka`, а merge order зафиксирован как `ai-flow -> planka`.
+- Следующий шаг — SAFE rollout kit для целевой площадки без выхода из manual validation mode.

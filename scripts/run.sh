@@ -43,6 +43,7 @@ Commands:
   project_set_status
   project_status_runtime
   log_summary
+  log_follow
   log_tail_executor
   log_tail_daemon_executor
   log_tail_all
@@ -84,6 +85,7 @@ Commands:
   runtime_clear_active
   runtime_clear_waiting
   runtime_clear_review
+  runtime_refresh_full
   executor_start
   executor_tick
   executor_build_prompt
@@ -294,9 +296,118 @@ tail_runtime_log() {
   tail -n "$lines" "$log_file"
 }
 
+follow_runtime_log() {
+  local target="${1:-}"
+  local lines="${2:-50}"
+  local log_name=""
+
+  case "$target" in
+    daemon|d)
+      log_name="daemon.log"
+      ;;
+    watchdog|w)
+      log_name="watchdog.log"
+      ;;
+    executor|e)
+      log_name="executor.log"
+      ;;
+    *)
+      echo "Usage: .flow/shared/scripts/run.sh log_follow <daemon|watchdog|executor|d|w|e> [lines]"
+      exit 1
+      ;;
+  esac
+
+  if ! [[ "$lines" =~ ^[0-9]+$ ]] || (( lines < 1 )); then
+    echo "log_follow lines must be a positive integer"
+    exit 1
+  fi
+
+  local log_dir log_file
+  log_dir="$(codex_resolve_flow_runtime_log_dir)"
+  log_file="${log_dir}/${log_name}"
+  if [[ ! -f "$log_file" ]]; then
+    echo "Log file not found: $log_file"
+    exit 1
+  fi
+
+  tail -n "$lines" -f "$log_file"
+}
+
 clear_runtime_state_file() {
   local file_name="$1"
   : > "${CODEX_DIR}/${file_name}"
+}
+
+runtime_refresh_full() {
+  local repo_root daemon_label daemon_interval snapshot_summary
+  repo_root="$ROOT_DIR"
+  daemon_label="${WATCHDOG_DAEMON_LABEL:-$(codex_resolve_default_daemon_label)}"
+  daemon_interval="${WATCHDOG_DAEMON_INTERVAL_SEC:-45}"
+
+  if ! [[ "$daemon_interval" =~ ^[0-9]+$ ]] || (( daemon_interval < 5 )); then
+    echo "Invalid daemon interval for runtime_refresh_full: '${daemon_interval}'"
+    exit 1
+  fi
+
+  printf '== runtime_refresh_full: git refresh ==\n'
+  git -C "$repo_root" fetch origin --prune
+  git -C "$repo_root" checkout development
+  git -C "$repo_root" reset --hard origin/development
+  git -C "$repo_root" checkout main
+  git -C "$repo_root" reset --hard origin/main
+  git -C "$repo_root" checkout development
+
+  printf '\n== runtime_refresh_full: .flow/shared submodule ==\n'
+  git -C "$repo_root" submodule sync -- ".flow/shared" >/dev/null 2>&1 || true
+  git -C "$repo_root" -c protocol.file.allow=always submodule update --init --checkout ".flow/shared"
+
+  printf '\n== runtime_refresh_full: clean repo ==\n'
+  git -C "$repo_root" clean -fd
+
+  printf '\n== runtime_refresh_full: clear runtime state ==\n'
+  clear_runtime_state_file "daemon_active_task.txt"
+  clear_runtime_state_file "daemon_active_item_id.txt"
+  clear_runtime_state_file "daemon_active_issue_number.txt"
+  clear_runtime_state_file "daemon_active_task_key.txt"
+  clear_runtime_state_file "daemon_active_worktree_path.txt"
+  clear_runtime_state_file "daemon_active_task_branch.txt"
+  clear_runtime_state_file "daemon_waiting_task_id.txt"
+  clear_runtime_state_file "daemon_waiting_issue_number.txt"
+  clear_runtime_state_file "daemon_waiting_kind.txt"
+  clear_runtime_state_file "daemon_waiting_since_utc.txt"
+  clear_runtime_state_file "daemon_waiting_comment_url.txt"
+  clear_runtime_state_file "daemon_waiting_pending_post.txt"
+  clear_runtime_state_file "daemon_waiting_question_comment_id.txt"
+  clear_runtime_state_file "daemon_review_task_id.txt"
+  clear_runtime_state_file "daemon_review_item_id.txt"
+  clear_runtime_state_file "daemon_review_issue_number.txt"
+  clear_runtime_state_file "daemon_review_pr_number.txt"
+  clear_runtime_state_file "daemon_review_branch_name.txt"
+  printf 'RUNTIME_STATE_CLEARED=active,waiting,review\n'
+
+  printf '\n== runtime_refresh_full: restart daemon ==\n'
+  "${CODEX_SHARED_SCRIPTS_DIR}/daemon_uninstall.sh" "$daemon_label"
+  "${CODEX_SHARED_SCRIPTS_DIR}/daemon_install.sh" "$daemon_label" "$daemon_interval"
+
+  printf '\n== runtime_refresh_full: final summary ==\n'
+  printf 'repo=%s\n' "$repo_root"
+  printf 'daemon_label=%s\n' "$daemon_label"
+  printf 'daemon_interval=%ss\n' "$daemon_interval"
+  printf 'current_branch=%s\n' "$(git -C "$repo_root" branch --show-current)"
+  printf '\n-- daemon_status --\n'
+  "${CODEX_SHARED_SCRIPTS_DIR}/daemon_status.sh" "$daemon_label"
+  printf '\n-- status_snapshot --\n'
+  snapshot_summary="$("${CODEX_SHARED_SCRIPTS_DIR}/status_snapshot.sh" | jq -c '{
+    overall_status,
+    headline,
+    daemon_state: .daemon.state,
+    watchdog_state: .watchdog.state,
+    executor_state: .executor.state,
+    active_task_id: .blockers.active_task_id,
+    outbox_pending: .queues.outbox_pending,
+    runtime_status_pending: .queues.runtime_status_pending
+  }')"
+  printf '%s\n' "$snapshot_summary"
 }
 
 key_to_file() {
@@ -722,6 +833,14 @@ case "$cmd" in
     "${CODEX_SHARED_SCRIPTS_DIR}/log_summary.sh" "$@"
     ;;
 
+  log_follow)
+    if [[ $# -lt 2 || $# -gt 3 ]]; then
+      echo "Usage: .flow/shared/scripts/run.sh log_follow <daemon|watchdog|executor|d|w|e> [lines]"
+      exit 1
+    fi
+    follow_runtime_log "${2:-}" "${3:-50}"
+    ;;
+
   log_tail_executor)
     tail_runtime_log "executor.log" "140"
     ;;
@@ -975,6 +1094,14 @@ case "$cmd" in
     clear_runtime_state_file "daemon_review_issue_number.txt"
     clear_runtime_state_file "daemon_review_pr_number.txt"
     clear_runtime_state_file "daemon_review_branch_name.txt"
+    ;;
+
+  runtime_refresh_full)
+    if [[ $# -ne 1 ]]; then
+      echo "Usage: .flow/shared/scripts/run.sh runtime_refresh_full"
+      exit 1
+    fi
+    runtime_refresh_full
     ;;
 
   executor_start)

@@ -50,6 +50,73 @@ executor_pid_file="${CODEX_DIR}/executor_pid.txt"
 executor_heartbeat_pid_file="${CODEX_DIR}/executor_heartbeat_pid.txt"
 executor_detach_file="${CODEX_DIR}/executor_detach_requested.txt"
 
+emit_runtime_v2_event() {
+  local event_type="$1"
+  local event_id="$2"
+  local dedup_key="$3"
+  local payload_json="${4:-{}}"
+  local event_out rc
+
+  if event_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_apply_event.sh" \
+      "$task_id" "$issue_number" "$event_type" "$event_id" "$dedup_key" "$payload_json" 2>&1
+  )"; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_EVENT: $line"
+    done <<< "$event_out"
+  else
+    rc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_EVENT_ERROR(rc=$rc): $line"
+    done <<< "$event_out"
+  fi
+}
+
+reconcile_runtime_v2_primary_context() {
+  local reconcile_out rc
+  if reconcile_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_reconcile_primary_context.sh" 2>&1
+  )"; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_RECONCILE: $line"
+    done <<< "$reconcile_out"
+  else
+    rc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_RECONCILE_ERROR(rc=$rc): $line"
+    done <<< "$reconcile_out"
+  fi
+}
+
+build_wait_payload() {
+  local wait_comment_id="$1"
+  local wait_reason="$2"
+  local wait_kind="$3"
+  local comment_url="$4"
+  local pending_post="$5"
+  local waiting_since="$6"
+
+  jq -nc \
+    --arg waitCommentId "$wait_comment_id" \
+    --arg reason "$wait_reason" \
+    --arg kind "$wait_kind" \
+    --arg commentUrl "$comment_url" \
+    --arg waitingSince "$waiting_since" \
+    --argjson pendingPost "$pending_post" \
+    '{
+      waitCommentId:$waitCommentId,
+      reason:$reason,
+      kind:$kind,
+      commentUrl:$commentUrl,
+      waitingSince:$waitingSince,
+      pendingPost:$pendingPost
+    }'
+}
+
 trim_line() {
   printf '%s' "$1" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g'
 }
@@ -635,15 +702,20 @@ EOF_COMMENT
 if comment_json="$(post_issue_comment "$issue_number" "$comment_body")"; then
   question_comment_id="$(printf '%s' "$comment_json" | jq -r '.id')"
   question_comment_url="$(printf '%s' "$comment_json" | jq -r '.html_url')"
-
-  printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
-  printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_waiting_task_id.txt"
-  printf '%s\n' "$question_comment_id" > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
-  printf '%s\n' "$kind_label" > "${CODEX_DIR}/daemon_waiting_kind.txt"
-  printf '%s\n' "$now_utc" > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
-  printf '%s\n' "$question_comment_url" > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
   : > "$pending_post_file"
   request_executor_stop
+
+  wait_reason="waiting human reply"
+  if [[ "$kind_label" == "BLOCKER" ]]; then
+    wait_reason="waiting human unblock"
+  fi
+  wait_payload="$(build_wait_payload "$question_comment_id" "$wait_reason" "$kind_label" "$question_comment_url" false "$now_utc")"
+  emit_runtime_v2_event \
+    "human.wait_requested" \
+    "legacy-v2-wait-${task_id}-${question_comment_id}" \
+    "legacy.human.wait_requested:${task_id}:${question_comment_id}" \
+    "$wait_payload"
+  reconcile_runtime_v2_primary_context
 
   echo "QUESTION_POSTED=1"
   echo "TASK_ID=$task_id"
@@ -686,13 +758,20 @@ while IFS= read -r line; do
   echo "$line"
 done <<< "$enqueue_out"
 
-printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
-printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_waiting_task_id.txt"
-printf '%s\n' "-1" > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
-printf '%s\n' "$kind_label" > "${CODEX_DIR}/daemon_waiting_kind.txt"
-printf '%s\n' "$now_utc" > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
-: > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
 printf '%s\n' "1" > "$pending_post_file"
+request_executor_stop
+
+wait_reason="waiting human reply"
+if [[ "$kind_label" == "BLOCKER" ]]; then
+  wait_reason="waiting human unblock"
+fi
+wait_payload="$(build_wait_payload "-1" "$wait_reason" "$kind_label" "" true "$now_utc")"
+emit_runtime_v2_event \
+  "human.wait_requested" \
+  "legacy-v2-wait-${task_id}-pending-${now_utc}" \
+  "legacy.human.wait_requested:${task_id}:pending" \
+  "$wait_payload"
+reconcile_runtime_v2_primary_context
 
 echo "QUESTION_QUEUED_OUTBOX=1"
 echo "TASK_ID=$task_id"

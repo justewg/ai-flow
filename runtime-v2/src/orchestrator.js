@@ -48,6 +48,24 @@ function ensureEventShape(event) {
   }
 }
 
+function buildWaitingMeta(payload) {
+  return {
+    kind: payload.kind || null,
+    waitCommentId: payload.waitCommentId || null,
+    commentUrl: payload.commentUrl || null,
+    pendingPost: payload.pendingPost === true,
+    waitingSince: payload.waitingSince || null,
+  };
+}
+
+function buildReviewFeedbackMeta(payload) {
+  return {
+    commentUrl: payload.commentUrl || null,
+    pendingPost: payload.pendingPost === true,
+    waitingSince: payload.waitingSince || null,
+  };
+}
+
 async function applyEvent(store, eventInput) {
   assertStore(store);
   ensureEventShape(eventInput);
@@ -85,13 +103,21 @@ async function applyEvent(store, eventInput) {
       meta: {},
     };
 
-  if (taskState.phase === "waiting_human" && event.eventType !== "human.response_received" && event.eventType !== "human.wait_requested") {
+  if (
+    taskState.phase === "waiting_human" &&
+    event.eventType !== "human.response_received" &&
+    event.eventType !== "human.wait_requested" &&
+    event.eventType !== "budget.breached"
+  ) {
     return blocked("waiting_human_terminal", { event, taskState });
   }
 
   const nextState = {
     ...taskState,
     updatedAt: nowIso(),
+    meta: {
+      ...(taskState.meta || {}),
+    },
   };
 
   switch (event.eventType) {
@@ -167,7 +193,29 @@ async function applyEvent(store, eventInput) {
       nextState.activeExecutionId = null;
       nextState.canonicalReviewPrNumber = prNumber;
       nextState.canonicalWaitCommentId = waitCommentId || taskState.canonicalWaitCommentId;
+      nextState.meta.reviewFeedback = buildReviewFeedbackMeta(event.payload);
       nextState.lastMeaningfulTransitionHash = meaning;
+      break;
+    }
+
+    case "review.feedback_wait_requested": {
+      const waitCommentId = event.payload.waitCommentId;
+      if (!waitCommentId) {
+        throw new ValidationError("review.feedback_wait_requested requires payload.waitCommentId");
+      }
+      if (!taskState.canonicalReviewPrNumber) {
+        return blocked("review_feedback_without_review", { event, taskState });
+      }
+      nextState.phase = "reviewing";
+      nextState.reason = event.payload.reason || "awaiting review feedback";
+      nextState.activeExecutionId = null;
+      nextState.canonicalWaitCommentId = waitCommentId;
+      nextState.meta.reviewFeedback = buildReviewFeedbackMeta(event.payload);
+      nextState.lastMeaningfulTransitionHash = transitionHash({
+        eventType: event.eventType,
+        prNumber: taskState.canonicalReviewPrNumber,
+        waitCommentId,
+      });
       break;
     }
 
@@ -187,6 +235,7 @@ async function applyEvent(store, eventInput) {
       nextState.reason = event.payload.reason || "waiting human reply";
       nextState.activeExecutionId = null;
       nextState.canonicalWaitCommentId = waitCommentId;
+      nextState.meta.waiting = buildWaitingMeta(event.payload);
       nextState.lastMeaningfulTransitionHash = transitionHash({
         eventType: event.eventType,
         waitCommentId,
@@ -197,9 +246,33 @@ async function applyEvent(store, eventInput) {
     case "human.response_received": {
       nextState.phase = "ready";
       nextState.reason = event.payload.reason || "human response received";
+      nextState.activeExecutionId = null;
+      nextState.canonicalWaitCommentId = null;
+      delete nextState.meta.waiting;
+      delete nextState.meta.reviewFeedback;
       nextState.lastMeaningfulTransitionHash = transitionHash({
         eventType: event.eventType,
         responseType: event.payload.responseType || "generic",
+      });
+      break;
+    }
+
+    case "budget.breached": {
+      const budgetState = event.payload.budgetState || "emergency_stop";
+      nextState.phase = "paused";
+      nextState.reason = event.payload.reason || "budget breach";
+      nextState.activeExecutionId = null;
+      nextState.budgetState = budgetState;
+      nextState.lockState = "frozen";
+      nextState.meta.budget = {
+        breachReason: event.payload.breachReason || event.payload.reason || "budget_breach",
+        providerErrorClass: event.payload.providerErrorClass || null,
+        triggeredAt: event.payload.triggeredAt || nowIso(),
+      };
+      nextState.lastMeaningfulTransitionHash = transitionHash({
+        eventType: event.eventType,
+        budgetState,
+        reason: nextState.reason,
       });
       break;
     }

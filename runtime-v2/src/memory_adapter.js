@@ -20,6 +20,10 @@ function createMemoryAdapter() {
       return tasks.get(taskId) || null;
     },
 
+    async listTasks() {
+      return Array.from(tasks.values()).sort((left, right) => left.id.localeCompare(right.id));
+    },
+
     async upsertTaskState(taskState) {
       taskStates.set(taskState.taskId, taskState);
       return taskState;
@@ -27,6 +31,10 @@ function createMemoryAdapter() {
 
     async getTaskState(taskId) {
       return taskStates.get(taskId) || null;
+    },
+
+    async listTaskStates() {
+      return Array.from(taskStates.values()).sort((left, right) => String(left.updatedAt || "").localeCompare(String(right.updatedAt || "")));
     },
 
     async upsertExecution(execution) {

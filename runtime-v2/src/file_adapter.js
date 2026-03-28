@@ -61,6 +61,10 @@ function createFileAdapter({ storeDir }) {
       return readCollection("tasks")[taskId] || null;
     },
 
+    async listTasks() {
+      return Object.values(readCollection("tasks")).sort((left, right) => String(left.id || "").localeCompare(String(right.id || "")));
+    },
+
     async upsertTaskState(taskState) {
       const taskStates = readCollection("taskStates");
       taskStates[taskState.taskId] = taskState;
@@ -70,6 +74,10 @@ function createFileAdapter({ storeDir }) {
 
     async getTaskState(taskId) {
       return readCollection("taskStates")[taskId] || null;
+    },
+
+    async listTaskStates() {
+      return Object.values(readCollection("taskStates")).sort((left, right) => String(left.updatedAt || "").localeCompare(String(right.updatedAt || "")));
     },
 
     async upsertExecution(execution) {

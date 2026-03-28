@@ -281,6 +281,10 @@ backlog_plan_present="false"
 if [[ -f "${CODEX_DIR}/backlog_seed_plan.json" ]]; then
   backlog_plan_present="true"
 fi
+runtime_v2_json="$(/bin/bash "${SCRIPT_DIR}/runtime_v2_inspect.sh" --compact 2>/dev/null || printf '{}')"
+if [[ -z "$runtime_v2_json" ]]; then
+  runtime_v2_json='{}'
+fi
 
 daemon_state_age_sec="$(age_from_epoch "$(file_mtime_epoch "$daemon_state_file")")"
 daemon_log_age_sec="$(age_from_epoch "$(file_mtime_epoch "$daemon_log_file")")"
@@ -465,6 +469,7 @@ jq -n \
   --argjson backlog_remaining "$backlog_remaining" \
   --argjson executor_pid_alive "$executor_pid_alive" \
   --argjson backlog_plan_present "$backlog_plan_present" \
+  --argjson runtime_v2 "$runtime_v2_json" \
   '{
     generated_at: $generated_at,
     project: {
@@ -538,5 +543,6 @@ jq -n \
       plan_present: $backlog_plan_present,
       remaining: $backlog_remaining,
       next_code: $backlog_next_code
-    }
+    },
+    runtime_v2: $runtime_v2
   }'

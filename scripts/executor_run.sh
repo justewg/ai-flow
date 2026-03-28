@@ -20,6 +20,7 @@ RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
 LOG_FILE="${RUNTIME_LOG_DIR}/executor.log"
 PROMPT_FILE="${CODEX_DIR}/executor_prompt.txt"
 STATE_FILE="${CODEX_DIR}/executor_state.txt"
+EXECUTION_ID_FILE="${CODEX_DIR}/executor_active_execution_id.txt"
 EXIT_FILE="${CODEX_DIR}/executor_last_exit_code.txt"
 FINISH_FILE="${CODEX_DIR}/executor_last_finished_utc.txt"
 LAST_MSG_FILE="${CODEX_DIR}/executor_last_message.txt"
@@ -42,6 +43,30 @@ record_execution() {
     "$termination_reason" "$provider_error_class" "$detached" >/dev/null 2>&1 || true
 }
 
+emit_runtime_v2_event() {
+  local event_type="$1"
+  local event_id="$2"
+  local dedup_key="$3"
+  local payload_json="${4:-{}}"
+  local event_out rc
+
+  if event_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_apply_event.sh" \
+      "$task_id" "$issue_number" "$event_type" "$event_id" "$dedup_key" "$payload_json" 2>&1
+  )"; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_EVENT: $line"
+    done <<< "$event_out" >>"$LOG_FILE" 2>&1
+  else
+    rc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_EVENT_ERROR(rc=$rc): $line"
+    done <<< "$event_out" >>"$LOG_FILE" 2>&1
+  fi
+}
+
 task_repo="$(task_worktree_repo_dir "$task_id" "$issue_number")"
 if ! task_worktree_repo_present "$task_repo"; then
   {
@@ -53,6 +78,7 @@ if ! task_worktree_repo_present "$task_repo"; then
   printf '%s\n' "1" > "$EXIT_FILE"
   date -u '+%Y-%m-%dT%H:%M:%SZ' > "$FINISH_FILE"
   : > "${CODEX_DIR}/executor_pid.txt"
+  : > "$EXECUTION_ID_FILE"
   /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/incident_append.sh" executor_task_worktree_missing "task=${task_id} issue=${issue_number} path=${task_repo}" >/dev/null 2>&1 || true
   record_execution "1" "task_worktree_missing" "none" "0"
   exit 0
@@ -141,6 +167,7 @@ if [[ "$detach_requested" == "1" ]]; then
   : > "${CODEX_DIR}/executor_pid.txt"
   : > "$HEARTBEAT_PID_FILE"
   : > "$DETACH_FILE"
+  : > "$EXECUTION_ID_FILE"
   {
     echo "EXECUTOR_RUN_DETACHED=1"
     echo "=== EXECUTOR_RUN_FINISH task=${task_id} issue=${issue_number} rc=${rc} detached=1 at $(date -u '+%Y-%m-%dT%H:%M:%SZ') ==="
@@ -155,8 +182,20 @@ run_log_slice="$(sed -n "${run_log_start_line},\$p" "$LOG_FILE" 2>/dev/null || t
 if printf '%s\n' "$run_log_slice" | rg -n "Quota exceeded" >/dev/null 2>&1; then
   provider_error_class="quota_exceeded"
   termination_reason="provider_quota_exceeded"
-  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" set EMERGENCY_STOP "provider quota exceeded during executor run for ${task_id}" >/dev/null 2>&1 || true
-  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/incident_append.sh" provider_quota_exceeded "task=${task_id} issue=${issue_number}" >/dev/null 2>&1 || true
+  budget_payload="$(
+    jq -nc \
+      --arg reason "provider quota exceeded during executor run" \
+      --arg breachReason "provider_quota_exceeded" \
+      --arg providerErrorClass "$provider_error_class" \
+      --arg triggeredAt "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+      '{reason:$reason, breachReason:$breachReason, providerErrorClass:$providerErrorClass, budgetState:"emergency_stop", triggeredAt:$triggeredAt}'
+  )"
+  emit_runtime_v2_event \
+    "budget.breached" \
+    "legacy-v2-budget-breach-${task_id}-${execution_id:-quota}" \
+    "legacy.budget.breached:${task_id}:provider_quota_exceeded" \
+    "$budget_payload"
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_sync_control_mode.sh" >/dev/null 2>&1 || true
 fi
 
 if [[ "$rc" == "0" ]]; then
@@ -173,6 +212,19 @@ date -u '+%Y-%m-%dT%H:%M:%SZ' > "$FINISH_FILE"
 : > "${CODEX_DIR}/executor_pid.txt"
 : > "$HEARTBEAT_PID_FILE"
 : > "$DETACH_FILE"
+
+execution_id="$(cat "$EXECUTION_ID_FILE" 2>/dev/null || true)"
+if [[ -n "$execution_id" ]]; then
+  finish_payload="$(
+    jq -nc --arg executionId "$execution_id" '{executionId:$executionId}'
+  )"
+  emit_runtime_v2_event \
+    "execution.finished" \
+    "legacy-v2-event-execution-finish-${task_id}-${execution_id}-${rc}" \
+    "legacy.execution.finished:${task_id}:${execution_id}:${rc}" \
+    "$finish_payload"
+fi
+: > "$EXECUTION_ID_FILE"
 
 {
   echo "=== EXECUTOR_RUN_FINISH task=${task_id} issue=${issue_number} rc=${rc} at $(date -u '+%Y-%m-%dT%H:%M:%SZ') ==="

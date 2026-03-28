@@ -19,6 +19,7 @@ STATE_FILE="${CODEX_DIR}/executor_state.txt"
 PID_FILE="${CODEX_DIR}/executor_pid.txt"
 TASK_FILE="${CODEX_DIR}/executor_task_id.txt"
 ISSUE_FILE="${CODEX_DIR}/executor_issue_number.txt"
+EXECUTION_ID_FILE="${CODEX_DIR}/executor_active_execution_id.txt"
 START_FILE="${CODEX_DIR}/executor_last_started_utc.txt"
 START_EPOCH_FILE="${CODEX_DIR}/executor_last_start_epoch.txt"
 LOG_FILE="${RUNTIME_LOG_DIR}/executor.log"
@@ -36,6 +37,22 @@ if [[ "$control_mode" != "AUTO" ]]; then
   echo "EXECUTOR_START_BLOCKED=1"
   echo "CONTROL_MODE=$control_mode"
   [[ -n "$control_reason" ]] && echo "CONTROL_REASON=$control_reason"
+  exit 0
+fi
+
+gate_out="$(
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_gate.sh" \
+    "$task_id" "$issue_number" "executor_start" "executor_start" 2>&1
+)"
+while IFS= read -r line; do
+  [[ -z "$line" ]] && continue
+  echo "$line"
+done <<<"$gate_out"
+gate_status="$(printf '%s\n' "$gate_out" | sed -n 's/^RUNTIME_V2_GATE_STATUS=//p' | tail -n1)"
+gate_reason="$(printf '%s\n' "$gate_out" | sed -n 's/^RUNTIME_V2_GATE_REASON=//p' | tail -n1)"
+if [[ "$gate_status" == "blocked" ]]; then
+  echo "EXECUTOR_START_BLOCKED_BY_V2_GATE=1"
+  [[ -n "$gate_reason" ]] && echo "EXECUTOR_START_BLOCK_REASON=$gate_reason"
   exit 0
 fi
 
@@ -61,6 +78,39 @@ if [[ "$current_state" == "RUNNING" && -n "$current_pid" ]] && kill -0 "$current
   echo "EXECUTOR_PID=$current_pid"
   echo "EXECUTOR_TASK_ID=$current_task"
   exit 0
+fi
+
+execution_id="legacy-v2-exec-${task_id}-$(date +%s)-$$"
+execution_payload="$(
+  jq -nc --arg executionId "$execution_id" '{executionId:$executionId}'
+)"
+if execution_event_out="$(
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_apply_event.sh" \
+    "$task_id" "$issue_number" "execution.started" \
+    "legacy-v2-event-execution-start-${task_id}-${execution_id}" \
+    "legacy.execution.started:${task_id}:${execution_id}" \
+    "$execution_payload" 2>&1
+)"; then
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "RUNTIME_V2_EVENT: $line"
+  done <<<"$execution_event_out"
+  execution_event_status="$(printf '%s\n' "$execution_event_out" | sed -n 's/^RUNTIME_V2_EVENT_STATUS=//p' | tail -n1)"
+  execution_event_reason="$(printf '%s\n' "$execution_event_out" | sed -n 's/^RUNTIME_V2_EVENT_REASON=//p' | tail -n1)"
+  if [[ "$execution_event_status" == "blocked" ]]; then
+    echo "EXECUTOR_START_BLOCKED_BY_V2_EVENT=1"
+    [[ -n "$execution_event_reason" ]] && echo "EXECUTOR_START_BLOCK_REASON=$execution_event_reason"
+    exit 0
+  fi
+  if [[ "$execution_event_status" == "applied" ]]; then
+    printf '%s\n' "$execution_id" > "$EXECUTION_ID_FILE"
+  fi
+else
+  rc=$?
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "RUNTIME_V2_EVENT_ERROR(rc=$rc): $line"
+  done <<<"$execution_event_out"
 fi
 
 printf '%s\n' "RUNNING" > "$STATE_FILE"

@@ -31,6 +31,13 @@ class AiFlowV2StateStore {
     return this.adapter.getTask(taskId);
   }
 
+  async listTasks() {
+    if (typeof this.adapter.listTasks !== "function") {
+      return [];
+    }
+    return this.adapter.listTasks();
+  }
+
   async putTaskState(taskStateInput) {
     const taskState = normalizeTaskState(taskStateInput);
     return this.adapter.upsertTaskState(taskState);
@@ -38,6 +45,13 @@ class AiFlowV2StateStore {
 
   async getTaskState(taskId) {
     return this.adapter.getTaskState(taskId);
+  }
+
+  async listTaskStates() {
+    if (typeof this.adapter.listTaskStates !== "function") {
+      return [];
+    }
+    return this.adapter.listTaskStates();
   }
 
   async putExecution(executionInput) {

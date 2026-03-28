@@ -24,13 +24,23 @@ const {
   collectLegacyShadowSnapshot,
   inferTaskStateFromLegacy,
   buildSnapshotHash,
+  collectLegacyExecutionRecords,
+  projectLegacyExecutionRecord,
+  syncLegacyShadowSnapshot,
 } = require("./legacy_shadow");
+const { evaluateLegacyPolicyGate } = require("./legacy_gate");
+const { applyLegacyEventBridge } = require("./legacy_event_bridge");
+const { derivePrimaryContexts } = require("./primary_context");
 const {
   normalizeTask,
   normalizeTaskState,
   normalizeExecution,
   normalizeEvent,
 } = require("./schemas");
+const { deriveGlobalControlMode } = require("./control_policy");
+const { buildInspectionSummary } = require("./inspection");
+const { runRolloutValidation } = require("./validation");
+const { runSingleTaskLoop } = require("./single_task_loop");
 const { ValidationError, ConfigError, DependencyError } = require("./errors");
 
 module.exports = {
@@ -55,6 +65,16 @@ module.exports = {
   collectLegacyShadowSnapshot,
   inferTaskStateFromLegacy,
   buildSnapshotHash,
+  collectLegacyExecutionRecords,
+  projectLegacyExecutionRecord,
+  syncLegacyShadowSnapshot,
+  evaluateLegacyPolicyGate,
+  applyLegacyEventBridge,
+  derivePrimaryContexts,
+  deriveGlobalControlMode,
+  buildInspectionSummary,
+  runRolloutValidation,
+  runSingleTaskLoop,
   normalizeTask,
   normalizeTaskState,
   normalizeExecution,

@@ -67,9 +67,82 @@ function parseArgs(argv) {
   return args;
 }
 
+function extractLeadingJson(raw) {
+  const source = String(raw || "");
+  let index = 0;
+  while (index < source.length && /\s/.test(source[index])) {
+    index += 1;
+  }
+  if (index >= source.length || (source[index] !== "{" && source[index] !== "[")) {
+    return null;
+  }
+
+  const opening = source[index];
+  const closing = opening === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let cursor = index; cursor < source.length; cursor += 1) {
+    const char = source[cursor];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = true;
+      continue;
+    }
+    if (char === opening) {
+      depth += 1;
+      continue;
+    }
+    if (char === closing) {
+      depth -= 1;
+      if (depth === 0) {
+        return source.slice(index, cursor + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
+function parsePayloadJson(raw) {
+  const payloadText = String(raw || "{}");
+  try {
+    return { payload: JSON.parse(payloadText), normalized: payloadText, warning: null };
+  } catch (primaryError) {
+    const extracted = extractLeadingJson(payloadText);
+    if (extracted) {
+      try {
+        return {
+          payload: JSON.parse(extracted),
+          normalized: extracted,
+          warning: `payload_json_trimmed_after_parse_error:${primaryError.message}`,
+        };
+      } catch (_secondaryError) {
+        // Fall through to empty payload.
+      }
+    }
+    return {
+      payload: {},
+      normalized: "{}",
+      warning: `payload_json_invalid_fallback_empty:${primaryError.message}`,
+    };
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv);
-  const payload = JSON.parse(args.payloadJson || "{}");
+  const parsedPayload = parsePayloadJson(args.payloadJson);
   const store = createAiFlowV2StateStore({
     adapter: createFileAdapter({ storeDir: path.resolve(args.storeDir) }),
   });
@@ -84,10 +157,16 @@ async function main() {
     eventId: args.eventId,
     source: args.source,
     dedupKey: args.dedupKey,
-    payload,
+    payload: parsedPayload.payload,
   });
-
-  console.log(JSON.stringify(result, null, 2));
+  const output = {
+    ...result,
+  };
+  if (parsedPayload.warning) {
+    output.payloadWarning = parsedPayload.warning;
+    output.payloadJsonNormalized = parsedPayload.normalized;
+  }
+  console.log(JSON.stringify(output, null, 2));
 }
 
 main().catch((error) => {

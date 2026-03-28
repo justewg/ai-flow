@@ -49,9 +49,11 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh project_item_view`
 - `.flow/shared/scripts/run.sh issue_comment`
 - `.flow/shared/scripts/run.sh project_set_status`
+- `.flow/shared/scripts/run.sh log_follow <daemon|watchdog|executor|d|w|e> [lines]`
 - `.flow/shared/scripts/run.sh log_tail_executor`
 - `.flow/shared/scripts/run.sh log_tail_daemon_executor`
 - `.flow/shared/scripts/run.sh log_tail_all`
+- `.flow/shared/scripts/run.sh runtime_refresh_full`
 - `.flow/shared/scripts/run.sh host_bootstrap`
 - `.flow/shared/scripts/run.sh docker_bootstrap`
 - `.flow/shared/scripts/run.sh android_builder <config|up|down|shell|run|exec> [command...]`

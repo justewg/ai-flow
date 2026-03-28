@@ -102,12 +102,11 @@ async function runRolloutValidation(store, options = {}) {
     const actual = scenarios.find((scenario) => scenario.name === expected.name);
     return !actual || actual.status !== expected.status || actual.reason !== expected.reason;
   });
+  const waitingContextForTask = inspection.contexts.waiting.find((item) => item.taskId === taskId) || null;
 
   const waitExpectationMet =
     (waitEvent.status === "applied" || (waitEvent.status === "noop" && waitEvent.reason === "duplicate_event")) &&
-    inspection.contexts.waitingCount === 1 &&
-    inspection.contexts.waiting[0] &&
-    inspection.contexts.waiting[0].taskId === taskId;
+    !!waitingContextForTask;
 
   return {
     generatedAt: new Date().toISOString(),

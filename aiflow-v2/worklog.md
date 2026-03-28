@@ -57,3 +57,9 @@
 - `PL-106 / Integration 12` завершена: собран PR-ready changeset package для `PL-096..PL-105`.
 - Добавлены отдельные PR body artifacts для `ai-flow` и `planka`, а merge order зафиксирован как `ai-flow -> planka`.
 - Следующий шаг — SAFE rollout kit для целевой площадки без выхода из manual validation mode.
+- `PL-107 / Integration 13` завершена в подготовительной части: собран SAFE rollout kit и локально подтверждён полный manual validation path.
+- `pl107_safe_rollout_kit.sh` собирает reproducible rollout report и не включает automation.
+- Для целевой площадки остаётся один операторский шаг: запустить kit после merge changeset.
+- `PL-108 / Integration 14` завершена в подготовительной части: собран limited rollout promotion kit.
+- `pl108_enable_limited_rollout.sh` обновляет rollout env keys через backup-first path и не переводит систему в `auto`.
+- После `PL-107` target validation оператору остаётся применить promotion script к `.flow/config/flow.env` на целевой площадке.

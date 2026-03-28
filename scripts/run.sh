@@ -32,6 +32,7 @@ Commands:
   pr_create
   pr_edit
   pr_merge
+  git_in
   commit_push
   git_ls_remote_heads
   git_delete_branch
@@ -242,6 +243,42 @@ run_project_gh() {
   else
     gh "$@"
   fi
+}
+
+ensure_git_in_repo_root() {
+  local repo_root="$1"
+  if [[ -z "$repo_root" ]]; then
+    echo "git_in requires <repo-root> as the first argument"
+    exit 1
+  fi
+  if [[ ! -d "$repo_root" ]]; then
+    echo "git_in repo root not found: $repo_root"
+    exit 1
+  fi
+  if [[ ! -e "$repo_root/.git" ]]; then
+    echo "git_in target is not a git checkout/worktree: $repo_root"
+    exit 1
+  fi
+}
+
+run_git_in() {
+  local repo_root="${1:-}"
+  local git_subcommand="${2:-}"
+  shift 2 || true
+
+  ensure_git_in_repo_root "$repo_root"
+
+  case "$git_subcommand" in
+    fetch|merge|checkout|add|commit|push|status|rev-parse|log|show|diff|branch|submodule)
+      ;;
+    *)
+      echo "Unsupported git_in subcommand: ${git_subcommand:-<empty>}"
+      echo "Allowed: fetch merge checkout add commit push status rev-parse log show diff branch submodule"
+      exit 1
+      ;;
+  esac
+
+  git -C "$repo_root" "$git_subcommand" "$@"
 }
 
 tail_runtime_log() {
@@ -496,7 +533,31 @@ case "$cmd" in
     if is_truthy "${pr_delete_branch_raw:-0}"; then
       pr_merge_cmd+=(--delete-branch)
     fi
-    "${pr_merge_cmd[@]}"
+    if pr_merge_out="$("${pr_merge_cmd[@]}" 2>&1)"; then
+      printf '%s\n' "$pr_merge_out"
+    else
+      pr_merge_rc=$?
+      if printf '%s' "$pr_merge_out" | grep -Eiq 'GraphQL: API rate limit|API rate limit already exceeded'; then
+        pr_merge_api_method="merge"
+        case "${pr_merge_method:-merge}" in
+          ""|merge) pr_merge_api_method="merge" ;;
+          squash) pr_merge_api_method="squash" ;;
+          rebase) pr_merge_api_method="rebase" ;;
+        esac
+        gh api -X PUT "repos/${repo}/pulls/${pr_number}/merge" -f merge_method="$pr_merge_api_method"
+      else
+        printf '%s\n' "$pr_merge_out" >&2
+        exit "$pr_merge_rc"
+      fi
+    fi
+    ;;
+
+  git_in)
+    if [[ $# -lt 2 ]]; then
+      echo "Usage: .flow/shared/scripts/run.sh git_in <repo-root> <git-subcommand> [args...]"
+      exit 1
+    fi
+    run_git_in "$@"
     ;;
 
   commit_push)

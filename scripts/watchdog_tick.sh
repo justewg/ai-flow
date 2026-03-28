@@ -29,6 +29,7 @@ DAEMON_LOG_STALE_SEC="${WATCHDOG_DAEMON_LOG_STALE_SEC:-180}"
 DAEMON_RATE_LIMIT_MAX_SLEEP_SEC="${DAEMON_RATE_LIMIT_MAX_SLEEP_SEC:-360}"
 DAEMON_LOG_STALE_RATE_LIMIT_SEC="${WATCHDOG_DAEMON_LOG_STALE_RATE_LIMIT_SEC:-0}"
 BRANCH_SYNC_NOTIFY_SEC="${WATCHDOG_BRANCH_SYNC_NOTIFY_SEC:-300}"
+WATCHDOG_IGNORE_DIRTY="${WATCHDOG_IGNORE_DIRTY:-0}"
 
 mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
 
@@ -175,6 +176,21 @@ emit_lines() {
   done <<< "$text"
 }
 
+reconcile_runtime_v2_primary_contexts() {
+  local reconcile_out reconcile_rc
+  if reconcile_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_reconcile_primary_context.sh" 2>&1
+  )"; then
+    emit_lines "$reconcile_out"
+    return 0
+  fi
+  reconcile_rc=$?
+  emit_lines "$reconcile_out"
+  echo "WATCHDOG_RUNTIME_V2_PRIMARY_RECONCILE_ERROR=1"
+  echo "WATCHDOG_RUNTIME_V2_PRIMARY_RECONCILE_RC=${reconcile_rc}"
+  return 0
+}
+
 is_pid_alive() {
   local pid="$1"
   [[ "$pid" =~ ^[0-9]+$ ]] || return 1
@@ -190,6 +206,20 @@ daemon_loop_running() {
 
 dirty_runtime_mode() {
   codex_resolve_config_value "FLOW_HOST_RUNTIME_MODE" ""
+}
+
+is_truthy() {
+  local raw_value="${1:-}"
+  local value
+  value="$(printf '%s' "$raw_value" | tr '[:upper:]' '[:lower:]')"
+  case "$value" in
+    1|true|yes|on)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 dirty_path_ignored() {
@@ -299,9 +329,9 @@ EOF
   rm -f "$msg_file"
 }
 
-run_soft_tick() {
+run_supervisor_stop_executor() {
   local out rc
-  if out="$("${CODEX_SHARED_SCRIPTS_DIR}/daemon_tick.sh" 2>&1)"; then
+  if out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" 2>&1)"; then
     emit_lines "$out"
     return 0
   fi
@@ -310,73 +340,30 @@ run_soft_tick() {
   return "$rc"
 }
 
-run_medium_recovery() {
-  local rc=0
-  local out
-
-  if out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" 2>&1)"; then
+run_supervisor_set_mode() {
+  local mode="$1"
+  local reason="$2"
+  local out rc
+  if out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" set "$mode" "$reason" 2>&1)"; then
     emit_lines "$out"
   else
     rc=$?
     emit_lines "$out"
+    return "$rc"
   fi
 
-  if out="$("${CODEX_SHARED_SCRIPTS_DIR}/daemon_tick.sh" 2>&1)"; then
+  if out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/incident_append.sh" "watchdog_supervisor" "$reason" 2>&1)"; then
     emit_lines "$out"
-  else
-    local tick_rc=$?
-    emit_lines "$out"
-    if [[ "$rc" -eq 0 ]]; then
-      rc="$tick_rc"
-    fi
+    return 0
   fi
-
-  return "$rc"
-}
-
-run_hard_recovery() {
-  local rc=0
-  local out
-
-  if [[ -d "$DAEMON_LOCK_DIR" ]] && ! daemon_loop_running; then
-    rm -rf "$DAEMON_LOCK_DIR"
-    log "STALE_DAEMON_LOCK_REMOVED=1"
-    echo "STALE_DAEMON_LOCK_REMOVED=1"
-  fi
-
-  if out="$("${CODEX_SHARED_SCRIPTS_DIR}/daemon_uninstall.sh" "$DAEMON_LABEL" 2>&1)"; then
-    emit_lines "$out"
-  else
-    rc=$?
-    emit_lines "$out"
-  fi
-
-  if out="$("${CODEX_SHARED_SCRIPTS_DIR}/daemon_install.sh" "$DAEMON_LABEL" "$DAEMON_INTERVAL" 2>&1)"; then
-    emit_lines "$out"
-  else
-    local install_rc=$?
-    emit_lines "$out"
-    if [[ "$rc" -eq 0 ]]; then
-      rc="$install_rc"
-    fi
-  fi
-
-  if out="$("${CODEX_SHARED_SCRIPTS_DIR}/daemon_status.sh" "$DAEMON_LABEL" 2>&1)"; then
-    emit_lines "$out"
-  else
-    local status_rc=$?
-    emit_lines "$out"
-    if [[ "$rc" -eq 0 ]]; then
-      rc="$status_rc"
-    fi
-  fi
-
+  rc=$?
+  emit_lines "$out"
   return "$rc"
 }
 
 now_epoch="$(date +%s)"
 
-if [[ -n "$(collect_dirty_tracked_lines)" ]]; then
+if ! is_truthy "$WATCHDOG_IGNORE_DIRTY" && [[ -n "$(collect_dirty_tracked_lines)" ]]; then
   detail="WATCHDOG_PAUSED_DIRTY_WORKTREE=1"
   set_state "PAUSED_DIRTY_WORKTREE" "$detail"
   echo "$detail"
@@ -385,6 +372,8 @@ if [[ -n "$(collect_dirty_tracked_lines)" ]]; then
   echo "WATCHDOG_OK=1"
   exit 0
 fi
+
+reconcile_runtime_v2_primary_contexts
 
 active_task="$(read_file_or_default "${CODEX_DIR}/daemon_active_task.txt" "")"
 active_issue="$(read_file_or_default "${CODEX_DIR}/daemon_active_issue_number.txt" "")"
@@ -437,27 +426,27 @@ action="NONE"
 reason=""
 
 if [[ "$daemon_agent_state" == "NOT_INSTALLED" ]]; then
-  action="HARD_RESTART_DAEMON"
+  action="FREEZE_EMERGENCY"
   reason="DAEMON_NOT_INSTALLED"
 elif [[ "$daemon_agent_state" == "INSTALLED_NOT_LOADED" ]]; then
-  action="HARD_RESTART_DAEMON"
+  action="FREEZE_EMERGENCY"
   reason="DAEMON_NOT_LOADED"
 elif [[ -d "$DAEMON_LOCK_DIR" && $daemon_log_age -gt $daemon_log_stale_threshold ]]; then
-  action="HARD_RESTART_DAEMON"
+  action="FREEZE_EMERGENCY"
   reason="DAEMON_LOG_STALE_WITH_LOCK"
 elif [[ -n "$active_task" ]]; then
   if [[ "$executor_state" == "RUNNING" && "$executor_pid_alive" != "1" ]]; then
-    action="MEDIUM_RESET_EXECUTOR"
+    action="STOP_EXECUTOR_AND_FREEZE"
     reason="EXECUTOR_PID_DEAD"
   elif [[ "$executor_state" == "RUNNING" && "$executor_hb_epoch" -gt 0 && $(( now_epoch - executor_hb_epoch )) -gt $EXECUTOR_STALE_SEC ]]; then
-    action="MEDIUM_RESET_EXECUTOR"
+    action="STOP_EXECUTOR_AND_FREEZE"
     reason="EXECUTOR_HEARTBEAT_STALE"
   elif [[ "$daemon_state" == "IDLE_NO_TASKS" ]]; then
-    action="SOFT_DAEMON_TICK"
+    action="FREEZE_SAFE"
     reason="DAEMON_IDLE_WITH_ACTIVE_TASK"
   elif [[ -z "$executor_state" ]]; then
     if (( claim_age_sec >= ACTIVE_TASK_GRACE_SEC )); then
-      action="SOFT_DAEMON_TICK"
+      action="FREEZE_SAFE"
       reason="ACTIVE_TASK_WITHOUT_EXECUTOR_STATE"
     fi
   fi
@@ -475,7 +464,7 @@ log "WATCHDOG_SUMMARY=${summary}"
 if [[ "$action" == "NONE" ]]; then
   if [[ "$daemon_state" == "WAIT_BRANCH_SYNC" ]]; then
     if (( daemon_state_age_sec >= BRANCH_SYNC_NOTIFY_SEC )); then
-      action="NOTIFY_BRANCH_SYNC_BLOCKED"
+      action="ALERT_BRANCH_SYNC"
       reason="BRANCH_SYNC_REQUIRED"
     else
       set_state "BLOCKED_BRANCH_SYNC" "$summary"
@@ -507,25 +496,28 @@ if (( since_last < COOLDOWN_SEC )); then
 fi
 
 detail="action=${action};reason=${reason};${summary}"
-set_state "RECOVERY_ACTION_PENDING" "$detail"
+set_state "SUPERVISOR_ACTION_PENDING" "$detail"
 echo "WATCHDOG_ACTION=${action}"
 echo "WATCHDOG_REASON=${reason}"
 notify_action "$action" "$reason" "$summary"
 
 action_rc=0
-if [[ "$action" == "SOFT_DAEMON_TICK" ]]; then
-  if ! run_soft_tick; then
+if [[ "$action" == "FREEZE_SAFE" ]]; then
+  if ! run_supervisor_set_mode "SAFE" "watchdog supervisor: ${reason}; ${summary}"; then
     action_rc=$?
   fi
-elif [[ "$action" == "MEDIUM_RESET_EXECUTOR" ]]; then
-  if ! run_medium_recovery; then
+elif [[ "$action" == "FREEZE_EMERGENCY" ]]; then
+  if ! run_supervisor_set_mode "EMERGENCY_STOP" "watchdog supervisor: ${reason}; ${summary}"; then
     action_rc=$?
   fi
-elif [[ "$action" == "HARD_RESTART_DAEMON" ]]; then
-  if ! run_hard_recovery; then
+elif [[ "$action" == "STOP_EXECUTOR_AND_FREEZE" ]]; then
+  if ! run_supervisor_stop_executor; then
     action_rc=$?
   fi
-elif [[ "$action" == "NOTIFY_BRANCH_SYNC_BLOCKED" ]]; then
+  if ! run_supervisor_set_mode "SAFE" "watchdog supervisor: ${reason}; ${summary}"; then
+    [[ "$action_rc" -eq 0 ]] && action_rc=$?
+  fi
+elif [[ "$action" == "ALERT_BRANCH_SYNC" ]]; then
   :
 fi
 
@@ -533,12 +525,12 @@ printf '%s\n' "$action" > "$LAST_ACTION_FILE"
 printf '%s\n' "$now_epoch" > "$LAST_ACTION_EPOCH_FILE"
 
 if [[ "$action_rc" -eq 0 ]]; then
-  set_state "RECOVERY_ACTION_APPLIED" "action=${action};reason=${reason}"
+  set_state "SUPERVISOR_ACTION_APPLIED" "action=${action};reason=${reason}"
   echo "WATCHDOG_ACTION_RESULT=OK"
   exit 0
 fi
 
-set_state "RECOVERY_ACTION_FAILED" "action=${action};reason=${reason};rc=${action_rc}"
+set_state "SUPERVISOR_ACTION_FAILED" "action=${action};reason=${reason};rc=${action_rc}"
 echo "WATCHDOG_ACTION_RESULT=FAILED"
 echo "WATCHDOG_ACTION_RC=${action_rc}"
 exit 0

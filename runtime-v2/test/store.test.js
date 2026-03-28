@@ -15,6 +15,7 @@ const {
   enforceTaskBudget,
   evaluateRolloutGate,
   evaluateAutomationGate,
+  deriveGlobalControlMode,
   parseMongoConfig,
   normalizeExecution,
   ValidationError,
@@ -426,4 +427,55 @@ test("automation gate blocks tasks already stopped by budget", async () => {
   });
   assert.equal(gate.status, "blocked");
   assert.equal(gate.reason, "task_budget_stopped");
+});
+
+test("budget.breached moves task into emergency stop state", async () => {
+  const store = createAiFlowV2StateStore({
+    adapter: createMemoryAdapter(),
+  });
+  await store.init();
+  await store.putTask({ id: "PL-102", title: "budget breach", repo: "justewg/planka" });
+  await store.putTaskState({
+    taskId: "PL-102",
+    phase: "executing",
+    reason: "running",
+    ownerMode: "human",
+    activeExecutionId: "exec-102",
+  });
+
+  const result = await applyEvent(store, {
+    id: "event-budget-1",
+    taskId: "PL-102",
+    eventType: "budget.breached",
+    source: "test",
+    payload: {
+      reason: "provider quota exceeded during executor run",
+      breachReason: "provider_quota_exceeded",
+      providerErrorClass: "quota_exceeded",
+      budgetState: "emergency_stop",
+      triggeredAt: "2026-03-28T21:30:00.000Z",
+    },
+  });
+
+  assert.equal(result.status, "applied");
+  assert.equal(result.taskState.phase, "paused");
+  assert.equal(result.taskState.budgetState, "emergency_stop");
+  assert.equal(result.taskState.lockState, "frozen");
+  assert.equal(result.taskState.meta.budget.providerErrorClass, "quota_exceeded");
+});
+
+test("global control mode derives from strongest budget stop", () => {
+  const result = deriveGlobalControlMode([
+    {
+      taskId: "PL-102-A",
+      budgetState: "paused_budget",
+    },
+    {
+      taskId: "PL-102-B",
+      budgetState: "emergency_stop",
+    },
+  ]);
+
+  assert.equal(result.mode, "EMERGENCY_STOP");
+  assert.equal(result.reason, "runtime_v2_budget_emergency:PL-102-B");
 });

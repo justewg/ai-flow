@@ -118,6 +118,21 @@ emit_lines() {
   done <<< "$text"
 }
 
+reconcile_runtime_v2_primary_contexts() {
+  local reconcile_out reconcile_rc
+  if reconcile_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_reconcile_primary_context.sh" 2>&1
+  )"; then
+    emit_lines "$reconcile_out"
+    return 0
+  fi
+  reconcile_rc=$?
+  emit_lines "$reconcile_out"
+  echo "RUNTIME_V2_PRIMARY_RECONCILE_ERROR=1"
+  echo "RUNTIME_V2_PRIMARY_RECONCILE_RC=${reconcile_rc}"
+  return 0
+}
+
 push_remote_status_if_needed() {
   local push_out rc
   if push_out="$("${CODEX_SHARED_SCRIPTS_DIR}/ops_remote_status_push.sh" 2>&1)"; then
@@ -860,6 +875,43 @@ is_truthy_flag() {
       return 1
       ;;
   esac
+}
+
+run_runtime_v2_gate() {
+  local gate_task_id="$1"
+  local gate_issue_number="$2"
+  local gate_name="$3"
+  local gate_profile="$4"
+  local gate_out gate_rc gate_status gate_reason
+
+  if gate_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_gate.sh" \
+      "$gate_task_id" "$gate_issue_number" "$gate_name" "$gate_profile" 2>&1
+  )"; then
+    emit_lines "$gate_out"
+  else
+    gate_rc=$?
+    emit_lines "$gate_out"
+    echo "WAIT_RUNTIME_V2_GATE_ERROR=1"
+    echo "WAIT_RUNTIME_V2_GATE_NAME=$gate_name"
+    echo "WAIT_RUNTIME_V2_GATE_PROFILE=$gate_profile"
+    echo "WAIT_RUNTIME_V2_GATE_TASK_ID=$gate_task_id"
+    echo "WAIT_RUNTIME_V2_GATE_RC=$gate_rc"
+    return 2
+  fi
+
+  gate_status="$(printf '%s\n' "$gate_out" | sed -n 's/^RUNTIME_V2_GATE_STATUS=//p' | tail -n1)"
+  gate_reason="$(printf '%s\n' "$gate_out" | sed -n 's/^RUNTIME_V2_GATE_REASON=//p' | tail -n1)"
+  if [[ "$gate_status" == "blocked" ]]; then
+    echo "WAIT_RUNTIME_V2_GATE=1"
+    echo "WAIT_RUNTIME_V2_GATE_NAME=$gate_name"
+    echo "WAIT_RUNTIME_V2_GATE_PROFILE=$gate_profile"
+    echo "WAIT_RUNTIME_V2_GATE_TASK_ID=$gate_task_id"
+    [[ -n "$gate_reason" ]] && echo "WAIT_RUNTIME_V2_GATE_REASON=$gate_reason"
+    return 1
+  fi
+
+  return 0
 }
 
 find_first_todo_issue_json() {
@@ -2559,6 +2611,8 @@ else
 fi
 
 # Сначала пытаемся доставить отложенные действия в GitHub (outbox).
+reconcile_runtime_v2_primary_contexts
+
 outbox_out="$("${CODEX_SHARED_SCRIPTS_DIR}/github_outbox.sh" flush 2>&1 || true)"
 if [[ -n "$outbox_out" ]]; then
   while IFS= read -r line; do
@@ -2625,15 +2679,8 @@ if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
     review_task_id="$(extract_kv "$reply_probe_out" "TASK_ID")"
     review_issue_number="$(extract_kv "$reply_probe_out" "ISSUE_NUMBER")"
     review_item_id=""
-    review_task_file_value=""
-    if [[ -s "$review_task_file" ]]; then
-      review_task_file_value="$(<"$review_task_file")"
-    fi
     if [[ -s "$review_item_file" ]]; then
       review_item_id="$(<"$review_item_file")"
-    fi
-    if [[ -n "$review_task_file_value" && "$review_task_file_value" != "$review_task_id" ]]; then
-      review_item_id=""
     fi
 
     if [[ -z "$review_task_id" || -z "$review_issue_number" ]]; then
@@ -2646,6 +2693,10 @@ if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
     status_target="$review_task_id"
     if [[ -n "$review_item_id" ]]; then
       status_target="$review_item_id"
+    fi
+
+    if ! run_runtime_v2_gate "$review_task_id" "$review_issue_number" "review_feedback_resume" "daemon_claim"; then
+      exit 0
     fi
 
     if status_out="$("${CODEX_SHARED_SCRIPTS_DIR}/project_set_status.sh" "$status_target" "$target_status" "$target_flow" 2>&1)"; then
@@ -2663,23 +2714,9 @@ if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
       fi
     fi
 
-    printf '%s\n' "$review_task_id" > "${CODEX_DIR}/daemon_active_task.txt"
-    if [[ -n "$review_item_id" ]]; then
-      printf '%s\n' "$review_item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"
-    else
-      : > "${CODEX_DIR}/daemon_active_item_id.txt"
-    fi
-    printf '%s\n' "$review_issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
-    printf '%s\n' "$review_task_id" > "${CODEX_DIR}/project_task_id.txt"
     materialize_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$review_task_id" "$review_issue_number" 2>&1)"
     emit_lines "$materialize_out"
     /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
-
-    : > "$review_task_file"
-    : > "$review_item_file"
-    : > "$review_issue_file"
-    : > "$review_pr_file"
-    : > "$review_branch_file"
 
     echo "REVIEW_FEEDBACK_RESUMED=1"
     echo "REVIEW_FEEDBACK_TASK_ID=$review_task_id"
@@ -3280,6 +3317,10 @@ if (( skip_sync_branches == 0 )); then
     exit "$rc"
   fi
   emit_lines "$sync_out"
+fi
+
+if ! run_runtime_v2_gate "$task_id" "$issue_number" "daemon_claim" "daemon_claim"; then
+  exit 0
 fi
 
 if status_out="$("${CODEX_SHARED_SCRIPTS_DIR}/project_set_status.sh" "$item_id" "$target_status" "$target_flow" 2>&1)"; then

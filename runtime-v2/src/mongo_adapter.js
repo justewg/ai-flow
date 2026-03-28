@@ -75,6 +75,10 @@ async function createMongoAdapter(config) {
       return collections.tasks.findOne({ id: taskId });
     },
 
+    async listTasks() {
+      return collections.tasks.find({}).sort({ id: 1 }).toArray();
+    },
+
     async upsertTaskState(taskState) {
       await collections.taskStates.updateOne({ taskId: taskState.taskId }, { $set: taskState }, { upsert: true });
       return taskState;
@@ -82,6 +86,10 @@ async function createMongoAdapter(config) {
 
     async getTaskState(taskId) {
       return collections.taskStates.findOne({ taskId });
+    },
+
+    async listTaskStates() {
+      return collections.taskStates.find({}).sort({ updatedAt: 1 }).toArray();
     },
 
     async upsertExecution(execution) {

@@ -62,6 +62,48 @@ require_nonempty_file() {
   printf '%s' "$value"
 }
 
+emit_runtime_v2_event() {
+  local event_type="$1"
+  local event_id="$2"
+  local dedup_key="$3"
+  local payload_json="${4:-{}}"
+  local event_out rc
+
+  if event_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_apply_event.sh" \
+      "$task_id" "${review_issue_number:-0}" "$event_type" "$event_id" "$dedup_key" "$payload_json" 2>&1
+  )"; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_EVENT: $line"
+    done <<< "$event_out"
+  else
+    rc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_EVENT_ERROR(rc=$rc): $line"
+    done <<< "$event_out"
+  fi
+}
+
+reconcile_runtime_v2_primary_context() {
+  local reconcile_out rc
+  if reconcile_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_reconcile_primary_context.sh" 2>&1
+  )"; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_RECONCILE: $line"
+    done <<< "$reconcile_out"
+  else
+    rc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_RECONCILE_ERROR(rc=$rc): $line"
+    done <<< "$reconcile_out"
+  fi
+}
+
 build_default_pr_title() {
   local task_id="$1"
   local commit_message="$2"
@@ -892,31 +934,6 @@ fi
 
 # После перевода в Review включаем канал review-feedback через комментарии Issue.
 if [[ -n "$review_issue_number" ]]; then
-  printf '%s\n' "$task_id" > "$review_task_file"
-  printf '%s\n' "$review_issue_number" > "$review_issue_file"
-  printf '%s\n' "$pr_number" > "$review_pr_file"
-  printf '%s\n' "$task_branch" > "$review_branch_file"
-  if [[ -n "$active_item_id" ]]; then
-    printf '%s\n' "$active_item_id" > "$review_item_file"
-  else
-    : > "$review_item_file"
-  fi
-
-  printf '%s\n' "$review_issue_number" > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
-  printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_waiting_task_id.txt"
-  printf '%s\n' "REVIEW_FEEDBACK" > "${CODEX_DIR}/daemon_waiting_kind.txt"
-  if [[ -n "$review_comment_id" ]]; then
-    printf '%s\n' "$review_comment_id" > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
-  else
-    printf '0\n' > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
-  fi
-  if [[ -n "$review_comment_url" ]]; then
-    printf '%s\n' "$review_comment_url" > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
-  else
-    : > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
-  fi
-  printf '%s\n' "$review_pending_post" > "${CODEX_DIR}/daemon_waiting_pending_post.txt"
-  date -u '+%Y-%m-%dT%H:%M:%SZ' > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
   if [[ -n "$review_comment_id" ]]; then
     echo "REVIEW_FEEDBACK_WAIT_ENABLED=1"
     echo "REVIEW_FEEDBACK_ANCHOR_COMMENT_ID=$review_comment_id"
@@ -927,19 +944,31 @@ if [[ -n "$review_issue_number" ]]; then
   if [[ "$review_pending_post" == "1" ]]; then
     echo "REVIEW_FEEDBACK_ANCHOR_PENDING_OUTBOX=1"
   fi
+
+  review_payload="$(
+    jq -nc \
+      --argjson prNumber "$pr_number" \
+      --arg waitCommentId "${review_comment_id:-}" \
+      --arg commentUrl "${review_comment_url:-}" \
+      --arg waitingSince "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+      --argjson pendingPost "${review_pending_post:-0}" \
+      '{prNumber:$prNumber}
+       + (if ($waitCommentId | length) > 0 then {waitCommentId:$waitCommentId} else {} end)
+       + (if ($commentUrl | length) > 0 then {commentUrl:$commentUrl} else {} end)
+       + {waitingSince:$waitingSince, pendingPost:$pendingPost}'
+  )"
+  emit_runtime_v2_event \
+    "review.finalized" \
+    "legacy-v2-review-${task_id}-${pr_number}" \
+    "legacy.review.finalized:${task_id}:${pr_number}" \
+    "$review_payload"
+  reconcile_runtime_v2_primary_context
 else
   : > "$review_task_file"
   : > "$review_item_file"
   : > "$review_issue_file"
   : > "$review_pr_file"
   : > "$review_branch_file"
-  : > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
-  : > "${CODEX_DIR}/daemon_waiting_task_id.txt"
-  : > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
-  : > "${CODEX_DIR}/daemon_waiting_kind.txt"
-  : > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
-  : > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
-  : > "${CODEX_DIR}/daemon_waiting_pending_post.txt"
 fi
 
 : > "$commit_file"

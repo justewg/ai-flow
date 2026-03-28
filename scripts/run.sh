@@ -45,8 +45,15 @@ Commands:
   control_mode
   incident_append
   execution_summary
+  runtime_v2_apply_event
+  runtime_v2_gate
+  runtime_v2_primary_context
+  runtime_v2_reconcile_primary_context
   runtime_v2_shadow_sync
   runtime_v2_snapshot
+  runtime_v2_inspect
+  runtime_v2_validate_rollout
+  runtime_v2_single_task_loop
   runtime_v2_clear
   log_summary
   log_tail_executor
@@ -738,6 +745,26 @@ case "$cmd" in
     /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/execution_summary.sh" "$@"
     ;;
 
+  runtime_v2_apply_event)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_apply_event.sh" "$@"
+    ;;
+
+  runtime_v2_gate)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_gate.sh" "$@"
+    ;;
+
+  runtime_v2_primary_context)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_primary_context.sh" "$@"
+    ;;
+
+  runtime_v2_reconcile_primary_context)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_reconcile_primary_context.sh" "$@"
+    ;;
+
   runtime_v2_shadow_sync)
     shift 1
     /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_shadow_sync.sh" "$@"
@@ -746,6 +773,21 @@ case "$cmd" in
   runtime_v2_snapshot)
     shift 1
     /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_snapshot.sh" "$@"
+    ;;
+
+  runtime_v2_inspect)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_inspect.sh" "$@"
+    ;;
+
+  runtime_v2_validate_rollout)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_validate_rollout.sh" "$@"
+    ;;
+
+  runtime_v2_single_task_loop)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_single_task_loop.sh" "$@"
     ;;
 
   runtime_v2_clear)

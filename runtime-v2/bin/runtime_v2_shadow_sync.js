@@ -7,11 +7,7 @@ const {
   createAiFlowV2StateStore,
   createFileAdapter,
 } = require("../src");
-const {
-  collectLegacyShadowSnapshot,
-  inferTaskStateFromLegacy,
-  buildSnapshotHash,
-} = require("../src/legacy_shadow");
+const { syncLegacyShadowSnapshot } = require("../src");
 
 function parseArgs(argv) {
   const args = {
@@ -50,94 +46,13 @@ async function main() {
   });
   await store.init();
 
-  const { snapshot, taskIds } = collectLegacyShadowSnapshot(legacyStateDir);
-  const syncedTasks = [];
-
-  for (const taskId of taskIds) {
-    const taskStateProjection = inferTaskStateFromLegacy(taskId, snapshot);
-    const issueNumberRaw =
-      snapshot.daemonWaitingTaskId === taskId
-        ? snapshot.daemonWaitingIssueNumber
-        : snapshot.daemonReviewTaskId === taskId
-          ? snapshot.daemonReviewIssueNumber
-          : snapshot.executorTaskId === taskId
-            ? snapshot.executorIssueNumber
-            : snapshot.daemonActiveTask === taskId
-              ? snapshot.daemonActiveIssueNumber
-              : "";
-    const issueNumber = Number.parseInt(issueNumberRaw || "", 10);
-
-    await store.putTask({
-      id: taskId,
-      title: `Legacy shadow task ${taskId}`,
-      repo,
-      issueNumber: Number.isInteger(issueNumber) && issueNumber > 0 ? issueNumber : null,
-      meta: {
-        legacyShadow: true,
-      },
-    });
-
-    await store.putTaskState({
-      taskId,
-      ...taskStateProjection,
-      reason: `${taskStateProjection.reason}${snapshot.controlReason ? ` (${snapshot.controlReason})` : ""}`,
-      meta: {
-        source: "legacy_shadow_sync_v2",
-      },
-    });
-
-    if (taskStateProjection.activeExecutionId) {
-      await store.putExecution({
-        id: taskStateProjection.activeExecutionId,
-        taskId,
-        triggerEventId: `legacy-shadow-trigger-${taskId}`,
-        executionType: "reconcile",
-        phase: "executing",
-        dedupKey: `legacy-shadow-execution:${taskId}`,
-        status: "running",
-        inputHash: `legacy-shadow:${taskId}`,
-        sideEffectClass: "state_only",
-      });
-    }
-
-    const snapshotHash = buildSnapshotHash({
-      taskId,
-      taskStateProjection,
-      issueNumber: Number.isInteger(issueNumber) && issueNumber > 0 ? issueNumber : null,
-      controlMode: snapshot.controlMode,
-    });
-    const dedupKey = `legacy_shadow_snapshot:${taskId}:${snapshotHash}`;
-    const existing = await store.findEventByDedupKey(taskId, dedupKey);
-    if (!existing) {
-      await store.appendEvent({
-        id: `legacy-shadow-event-${taskId}-${snapshotHash}`,
-        taskId,
-        eventType: "legacy.shadow_synced",
-        source: "runtime_v2_shadow_sync",
-        dedupKey,
-        payload: {
-          controlMode: snapshot.controlMode,
-          issueNumber: Number.isInteger(issueNumber) && issueNumber > 0 ? issueNumber : null,
-          taskStateProjection,
-        },
-      });
-    }
-
-    const bundle = await store.getTaskBundle(taskId);
-    syncedTasks.push({
-      taskId,
-      phase: bundle.taskState ? bundle.taskState.phase : null,
-      reviewPr: bundle.canonicalReviewPrNumber,
-      waitingCommentId: bundle.canonicalWaitCommentId,
-      activeExecutionId: bundle.activeExecution ? bundle.activeExecution.id : null,
-    });
-  }
+  const sync = await syncLegacyShadowSnapshot(store, legacyStateDir, { repo });
 
   console.log(
     JSON.stringify(
       {
-        syncedTaskCount: syncedTasks.length,
-        syncedTasks,
+        syncedTaskCount: sync.syncedTasks.length,
+        syncedTasks: sync.syncedTasks,
         storeDir,
       },
       null,

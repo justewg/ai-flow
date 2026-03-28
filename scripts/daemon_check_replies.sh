@@ -19,6 +19,95 @@ kind_file="${CODEX_DIR}/daemon_waiting_kind.txt"
 pending_post_file="${CODEX_DIR}/daemon_waiting_pending_post.txt"
 waiting_since_file="${CODEX_DIR}/daemon_waiting_since_utc.txt"
 waiting_comment_url_file="${CODEX_DIR}/daemon_waiting_comment_url.txt"
+
+emit_runtime_v2_event() {
+  local event_type="$1"
+  local event_id="$2"
+  local dedup_key="$3"
+  local payload_json="${4:-{}}"
+  local event_out rc
+
+  if event_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_apply_event.sh" \
+      "$task_id" "$issue_number" "$event_type" "$event_id" "$dedup_key" "$payload_json" 2>&1
+  )"; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_EVENT: $line"
+    done <<< "$event_out"
+  else
+    rc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_EVENT_ERROR(rc=$rc): $line"
+    done <<< "$event_out"
+  fi
+}
+
+reconcile_runtime_v2_primary_context() {
+  local reconcile_out rc
+  if reconcile_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_reconcile_primary_context.sh" 2>&1
+  )"; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_RECONCILE: $line"
+    done <<< "$reconcile_out"
+  else
+    rc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_RECONCILE_ERROR(rc=$rc): $line"
+    done <<< "$reconcile_out"
+  fi
+}
+
+build_wait_payload() {
+  local wait_comment_id="$1"
+  local wait_reason="$2"
+  local wait_kind="$3"
+  local comment_url="$4"
+  local pending_post="$5"
+  local waiting_since="$6"
+
+  jq -nc \
+    --arg waitCommentId "$wait_comment_id" \
+    --arg reason "$wait_reason" \
+    --arg kind "$wait_kind" \
+    --arg commentUrl "$comment_url" \
+    --arg waitingSince "$waiting_since" \
+    --argjson pendingPost "$pending_post" \
+    '{
+      waitCommentId:$waitCommentId,
+      reason:$reason,
+      kind:$kind,
+      commentUrl:$commentUrl,
+      waitingSince:$waitingSince,
+      pendingPost:$pendingPost
+    }'
+}
+
+build_review_feedback_payload() {
+  local wait_comment_id="$1"
+  local comment_url="$2"
+  local pending_post="$3"
+  local waiting_since="$4"
+  local wait_reason="$5"
+
+  jq -nc \
+    --arg waitCommentId "$wait_comment_id" \
+    --arg commentUrl "$comment_url" \
+    --arg waitingSince "$waiting_since" \
+    --arg reason "$wait_reason" \
+    --argjson pendingPost "$pending_post" \
+    '{
+      waitCommentId:$waitCommentId,
+      commentUrl:$commentUrl,
+      waitingSince:$waitingSince,
+      reason:$reason,
+      pendingPost:$pendingPost
+    }'
+}
 review_task_file="${CODEX_DIR}/daemon_review_task_id.txt"
 review_item_file="${CODEX_DIR}/daemon_review_item_id.txt"
 review_issue_file="${CODEX_DIR}/daemon_review_issue_number.txt"
@@ -775,6 +864,27 @@ if [[ "$reply_mode" == "QUESTION" ]]; then
     echo "ANSWER_POSTED=1"
   fi
 
+  if is_review_feedback_kind "$kind_label"; then
+    review_wait_payload="$(build_review_feedback_payload "$reply_id" "$reply_url" false "$now_utc" "awaiting review feedback clarification")"
+    emit_runtime_v2_event \
+      "review.feedback_wait_requested" \
+      "legacy-v2-review-wait-${task_id}-${reply_id}" \
+      "legacy.review.feedback_wait_requested:${task_id}:${reply_id}" \
+      "$review_wait_payload"
+  else
+    wait_reason="waiting human reply"
+    if is_blocker_kind "$kind_label"; then
+      wait_reason="waiting human unblock"
+    fi
+    wait_payload="$(build_wait_payload "$reply_id" "$wait_reason" "$kind_label" "$reply_url" false "$now_utc")"
+    emit_runtime_v2_event \
+      "human.wait_requested" \
+      "legacy-v2-wait-${task_id}-${reply_id}" \
+      "legacy.human.wait_requested:${task_id}:${reply_id}" \
+      "$wait_payload"
+  fi
+  reconcile_runtime_v2_primary_context
+
   emit_wait_state "$task_id" "$issue_number" "$reply_id" "$kind_label"
   if is_review_feedback_kind "$kind_label"; then
     echo "REVIEW_FEEDBACK_RECEIVED=1"
@@ -802,7 +912,19 @@ printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_user_reply_task_id.txt"
 printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_user_reply_issue_number.txt"
 printf '%s\n' "$now_utc" > "${CODEX_DIR}/daemon_user_reply_at_utc.txt"
 
-clear_waiting_state
+reply_payload="$(
+  jq -nc \
+    --arg responseType "$kind_label" \
+    --arg replyCommentId "$reply_id" \
+    --arg replyMode "$reply_mode" \
+    '{responseType:$responseType, replyCommentId:$replyCommentId, replyMode:$replyMode}'
+)"
+emit_runtime_v2_event \
+  "human.response_received" \
+  "legacy-v2-reply-${task_id}-${reply_id}" \
+  "legacy.human.response_received:${task_id}:${reply_id}" \
+  "$reply_payload"
+reconcile_runtime_v2_primary_context
 
 ack_signal="AGENT_RESUMED"
 ack_message="Ответ получен, продолжаю работу по задаче."

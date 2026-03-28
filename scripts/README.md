@@ -91,7 +91,14 @@ Linux-hosted bootstrap launchers:
     - при необходимости локальный `jq` накладывается уже на stdout этой команды, а не на прямой `gh project item-list ...`.
 - `.flow/shared/scripts/run.sh project_status_runtime <enqueue|apply|list|clear> ...` — runtime-очередь отложенных обновлений `Project Status/Flow`.
 - `.flow/shared/scripts/run.sh runtime_v2_shadow_sync` — materialize-ит отдельный `v2` shadow state из текущего legacy runtime в `<state-dir>/runtime_v2/store`.
+- `.flow/shared/scripts/run.sh runtime_v2_gate <task-id> <issue-number> <gate-name> [profile]` — читает `runtime-v2` rollout/budget/stale verdict для legacy expensive/recovery path без full cutover.
+- `.flow/shared/scripts/run.sh runtime_v2_apply_event <task-id> <issue-number> <event-type> <event-id> <dedup-key> [payload-json]` — best-effort bridge selected legacy lifecycle transitions в `runtime-v2 applyEvent()`.
+- `.flow/shared/scripts/run.sh runtime_v2_primary_context` — выводит selected `active/review` contexts, derivable из `runtime-v2` store.
+- `.flow/shared/scripts/run.sh runtime_v2_reconcile_primary_context` — проецирует selected `runtime-v2` primary contexts обратно в legacy `daemon_active_*` / `daemon_review_*` файлы.
 - `.flow/shared/scripts/run.sh runtime_v2_snapshot [task-id]` — показывает snapshot отдельного `v2` shadow contour.
+- `.flow/shared/scripts/run.sh runtime_v2_inspect` — показывает operator-grade summary по `runtime-v2`: control mode, task counts, primary contexts, incidents и execution summary.
+- `.flow/shared/scripts/run.sh runtime_v2_validate_rollout [task-id] [issue-number]` — прогоняет локальный `dry_run/shadow` validation harness и пишет отчёт в `<state-dir>/runtime_v2_validation_report.json`.
+- `.flow/shared/scripts/run.sh runtime_v2_single_task_loop [task-id] [issue-number] [pr-number]` — прогоняет controlled local `single_task` loop и пишет отчёт в `<state-dir>/runtime_v2_single_task_loop_report.json`.
 - `.flow/shared/scripts/run.sh runtime_v2_clear` — очищает только `v2` shadow store, не трогая legacy state.
 - `.flow/shared/scripts/run.sh log_summary [--hours N|--from ISO|--to ISO]` — агрегированный отчет по логам daemon/watchdog/runtime/graphql за период (без аргументов берёт весь доступный диапазон логов).
 - `.flow/shared/scripts/run.sh status_snapshot` — нормализованный JSON snapshot состояния автоматики (daemon/watchdog/executor/очереди/blockers).

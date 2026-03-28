@@ -134,6 +134,7 @@ async function runSingleTaskLoop(store, options = {}) {
   });
   const primaryTask = inspection.tasks.recent.find((task) => task.taskId === taskId) || null;
   const reviewContext = inspection.contexts.review.find((item) => item.taskId === taskId) || null;
+  const waitingContextForTask = inspection.contexts.waiting.find((item) => item.taskId === taskId) || null;
 
   const ok =
     allowedGate.status === "applied" &&
@@ -142,7 +143,7 @@ async function runSingleTaskLoop(store, options = {}) {
     primaryTask.phase === "reviewing" &&
     reviewContext &&
     reviewContext.prNumber === prNumber &&
-    inspection.contexts.waitingCount === 0;
+    !waitingContextForTask;
 
   return {
     generatedAt: new Date().toISOString(),

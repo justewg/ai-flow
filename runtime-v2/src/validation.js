@@ -104,7 +104,7 @@ async function runRolloutValidation(store, options = {}) {
   });
 
   const waitExpectationMet =
-    waitEvent.status === "applied" &&
+    (waitEvent.status === "applied" || (waitEvent.status === "noop" && waitEvent.reason === "duplicate_event")) &&
     inspection.contexts.waitingCount === 1 &&
     inspection.contexts.waiting[0] &&
     inspection.contexts.waiting[0].taskId === taskId;

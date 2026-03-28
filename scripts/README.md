@@ -98,6 +98,7 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh runtime_v2_snapshot [task-id]` — показывает snapshot отдельного `v2` shadow contour.
 - `.flow/shared/scripts/run.sh runtime_v2_inspect` — показывает operator-grade summary по `runtime-v2`: control mode, task counts, primary contexts, incidents и execution summary.
 - `.flow/shared/scripts/run.sh runtime_v2_status` — alias для `runtime_v2_inspect` с тем же operator-grade summary по `runtime-v2`.
+- `.flow/shared/scripts/run.sh runtime_v2_status_json` — alias для `runtime_v2_inspect --compact`, возвращает compact JSON для operator status-check.
 - `.flow/shared/scripts/run.sh runtime_v2_validate_rollout [task-id] [issue-number]` — прогоняет локальный `dry_run/shadow` validation harness и пишет отчёт в `<state-dir>/runtime_v2_validation_report.json`.
 - `.flow/shared/scripts/run.sh runtime_v2_single_task_loop [task-id] [issue-number] [pr-number]` — прогоняет controlled local `single_task` loop и пишет отчёт в `<state-dir>/runtime_v2_single_task_loop_report.json`.
 - `.flow/shared/scripts/run.sh runtime_v2_clear` — очищает только `v2` shadow store, не трогая legacy state.

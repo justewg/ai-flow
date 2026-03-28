@@ -34,6 +34,7 @@ title_file="${CODEX_DIR}/pr_title.txt"
 body_file="${CODEX_DIR}/pr_body.txt"
 pr_number_file="${CODEX_DIR}/pr_number.txt"
 executor_prompt_file="${CODEX_DIR}/executor_prompt.txt"
+executor_detach_file="${CODEX_DIR}/executor_detach_requested.txt"
 
 read_if_present() {
   local file_path="$1"
@@ -183,6 +184,29 @@ mark_pr_ready_if_draft() {
   fi
 }
 
+find_existing_in_review_comment() {
+  local issue_number="$1"
+  local task_id="$2"
+  local pr_number="$3"
+  local comments_json=""
+
+  comments_json="$(
+    "${CODEX_SHARED_SCRIPTS_DIR}/gh_retry.sh" \
+      gh api "repos/${REPO}/issues/${issue_number}/comments?per_page=100"
+  )"
+
+  printf '%s' "$comments_json" |
+    jq -r \
+      --arg task "$task_id" \
+      --arg pr "$pr_number" '
+        [ .[]
+          | select(((.body // "") | test("(?m)^CODEX_SIGNAL: AGENT_IN_REVIEW$")))
+          | select(((.body // "") | test("(?m)^CODEX_TASK: " + $task + "$")))
+          | select(((.body // "") | test("(?m)^CODEX_PR_NUMBER: " + $pr + "$")))
+        ] | last | [.id // "", .html_url // ""] | @tsv
+      '
+}
+
 find_issue_number_for_task() {
   local task_id="$1"
   local issue_number=""
@@ -229,6 +253,21 @@ post_in_review_issue_comment() {
   fi
   if [[ -z "$issue_number" ]]; then
     echo "FINAL_ISSUE_COMMENT_SKIPPED=ISSUE_NOT_FOUND"
+    return 0
+  fi
+
+  local existing_comment_tsv=""
+  local existing_comment_id=""
+  local existing_comment_url=""
+  if existing_comment_tsv="$(find_existing_in_review_comment "$issue_number" "$task_id" "$pr_number" 2>/dev/null || true)"; then
+    existing_comment_id="$(printf '%s' "$existing_comment_tsv" | cut -f1)"
+    existing_comment_url="$(printf '%s' "$existing_comment_tsv" | cut -f2)"
+  fi
+  if [[ -n "$existing_comment_id" ]]; then
+    echo "FINAL_ISSUE_COMMENT_REUSED=1"
+    echo "FINAL_ISSUE_NUMBER=$issue_number"
+    echo "FINAL_ISSUE_COMMENT_ID=$existing_comment_id"
+    echo "FINAL_ISSUE_COMMENT_URL=$existing_comment_url"
     return 0
   fi
 
@@ -327,6 +366,69 @@ emit_nonempty_lines() {
     [[ -z "$line" ]] && continue
     echo "$line"
   done <<< "$text"
+}
+
+REUSED_REVIEW_PR_NUMBER=""
+REUSED_REVIEW_PR_URL=""
+REUSED_REVIEW_PR_BRANCH=""
+
+try_reuse_existing_review_pr() {
+  local review_branch=""
+  local review_pr_number=""
+  local open_prs_json=""
+  local open_pr_count=""
+
+  review_branch="$(read_if_present "$review_branch_file" || true)"
+  review_pr_number="$(read_if_present "$review_pr_file" || true)"
+
+  if [[ -z "$review_branch" || "$review_branch" == "$HEAD_BRANCH" ]]; then
+    return 1
+  fi
+
+  if open_prs_json="$(
+    gh pr list \
+      --repo "$REPO" \
+      --state open \
+      --base "$HEAD_BRANCH" \
+      --head "$review_branch" \
+      --json number,url \
+      --jq '.'
+  )"; then
+    :
+  else
+    local rc=$?
+    echo "TASK_FINALIZE_REUSE_LOOKUP_FAILED=1"
+    return "$rc"
+  fi
+
+  open_pr_count="$(printf '%s' "$open_prs_json" | jq 'length')"
+  if (( open_pr_count != 1 )); then
+    return 1
+  fi
+
+  REUSED_REVIEW_PR_NUMBER="$(printf '%s' "$open_prs_json" | jq -r '.[0].number // empty')"
+  REUSED_REVIEW_PR_URL="$(printf '%s' "$open_prs_json" | jq -r '.[0].url // empty')"
+  REUSED_REVIEW_PR_BRANCH="$review_branch"
+
+  if [[ -z "$REUSED_REVIEW_PR_NUMBER" || -z "$REUSED_REVIEW_PR_URL" ]]; then
+    return 1
+  fi
+
+  echo "TASK_FINALIZE_REUSE_OPEN_REVIEW_PR=1"
+  echo "TASK_FINALIZE_REUSE_BRANCH=${REUSED_REVIEW_PR_BRANCH}"
+  if [[ -n "$review_pr_number" && "$review_pr_number" != "$REUSED_REVIEW_PR_NUMBER" ]]; then
+    echo "TASK_FINALIZE_REUSE_REPLACED_STALE_REVIEW_PR=${review_pr_number}"
+  fi
+  return 0
+}
+
+request_executor_stop_after_finalize() {
+  printf '%s\n' "task-finalize-stop" > "$executor_detach_file"
+  (
+    sleep 2
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null 2>&1 || true
+  ) >/dev/null 2>&1 &
+  echo "FINALIZE_EXECUTOR_STOP_REQUESTED=1"
 }
 
 run_commit_push_for_branch() {
@@ -640,6 +742,33 @@ if ! smoke_check_branch_mismatch "$TASK_ROOT_DIR" "$task_branch"; then
   exit 1
 fi
 
+if [[ "$task_branch" == "$HEAD_BRANCH" ]]; then
+  if reuse_out="$(try_reuse_existing_review_pr 2>&1)"; then
+    emit_nonempty_lines "$reuse_out"
+    pr_number="$REUSED_REVIEW_PR_NUMBER"
+    pr_url="$REUSED_REVIEW_PR_URL"
+    echo "TASK_FINALIZE_IDEMPOTENT_REUSE=1"
+    echo "PR_ACTION=REUSED"
+    echo "PR_NUMBER=$pr_number"
+    echo "PR_URL=$pr_url"
+    request_executor_stop_after_finalize
+    echo "FINALIZED_TASK_ID=$task_id"
+    echo "FINALIZED_STATUS=$FINAL_STATUS"
+    echo "FINALIZED_FLOW=$FINAL_FLOW"
+    exit 0
+  else
+    reuse_rc=$?
+    emit_nonempty_lines "$reuse_out"
+    echo "TASK_FINALIZE_DIRECT_HEAD_BLOCKED=1"
+    echo "TASK_FINALIZE_CURRENT_BRANCH=${task_branch}"
+    echo "TASK_FINALIZE_EXPECTED_REVIEW_BRANCH=$(read_if_present "$review_branch_file" || true)"
+    if [[ "$reuse_rc" -ne 1 ]]; then
+      exit "$reuse_rc"
+    fi
+    exit 1
+  fi
+fi
+
 run_commit_push_for_branch "$task_branch" "$commit_message" "${stage_paths[@]}"
 resolve_pr_target_branches "$task_branch" "$HEAD_BRANCH" "$BASE_BRANCH"
 prepare_pr_source_branch "$task_branch" "$HEAD_BRANCH"
@@ -820,12 +949,7 @@ fi
 : > "$active_task_file"
 : > "$active_item_file"
 : > "$active_issue_file"
-executor_owner_pid=""
-if [[ -s "${CODEX_DIR}/executor_pid.txt" ]]; then
-  executor_owner_pid="$(<"${CODEX_DIR}/executor_pid.txt")"
-fi
-EXECUTOR_RESET_PRESERVE_CURRENT=1 EXECUTOR_RESET_PRESERVE_PID="$executor_owner_pid" \
-  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
+request_executor_stop_after_finalize
 
 echo "FINALIZED_TASK_ID=$task_id"
 echo "FINALIZED_STATUS=$FINAL_STATUS"

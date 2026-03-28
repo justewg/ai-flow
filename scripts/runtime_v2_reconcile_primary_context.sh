@@ -23,6 +23,21 @@ waiting_kind_file="${CODEX_DIR}/daemon_waiting_kind.txt"
 waiting_pending_file="${CODEX_DIR}/daemon_waiting_pending_post.txt"
 waiting_since_file="${CODEX_DIR}/daemon_waiting_since_utc.txt"
 waiting_comment_url_file="${CODEX_DIR}/daemon_waiting_comment_url.txt"
+claim_epoch_file="${CODEX_DIR}/daemon_last_claim_epoch.txt"
+
+read_int_file_or_default() {
+  local file_path="${1:-}"
+  local default_value="${2:-0}"
+  local value=""
+  if [[ -n "$file_path" && -s "$file_path" ]]; then
+    value="$(tr -d '\r\n' < "$file_path" 2>/dev/null || true)"
+  fi
+  if [[ "$value" =~ ^[0-9]+$ ]]; then
+    printf '%s' "$value"
+  else
+    printf '%s' "$default_value"
+  fi
+}
 
 context_out="$(
   /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_primary_context.sh" 2>&1
@@ -72,11 +87,33 @@ if [[ "$active_count" == "1" ]]; then
   fi
 elif [[ "$active_count" == "0" ]]; then
   if [[ -n "$current_active_task" ]]; then
-    : > "$active_task_file"
-    : > "$active_issue_file"
-    : > "$project_task_file"
-    echo "RUNTIME_V2_PRIMARY_ACTIVE_CLEARED=1"
-    echo "RUNTIME_V2_PRIMARY_ACTIVE_TASK_ID=${current_active_task}"
+    claim_grace_sec="${RUNTIME_V2_ACTIVE_CLAIM_GRACE_SEC:-120}"
+    if ! [[ "$claim_grace_sec" =~ ^[0-9]+$ ]]; then
+      claim_grace_sec=120
+    fi
+
+    claim_epoch="$(read_int_file_or_default "$claim_epoch_file" "0")"
+    now_epoch="$(date +%s)"
+    if (( claim_grace_sec > 0 && claim_epoch > 0 && now_epoch >= claim_epoch )); then
+      claim_age=$(( now_epoch - claim_epoch ))
+      if (( claim_age < claim_grace_sec )); then
+        echo "RUNTIME_V2_PRIMARY_ACTIVE_CLAIM_GRACE=1"
+        echo "RUNTIME_V2_PRIMARY_ACTIVE_TASK_ID=${current_active_task}"
+        echo "RUNTIME_V2_PRIMARY_ACTIVE_GRACE_LEFT_SEC=$(( claim_grace_sec - claim_age ))"
+      else
+        : > "$active_task_file"
+        : > "$active_issue_file"
+        : > "$project_task_file"
+        echo "RUNTIME_V2_PRIMARY_ACTIVE_CLEARED=1"
+        echo "RUNTIME_V2_PRIMARY_ACTIVE_TASK_ID=${current_active_task}"
+      fi
+    else
+      : > "$active_task_file"
+      : > "$active_issue_file"
+      : > "$project_task_file"
+      echo "RUNTIME_V2_PRIMARY_ACTIVE_CLEARED=1"
+      echo "RUNTIME_V2_PRIMARY_ACTIVE_TASK_ID=${current_active_task}"
+    fi
   fi
 else
   echo "RUNTIME_V2_PRIMARY_ACTIVE_AMBIGUOUS=1"

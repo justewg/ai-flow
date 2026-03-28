@@ -63,3 +63,5 @@
 - `PL-108 / Integration 14` завершена в подготовительной части: собран limited rollout promotion kit.
 - `pl108_enable_limited_rollout.sh` обновляет rollout env keys через backup-first path и не переводит систему в `auto`.
 - После `PL-107` target validation оператору остаётся применить promotion script к `.flow/config/flow.env` на целевой площадке.
+- `PL-110 / Canary hotfix` завершена локально: найден и исправлен orphaned-claim gap между `CLAIMED_TASK_ID` и первым `executor_tick`.
+- `runtime_v2_reconcile_primary_context` теперь держит freshly claimed `daemon_active_*` в коротком grace-window, если `runtime-v2` ещё не успела materialize-ить `phase=executing`.

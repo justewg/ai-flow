@@ -84,6 +84,23 @@ if ! task_worktree_repo_present "$task_repo"; then
   exit 0
 fi
 
+if ! task_worktree_ensure_toolkit_materialized "$task_repo"; then
+  {
+    echo "EXECUTOR_TASK_WORKTREE_TOOLKIT_MISSING=1"
+    echo "EXECUTOR_TASK_WORKTREE_PATH=${task_repo}"
+    echo "EXECUTOR_TASK_WORKTREE_TOOLKIT_PATH=${task_repo}/.flow/shared"
+    echo "=== EXECUTOR_RUN_FINISH task=${task_id} issue=${issue_number} rc=1 at $(date -u '+%Y-%m-%dT%H:%M:%SZ') ==="
+  } >>"$LOG_FILE" 2>&1
+  printf '%s\n' "FAILED" > "$STATE_FILE"
+  printf '%s\n' "1" > "$EXIT_FILE"
+  date -u '+%Y-%m-%dT%H:%M:%SZ' > "$FINISH_FILE"
+  : > "${CODEX_DIR}/executor_pid.txt"
+  : > "$EXECUTION_ID_FILE"
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/incident_append.sh" executor_task_worktree_toolkit_missing "task=${task_id} issue=${issue_number} path=${task_repo}/.flow/shared" >/dev/null 2>&1 || true
+  record_execution "1" "task_worktree_toolkit_missing" "none" "0"
+  exit 0
+fi
+
 is_truthy() {
   local raw_value="${1:-}"
   local value

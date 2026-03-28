@@ -52,6 +52,7 @@ Commands:
   runtime_v2_shadow_sync
   runtime_v2_snapshot
   runtime_v2_inspect
+  runtime_v2_status
   runtime_v2_validate_rollout
   runtime_v2_single_task_loop
   runtime_v2_clear
@@ -775,7 +776,7 @@ case "$cmd" in
     /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_snapshot.sh" "$@"
     ;;
 
-  runtime_v2_inspect)
+  runtime_v2_inspect|runtime_v2_status)
     shift 1
     /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_inspect.sh" "$@"
     ;;

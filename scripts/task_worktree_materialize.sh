@@ -41,6 +41,16 @@ else
   materialized_now="0"
 fi
 
+toolkit_materialized="0"
+if task_worktree_declares_toolkit_submodule "$task_repo"; then
+  if ! task_worktree_ensure_toolkit_materialized "$task_repo"; then
+    echo "TASK_WORKTREE_TOOLKIT_INIT_FAILED=1"
+    echo "TASK_WORKTREE_TOOLKIT_PATH=${task_repo}/.flow/shared"
+    exit 1
+  fi
+  toolkit_materialized="1"
+fi
+
 claimed_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 cat > "$task_env_file" <<EOF
 TASK_KEY=${task_key}
@@ -106,3 +116,4 @@ echo "TASK_WORKTREE_PATH=${task_repo}"
 echo "TASK_WORKTREE_BRANCH=${task_branch}"
 echo "TASK_WORKTREE_BASE_COMMIT=${base_commit}"
 echo "TASK_WORKTREE_MATERIALIZED=${materialized_now}"
+echo "TASK_WORKTREE_TOOLKIT_MATERIALIZED=${toolkit_materialized}"

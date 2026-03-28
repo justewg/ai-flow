@@ -811,7 +811,7 @@ if [[ "$task_branch" == "$HEAD_BRANCH" ]]; then
   fi
 fi
 
-run_commit_push_for_branch "$task_branch" "$commit_message" "${stage_paths[@]}"
+run_commit_push_for_branch "$TASK_ROOT_DIR" "$task_branch" "$commit_message" "${stage_paths[@]}"
 resolve_pr_target_branches "$task_branch" "$HEAD_BRANCH" "$BASE_BRANCH"
 prepare_pr_source_branch "$task_branch" "$HEAD_BRANCH"
 

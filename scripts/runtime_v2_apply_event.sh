@@ -24,6 +24,15 @@ mkdir -p "$V2_STORE_DIR"
 
 repo="${FLOW_GITHUB_REPO:-unknown/repo}"
 
+if normalized_payload_json="$(printf '%s' "$payload_json" | jq -c . 2>/dev/null)"; then
+  payload_json="$normalized_payload_json"
+else
+  payload_json="$(
+    node "${SCRIPT_DIR}/../runtime-v2/bin/runtime_v2_normalize_payload_json.js" \
+      --payload-json "$payload_json"
+  )"
+fi
+
 event_json="$(node "${SCRIPT_DIR}/../runtime-v2/bin/runtime_v2_apply_event.js" \
   --legacy-state-dir "$CODEX_DIR" \
   --store-dir "$V2_STORE_DIR" \

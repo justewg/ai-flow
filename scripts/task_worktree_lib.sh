@@ -111,3 +111,36 @@ task_worktree_repo_present() {
   [[ -n "$repo_path" ]] || return 1
   git -C "$repo_path" rev-parse --is-inside-work-tree >/dev/null 2>&1
 }
+
+task_worktree_declares_toolkit_submodule() {
+  local repo_path="${1:-}"
+  [[ -n "$repo_path" ]] || return 1
+  [[ -f "$repo_path/.gitmodules" ]] || return 1
+
+  git -C "$repo_path" config -f .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null \
+    | awk '{print $2}' \
+    | grep -Fxq '.flow/shared'
+}
+
+task_worktree_toolkit_ready() {
+  local repo_path="${1:-}"
+  [[ -n "$repo_path" ]] || return 1
+  [[ -f "$repo_path/.flow/shared/scripts/run.sh" ]]
+}
+
+task_worktree_ensure_toolkit_materialized() {
+  local repo_path="${1:-}"
+  [[ -n "$repo_path" ]] || return 1
+  task_worktree_repo_present "$repo_path" || return 1
+
+  if ! task_worktree_declares_toolkit_submodule "$repo_path"; then
+    return 0
+  fi
+
+  if task_worktree_toolkit_ready "$repo_path"; then
+    return 0
+  fi
+
+  git -C "$repo_path" submodule update --init --recursive -- ".flow/shared" >/dev/null 2>&1 || return 1
+  task_worktree_toolkit_ready "$repo_path"
+}

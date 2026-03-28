@@ -60,6 +60,15 @@ project_issue_cache_max_age_sec="${PROJECT_ISSUE_CACHE_MAX_AGE_SEC:-1800}"
 
 mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
 
+control_mode="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" get --raw 2>/dev/null || printf 'AUTO')"
+if [[ "$control_mode" != "AUTO" ]]; then
+  control_reason="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" get | awk -F= '/^CONTROL_REASON=/{print substr($0, index($0, "=")+1)}' 2>/dev/null || true)"
+  echo "CONTROL_MODE=${control_mode}"
+  [[ -n "$control_reason" ]] && echo "CONTROL_REASON=${control_reason}"
+  echo "DAEMON_EXPENSIVE_WORK_BLOCKED=1"
+  exit 0
+fi
+
 cleanup_tick_lock() {
   rm -f "$TICK_LOCK_OWNER_FILE" 2>/dev/null || true
   rmdir "$TICK_LOCK_DIR" 2>/dev/null || true

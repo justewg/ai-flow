@@ -42,6 +42,12 @@ Commands:
   project_item_view
   project_set_status
   project_status_runtime
+  control_mode
+  incident_append
+  execution_summary
+  runtime_v2_shadow_sync
+  runtime_v2_snapshot
+  runtime_v2_clear
   log_summary
   log_tail_executor
   log_tail_daemon_executor
@@ -715,6 +721,36 @@ case "$cmd" in
     fi
     shift 1
     "${CODEX_SHARED_SCRIPTS_DIR}/project_status_runtime.sh" "$@"
+    ;;
+
+  control_mode)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" "$@"
+    ;;
+
+  incident_append)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/incident_append.sh" "$@"
+    ;;
+
+  execution_summary)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/execution_summary.sh" "$@"
+    ;;
+
+  runtime_v2_shadow_sync)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_shadow_sync.sh" "$@"
+    ;;
+
+  runtime_v2_snapshot)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_snapshot.sh" "$@"
+    ;;
+
+  runtime_v2_clear)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_clear.sh" "$@"
     ;;
 
   log_summary)

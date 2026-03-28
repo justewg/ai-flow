@@ -17,6 +17,16 @@ STATE_TMP_DIR="$(codex_resolve_state_tmp_dir "$CODEX_DIR")"
 mkdir -p "$STATE_TMP_DIR"
 RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
 
+control_mode="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" get --raw 2>/dev/null || printf 'AUTO')"
+if [[ "$control_mode" != "AUTO" ]]; then
+  control_reason="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" get | awk -F= '/^CONTROL_REASON=/{print substr($0, index($0, "=")+1)}' 2>/dev/null || true)"
+  echo "EXECUTOR_BLOCKED_BY_CONTROL_MODE=1"
+  echo "EXECUTOR_TASK_ID=$task_id"
+  echo "CONTROL_MODE=$control_mode"
+  [[ -n "$control_reason" ]] && echo "CONTROL_REASON=$control_reason"
+  exit 0
+fi
+
 STATE_FILE="${CODEX_DIR}/executor_state.txt"
 PID_FILE="${CODEX_DIR}/executor_pid.txt"
 TASK_FILE="${CODEX_DIR}/executor_task_id.txt"

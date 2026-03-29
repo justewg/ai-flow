@@ -41,6 +41,7 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh pr_edit`
 - `.flow/shared/scripts/run.sh pr_merge`
 - `.flow/shared/scripts/run.sh commit_push`
+- `.flow/shared/scripts/run.sh git_temp_repo <checkout_branch|merge_ref|add_paths|commit|push_branch|status|rev_parse>`
 - `.flow/shared/scripts/run.sh git_ls_remote_heads`
 - `.flow/shared/scripts/run.sh git_delete_branch`
 - `.flow/shared/scripts/run.sh project_add_task`
@@ -89,6 +90,32 @@ Linux-hosted bootstrap launchers:
     - читает optional `project_item_jq.txt` и применяет jq filter уже внутри wrapper;
     - нужен для project list/view sync без прямого `gh project item-list ... --limit ... --jq ...`.
     - при необходимости локальный `jq` накладывается уже на stdout этой команды, а не на прямой `gh project item-list ...`.
+- Для типовых временных git-checkout/worktree операций использовать fixed-input entrypoint:
+  - `.flow/shared/scripts/run.sh git_temp_repo <action>`
+  - читает один стабильный файл `${CODEX_DIR}/git_temp_repo.env`
+  - обязательный параметр:
+    - `GIT_TEMP_REPO_ROOT=/tmp/planka-578`
+  - поддерживаемые actions и их параметры:
+    - `checkout_branch`
+      - `GIT_TEMP_BRANCH=feature-branch`
+      - optional `GIT_TEMP_START_POINT=origin/development`
+    - `merge_ref`
+      - `GIT_TEMP_MERGE_REF=origin/development`
+    - `add_paths`
+      - newline-delimited `GIT_TEMP_PATHS`, например `$'.flow/shared\nREADME.md'`
+    - `commit`
+      - `GIT_TEMP_COMMIT_MESSAGE='chore: bump toolkit'`
+      - optional `GIT_TEMP_ALLOW_EMPTY=1`
+    - `push_branch`
+      - `GIT_TEMP_BRANCH=feature-branch` или `GIT_TEMP_PUSH_REFSPEC=HEAD:feature-branch`
+      - optional `GIT_TEMP_REMOTE=origin`
+      - optional `GIT_TEMP_SET_UPSTREAM=1`
+      - optional `GIT_TEMP_FORCE_WITH_LEASE=1`
+    - `status`
+      - без дополнительных параметров
+    - `rev_parse`
+      - optional `GIT_TEMP_REV=HEAD`
+  - это wrapper для случаев, где раньше приходилось звать raw команды вида `git -C /tmp/... push -u origin ...`
 - `.flow/shared/scripts/run.sh project_status_runtime <enqueue|apply|list|clear> ...` — runtime-очередь отложенных обновлений `Project Status/Flow`.
 - `.flow/shared/scripts/run.sh runtime_v2_shadow_sync` — materialize-ит отдельный `v2` shadow state из текущего legacy runtime в `<state-dir>/runtime_v2/store`.
 - `.flow/shared/scripts/run.sh runtime_v2_gate <task-id> <issue-number> <gate-name> [profile]` — читает `runtime-v2` rollout/budget/stale verdict для legacy expensive/recovery path без full cutover.

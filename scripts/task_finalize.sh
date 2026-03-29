@@ -108,7 +108,7 @@ build_default_pr_title() {
   local task_id="$1"
   local commit_message="$2"
   local cleaned
-  cleaned="$(printf '%s' "$commit_message" | sed -E 's/^PL-[0-9]{3}:[[:space:]]*/ /')"
+  cleaned="$(printf '%s' "$commit_message" | sed -E 's/^(PL-[0-9]{3}([A-Za-z0-9-]+)?|ISSUE-[0-9]+([A-Za-z0-9-]+)?):[[:space:]]*/ /')"
   cleaned="$(printf '%s' "$cleaned" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
   if [[ -z "$cleaned" ]]; then
     cleaned="Рабочая дельта по задаче ${task_id}"
@@ -166,7 +166,7 @@ ensure_final_review_signal() {
 extract_task_id_from_message() {
   local commit_message="$1"
   local task_id
-  task_id="$(printf '%s' "$commit_message" | grep -Eo 'PL-[0-9]{3}' | head -n1 || true)"
+  task_id="$(printf '%s' "$commit_message" | grep -Eo '(PL-[0-9]{3}([A-Za-z0-9-]+)?|ISSUE-[0-9]+([A-Za-z0-9-]+)?)' | head -n1 || true)"
   printf '%s' "$task_id"
 }
 
@@ -739,7 +739,7 @@ if [[ -z "$task_id" ]]; then
   task_id="$(extract_task_id_from_message "$commit_message")"
 fi
 if [[ -z "$task_id" ]]; then
-  echo "Cannot detect task id. Set ${task_file} or include PL-xxx in commit message."
+  echo "Cannot detect task id. Set ${task_file} or include a task id like ISSUE-123 or PL-123 in commit message."
   exit 1
 fi
 

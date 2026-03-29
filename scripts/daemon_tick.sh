@@ -60,6 +60,15 @@ project_issue_cache_max_age_sec="${PROJECT_ISSUE_CACHE_MAX_AGE_SEC:-1800}"
 
 mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
 
+control_mode="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" get --raw 2>/dev/null || printf 'AUTO')"
+if [[ "$control_mode" != "AUTO" ]]; then
+  control_reason="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" get | awk -F= '/^CONTROL_REASON=/{print substr($0, index($0, "=")+1)}' 2>/dev/null || true)"
+  echo "CONTROL_MODE=${control_mode}"
+  [[ -n "$control_reason" ]] && echo "CONTROL_REASON=${control_reason}"
+  echo "DAEMON_EXPENSIVE_WORK_BLOCKED=1"
+  exit 0
+fi
+
 cleanup_tick_lock() {
   rm -f "$TICK_LOCK_OWNER_FILE" 2>/dev/null || true
   rmdir "$TICK_LOCK_DIR" 2>/dev/null || true
@@ -107,6 +116,21 @@ emit_lines() {
     [[ -z "$line" ]] && continue
     echo "$line"
   done <<< "$text"
+}
+
+reconcile_runtime_v2_primary_contexts() {
+  local reconcile_out reconcile_rc
+  if reconcile_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_reconcile_primary_context.sh" 2>&1
+  )"; then
+    emit_lines "$reconcile_out"
+    return 0
+  fi
+  reconcile_rc=$?
+  emit_lines "$reconcile_out"
+  echo "RUNTIME_V2_PRIMARY_RECONCILE_ERROR=1"
+  echo "RUNTIME_V2_PRIMARY_RECONCILE_RC=${reconcile_rc}"
+  return 0
 }
 
 push_remote_status_if_needed() {
@@ -295,8 +319,10 @@ run_project_item_list_fallback() {
 }
 
 list_open_flow_prs_json() {
+  local base_branch="${1:-$flow_base_branch}"
+  local head_branch="${2:-$flow_head_branch}"
   run_gh_retry_capture \
-    gh api "repos/${repo}/pulls?state=open&base=${flow_base_branch}&head=${repo_owner}:${flow_head_branch}&per_page=100"
+    gh api "repos/${repo}/pulls?state=open&base=${base_branch}&head=${repo_owner}:${head_branch}&per_page=100"
 }
 
 read_file_or_default() {
@@ -851,6 +877,43 @@ is_truthy_flag() {
   esac
 }
 
+run_runtime_v2_gate() {
+  local gate_task_id="$1"
+  local gate_issue_number="$2"
+  local gate_name="$3"
+  local gate_profile="$4"
+  local gate_out gate_rc gate_status gate_reason
+
+  if gate_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_gate.sh" \
+      "$gate_task_id" "$gate_issue_number" "$gate_name" "$gate_profile" 2>&1
+  )"; then
+    emit_lines "$gate_out"
+  else
+    gate_rc=$?
+    emit_lines "$gate_out"
+    echo "WAIT_RUNTIME_V2_GATE_ERROR=1"
+    echo "WAIT_RUNTIME_V2_GATE_NAME=$gate_name"
+    echo "WAIT_RUNTIME_V2_GATE_PROFILE=$gate_profile"
+    echo "WAIT_RUNTIME_V2_GATE_TASK_ID=$gate_task_id"
+    echo "WAIT_RUNTIME_V2_GATE_RC=$gate_rc"
+    return 2
+  fi
+
+  gate_status="$(printf '%s\n' "$gate_out" | sed -n 's/^RUNTIME_V2_GATE_STATUS=//p' | tail -n1)"
+  gate_reason="$(printf '%s\n' "$gate_out" | sed -n 's/^RUNTIME_V2_GATE_REASON=//p' | tail -n1)"
+  if [[ "$gate_status" == "blocked" ]]; then
+    echo "WAIT_RUNTIME_V2_GATE=1"
+    echo "WAIT_RUNTIME_V2_GATE_NAME=$gate_name"
+    echo "WAIT_RUNTIME_V2_GATE_PROFILE=$gate_profile"
+    echo "WAIT_RUNTIME_V2_GATE_TASK_ID=$gate_task_id"
+    [[ -n "$gate_reason" ]] && echo "WAIT_RUNTIME_V2_GATE_REASON=$gate_reason"
+    return 1
+  fi
+
+  return 0
+}
+
 find_first_todo_issue_json() {
   local project_json
   local ignore_labels_csv
@@ -1223,6 +1286,7 @@ maybe_release_active_task_on_status_mismatch() {
   local executor_state_file="${CODEX_DIR}/executor_state.txt"
   local executor_pid_file="${CODEX_DIR}/executor_pid.txt"
   local executor_state="" executor_pid="" executor_alive="0"
+  local cleanup_out=""
 
   [[ -s "$active_task_file" ]] || return 0
   active_task="$(<"$active_task_file")"
@@ -1245,7 +1309,7 @@ maybe_release_active_task_on_status_mismatch() {
       echo "ACTIVE_TASK_RELEASED_AUTO_IGNORE_LABEL=1"
       echo "ACTIVE_TASK_RELEASED_TASK_ID=${active_task}"
       echo "ACTIVE_TASK_RELEASED_ISSUE_NUMBER=${active_issue_number}"
-      "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
+      /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
       : > "$active_task_file"
       : > "$active_item_file"
       : > "$active_issue_file"
@@ -1273,6 +1337,10 @@ maybe_release_active_task_on_status_mismatch() {
         : > "$review_pr_file"
         : > "$review_branch_file"
         echo "ACTIVE_TASK_RELEASED_REVIEW_CONTEXT_CLEARED=1"
+      fi
+      if [[ "$active_issue_number" =~ ^[0-9]+$ ]]; then
+        cleanup_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$active_task" "$active_issue_number" "auto-ignore-release" 2>&1 || true)"
+        emit_lines "$cleanup_out"
       fi
       return 0
     fi
@@ -1333,11 +1401,15 @@ maybe_release_active_task_on_status_mismatch() {
     echo "ACTIVE_TASK_RELEASED_REASON=STATUS_EMPTY_OR_ITEM_MISSING"
     echo "ACTIVE_TASK_RELEASED_TASK_ID=${active_task}"
     echo "ACTIVE_TASK_EXPECTED_STATUS=${target_status}"
-    "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
     : > "$active_task_file"
     : > "$active_item_file"
     : > "$active_issue_file"
     : > "${CODEX_DIR}/project_task_id.txt"
+    if [[ "$active_issue_number" =~ ^[0-9]+$ ]]; then
+      cleanup_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$active_task" "$active_issue_number" "status-empty-or-missing" 2>&1 || true)"
+      emit_lines "$cleanup_out"
+    fi
     return 0
   fi
 
@@ -1385,11 +1457,15 @@ maybe_release_active_task_on_status_mismatch() {
   echo "ACTIVE_TASK_RELEASED_TASK_ID=${active_task}"
   echo "ACTIVE_TASK_RELEASED_STATUS=${status_name}"
   echo "ACTIVE_TASK_EXPECTED_STATUS=${target_status}"
-  "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
   : > "$active_task_file"
   : > "$active_item_file"
   : > "$active_issue_file"
   : > "${CODEX_DIR}/project_task_id.txt"
+  if [[ "$active_issue_number" =~ ^[0-9]+$ ]]; then
+    cleanup_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$active_task" "$active_issue_number" "status-mismatch" 2>&1 || true)"
+    emit_lines "$cleanup_out"
+  fi
 
   # Если уже был выставлен waiting/review по этой же задаче, очищаем контекст,
   # чтобы daemon ушел в idle и мог взять следующую карточку.
@@ -2535,6 +2611,8 @@ else
 fi
 
 # Сначала пытаемся доставить отложенные действия в GitHub (outbox).
+reconcile_runtime_v2_primary_contexts
+
 outbox_out="$("${CODEX_SHARED_SCRIPTS_DIR}/github_outbox.sh" flush 2>&1 || true)"
 if [[ -n "$outbox_out" ]]; then
   while IFS= read -r line; do
@@ -2601,15 +2679,8 @@ if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
     review_task_id="$(extract_kv "$reply_probe_out" "TASK_ID")"
     review_issue_number="$(extract_kv "$reply_probe_out" "ISSUE_NUMBER")"
     review_item_id=""
-    review_task_file_value=""
-    if [[ -s "$review_task_file" ]]; then
-      review_task_file_value="$(<"$review_task_file")"
-    fi
     if [[ -s "$review_item_file" ]]; then
       review_item_id="$(<"$review_item_file")"
-    fi
-    if [[ -n "$review_task_file_value" && "$review_task_file_value" != "$review_task_id" ]]; then
-      review_item_id=""
     fi
 
     if [[ -z "$review_task_id" || -z "$review_issue_number" ]]; then
@@ -2622,6 +2693,10 @@ if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
     status_target="$review_task_id"
     if [[ -n "$review_item_id" ]]; then
       status_target="$review_item_id"
+    fi
+
+    if ! run_runtime_v2_gate "$review_task_id" "$review_issue_number" "review_feedback_resume" "daemon_claim"; then
+      exit 0
     fi
 
     if status_out="$("${CODEX_SHARED_SCRIPTS_DIR}/project_set_status.sh" "$status_target" "$target_status" "$target_flow" 2>&1)"; then
@@ -2639,21 +2714,9 @@ if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
       fi
     fi
 
-    printf '%s\n' "$review_task_id" > "${CODEX_DIR}/daemon_active_task.txt"
-    if [[ -n "$review_item_id" ]]; then
-      printf '%s\n' "$review_item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"
-    else
-      : > "${CODEX_DIR}/daemon_active_item_id.txt"
-    fi
-    printf '%s\n' "$review_issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
-    printf '%s\n' "$review_task_id" > "${CODEX_DIR}/project_task_id.txt"
-    "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
-
-    : > "$review_task_file"
-    : > "$review_item_file"
-    : > "$review_issue_file"
-    : > "$review_pr_file"
-    : > "$review_branch_file"
+    materialize_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$review_task_id" "$review_issue_number" 2>&1)"
+    emit_lines "$materialize_out"
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
 
     echo "REVIEW_FEEDBACK_RESUMED=1"
     echo "REVIEW_FEEDBACK_TASK_ID=$review_task_id"
@@ -2719,9 +2782,30 @@ else
   exit "$rc"
 fi
 
+open_pr_base="$flow_base_branch"
+open_pr_head="$flow_head_branch"
+active_issue_number_for_review=""
+active_task_for_review=""
+active_item_for_review=""
+review_branch_for_open_pr=""
+review_task_for_open_pr=""
+review_pr_context_present="0"
+[[ -s "${CODEX_DIR}/daemon_active_issue_number.txt" ]] && active_issue_number_for_review="$(<"${CODEX_DIR}/daemon_active_issue_number.txt")"
+[[ -s "${CODEX_DIR}/daemon_active_task.txt" ]] && active_task_for_review="$(<"${CODEX_DIR}/daemon_active_task.txt")"
+[[ -s "${CODEX_DIR}/daemon_active_item_id.txt" ]] && active_item_for_review="$(<"${CODEX_DIR}/daemon_active_item_id.txt")"
+[[ -s "$review_branch_file" ]] && review_branch_for_open_pr="$(<"$review_branch_file")"
+[[ -s "$review_task_file" ]] && review_task_for_open_pr="$(<"$review_task_file")"
+if [[ -n "$review_branch_for_open_pr" ]]; then
+  open_pr_base="$flow_head_branch"
+  open_pr_head="$review_branch_for_open_pr"
+  review_pr_context_present="1"
+elif [[ -n "$review_task_for_open_pr" || -s "$review_pr_file" ]]; then
+  review_pr_context_present="1"
+fi
+
 open_prs_json=""
 if open_prs_json="$(
-  list_open_flow_prs_json
+  list_open_flow_prs_json "$open_pr_base" "$open_pr_head"
 )"; then
   :
 else
@@ -2736,17 +2820,11 @@ fi
 
 echo "FLOW_OPEN_PR_CHECK=1"
 echo "FLOW_OPEN_PR_CHECK_REPO=${repo}"
-echo "FLOW_OPEN_PR_CHECK_BASE=${flow_base_branch}"
-echo "FLOW_OPEN_PR_CHECK_HEAD=${flow_head_branch}"
+echo "FLOW_OPEN_PR_CHECK_BASE=${open_pr_base}"
+echo "FLOW_OPEN_PR_CHECK_HEAD=${open_pr_head}"
 open_pr_count="$(printf '%s' "$open_prs_json" | jq 'length')"
 if (( open_pr_count > 0 )); then
   if (( open_pr_count == 1 )) && [[ ! -s "$review_pr_file" ]]; then
-    active_issue_number_for_review=""
-    active_task_for_review=""
-    active_item_for_review=""
-    [[ -s "${CODEX_DIR}/daemon_active_issue_number.txt" ]] && active_issue_number_for_review="$(<"${CODEX_DIR}/daemon_active_issue_number.txt")"
-    [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]] && active_task_for_review="$(<"${CODEX_DIR}/daemon_active_task.txt")"
-    [[ -s "${CODEX_DIR}/daemon_active_item_id.txt" ]] && active_item_for_review="$(<"${CODEX_DIR}/daemon_active_item_id.txt")"
     if [[ -n "$active_issue_number_for_review" || -n "$active_task_for_review" ]]; then
       open_pr_number_for_review="$(printf '%s' "$open_prs_json" | jq -r '.[0].number // empty')"
       open_pr_url_for_review="$(printf '%s' "$open_prs_json" | jq -r '.[0].html_url // .[0].url // empty')"
@@ -2756,6 +2834,7 @@ if (( open_pr_count > 0 )); then
           --task-id "$active_task_for_review" \
           --issue-number "$active_issue_number_for_review" \
           --item-id "$active_item_for_review" \
+          --branch "$review_branch_for_open_pr" \
           --pr-number "$open_pr_number_for_review" \
           --pr-url "$open_pr_url_for_review" \
           --pr-title "$open_pr_title_for_review" 2>&1
@@ -2769,9 +2848,13 @@ if (( open_pr_count > 0 )); then
       echo "REVIEW_CONTEXT_RECOVER_AUTO_RC=${recover_rc}"
     fi
   fi
-  echo "WAIT_OPEN_PR_COUNT=$open_pr_count"
-  printf '%s' "$open_prs_json" | jq -r '.[] | "OPEN_PR=#\(.number) \(.title // "") \(.html_url // "")"'
-  exit 0
+  if [[ "$review_pr_context_present" == "1" || -n "$active_issue_number_for_review" || -n "$active_task_for_review" ]]; then
+    echo "WAIT_OPEN_PR_COUNT=$open_pr_count"
+    printf '%s' "$open_prs_json" | jq -r '.[] | "OPEN_PR=#\(.number) \(.title // "") \(.html_url // "")"'
+    exit 0
+  fi
+  echo "OPEN_PR_COUNT_IGNORED=$open_pr_count"
+  printf '%s' "$open_prs_json" | jq -r '.[] | "OPEN_PR_IGNORED=#\(.number) \(.title // "") \(.html_url // "")"'
 fi
 
 project_json=""
@@ -3236,6 +3319,10 @@ if (( skip_sync_branches == 0 )); then
   emit_lines "$sync_out"
 fi
 
+if ! run_runtime_v2_gate "$task_id" "$issue_number" "daemon_claim" "daemon_claim"; then
+  exit 0
+fi
+
 if status_out="$("${CODEX_SHARED_SCRIPTS_DIR}/project_set_status.sh" "$item_id" "$target_status" "$target_flow" 2>&1)"; then
   emit_lines "$status_out"
 else
@@ -3258,12 +3345,15 @@ rm -f "${CODEX_DIR}/daemon_dependency_blocked_signature.txt"
 : > "$review_pr_file"
 : > "$review_branch_file"
 
+materialize_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$task_id" "$issue_number" "$title" 2>&1)"
+emit_lines "$materialize_out"
+
 printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_active_task.txt"
 printf '%s\n' "$item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"
 printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
 printf '%s\n' "$task_id" > "${CODEX_DIR}/project_task_id.txt"
 project_issue_cache_upsert "$task_id" "$item_id" "$issue_number" "$title" "$target_status" "$target_flow" "daemon_claim"
-"${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
+/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
 date -u '+%Y-%m-%dT%H:%M:%SZ' > "${CODEX_DIR}/daemon_last_claim_utc.txt"
 date +%s > "$claim_epoch_file"
 

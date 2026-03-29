@@ -54,6 +54,13 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh log_tail_all`
 - `.flow/shared/scripts/run.sh host_bootstrap`
 - `.flow/shared/scripts/run.sh docker_bootstrap`
+- `.flow/shared/scripts/run.sh android_builder <config|up|down|shell|run|exec> [command...]`
+  - standalone Android/Java builder в отдельном Docker image/service
+  - монтирует текущий repo в `/workspace`
+  - держит JDK 17 и Android SDK вне host runtime и вне основного Codex/runtime container
+  - кэш Gradle хранит в `<AI_FLOW_ROOT_DIR>/services/android-builder/<project>/home`
+  - канонический пример:
+    `./.flow/shared/scripts/run.sh android_builder run bash -lc 'cd app/planka_quick_test_app && ./gradlew --no-daemon testDebugUnitTest assembleDebug'`
 - `.flow/shared/scripts/run.sh remote_agent_access_bootstrap`
 - `.flow/shared/scripts/run.sh remote_agent_v2_bootstrap`
 - `.flow/shared/scripts/run.sh env_audit`
@@ -83,6 +90,17 @@ Linux-hosted bootstrap launchers:
     - нужен для project list/view sync без прямого `gh project item-list ... --limit ... --jq ...`.
     - при необходимости локальный `jq` накладывается уже на stdout этой команды, а не на прямой `gh project item-list ...`.
 - `.flow/shared/scripts/run.sh project_status_runtime <enqueue|apply|list|clear> ...` — runtime-очередь отложенных обновлений `Project Status/Flow`.
+- `.flow/shared/scripts/run.sh runtime_v2_shadow_sync` — materialize-ит отдельный `v2` shadow state из текущего legacy runtime в `<state-dir>/runtime_v2/store`.
+- `.flow/shared/scripts/run.sh runtime_v2_gate <task-id> <issue-number> <gate-name> [profile]` — читает `runtime-v2` rollout/budget/stale verdict для legacy expensive/recovery path без full cutover.
+- `.flow/shared/scripts/run.sh runtime_v2_apply_event <task-id> <issue-number> <event-type> <event-id> <dedup-key> [payload-json]` — best-effort bridge selected legacy lifecycle transitions в `runtime-v2 applyEvent()`.
+- `.flow/shared/scripts/run.sh runtime_v2_primary_context` — выводит selected `active/review` contexts, derivable из `runtime-v2` store.
+- `.flow/shared/scripts/run.sh runtime_v2_reconcile_primary_context` — проецирует selected `runtime-v2` primary contexts обратно в legacy `daemon_active_*` / `daemon_review_*` файлы.
+- `.flow/shared/scripts/run.sh runtime_v2_snapshot [task-id]` — показывает snapshot отдельного `v2` shadow contour.
+- `.flow/shared/scripts/run.sh runtime_v2_inspect` — показывает operator-grade summary по `runtime-v2`: control mode, task counts, primary contexts, incidents и execution summary.
+- `.flow/shared/scripts/run.sh runtime_v2_status` — alias для `runtime_v2_inspect` с тем же operator-grade summary по `runtime-v2`.
+- `.flow/shared/scripts/run.sh runtime_v2_validate_rollout [task-id] [issue-number]` — прогоняет локальный `dry_run/shadow` validation harness и пишет отчёт в `<state-dir>/runtime_v2_validation_report.json`.
+- `.flow/shared/scripts/run.sh runtime_v2_single_task_loop [task-id] [issue-number] [pr-number]` — прогоняет controlled local `single_task` loop и пишет отчёт в `<state-dir>/runtime_v2_single_task_loop_report.json`.
+- `.flow/shared/scripts/run.sh runtime_v2_clear` — очищает только `v2` shadow store, не трогая legacy state.
 - `.flow/shared/scripts/run.sh log_summary [--hours N|--from ISO|--to ISO]` — агрегированный отчет по логам daemon/watchdog/runtime/graphql за период (без аргументов берёт весь доступный диапазон логов).
 - `.flow/shared/scripts/run.sh status_snapshot` — нормализованный JSON snapshot состояния автоматики (daemon/watchdog/executor/очереди/blockers).
 - `.flow/shared/scripts/run.sh next_task` — показать следующую задачу со статусом `Planned` (приоритет P0→P1→P2, затем по номеру `PL-xxx`).
@@ -367,18 +385,18 @@ Rollback нового профиля:
 ## Команды
 - `dev_commit_push.sh "message" <path...>`
   - `git add` + `git commit` + `git push origin <current-branch>`
-  - `task_finalize` при необходимости вызывает его с явным override для task-ветки, а финальный PR все равно остается `development -> main`
+  - `task_finalize` при необходимости вызывает его с явным override для task-ветки; для task-ветки review PR публикуется как `task/<id> -> development`, а release PR `development -> main` живет отдельно
   - для agent-коммитов использует отдельную identity (env): `CODEX_GIT_AUTHOR_NAME`, `CODEX_GIT_AUTHOR_EMAIL`, `CODEX_GIT_COMMITTER_NAME`, `CODEX_GIT_COMMITTER_EMAIL`
 - `sync_branches.sh`
   - `fetch/pull/merge/push` для выравнивания `main` и `development` после merge PR
   - если `main` уже включен в `development`, merge пропускается
   - при merge-конфликте возвращает `BRANCH_SYNC_CONFLICT=1` (код 78)
 - `pr_list_open.sh`
-  - список открытых PR `development -> main`
+  - список открытых PR для `FLOW_PR_HEAD_BRANCH -> FLOW_PR_BASE_BRANCH` (или `FLOW_HEAD_BRANCH -> FLOW_BASE_BRANCH`, если override не задан)
 - `pr_view.sh <pr-number>`
   - просмотр PR в фиксированном JSON-формате
 - `pr_create.sh <title-file> <body-file>`
-  - создание PR `development -> main`
+  - создание PR для `FLOW_PR_HEAD_BRANCH -> FLOW_PR_BASE_BRANCH` (или для flow default branch pair без override)
 - `pr_edit.sh <pr-number> <title-file> <body-file>`
   - обновление title/body PR
 - `project_set_status.sh <task-id|project-item-id> <status-name> [flow-name]`
@@ -418,6 +436,8 @@ Rollback нового профиля:
   - печатает стандартный двойной хвост `daemon.log + executor.log`
 - `.flow/shared/scripts/run.sh log_tail_all`
   - печатает стандартный хвост `daemon.log + watchdog.log + executor.log`
+- `.flow/shared/scripts/run.sh log_follow <daemon|watchdog|executor|d|w|e> [lines]`
+  - делает `tail -f` по одному runtime-логу; второй аргумент опционален, по умолчанию `50`
 - `.flow/shared/scripts/run.sh runtime_clear_active`
   - очищает active runtime-context daemon без прямых `truncate`
 - `.flow/shared/scripts/run.sh runtime_clear_waiting`
@@ -446,7 +466,7 @@ Rollback нового профиля:
   - при создании/линковке dirty-gate issue сразу переводит ее карточку в `Status/Flow=In Progress`
   - при рабочем ответе (`REWORK`) переводит карточку dirty-gate issue в `Status/Flow=In Progress`
   - при dirty-worktree больше не “глушит” обслуживание активного контекста: если есть `daemon_active_task`/waiting/review, тик продолжает `daemon_check_replies` и `executor_tick`; при этом новые claim остаются заблокированы (`WAIT_DIRTY_WORKTREE_SKIP_NEW_CLAIM=1`)
-  - `COMMIT` запускает полный dirty-gate flow: auto-commit tracked-файлов (`dev_commit_push.sh`) -> PR `development -> main` -> merge PR -> закрытие dirty-gate issue
+  - `COMMIT` запускает отдельный dirty-gate recovery flow для tracked-файлов в `development`; он не определяет PR topology обычных task-задач
   - если финальный `project_set_status(Done)` для dirty-gate не прошел, daemon фиксирует pending-finalize и ретраит завершение автоматически на следующих тиках (без нового user-reply)
   - по успешному завершению пишет `WAIT_DIRTY_WORKTREE_COMMIT_FLOW_DONE=1` и снимает dirty-gate state
   - auto-`COMMIT` выполняется только из ветки `development` (иначе пишет `WAIT_DIRTY_WORKTREE_COMMIT_BLOCKED_BRANCH=...`)
@@ -465,7 +485,7 @@ Rollback нового профиля:
   - для активной задачи вызывает `executor_tick.sh`, который запускает/мониторит headless executor (`codex exec`)
   - перед критичными GitHub-операциями делает preflight (`github_health_check.sh`)
   - сетевые вызовы к GitHub выполняет через `gh_retry.sh`, чтобы кратковременные DNS/API-сбои не роняли flow
-  - если активной задачи нет, проверяет открытые PR `development -> main` и при наличии ждет merge/close
+  - если активной/review задачи нет, открытые release PR не должны сами по себе блокировать claim новой задачи
   - не-Project проверки (`issues/labels/comments/open PR`) выполняет через REST (`gh api repos/...`); GraphQL оставлен для Project v2
   - читает Project через GraphQL (без нестабильного `gh project item-list`)
   - в hybrid mode для Project-операций использует `DAEMON_GH_PROJECT_TOKEN`/`CODEX_GH_PROJECT_TOKEN` (если задан), сохраняя App token для `Issue/PR`
@@ -557,8 +577,8 @@ Rollback нового профиля:
 - `task_finalize.sh`
   - читает `commit_message.txt`, `stage_paths.txt`, `project_task_id.txt` (или `daemon_active_task.txt`)
   - выполняет commit/push в текущую task-ветку
-  - если текущая ветка не `development`, подтягивает в неё актуальный `development`, затем fast-forward вливает task-ветку обратно в `development`
-  - создает PR `development -> main` или обновляет существующий
+  - если текущая ветка не `development`, подтягивает в неё актуальный `development` и публикует отдельный review PR `task/<id> -> development`
+  - если текущая ветка уже `development`, работает в прямом release-path `development -> main`
   - переводит задачу в `Status=Review`, `Flow=In Review` (можно переопределить через `FINAL_STATUS` и `FINAL_FLOW`)
   - если апдейт статуса временно недоступен, откладывает его в runtime-очередь без остановки финализации
   - публикует `CODEX_SIGNAL: AGENT_IN_REVIEW` и включает waiting-контекст `REVIEW_FEEDBACK` для комментариев в Issue
@@ -587,10 +607,14 @@ Rollback нового профиля:
 - `daemon_check_replies.sh`
   - если daemon в waiting-state, проверяет новые комментарии Issue после вопроса/ревью
   - для `AGENT_QUESTION/AGENT_BLOCKER` первый пользовательский комментарий (без `CODEX_SIGNAL:`) классифицирует как `QUESTION` или `REWORK`
+    - `USER_REPLY` допустим только когда от пользователя реально нужен новый факт, выбор или решение
+    - если единственный разумный ответ был бы `продолжай`, blocker считается некорректным и должен авто-резолвиться как `REWORK`, а не требовать ручного ответа
+    - внутренние executor-сбои (`rate limit`, сеть, GitHub, обрыв stream, log fragment, строка кода без вопроса) не должны публиковаться как blocker-вопрос к пользователю
     - `QUESTION` -> публикует `CODEX_SIGNAL: AGENT_ANSWER` и оставляет задачу в `WAIT_USER_REPLY`
     - `REWORK` -> публикует `CODEX_SIGNAL: AGENT_RESUMED` и передает задачу в работу
     - команды dirty-gate (`COMMIT`/`STASH`/`REVERT`/`IGNORE`) считаются `REWORK`
     - для явного продолжения после blocker используй `CODEX_MODE: REWORK`
+    - если executor всё ещё жив, не-question reply не должен удерживать задачу в `WAIT_USER_REPLY`
   - для `REVIEW_FEEDBACK` принимает только не-системный комментарий автора Issue
   - для `REVIEW_FEEDBACK` различает режимы:
     - `QUESTION` -> публикует `CODEX_SIGNAL: AGENT_ANSWER` и оставляет задачу в `WAIT_REVIEW_FEEDBACK`

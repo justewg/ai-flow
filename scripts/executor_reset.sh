@@ -99,6 +99,7 @@ fi
 : > "${CODEX_DIR}/executor_task_id.txt"
 : > "${CODEX_DIR}/executor_issue_number.txt"
 : > "${CODEX_DIR}/executor_last_exit_code.txt"
+: > "${CODEX_DIR}/executor_review_handoff_reason.txt"
 : > "${CODEX_DIR}/executor_last_started_utc.txt"
 : > "${CODEX_DIR}/executor_last_finished_utc.txt"
 : > "${CODEX_DIR}/executor_last_start_epoch.txt"

@@ -1,0 +1,31 @@
+services:
+  android-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        ANDROID_CMDLINE_TOOLS_VERSION: ${ANDROID_CMDLINE_TOOLS_VERSION:-11076708}
+        ANDROID_COMPILE_SDK: ${ANDROID_COMPILE_SDK:-35}
+        ANDROID_BUILD_TOOLS: ${ANDROID_BUILD_TOOLS:-35.0.0}
+    image: ${ANDROID_BUILDER_IMAGE_NAME:-ai-flow-android-builder:latest}
+    init: true
+    user: "${ANDROID_BUILDER_UID:-1000}:${ANDROID_BUILDER_GID:-1000}"
+    working_dir: /workspace
+    environment:
+      HOME: /tmp/android-builder-home
+      GRADLE_USER_HOME: /tmp/android-builder-home/.gradle
+      JAVA_HOME: /opt/java/openjdk
+      ANDROID_SDK_ROOT: /opt/android-sdk
+      ANDROID_HOME: /opt/android-sdk
+      TERM: xterm-256color
+    volumes:
+      - ${ANDROID_BUILDER_WORKSPACE_PATH:?set ANDROID_BUILDER_WORKSPACE_PATH}:/workspace
+      - ${ANDROID_BUILDER_CACHE_PATH:?set ANDROID_BUILDER_CACHE_PATH}:/tmp/android-builder-home
+    command:
+      - bash
+      - -lc
+      - |
+        mkdir -p "$$HOME" "$$GRADLE_USER_HOME"
+        exec sleep infinity
+    stdin_open: true
+    tty: true

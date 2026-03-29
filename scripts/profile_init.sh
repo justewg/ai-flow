@@ -656,6 +656,7 @@ ensure_state_namespace_layout() {
     "executor:executor_heartbeat_utc.txt"
     "executor:executor_issue_number.txt"
     "executor:executor_last_exit_code.txt"
+    "executor:executor_review_handoff_reason.txt"
     "executor:executor_last_finished_utc.txt"
     "executor:executor_last_message.txt"
     "executor:executor_last_start_epoch.txt"

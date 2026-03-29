@@ -32,6 +32,7 @@ Commands:
   pr_create
   pr_edit
   pr_merge
+  git_in
   commit_push
   git_ls_remote_heads
   git_delete_branch
@@ -41,6 +42,32 @@ Commands:
   project_item_view
   project_set_status
   project_status_runtime
+  control_mode
+  incident_append
+  execution_summary
+  runtime_v2_apply_event
+  runtime_v2_gate
+  runtime_v2_primary_context
+  runtime_v2_reconcile_primary_context
+  runtime_v2_shadow_sync
+  runtime_v2_snapshot
+  runtime_v2_inspect
+  runtime_v2_status
+  runtime_v2_validate_rollout
+  runtime_v2_single_task_loop
+  runtime_v2_clear
+  task_capture_source_definition
+  task_standardize_spec
+  task_interpret
+  micro_task_classifier
+  context_builder
+  canonical_diff
+  metadata_builder
+  llm_call_telemetry
+  micro_profile_guard
+  micro_prepare_guard_bin
+  micro_finalize
+  micro_local_canary
   log_summary
   log_tail_executor
   log_tail_daemon_executor
@@ -52,6 +79,7 @@ Commands:
   bootstrap_repo
   host_bootstrap
   docker_bootstrap
+  android_builder
   remote_agent_access_bootstrap
   remote_agent_v2_bootstrap
   onboarding_audit
@@ -77,6 +105,8 @@ Commands:
   watchdog_uninstall
   watchdog_status
   executor_reset
+  task_worktree_materialize
+  task_worktree_cleanup
   runtime_clear_active
   runtime_clear_waiting
   runtime_clear_review
@@ -239,6 +269,42 @@ run_project_gh() {
   else
     gh "$@"
   fi
+}
+
+ensure_git_in_repo_root() {
+  local repo_root="$1"
+  if [[ -z "$repo_root" ]]; then
+    echo "git_in requires <repo-root> as the first argument"
+    exit 1
+  fi
+  if [[ ! -d "$repo_root" ]]; then
+    echo "git_in repo root not found: $repo_root"
+    exit 1
+  fi
+  if [[ ! -e "$repo_root/.git" ]]; then
+    echo "git_in target is not a git checkout/worktree: $repo_root"
+    exit 1
+  fi
+}
+
+run_git_in() {
+  local repo_root="${1:-}"
+  local git_subcommand="${2:-}"
+  shift 2 || true
+
+  ensure_git_in_repo_root "$repo_root"
+
+  case "$git_subcommand" in
+    fetch|merge|checkout|add|commit|push|status|rev-parse|log|show|diff|branch|submodule)
+      ;;
+    *)
+      echo "Unsupported git_in subcommand: ${git_subcommand:-<empty>}"
+      echo "Allowed: fetch merge checkout add commit push status rev-parse log show diff branch submodule"
+      exit 1
+      ;;
+  esac
+
+  git -C "$repo_root" "$git_subcommand" "$@"
 }
 
 tail_runtime_log() {
@@ -493,7 +559,31 @@ case "$cmd" in
     if is_truthy "${pr_delete_branch_raw:-0}"; then
       pr_merge_cmd+=(--delete-branch)
     fi
-    "${pr_merge_cmd[@]}"
+    if pr_merge_out="$("${pr_merge_cmd[@]}" 2>&1)"; then
+      printf '%s\n' "$pr_merge_out"
+    else
+      pr_merge_rc=$?
+      if printf '%s' "$pr_merge_out" | grep -Eiq 'GraphQL: API rate limit|API rate limit already exceeded'; then
+        pr_merge_api_method="merge"
+        case "${pr_merge_method:-merge}" in
+          ""|merge) pr_merge_api_method="merge" ;;
+          squash) pr_merge_api_method="squash" ;;
+          rebase) pr_merge_api_method="rebase" ;;
+        esac
+        gh api -X PUT "repos/${repo}/pulls/${pr_number}/merge" -f merge_method="$pr_merge_api_method"
+      else
+        printf '%s\n' "$pr_merge_out" >&2
+        exit "$pr_merge_rc"
+      fi
+    fi
+    ;;
+
+  git_in)
+    if [[ $# -lt 2 ]]; then
+      echo "Usage: .flow/shared/scripts/run.sh git_in <repo-root> <git-subcommand> [args...]"
+      exit 1
+    fi
+    run_git_in "$@"
     ;;
 
   commit_push)
@@ -653,6 +743,131 @@ case "$cmd" in
     "${CODEX_SHARED_SCRIPTS_DIR}/project_status_runtime.sh" "$@"
     ;;
 
+  control_mode)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" "$@"
+    ;;
+
+  incident_append)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/incident_append.sh" "$@"
+    ;;
+
+  execution_summary)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/execution_summary.sh" "$@"
+    ;;
+
+  runtime_v2_apply_event)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_apply_event.sh" "$@"
+    ;;
+
+  runtime_v2_gate)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_gate.sh" "$@"
+    ;;
+
+  runtime_v2_primary_context)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_primary_context.sh" "$@"
+    ;;
+
+  runtime_v2_reconcile_primary_context)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_reconcile_primary_context.sh" "$@"
+    ;;
+
+  runtime_v2_shadow_sync)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_shadow_sync.sh" "$@"
+    ;;
+
+  runtime_v2_snapshot)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_snapshot.sh" "$@"
+    ;;
+
+  runtime_v2_inspect|runtime_v2_status)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_inspect.sh" "$@"
+    ;;
+
+  runtime_v2_validate_rollout)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_validate_rollout.sh" "$@"
+    ;;
+
+  runtime_v2_single_task_loop)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_single_task_loop.sh" "$@"
+    ;;
+
+  runtime_v2_clear)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_clear.sh" "$@"
+    ;;
+
+  task_capture_source_definition)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_capture_source_definition.sh" "$@"
+    ;;
+
+  task_standardize_spec)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_standardize_spec.sh" "$@"
+    ;;
+
+  task_interpret)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_interpret.sh" "$@"
+    ;;
+
+  micro_task_classifier)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_task_classifier.sh" "$@"
+    ;;
+
+  context_builder)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/context_builder.sh" "$@"
+    ;;
+
+  canonical_diff)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/canonical_diff.sh" "$@"
+    ;;
+
+  metadata_builder)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/metadata_builder.sh" "$@"
+    ;;
+
+  llm_call_telemetry)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/llm_call_telemetry.sh" "$@"
+    ;;
+
+  micro_profile_guard)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_profile_guard.sh" "$@"
+    ;;
+
+  micro_prepare_guard_bin)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_prepare_guard_bin.sh" "$@"
+    ;;
+
+  micro_finalize)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_finalize.sh" "$@"
+    ;;
+
+  micro_local_canary)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_local_canary.sh" "$@"
+    ;;
+
   log_summary)
     shift 1
     "${CODEX_SHARED_SCRIPTS_DIR}/log_summary.sh" "$@"
@@ -711,6 +926,11 @@ case "$cmd" in
   docker_bootstrap)
     shift 1
     "${CODEX_SHARED_SCRIPTS_DIR}/docker_bootstrap.sh" "$@"
+    ;;
+
+  android_builder)
+    shift 1
+    "${CODEX_SHARED_SCRIPTS_DIR}/android_builder.sh" "$@"
     ;;
 
   remote_agent_access_bootstrap)
@@ -862,13 +1082,32 @@ case "$cmd" in
     ;;
 
   executor_reset)
-    "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh"
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh"
+    ;;
+
+  task_worktree_materialize)
+    if [[ $# -lt 3 || $# -gt 4 ]]; then
+      echo "Usage: .flow/shared/scripts/run.sh task_worktree_materialize <task-id> <issue-number> [title]"
+      exit 1
+    fi
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "${@:2}"
+    ;;
+
+  task_worktree_cleanup)
+    if [[ $# -lt 3 || $# -gt 4 ]]; then
+      echo "Usage: .flow/shared/scripts/run.sh task_worktree_cleanup <task-id> <issue-number> [reason]"
+      exit 1
+    fi
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "${@:2}"
     ;;
 
   runtime_clear_active)
     clear_runtime_state_file "daemon_active_task.txt"
     clear_runtime_state_file "daemon_active_item_id.txt"
     clear_runtime_state_file "daemon_active_issue_number.txt"
+    clear_runtime_state_file "daemon_active_task_key.txt"
+    clear_runtime_state_file "daemon_active_worktree_path.txt"
+    clear_runtime_state_file "daemon_active_task_branch.txt"
     ;;
 
   runtime_clear_waiting)
@@ -919,6 +1158,14 @@ case "$cmd" in
       exit 1
     fi
     "${CODEX_SHARED_SCRIPTS_DIR}/task_ask.sh" "$2" "$3"
+    ;;
+
+  task_review_handoff)
+    if [[ $# -lt 3 || $# -gt 4 ]]; then
+      echo "Usage: .flow/shared/scripts/run.sh task_review_handoff <task-id> <issue-number> [reason]"
+      exit 1
+    fi
+    "${CODEX_SHARED_SCRIPTS_DIR}/task_review_handoff.sh" "${@:2}"
     ;;
 
   daemon_check_replies)

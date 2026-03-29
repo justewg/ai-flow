@@ -46,6 +46,127 @@ active_task_file="${CODEX_DIR}/daemon_active_task.txt"
 project_task_file="${CODEX_DIR}/project_task_id.txt"
 active_issue_file="${CODEX_DIR}/daemon_active_issue_number.txt"
 pending_post_file="${CODEX_DIR}/daemon_waiting_pending_post.txt"
+executor_pid_file="${CODEX_DIR}/executor_pid.txt"
+executor_heartbeat_pid_file="${CODEX_DIR}/executor_heartbeat_pid.txt"
+executor_detach_file="${CODEX_DIR}/executor_detach_requested.txt"
+
+emit_runtime_v2_event() {
+  local event_type="$1"
+  local event_id="$2"
+  local dedup_key="$3"
+  local payload_json="${4:-{}}"
+  local event_out rc
+
+  if event_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_apply_event.sh" \
+      "$task_id" "$issue_number" "$event_type" "$event_id" "$dedup_key" "$payload_json" 2>&1
+  )"; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_EVENT: $line"
+    done <<< "$event_out"
+  else
+    rc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_EVENT_ERROR(rc=$rc): $line"
+    done <<< "$event_out"
+  fi
+}
+
+reconcile_runtime_v2_primary_context() {
+  local reconcile_out rc
+  if reconcile_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_reconcile_primary_context.sh" 2>&1
+  )"; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_RECONCILE: $line"
+    done <<< "$reconcile_out"
+  else
+    rc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_RECONCILE_ERROR(rc=$rc): $line"
+    done <<< "$reconcile_out"
+  fi
+}
+
+build_wait_payload() {
+  local wait_comment_id="$1"
+  local wait_reason="$2"
+  local wait_kind="$3"
+  local comment_url="$4"
+  local pending_post="$5"
+  local waiting_since="$6"
+
+  jq -nc \
+    --arg waitCommentId "$wait_comment_id" \
+    --arg reason "$wait_reason" \
+    --arg kind "$wait_kind" \
+    --arg commentUrl "$comment_url" \
+    --arg waitingSince "$waiting_since" \
+    --argjson pendingPost "$pending_post" \
+    '{
+      waitCommentId:$waitCommentId,
+      reason:$reason,
+      kind:$kind,
+      commentUrl:$commentUrl,
+      waitingSince:$waitingSince,
+      pendingPost:$pendingPost
+    }'
+}
+
+trim_line() {
+  printf '%s' "$1" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g'
+}
+
+extract_structured_field() {
+  local field_name="$1"
+  local text="$2"
+  printf '%s\n' "$text" \
+    | sed 's/\r$//' \
+    | awk -F= -v key="$field_name" '$1 == key { sub(/^[^=]*=/, "", $0); print; exit }'
+}
+
+contains_user_prompt_keywords() {
+  local text
+  text="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  printf '%s' "$text" \
+    | grep -Eiq '\b(продолжай|продолжить|финализируй|финализировать|подтверди|выбери|как действовать|нужен ответ|ответь|какой|какая|какое|какие|что|нужно ли|можно ли|should|what|which|how|need your answer)\b'
+}
+
+is_malformed_question_candidate() {
+  local value
+  value="$(trim_line "$1")"
+
+  [[ -z "$value" ]] && return 0
+
+  if printf '%s' "$value" | grep -Eiq '^(null[[:space:]]*->[[:space:]]*".*\?"|\?\?[[:space:]]+.+|[0-9]{4}-[0-9]{2}-[0-9]{2}t[0-9:.+-]+.*\|.*event=|diff --git|index [0-9a-f]+\.\.[0-9a-f]+|@@|[+-]{3}[[:space:]]|override fun |versionname[[:space:]]*=|/bin/(ba|z)sh|[A-Za-z0-9_./-]+[[:space:]]*->[[:space:]]*".*")$'; then
+    return 0
+  fi
+
+  return 1
+}
+
+is_actionable_user_prompt_candidate() {
+  local value
+  value="$(trim_line "$1")"
+
+  if [[ -z "$value" ]] || is_malformed_question_candidate "$value"; then
+    return 1
+  fi
+
+  if contains_user_prompt_keywords "$value"; then
+    return 0
+  fi
+
+  if [[ "$value" == *"?"* ]] && printf '%s' "$value" | grep -Eq '[[:alpha:]]'; then
+    return 0
+  fi
+
+  return 1
+}
 
 extract_question_line() {
   local text="$1"
@@ -299,16 +420,28 @@ infer_executor_question() {
   if [[ -s "${CODEX_DIR}/executor_last_message.txt" ]]; then
     src_text="$(<"${CODEX_DIR}/executor_last_message.txt")"
     candidate="$(extract_question_line "$src_text")"
+    if [[ -n "$candidate" ]] && ! is_actionable_user_prompt_candidate "$candidate"; then
+      candidate=""
+    fi
     if [[ -z "$candidate" ]]; then
       candidate="$(extract_decision_line "$src_text")"
+      if [[ -n "$candidate" ]] && ! is_actionable_user_prompt_candidate "$candidate"; then
+        candidate=""
+      fi
     fi
   fi
 
   if [[ -z "$candidate" && -f "${RUNTIME_LOG_DIR}/executor.log" ]]; then
     src_text="$(tail -n 400 "${RUNTIME_LOG_DIR}/executor.log" 2>/dev/null || true)"
     candidate="$(extract_question_line "$src_text")"
+    if [[ -n "$candidate" ]] && ! is_actionable_user_prompt_candidate "$candidate"; then
+      candidate=""
+    fi
     if [[ -z "$candidate" ]]; then
       candidate="$(extract_decision_line "$src_text")"
+      if [[ -n "$candidate" ]] && ! is_actionable_user_prompt_candidate "$candidate"; then
+        candidate=""
+      fi
     fi
   fi
 
@@ -340,6 +473,7 @@ infer_executor_remark() {
 render_question_message() {
   local text="$1"
   local kind="$2"
+  local structured_q=""
   local explicit_q=""
   local explicit_decision=""
   local inferred_q=""
@@ -350,20 +484,39 @@ render_question_message() {
   local smart_options=""
   local recommended_option=""
 
-  explicit_q="$(extract_question_line "$text")"
-  explicit_decision="$(extract_decision_line "$text")"
+  structured_q="$(extract_structured_field "ASK_QUESTION" "$text")"
+  if [[ -n "$structured_q" ]] && ! is_actionable_user_prompt_candidate "$structured_q"; then
+    structured_q=""
+  fi
 
-  if [[ -n "$explicit_q" ]]; then
+  explicit_q="$(extract_question_line "$text")"
+  if [[ -n "$explicit_q" ]] && ! is_actionable_user_prompt_candidate "$explicit_q"; then
+    explicit_q=""
+  fi
+
+  explicit_decision="$(extract_decision_line "$text")"
+  if [[ -n "$explicit_decision" ]] && ! is_actionable_user_prompt_candidate "$explicit_decision"; then
+    explicit_decision=""
+  fi
+
+  if [[ -n "$structured_q" ]]; then
+    selected_q="$structured_q"
+  elif [[ -n "$explicit_q" ]]; then
     selected_q="$explicit_q"
   elif [[ -n "$explicit_decision" ]]; then
     selected_q="$explicit_decision"
   fi
 
-  if [[ -z "$selected_q" ]]; then
+  if [[ -z "$selected_q" && "$kind" != "BLOCKER" ]]; then
     inferred_q="$(infer_executor_question)"
     if [[ -n "$inferred_q" ]]; then
       selected_q="$inferred_q"
     fi
+  fi
+
+  if [[ -z "$selected_q" && "$kind" == "BLOCKER" ]]; then
+    printf '%s' "__TASK_ASK_REJECTED_MALFORMED_BLOCKER__"
+    return 0
   fi
 
   if [[ -z "$selected_q" ]]; then
@@ -444,6 +597,35 @@ post_issue_comment() {
   fi
 }
 
+kill_pid_gracefully() {
+  local pid="$1"
+  [[ -z "$pid" || ! "$pid" =~ ^[0-9]+$ ]] && return 0
+  if ! kill -0 "$pid" 2>/dev/null; then
+    return 0
+  fi
+  kill "$pid" 2>/dev/null || true
+  sleep 1
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -9 "$pid" 2>/dev/null || true
+  fi
+}
+
+request_executor_stop() {
+  local pid=""
+  local heartbeat_pid=""
+  pid="$(cat "$executor_pid_file" 2>/dev/null || true)"
+  heartbeat_pid="$(cat "$executor_heartbeat_pid_file" 2>/dev/null || true)"
+
+  printf '%s\n' "stop-requested" > "$executor_detach_file"
+  kill_pid_gracefully "$heartbeat_pid"
+  kill_pid_gracefully "$pid"
+
+  if [[ "$pid" =~ ^[0-9]+$ ]]; then
+    echo "EXECUTOR_STOP_REQUESTED=1"
+    echo "EXECUTOR_STOP_PID=$pid"
+  fi
+}
+
 task_id=""
 if [[ -s "$active_task_file" ]]; then
   task_id="$(<"$active_task_file")"
@@ -496,6 +678,11 @@ now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 comment_message_text="$message_text"
 if [[ "$kind_label" == "QUESTION" || "$kind_label" == "BLOCKER" ]]; then
   comment_message_text="$(render_question_message "$message_text" "$kind_label")"
+  if [[ "$comment_message_text" == "__TASK_ASK_REJECTED_MALFORMED_BLOCKER__" ]]; then
+    echo "TASK_ASK_REJECTED_MALFORMED_BLOCKER=1"
+    echo "TASK_ASK_REJECTED_KIND=${kind_label}"
+    exit 42
+  fi
 fi
 
 comment_body="$(cat <<EOF_COMMENT
@@ -515,14 +702,20 @@ EOF_COMMENT
 if comment_json="$(post_issue_comment "$issue_number" "$comment_body")"; then
   question_comment_id="$(printf '%s' "$comment_json" | jq -r '.id')"
   question_comment_url="$(printf '%s' "$comment_json" | jq -r '.html_url')"
-
-  printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
-  printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_waiting_task_id.txt"
-  printf '%s\n' "$question_comment_id" > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
-  printf '%s\n' "$kind_label" > "${CODEX_DIR}/daemon_waiting_kind.txt"
-  printf '%s\n' "$now_utc" > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
-  printf '%s\n' "$question_comment_url" > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
   : > "$pending_post_file"
+  request_executor_stop
+
+  wait_reason="waiting human reply"
+  if [[ "$kind_label" == "BLOCKER" ]]; then
+    wait_reason="waiting human unblock"
+  fi
+  wait_payload="$(build_wait_payload "$question_comment_id" "$wait_reason" "$kind_label" "$question_comment_url" false "$now_utc")"
+  emit_runtime_v2_event \
+    "human.wait_requested" \
+    "legacy-v2-wait-${task_id}-${question_comment_id}" \
+    "legacy.human.wait_requested:${task_id}:${question_comment_id}" \
+    "$wait_payload"
+  reconcile_runtime_v2_primary_context
 
   echo "QUESTION_POSTED=1"
   echo "TASK_ID=$task_id"
@@ -565,13 +758,20 @@ while IFS= read -r line; do
   echo "$line"
 done <<< "$enqueue_out"
 
-printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
-printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_waiting_task_id.txt"
-printf '%s\n' "-1" > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
-printf '%s\n' "$kind_label" > "${CODEX_DIR}/daemon_waiting_kind.txt"
-printf '%s\n' "$now_utc" > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
-: > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
 printf '%s\n' "1" > "$pending_post_file"
+request_executor_stop
+
+wait_reason="waiting human reply"
+if [[ "$kind_label" == "BLOCKER" ]]; then
+  wait_reason="waiting human unblock"
+fi
+wait_payload="$(build_wait_payload "-1" "$wait_reason" "$kind_label" "" true "$now_utc")"
+emit_runtime_v2_event \
+  "human.wait_requested" \
+  "legacy-v2-wait-${task_id}-pending-${now_utc}" \
+  "legacy.human.wait_requested:${task_id}:pending" \
+  "$wait_payload"
+reconcile_runtime_v2_primary_context
 
 echo "QUESTION_QUEUED_OUTBOX=1"
 echo "TASK_ID=$task_id"

@@ -3161,6 +3161,7 @@ item_id="$(printf '%s' "$valid_queue_json" | jq -r '.[0].item_id')"
 issue_number="$(printf '%s' "$valid_queue_json" | jq -r '.[0].issue_number')"
 task_id="$(printf '%s' "$valid_queue_json" | jq -r '.[0].task_id')"
 title="$(printf '%s' "$valid_queue_json" | jq -r '.[0].title')"
+source_flow="$(printf '%s' "$valid_queue_json" | jq -r '.[0].flow // ""')"
 
 if [[ -z "$task_id" || "$task_id" == "null" ]]; then
   echo "Task in trigger status has no resolvable task id"
@@ -3345,8 +3346,39 @@ rm -f "${CODEX_DIR}/daemon_dependency_blocked_signature.txt"
 : > "$review_pr_file"
 : > "$review_branch_file"
 
-materialize_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$task_id" "$issue_number" "$title" 2>&1)"
-emit_lines "$materialize_out"
+if materialize_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$task_id" "$issue_number" "$title" 2>&1)"; then
+  emit_lines "$materialize_out"
+else
+  rc=$?
+  emit_lines "$materialize_out"
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "TASK_WORKTREE_MATERIALIZE_ERROR(rc=$rc): $line"
+  done <<<"$materialize_out"
+
+  revert_flow="$source_flow"
+  [[ -n "$revert_flow" && "$revert_flow" != "null" ]] || revert_flow="$trigger_status"
+  if revert_out="$("${CODEX_SHARED_SCRIPTS_DIR}/project_set_status.sh" "$item_id" "$trigger_status" "$revert_flow" 2>&1)"; then
+    emit_lines "$revert_out"
+    echo "TASK_WORKTREE_MATERIALIZE_REVERTED=1"
+    echo "TASK_WORKTREE_MATERIALIZE_REVERT_STATUS=${trigger_status}"
+    echo "TASK_WORKTREE_MATERIALIZE_REVERT_FLOW=${revert_flow}"
+  else
+    revert_rc=$?
+    emit_lines "$revert_out"
+    if is_github_network_error "$revert_out" || [[ "$revert_rc" -eq 75 ]]; then
+      enqueue_project_status_runtime "$item_id" "$trigger_status" "$revert_flow" "materialize-failed:${task_id}" || true
+      echo "TASK_WORKTREE_MATERIALIZE_REVERT_DEFERRED=1"
+    else
+      echo "TASK_WORKTREE_MATERIALIZE_REVERT_ERROR=1"
+      echo "TASK_WORKTREE_MATERIALIZE_REVERT_RC=${revert_rc}"
+    fi
+  fi
+  echo "WAIT_TASK_WORKTREE_MATERIALIZE=1"
+  echo "WAIT_TASK_WORKTREE_MATERIALIZE_TASK_ID=${task_id}"
+  echo "WAIT_TASK_WORKTREE_MATERIALIZE_ISSUE_NUMBER=${issue_number}"
+  exit 0
+fi
 
 printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_active_task.txt"
 printf '%s\n' "$item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"

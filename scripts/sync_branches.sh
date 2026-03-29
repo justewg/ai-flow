@@ -24,5 +24,8 @@ else
   fi
 fi
 
+git submodule sync --recursive
+git submodule update --init --recursive -- .flow/shared
+
 git push origin "$FLOW_HEAD_BRANCH"
 git status --short --branch

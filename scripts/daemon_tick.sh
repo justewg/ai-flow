@@ -857,6 +857,11 @@ is_review_feedback_kind() {
   [[ "$(printf '%s' "$kind" | tr '[:lower:]' '[:upper:]')" == "REVIEW_FEEDBACK" ]]
 }
 
+is_blocker_kind() {
+  local kind="$1"
+  [[ "$(printf '%s' "$kind" | tr '[:lower:]' '[:upper:]')" == "BLOCKER" ]]
+}
+
 extract_kv() {
   local text="$1"
   local key="$2"

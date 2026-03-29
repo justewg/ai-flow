@@ -41,6 +41,7 @@ canonical_diff_file="$(task_worktree_canonical_diff_file "$task_id" "$issue_numb
 failed_checks_file="$(task_worktree_failed_checks_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
 check_results_file="$(task_worktree_check_results_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
 guard_violations_file="${execution_dir}/blocked_commands.jsonl"
+micro_noop="0"
 
 mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR" "$execution_dir"
 : > "$DETACH_FILE"
@@ -246,6 +247,20 @@ run_codex_call() {
   return "$rc"
 }
 
+micro_profile_breach_active() {
+  local budget_file
+  budget_file="$(task_worktree_execution_budget_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
+  [[ -f "$budget_file" ]] || return 1
+  [[ "$(jq -r '.profileBreach // false' "$budget_file" 2>/dev/null || printf 'false')" == "true" ]]
+}
+
+micro_profile_noop_detected() {
+  [[ -f "$canonical_diff_file" ]] || return 1
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/canonical_diff.sh" "$task_id" "$issue_number" >>"$LOG_FILE" 2>&1 || return 1
+  [[ -f "${execution_dir}/changed_files.json" ]] || return 1
+  [[ "$(jq 'length' "${execution_dir}/changed_files.json" 2>/dev/null || printf '1')" == "0" ]]
+}
+
 run_micro_checks() {
   local results_tmp
   local failed=0
@@ -340,10 +355,23 @@ else
   rc=$?
 fi
 
+if [[ "$execution_profile" == "micro" && "$rc" -eq 0 ]] && micro_profile_breach_active; then
+  rc=42
+fi
+
 if [[ "$execution_profile" == "micro" && "$rc" -eq 0 ]]; then
   if run_micro_checks; then
-    :
+    if micro_profile_noop_detected; then
+      micro_noop="1"
+      {
+        echo "MICRO_NOOP_ALREADY_SATISFIED=1"
+        echo "MICRO_NOOP_REASON=empty_canonical_diff_after_successful_checks"
+      } >>"$LOG_FILE" 2>&1
+    fi
   else
+    if micro_profile_breach_active; then
+      rc=42
+    else
     /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/canonical_diff.sh" "$task_id" "$issue_number" >>"$LOG_FILE" 2>&1 || true
     build_micro_repair_prompt "${execution_dir}/micro_repair_prompt.txt"
     if run_codex_call "repair" "${execution_dir}/micro_repair_prompt.txt" "${execution_dir}/llm-response-2.txt" 2; then
@@ -351,16 +379,26 @@ if [[ "$execution_profile" == "micro" && "$rc" -eq 0 ]]; then
     else
       rc=$?
     fi
+    if [[ "$rc" -eq 0 ]] && micro_profile_breach_active; then
+      rc=42
+    fi
     if [[ "$rc" -eq 0 ]]; then
       if run_micro_checks; then
-        :
+        if micro_profile_noop_detected; then
+          micro_noop="1"
+          {
+            echo "MICRO_NOOP_ALREADY_SATISFIED=1"
+            echo "MICRO_NOOP_REASON=empty_canonical_diff_after_successful_checks"
+          } >>"$LOG_FILE" 2>&1
+        fi
       else
         rc=1
       fi
     fi
+    fi
   fi
 
-  if [[ "$rc" -eq 0 ]]; then
+  if [[ "$rc" -eq 0 && "$micro_noop" != "1" ]]; then
     if is_truthy "${EXECUTOR_MICRO_SKIP_FINALIZE:-0}"; then
       /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/canonical_diff.sh" "$task_id" "$issue_number" >>"$LOG_FILE" 2>&1 || rc=$?
       /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/metadata_builder.sh" "$task_id" "$issue_number" >>"$LOG_FILE" 2>&1 || rc=$?
@@ -397,6 +435,8 @@ termination_reason="completed"
 run_log_slice="$(sed -n "${run_log_start_line},\$p" "$LOG_FILE" 2>/dev/null || true)"
 if [[ "$rc" -eq 42 ]]; then
   termination_reason="failed_profile_breach"
+elif [[ "$micro_noop" == "1" ]]; then
+  termination_reason="noop_already_satisfied"
 fi
 if printf '%s\n' "$run_log_slice" | rg -n "Quota exceeded" >/dev/null 2>&1; then
   provider_error_class="quota_exceeded"

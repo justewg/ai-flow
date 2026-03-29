@@ -141,7 +141,7 @@ micro_profile_allowlist_verification_command() {
     "jq -e "*)
       return 0
       ;;
-    "git status --short"|"git diff --name-only"*|"git diff --no-ext-diff "*)
+    "git status --short"|"git diff --name-only"*|"git diff --no-ext-diff "*|"git diff -- "*)
       return 0
       ;;
     *)

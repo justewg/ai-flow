@@ -86,3 +86,9 @@
 - Для already-satisfied micro tasks добавлен deterministic `MICRO_NOOP_ALREADY_SATISFIED=1` short-circuit на пустом canonical diff, чтобы no-op run не тратил второй LLM call и не уходил в finalize chatter.
 - `PL-124 / Target-aware micro context slices` завершена локально: `context_builder` больше не кормит `micro` prompt первыми строками большого файла, а собирает deterministic excerpts вокруг anchors из issue text.
 - Реплика live issue `PL-124` теперь отдаёт compact excerpt вокруг `planka-hero` блока в `narrative/index.html`, что должно убрать безопасный отказ модели “целевой фрагмент не попал в context” и вернуть следующий live canary к реальной правке.
+- `PL-126 / Task Interpretation Layer / Intake Profile` оформлена как отдельный v2-эпик.
+- Зафиксирован новый архитектурный разрез: `Source Definition -> Standardized Task Spec -> Execution Profile`, где `micro` становится execution mode нормализованной задачи, а не режимом понимания сырой свободной постановки.
+- `PL-127 / Intake artifacts and source capture` завершена локально: в task execution dir появились `source_definition.json`, `standardized_task_spec.json`, `intake_profile.json`, а source input теперь materialize-ится как отдельный audit layer.
+- `PL-128 / Standardized Task Spec builder` завершена локально: intake layer теперь строит normalized task contract с `profileDecision`, `decisionReason`, `interpretedIntent`, target files, expected change, checks, confidence, notes и rationale.
+- `PL-129 / Intake-driven profile decision` завершена локально: `micro_task_classifier` стала thin wrapper над intake layer и больше не вычисляет execution profile прямо из raw issue body.
+- `PL-130 / Executor handoff to normalized task spec` завершена локально: `context_builder`, `executor_build_prompt` и startup handoff теперь работают от `Standardized Task Spec`, а `human_needed | blocked` outcomes останавливаются до execution start.

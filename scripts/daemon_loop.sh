@@ -90,6 +90,20 @@ log() {
   printf '%s %s\n' "$ts" "$*" >> "$LOG_FILE"
 }
 
+log_start_revision_stamp() {
+  local planka_head planka_branch aiflow_head aiflow_branch
+
+  planka_head="$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || printf 'unknown')"
+  planka_branch="$(git -C "$ROOT_DIR" symbolic-ref --short -q HEAD 2>/dev/null || printf 'detached')"
+  aiflow_head="$(git -C "${ROOT_DIR}/.flow/shared" rev-parse HEAD 2>/dev/null || printf 'unknown')"
+  aiflow_branch="$(git -C "${ROOT_DIR}/.flow/shared" symbolic-ref --short -q HEAD 2>/dev/null || printf 'detached')"
+
+  log "DAEMON_START_PLANKA_HEAD=${planka_head}"
+  log "DAEMON_START_PLANKA_BRANCH=${planka_branch}"
+  log "DAEMON_START_AIFLOW_HEAD=${aiflow_head}"
+  log "DAEMON_START_AIFLOW_BRANCH=${aiflow_branch}"
+}
+
 resolve_config_value() {
   codex_resolve_config_value "$@"
 }
@@ -1054,6 +1068,7 @@ notify_if_needed() {
 }
 
 log "daemon_loop start interval=${interval}s rate_limit_backoff_base=${rate_limit_backoff_base_sec}s rate_limit_backoff_max=${rate_limit_backoff_max_sec}s"
+log_start_revision_stamp
 if [[ "$stale_lock_recovered" == "1" ]]; then
   log "STALE_DAEMON_LOCK_RECOVERED=1 PREVIOUS_PID=${stale_lock_owner_pid}"
 fi

@@ -33,7 +33,7 @@ Execution-Mode: daemon
 5. В `Depends-On/Blocks` используем canonical-идентификатор `#issue_number` (не `APP-xx`), чтобы парсинг был стабильным.
 
 ## 2. Текущий рабочий flow (действует сейчас)
-1. Ты делаешь merge PR `development -> main`.
+1. Ты делаешь merge release PR `development -> main`.
 2. Ты пишешь `merged`.
 3. Я запускаю синхронизацию веток:
    - `.flow/shared/scripts/run.sh sync_branches`
@@ -43,7 +43,7 @@ Execution-Mode: daemon
 5. После подхвата:
    - реализую изменения в рабочем цикле.
 6. По готовности:
-   - запускаю `.flow/shared/scripts/run.sh task_finalize` (commit+push, при task-ветке сначала merge в `development`, затем create/update PR `development -> main`, перевод в `Status=Review`, `Flow=In Review`);
+   - запускаю `.flow/shared/scripts/run.sh task_finalize` (commit+push в task-ветку и create/update task PR `task/<id> -> development`; для прямой работы из `development` release-path остается `development -> main`, перевод в `Status=Review`, `Flow=In Review`);
    - перевожу PR в финальный сигнал ревью (`ready_for_review`);
    - отправляю ссылку на PR для ревью;
    - после merge цикл повторяется.
@@ -88,7 +88,7 @@ Execution-Mode: daemon
 ## 5. Контракт демона (что он должен делать)
 1. Периодически (например, каждые 30-60 сек) читать GitHub Project.
 2. Гарантировать single-run (lock-файл), чтобы не запускать две задачи одновременно.
-3. Если уже есть открытый PR `development -> main`, новую задачу не брать.
+3. Открытый release PR `development -> main` сам по себе не должен блокировать новые daemon-задачи; блокировать должны только active/review/waiting контексты конкретной задачи.
 4. Проверять очередь `Status=Todo`:
    - если `0` задач: ждать;
    - если `1` задача: забрать ее в работу;
@@ -98,23 +98,28 @@ Execution-Mode: daemon
    - поменять `Flow` на `In Progress`;
    - продолжить разработку по стандартному flow.
 6. При завершении разработки:
-   - выполнить `task_finalize` для commit/push; если работа велась в task-ветке, daemon сначала подтягивает `development` в неё и затем fast-forward вливает task-ветку обратно в `development`;
-   - создать/обновить только PR `development -> main`;
+   - выполнить `task_finalize` для commit/push; если работа велась в task-ветке, daemon подтягивает в неё актуальный `development` и публикует отдельный task PR `task/<id> -> development`;
+   - release PR `development -> main` создается отдельно и не является review-артефактом отдельной задачи;
    - перевести карточку в `Status=Review`, `Flow=In Review`.
 7. Логировать heartbeat и действия в `<state-dir>/daemon.log`.
 8. Корректно обрабатывать ошибки (retry/backoff, без дублирования действий).
 9. Не запускать подхват задач при изменениях tracked-файлов (wait-state), чтобы не конфликтовать с ручной работой в чате.
 10. Untracked-файлы (черновики, артефакты, заметки) не должны блокировать daemon-flow.
 11. Если в ходе задачи нужен ответ от тебя:
+   - `AGENT_QUESTION`/`AGENT_BLOCKER` допустимы только если реально нужен новый факт, явный выбор или решение по scope;
+   - внутренние ошибки, строки логов, строки кода, sample/event lines, `git status` и любые raw fragments не могут публиковаться как `USER_REPLY`;
+   - `AGENT_BLOCKER` публикуется только в структурированном виде (`ASK_REASON`, `ASK_QUESTION`, опционально `ASK_CONTEXT`);
+   - malformed blocker автоматически считается internal failure и не должен переводить daemon в ожидание ответа;
    - агент публикует комментарий в Issue с сигналом `CODEX_SIGNAL: AGENT_QUESTION` или `AGENT_BLOCKER`;
    - Telegram workflow отправляет уведомление;
    - daemon переходит в ожидание ответа (`WAIT_USER_REPLY`) и не подхватывает новые задачи;
+   - после публикации waiting-комментария executor обязана реально остановиться, а не продолжать команды и тратить токены;
    - твой следующий комментарий в Issue принимается как входное сообщение;
    - daemon классифицирует комментарий:
      - `QUESTION` — публикует `CODEX_SIGNAL: AGENT_ANSWER` и остается в `WAIT_USER_REPLY`;
      - `REWORK` — публикует `CODEX_SIGNAL: AGENT_RESUMED` и продолжает flow.
    - для явного продолжения после blocker рекомендуется писать `CODEX_MODE: REWORK`.
-   - если executor завершил прогон (`DONE`), но задача не финализирована, агент обязан опубликовать blocker-комментарий и ждать твоего решения (`продолжай`/`финализируй`), а не молчать.
+   - состояние `DONE` без финализации само по себе не является поводом публиковать blocker; сначала агент должен пытаться довести внутренний цикл без `USER_REPLY`.
 11.1. Если задача уже в `Status=Review`, daemon включает режим `WAIT_REVIEW_FEEDBACK`:
    - не-системный комментарий автора Issue после `AGENT_IN_REVIEW` принимается как review-feedback;
    - daemon пишет явный маркер `REVIEW_FEEDBACK_RECEIVED`;
@@ -190,7 +195,8 @@ Telegram-сигналы по Issue-вопросам:
 ## 7. Операционные правила безопасности
 - Автоматически разрешено:
   - коммиты и push в `development`;
-  - создание/обновление PR `development -> main`;
+  - создание/обновление task PR `task/<id> -> development`;
+  - отдельное ручное создание/обновление release PR `development -> main`;
   - sync веток после merge.
 - Обязательно спросить перед:
   - удалением файлов/директорий;

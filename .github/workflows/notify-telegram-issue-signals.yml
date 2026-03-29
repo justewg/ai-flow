@@ -8,7 +8,7 @@ on:
 jobs:
   notify_telegram:
     if: ${{ github.event.issue.pull_request == null }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, planka-deploy]
     env:
       TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
       TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}

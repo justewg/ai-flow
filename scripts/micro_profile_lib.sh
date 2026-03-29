@@ -45,13 +45,31 @@ micro_profile_extract_target_files() {
   local issue_text="${1:-}"
   local root_dir="${2:-$ROOT_DIR}"
   local tmp_file
+  local body_without_checks
+  local line
+  local in_frontmatter="1"
 
   tmp_file="$(mktemp)"
-  printf '%s\n' "$issue_text" \
+
+  body_without_checks="$(
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^Проверки: || "$line" =~ ^Вне\ scope: || "$line" =~ ^Вне\ scope ]]; then
+        break
+      fi
+
+      # Keep the title/frontmatter and the descriptive task sections, but stop before
+      # checks/out-of-scope so those command snippets do not inflate target file count.
+      printf '%s\n' "$line"
+      in_frontmatter="0"
+    done <<< "$issue_text"
+  )"
+
+  printf '%s\n' "$body_without_checks" \
     | rg -o '`[^`]+`' \
     | sed -E 's/^`//; s/`$//' \
     | while IFS= read -r candidate; do
         [[ -z "$candidate" ]] && continue
+        [[ "$candidate" == *" "* ]] && continue
         if [[ -e "${root_dir}/${candidate}" ]]; then
           printf '%s\n' "$candidate"
         elif [[ "$candidate" == ./* && -e "${root_dir}/${candidate#./}" ]]; then

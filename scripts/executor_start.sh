@@ -74,6 +74,12 @@ while IFS= read -r line; do
   echo "$line"
 done <<<"$classifier_out"
 execution_profile="$(printf '%s\n' "$classifier_out" | sed -n 's/^EXECUTION_PROFILE=//p' | tail -n1)"
+execution_profile_reason="$(printf '%s\n' "$classifier_out" | sed -n 's/^EXECUTION_PROFILE_REASON=//p' | tail -n1)"
+execution_profile_target_count="$(printf '%s\n' "$classifier_out" | sed -n 's/^EXECUTION_PROFILE_TARGET_COUNT=//p' | tail -n1)"
+echo "EXECUTION_PROFILE=${execution_profile}"
+[[ -n "$execution_profile_reason" ]] && echo "EXECUTION_PROFILE_REASON=${execution_profile_reason}"
+[[ -n "$execution_profile_target_count" ]] && echo "EXECUTION_PROFILE_TARGET_COUNT=${execution_profile_target_count}"
+echo "EXECUTION_PROFILE_FILE=${PROFILE_FILE}"
 if [[ "$execution_profile" == "micro" ]]; then
   micro_profile_budget_init_json \
     "$task_id" \

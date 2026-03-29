@@ -47,21 +47,23 @@ micro_profile_extract_target_files() {
   local tmp_file
   local line
   local trimmed_line
+  local lowered_line
   local candidate
 
   tmp_file="$(mktemp)"
 
   while IFS= read -r line; do
     trimmed_line="$(micro_profile_trim "$line")"
+    lowered_line="$(printf '%s' "$trimmed_line" | tr '[:upper:]' '[:lower:]')"
 
     if [[ "$trimmed_line" == "Проверки:" || "$trimmed_line" == "Вне scope:" || "$trimmed_line" == "Вне scope" ]]; then
       break
     fi
 
-    if [[ "$trimmed_line" == -[[:space:]]Не\ * || "$trimmed_line" == -[[:space:]]не\ * ]]; then
+    if [[ "$lowered_line" == -[[:space:]]не\ * ]]; then
       continue
     fi
-    if [[ "$trimmed_line" == *"не трогать"* || "$trimmed_line" == *"не менять"* || "$trimmed_line" == *"любые изменения"* ]]; then
+    if [[ "$lowered_line" == *"не трогать"* || "$lowered_line" == *"не менять"* || "$lowered_line" == *"любые изменения"* ]]; then
       continue
     fi
 
@@ -75,6 +77,16 @@ micro_profile_extract_target_files() {
         printf '%s\n' "${candidate#./}"
       fi
     done < <(printf '%s\n' "$trimmed_line" | rg -o '`[^`]+`')
+
+    while IFS= read -r candidate; do
+      [[ -z "$candidate" ]] && continue
+      [[ "$candidate" == *" "* ]] && continue
+      if [[ -e "${root_dir}/${candidate}" ]]; then
+        printf '%s\n' "$candidate"
+      elif [[ "$candidate" == ./* && -e "${root_dir}/${candidate#./}" ]]; then
+        printf '%s\n' "${candidate#./}"
+      fi
+    done < <(printf '%s\n' "$trimmed_line" | rg -o '(?:\./)?[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+')
   done <<< "$issue_text" | awk '!seen[$0]++' > "$tmp_file"
 
   cat "$tmp_file"
@@ -104,11 +116,14 @@ micro_profile_extract_check_commands() {
       continue
     fi
 
-    if [[ "$trimmed_line" != -[[:space:]]* ]]; then
+    if [[ -z "$trimmed_line" ]]; then
       continue
     fi
 
-    item="${trimmed_line#- }"
+    item="${trimmed_line}"
+    if [[ "$item" == -[[:space:]]* ]]; then
+      item="${item#- }"
+    fi
     item="$(micro_profile_trim "$item")"
     [[ -n "$item" ]] || continue
 

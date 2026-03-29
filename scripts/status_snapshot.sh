@@ -257,9 +257,11 @@ github_rate_limit_remaining="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_L
 github_rate_limit_reset_epoch="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_LIMIT_RESET_EPOCH")"
 github_rate_limit_reset_at="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_LIMIT_RESET_AT")"
 github_rate_limit_reset_human="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_LIMIT_RESET_IN_HUMAN")"
+github_rate_limit_call="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_LIMIT_CALL")"
 github_auth_stage="$(detail_value "$daemon_detail" "WAIT_GITHUB_AUTH_STAGE")"
 github_auth_msg="$(detail_value "$daemon_detail" "WAIT_GITHUB_AUTH_MSG")"
 github_auth_source="$(detail_value "$daemon_detail" "WAIT_GITHUB_AUTH_SOURCE")"
+github_auth_call="$(detail_value "$daemon_detail" "WAIT_GITHUB_AUTH_CALL")"
 
 [[ -z "$github_status" ]] && github_status="UNKNOWN"
 [[ -z "$telegram_status" ]] && telegram_status="SKIPPED"
@@ -456,9 +458,14 @@ jq -n \
   --arg active_task_id "$active_task_id" \
   --arg github_rate_limit_stage "$github_rate_limit_stage" \
   --arg github_rate_limit_msg "$github_rate_limit_msg" \
+  --arg github_rate_limit_call "$github_rate_limit_call" \
   --arg github_rate_limit_remaining "$github_rate_limit_remaining" \
   --arg github_rate_limit_reset_at "$github_rate_limit_reset_at" \
   --arg github_rate_limit_reset_human "$github_rate_limit_reset_human" \
+  --arg github_auth_stage "$github_auth_stage" \
+  --arg github_auth_msg "$github_auth_msg" \
+  --arg github_auth_source "$github_auth_source" \
+  --arg github_auth_call "$github_auth_call" \
   --arg rate_window_state "$rate_window_state" \
   --arg rate_window_start_utc "$rate_window_start_utc" \
   --arg rate_last_success_utc "$rate_last_success_utc" \
@@ -536,6 +543,7 @@ jq -n \
     },
     rate_limit: {
       wait_stage: $github_rate_limit_stage,
+      wait_call: $github_rate_limit_call,
       wait_message: $github_rate_limit_msg,
       wait_remaining: ($github_rate_limit_remaining | tonumber? // 0),
       wait_reset_at_utc: $github_rate_limit_reset_at,
@@ -546,6 +554,12 @@ jq -n \
       window_start_utc: $rate_window_start_utc,
       last_success_utc: $rate_last_success_utc,
       last_limit_utc: $rate_last_limit_utc
+    },
+    github_auth: {
+      wait_stage: $github_auth_stage,
+      wait_source: $github_auth_source,
+      wait_call: $github_auth_call,
+      wait_message: $github_auth_msg
     },
     backlog_seed: {
       plan_present: $backlog_plan_present,

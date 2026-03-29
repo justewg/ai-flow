@@ -84,3 +84,5 @@
 - Реплика live-like issue body с двумя leading spaces на каждой строке теперь корректно даёт `targetFiles=["narrative/index.html"]` и восстанавливает три check-команды, вместо пустого `checks` и inflated target list.
 - `PL-123 / Live micro follow-up` завершена локально: в `micro` whitelist добавлен `git diff -- <path>`, `executor_run` теперь повторно проверяет budget breach после каждого call и не идёт в repair branch после первого `FAILED_PROFILE_BREACH`.
 - Для already-satisfied micro tasks добавлен deterministic `MICRO_NOOP_ALREADY_SATISFIED=1` short-circuit на пустом canonical diff, чтобы no-op run не тратил второй LLM call и не уходил в finalize chatter.
+- `PL-124 / Target-aware micro context slices` завершена локально: `context_builder` больше не кормит `micro` prompt первыми строками большого файла, а собирает deterministic excerpts вокруг anchors из issue text.
+- Реплика live issue `PL-124` теперь отдаёт compact excerpt вокруг `planka-hero` блока в `narrative/index.html`, что должно убрать безопасный отказ модели “целевой фрагмент не попал в context” и вернуть следующий live canary к реальной правке.

@@ -41,7 +41,7 @@ task_worktree_remove_existing() {
 }
 
 task_worktree_create_fresh() {
-  rm -rf "$task_repo"
+  task_worktree_remove_existing
   git -C "${ROOT_DIR}" worktree add -B "$task_branch" "$task_repo" "origin/${FLOW_HEAD_BRANCH}"
 }
 

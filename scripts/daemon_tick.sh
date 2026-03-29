@@ -2716,8 +2716,36 @@ if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
       fi
     fi
 
-    materialize_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$review_task_id" "$review_issue_number" 2>&1)"
-    emit_lines "$materialize_out"
+    if materialize_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$review_task_id" "$review_issue_number" 2>&1)"; then
+      emit_lines "$materialize_out"
+    else
+      rc=$?
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        echo "TASK_WORKTREE_MATERIALIZE_ERROR(rc=$rc): $line"
+      done <<<"$materialize_out"
+
+      printf '%s\n' "$review_task_id" > "${CODEX_DIR}/daemon_active_task.txt"
+      if [[ -n "$review_item_id" ]]; then
+        printf '%s\n' "$review_item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"
+      fi
+      printf '%s\n' "$review_issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
+      printf '%s\n' "$review_task_id" > "${CODEX_DIR}/project_task_id.txt"
+
+      if handoff_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_review_handoff.sh" "$review_task_id" "$review_issue_number" "materialize_failed" 2>&1)"; then
+        emit_lines "$handoff_out"
+        echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF=1"
+      else
+        handoff_rc=$?
+        emit_lines "$handoff_out"
+        echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF_ERROR=1"
+        echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF_RC=${handoff_rc}"
+      fi
+      echo "WAIT_REVIEW_FEEDBACK=1"
+      echo "WAIT_REVIEW_FEEDBACK_TASK_ID=${review_task_id}"
+      echo "WAIT_REVIEW_FEEDBACK_ISSUE_NUMBER=${review_issue_number}"
+      exit 0
+    fi
     /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
 
     echo "REVIEW_FEEDBACK_RESUMED=1"

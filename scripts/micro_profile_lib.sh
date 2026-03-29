@@ -150,13 +150,156 @@ micro_profile_allowlist_verification_command() {
   esac
 }
 
+micro_profile_extract_context_anchors() {
+  local issue_text="${1:-}"
+  local token
+  local cleaned
+
+  {
+    while IFS= read -r token; do
+      [[ -n "$token" ]] || continue
+      cleaned="$(printf '%s' "$token" | sed -E 's/^`//; s/`$//')"
+      [[ -n "$cleaned" ]] || continue
+      if [[ "$cleaned" == */* || "$cleaned" == ./* || "$cleaned" == *" "* || "$cleaned" =~ ^PL-[0-9]+$ ]]; then
+        continue
+      fi
+      printf '%s\n' "$cleaned"
+    done < <(printf '%s\n' "$issue_text" | rg -o '`[^`]+`' || true)
+
+    while IFS= read -r token; do
+      [[ -n "$token" ]] || continue
+      case "$(printf '%s' "$token" | tr '[:upper:]' '[:lower:]')" in
+        narrative|index|html|scope|checks|issue|task|block|frame|device|screen|pl-[0-9]*)
+          continue
+          ;;
+        *)
+          if [[ "$token" == *- && "$token" != *[_-]*[[:alnum:]] ]]; then
+            continue
+          fi
+          if [[ "$token" == *[_-]* ]]; then
+            printf '%s\n' "$token"
+          elif [[ "$token" == "hero" || "$token" == "caption" || "$token" == "subtitle" || "$token" == "overlay" || "$token" == "aria-label" ]]; then
+            printf '%s\n' "$token"
+          elif (( ${#token} >= 7 )); then
+            printf '%s\n' "$token"
+          fi
+          ;;
+      esac
+    done < <(
+      printf '%s\n' "$issue_text" \
+        | rg -o '[A-Za-z][A-Za-z0-9_-]{3,}' \
+        | tr '[:upper:]' '[:lower:]' \
+        || true
+    )
+  } | awk 'NF && !seen[$0]++'
+}
+
+micro_profile_extract_excerpt_ranges() {
+  local file_path="$1"
+  local issue_text="${2:-}"
+  local max_lines="${3:-140}"
+  local before_context="${4:-12}"
+  local after_context="${5:-20}"
+  local total_lines
+  local anchor_count="0"
+  local anchor
+
+  total_lines="$(wc -l < "$file_path" | tr -d '[:space:]')"
+
+  if (( total_lines <= max_lines )); then
+    printf '1:%s\n' "${total_lines:-1}"
+    return 0
+  fi
+
+  while IFS= read -r anchor; do
+    [[ -n "$anchor" ]] || continue
+    anchor_count=$((anchor_count + 1))
+    awk \
+      -v needle="$anchor" \
+      -v before="$before_context" \
+      -v after="$after_context" \
+      '
+        BEGIN {
+          needle_lc = tolower(needle)
+          matches = 0
+          max_matches = (needle_lc == "aria-label" || needle_lc == "alt" || needle_lc == "role") ? 1 : 2
+        }
+        {
+          line_lc = tolower($0)
+          if (index(line_lc, needle_lc) > 0) {
+            start = NR - before
+            end = NR + after
+            if (start < 1) start = 1
+            print start ":" end
+            matches++
+            if (matches >= max_matches) exit
+          }
+        }
+      ' "$file_path"
+  done < <(micro_profile_extract_context_anchors "$issue_text")
+}
+
+micro_profile_merge_excerpt_ranges() {
+  local total_lines="$1"
+  shift || true
+
+  if (( $# == 0 )); then
+    printf '1:%s\n' "$(( total_lines > 120 ? 120 : total_lines ))"
+    return 0
+  fi
+
+  printf '%s\n' "$@" \
+    | sort -t: -k1,1n -k2,2n \
+    | awk -F: -v total="$total_lines" '
+        NF != 2 { next }
+        {
+          start = $1 + 0
+          end = $2 + 0
+          if (start < 1) start = 1
+          if (end > total) end = total
+          if (end < start) next
+          ranges[++n] = start ":" end
+        }
+        END {
+          if (n == 0) {
+            print "1:" (total > 120 ? 120 : total)
+            exit
+          }
+          split(ranges[1], parts, ":")
+          current_start = parts[1] + 0
+          current_end = parts[2] + 0
+          for (i = 2; i <= n; i++) {
+            split(ranges[i], parts, ":")
+            start = parts[1] + 0
+            end = parts[2] + 0
+            if (start <= current_end + 1) {
+              if (end > current_end) current_end = end
+            } else {
+              print current_start ":" current_end
+              current_start = start
+              current_end = end
+            }
+          }
+          print current_start ":" current_end
+        }
+      '
+}
+
 micro_profile_file_context_json() {
   local repo_path="$1"
   local relative_path="$2"
-  local max_lines="${3:-160}"
+  local issue_text="${3:-}"
+  local max_lines="${4:-140}"
   local file_path="${repo_path}/${relative_path}"
   local total_lines
   local content
+  local content_file
+  local range
+  local start_line
+  local end_line
+  local raw_ranges=()
+  local merged_ranges=()
+  local excerpt_lines="0"
 
   if [[ ! -f "$file_path" ]]; then
     jq -nc --arg path "$relative_path" '{path:$path, present:false, lineCount:0, excerpt:""}'
@@ -164,18 +307,42 @@ micro_profile_file_context_json() {
   fi
 
   total_lines="$(wc -l < "$file_path" | tr -d '[:space:]')"
-  if (( total_lines > max_lines )); then
-    content="$(sed -n "1,${max_lines}p" "$file_path")"
-  else
-    content="$(cat "$file_path")"
+  while IFS= read -r range; do
+    [[ -n "$range" ]] || continue
+    raw_ranges+=("$range")
+  done < <(micro_profile_extract_excerpt_ranges "$file_path" "$issue_text" "$max_lines" || true)
+
+  while IFS= read -r range; do
+    [[ -n "$range" ]] || continue
+    merged_ranges+=("$range")
+  done < <(micro_profile_merge_excerpt_ranges "$total_lines" "${raw_ranges[@]}")
+
+  if (( ${#merged_ranges[@]} == 0 )); then
+    merged_ranges=("1:$(( total_lines > max_lines ? max_lines : total_lines ))")
   fi
+
+  content_file="$(mktemp)"
+  for range in "${merged_ranges[@]}"; do
+    start_line="${range%%:*}"
+    end_line="${range##*:}"
+    [[ -n "$start_line" && -n "$end_line" ]] || continue
+    if (( excerpt_lines > 0 )); then
+      printf '\n' >> "$content_file"
+    fi
+    printf '@@ lines %s-%s @@\n' "$start_line" "$end_line" >> "$content_file"
+    sed -n "${start_line},${end_line}p" "$file_path" >> "$content_file"
+    excerpt_lines=$((excerpt_lines + end_line - start_line + 1))
+  done
+  content="$(cat "$content_file")"
+  rm -f "$content_file"
 
   jq -nc \
     --arg path "$relative_path" \
     --arg excerpt "$content" \
     --argjson present true \
     --argjson lineCount "${total_lines:-0}" \
-    '{path:$path, present:$present, lineCount:$lineCount, excerpt:$excerpt}'
+    --argjson excerptLineCount "${excerpt_lines:-0}" \
+    '{path:$path, present:$present, lineCount:$lineCount, excerptLineCount:$excerptLineCount, excerpt:$excerpt}'
 }
 
 micro_profile_budget_init_json() {

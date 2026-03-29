@@ -69,7 +69,7 @@ file_contexts_json="$(
     jq -nc '[]'
   else
     for path in "${target_files[@]}"; do
-      micro_profile_file_context_json "$task_repo" "$path"
+      micro_profile_file_context_json "$task_repo" "$path" "$(printf '%s\n\n%s' "$issue_title" "$issue_body")"
     done | jq -s '.'
   fi
 )"

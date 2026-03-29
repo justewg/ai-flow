@@ -258,14 +258,19 @@ task_worktree_toolkit_ready() {
 task_worktree_reset_toolkit_submodule() {
   local repo_path="${1:-}"
   local git_dir=""
+  local common_dir=""
   [[ -n "$repo_path" ]] || return 1
   task_worktree_repo_present "$repo_path" || return 1
 
   git_dir="$(git -C "$repo_path" rev-parse --git-dir 2>/dev/null || true)"
+  common_dir="$(git -C "$repo_path" rev-parse --git-common-dir 2>/dev/null || true)"
   git -C "$repo_path" submodule deinit -f -- ".flow/shared" >/dev/null 2>&1 || true
   rm -rf "$repo_path/.flow/shared"
   if [[ -n "$git_dir" ]]; then
     rm -rf "${git_dir}/modules/.flow/shared"
+  fi
+  if [[ -n "$common_dir" ]]; then
+    rm -rf "${common_dir}/modules/.flow/shared"
   fi
 }
 
@@ -293,7 +298,6 @@ task_worktree_run_toolkit_update() {
 
 task_worktree_ensure_toolkit_materialized() {
   local repo_path="${1:-}"
-  local git_dir=""
   [[ -n "$repo_path" ]] || return 1
   task_worktree_repo_present "$repo_path" || return 1
 
@@ -305,21 +309,12 @@ task_worktree_ensure_toolkit_materialized() {
     return 0
   fi
 
-  git_dir="$(git -C "$repo_path" rev-parse --git-dir 2>/dev/null || true)"
-  if [[ -n "$git_dir" ]]; then
-    mkdir -p "${git_dir}/modules/.flow/shared" 2>/dev/null || true
-  fi
-
   if task_worktree_run_toolkit_update "$repo_path" && task_worktree_toolkit_ready "$repo_path"; then
     return 0
   fi
 
   echo "TASK_WORKTREE_TOOLKIT_REINIT=1" >&2
   task_worktree_reset_toolkit_submodule "$repo_path" || true
-
-  if [[ -n "$git_dir" ]]; then
-    mkdir -p "${git_dir}/modules/.flow/shared" 2>/dev/null || true
-  fi
 
   task_worktree_run_toolkit_update "$repo_path" || return 1
   if task_worktree_toolkit_ready "$repo_path"; then

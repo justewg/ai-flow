@@ -232,6 +232,13 @@ task_worktree_repo_present() {
   git -C "$repo_path" rev-parse --is-inside-work-tree >/dev/null 2>&1
 }
 
+task_worktree_head_commit() {
+  local repo_path="${1:-}"
+  [[ -n "$repo_path" ]] || return 1
+  task_worktree_repo_present "$repo_path" || return 1
+  git -C "$repo_path" rev-parse HEAD 2>/dev/null
+}
+
 task_worktree_declares_toolkit_submodule() {
   local repo_path="${1:-}"
   [[ -n "$repo_path" ]] || return 1

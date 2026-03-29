@@ -3368,27 +3368,23 @@ else
     echo "TASK_WORKTREE_MATERIALIZE_ERROR(rc=$rc): $line"
   done <<<"$materialize_out"
 
-  revert_flow="$source_flow"
-  [[ -n "$revert_flow" && "$revert_flow" != "null" && "$revert_flow" != "$target_flow" ]] || revert_flow="$trigger_flow"
-  if revert_out="$("${CODEX_SHARED_SCRIPTS_DIR}/project_set_status.sh" "$item_id" "$trigger_status" "$revert_flow" 2>&1)"; then
-    emit_lines "$revert_out"
-    echo "TASK_WORKTREE_MATERIALIZE_REVERTED=1"
-    echo "TASK_WORKTREE_MATERIALIZE_REVERT_STATUS=${trigger_status}"
-    echo "TASK_WORKTREE_MATERIALIZE_REVERT_FLOW=${revert_flow}"
+  printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_active_task.txt"
+  printf '%s\n' "$item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"
+  printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
+  printf '%s\n' "$task_id" > "${CODEX_DIR}/project_task_id.txt"
+
+  if handoff_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_review_handoff.sh" "$task_id" "$issue_number" "materialize_failed" 2>&1)"; then
+    emit_lines "$handoff_out"
+    echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF=1"
   else
-    revert_rc=$?
-    emit_lines "$revert_out"
-    if is_github_network_error "$revert_out" || [[ "$revert_rc" -eq 75 ]]; then
-      enqueue_project_status_runtime "$item_id" "$trigger_status" "$revert_flow" "materialize-failed:${task_id}" || true
-      echo "TASK_WORKTREE_MATERIALIZE_REVERT_DEFERRED=1"
-    else
-      echo "TASK_WORKTREE_MATERIALIZE_REVERT_ERROR=1"
-      echo "TASK_WORKTREE_MATERIALIZE_REVERT_RC=${revert_rc}"
-    fi
+    handoff_rc=$?
+    emit_lines "$handoff_out"
+    echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF_ERROR=1"
+    echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF_RC=${handoff_rc}"
   fi
-  echo "WAIT_TASK_WORKTREE_MATERIALIZE=1"
-  echo "WAIT_TASK_WORKTREE_MATERIALIZE_TASK_ID=${task_id}"
-  echo "WAIT_TASK_WORKTREE_MATERIALIZE_ISSUE_NUMBER=${issue_number}"
+  echo "WAIT_REVIEW_FEEDBACK=1"
+  echo "WAIT_REVIEW_FEEDBACK_TASK_ID=${task_id}"
+  echo "WAIT_REVIEW_FEEDBACK_ISSUE_NUMBER=${issue_number}"
   exit 0
 fi
 

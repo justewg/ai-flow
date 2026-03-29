@@ -112,6 +112,9 @@ human_reason_label() {
     already_satisfied)
       printf '%s' "already_satisfied"
       ;;
+    materialize_failed)
+      printf '%s' "materialize_failed"
+      ;;
     *)
       printf '%s' "automation_stopped"
       ;;
@@ -134,6 +137,9 @@ reason_explanation() {
       ;;
     already_satisfied)
       printf '%s' "Автоматика не создавала PR, потому что требуемая правка уже присутствует в репозитории."
+      ;;
+    materialize_failed)
+      printf '%s' "Автоматика не смогла подготовить task worktree и toolkit до старта executor, поэтому задача передана в review без PR."
       ;;
     *)
       printf '%s' "Автоматика остановила выполнение до создания PR и передаёт задачу в review без PR."

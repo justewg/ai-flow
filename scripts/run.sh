@@ -741,11 +741,11 @@ case "$cmd" in
     ;;
 
   git_temp_repo)
-    if [[ $# -ne 1 ]]; then
+    if [[ $# -ne 2 ]]; then
       echo "Usage: .flow/shared/scripts/run.sh git_temp_repo <checkout_branch|merge_ref|add_paths|commit|push_branch|status|rev_parse|update_gitlink>"
       exit 1
     fi
-    run_git_temp_repo "$1"
+    run_git_temp_repo "$2"
     ;;
 
   commit_push)

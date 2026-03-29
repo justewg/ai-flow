@@ -87,6 +87,30 @@ task_worktree_execution_profile_file() {
   printf '%s/execution_profile.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
 }
 
+task_worktree_source_definition_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/source_definition.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_standardized_spec_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/standardized_task_spec.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_intake_profile_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/intake_profile.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
 task_worktree_context_cache_file() {
   local task_id="$1"
   local issue_number="$2"

@@ -16,52 +16,51 @@ source "${SCRIPT_DIR}/task_worktree_lib.sh"
 
 state_dir="$(codex_resolve_state_dir)"
 profile_name="$(codex_resolve_project_profile_name 2>/dev/null || printf '%s' "${PROJECT_PROFILE:-default}")"
-execution_profile_file="$(task_worktree_execution_profile_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
-intake_profile_file="$(task_worktree_intake_profile_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
-spec_file="$(task_worktree_standardized_spec_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
 source_file="$(task_worktree_source_definition_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
+spec_file="$(task_worktree_standardized_spec_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
+intake_profile_file="$(task_worktree_intake_profile_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
 
-/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_interpret.sh" "$task_id" "$issue_number" >/dev/null
+mkdir -p "$(dirname "$intake_profile_file")"
 
-intake_json="$(cat "$intake_profile_file")"
+/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_capture_source_definition.sh" "$task_id" "$issue_number" >/dev/null
+/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_standardize_spec.sh" "$task_id" "$issue_number" >/dev/null
+
+source_json="$(cat "$source_file")"
 spec_json="$(cat "$spec_file")"
-decision="$(printf '%s' "$intake_json" | jq -r '.profileDecision // "standard"')"
-decision_reason="$(printf '%s' "$intake_json" | jq -r '.decisionReason // ""')"
-target_count="$(printf '%s' "$intake_json" | jq -r '(.candidateTargetFiles // []) | length')"
 
 jq -nc \
   --arg taskId "$task_id" \
   --arg issueNumber "$issue_number" \
-  --arg profile "$decision" \
-  --arg decision "$decision" \
-  --arg reason "$decision_reason" \
   --arg sourceDefinitionFile "$source_file" \
   --arg standardizedTaskSpecFile "$spec_file" \
-  --arg intakeProfileFile "$intake_profile_file" \
+  --arg sourceHash "$(printf '%s' "$source_json" | jq -r '.sourceHash // ""')" \
+  --arg profileDecision "$(printf '%s' "$spec_json" | jq -r '.profileDecision // "standard"')" \
+  --arg decisionReason "$(printf '%s' "$spec_json" | jq -r '.decisionReason // ""')" \
   --arg interpretedIntent "$(printf '%s' "$spec_json" | jq -r '.interpretedIntent // ""')" \
   --argjson candidateTargetFiles "$(printf '%s' "$spec_json" | jq -c '.candidateTargetFiles // []')" \
   --argjson confidence "$(printf '%s' "$spec_json" | jq -c '.confidence // {}')" \
   --argjson rationale "$(printf '%s' "$spec_json" | jq -c '.rationale // []')" \
   '{
+    kind:"intake_profile",
     taskId:$taskId,
     issueNumber:$issueNumber,
-    profile:$profile,
-    decision:$decision,
-    reason:$reason,
     sourceDefinitionFile:$sourceDefinitionFile,
     standardizedTaskSpecFile:$standardizedTaskSpecFile,
-    intakeProfileFile:$intakeProfileFile,
+    sourceHash:$sourceHash,
+    profileDecision:$profileDecision,
+    decisionReason:$decisionReason,
     interpretedIntent:$interpretedIntent,
     candidateTargetFiles:$candidateTargetFiles,
     confidence:$confidence,
     rationale:$rationale
-  }' > "$execution_profile_file"
+  }' > "$intake_profile_file"
 
 if [[ -n "$output_file" ]]; then
-  cp "$execution_profile_file" "$output_file"
+  cp "$intake_profile_file" "$output_file"
 fi
 
-echo "EXECUTION_PROFILE=${decision}"
-[[ -n "$decision_reason" ]] && echo "EXECUTION_PROFILE_REASON=${decision_reason}"
-echo "EXECUTION_PROFILE_TARGET_COUNT=${target_count}"
-cat "$execution_profile_file"
+echo "TASK_INTERPRETATION_READY=1"
+echo "SOURCE_DEFINITION_FILE=${source_file}"
+echo "STANDARDIZED_TASK_SPEC_FILE=${spec_file}"
+echo "INTAKE_PROFILE_FILE=${intake_profile_file}"
+cat "$intake_profile_file"

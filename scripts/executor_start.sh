@@ -80,6 +80,16 @@ echo "EXECUTION_PROFILE=${execution_profile}"
 [[ -n "$execution_profile_reason" ]] && echo "EXECUTION_PROFILE_REASON=${execution_profile_reason}"
 [[ -n "$execution_profile_target_count" ]] && echo "EXECUTION_PROFILE_TARGET_COUNT=${execution_profile_target_count}"
 echo "EXECUTION_PROFILE_FILE=${PROFILE_FILE}"
+[[ -f "$PROFILE_FILE" ]] && echo "STANDARDIZED_TASK_SPEC_FILE=$(jq -r '.standardizedTaskSpecFile // empty' "$PROFILE_FILE" 2>/dev/null || true)"
+[[ -f "$PROFILE_FILE" ]] && echo "SOURCE_DEFINITION_FILE=$(jq -r '.sourceDefinitionFile // empty' "$PROFILE_FILE" 2>/dev/null || true)"
+[[ -f "$PROFILE_FILE" ]] && echo "INTAKE_PROFILE_FILE=$(jq -r '.intakeProfileFile // empty' "$PROFILE_FILE" 2>/dev/null || true)"
+if [[ "$execution_profile" == "human_needed" || "$execution_profile" == "blocked" ]]; then
+  printf '%s\n' "FAILED" > "$STATE_FILE"
+  printf '%s\n' "intake_${execution_profile}" > "${CODEX_DIR}/executor_last_exit_code.txt"
+  echo "EXECUTOR_START_BLOCKED_BY_INTAKE=1"
+  echo "EXECUTOR_START_BLOCK_REASON=${execution_profile_reason}"
+  exit 0
+fi
 if [[ "$execution_profile" == "micro" ]]; then
   micro_profile_budget_init_json \
     "$task_id" \

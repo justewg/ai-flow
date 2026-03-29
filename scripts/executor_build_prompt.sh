@@ -16,16 +16,22 @@ source "${SCRIPT_DIR}/env/bootstrap.sh"
 # shellcheck source=./task_worktree_lib.sh
 source "${SCRIPT_DIR}/task_worktree_lib.sh"
 CODEX_DIR="$(codex_export_state_dir)"
-REPO="${GITHUB_REPO:-justewg/planka}"
 state_dir="$(codex_resolve_state_dir)"
 profile_name="$(codex_resolve_project_profile_name 2>/dev/null || printf '%s' "${PROJECT_PROFILE:-default}")"
 profile_file="$(task_worktree_execution_profile_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
+source_file="$(task_worktree_source_definition_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
+spec_file="$(task_worktree_standardized_spec_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
+intake_profile_file="$(task_worktree_intake_profile_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
 
 mkdir -p "$CODEX_DIR"
 
 profile_kind=""
 if [[ -f "$profile_file" ]]; then
   profile_kind="$(jq -r '.profile // ""' "$profile_file" 2>/dev/null || true)"
+fi
+
+if [[ ! -f "$spec_file" || ! -f "$source_file" || ! -f "$intake_profile_file" ]]; then
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_interpret.sh" "$task_id" "$issue_number" >/dev/null
 fi
 
 if [[ "$profile_kind" == "micro" ]]; then
@@ -38,12 +44,11 @@ if [[ "$profile_kind" == "micro" ]]; then
   exit 0
 fi
 
-issue_title=""
-issue_body=""
-if issue_json="$(gh issue view "$issue_number" --repo "$REPO" --json title,body --jq '.' 2>/dev/null)"; then
-  issue_title="$(printf '%s' "$issue_json" | jq -r '.title // ""')"
-  issue_body="$(printf '%s' "$issue_json" | jq -r '.body // ""')"
-fi
+source_json="$(cat "$source_file")"
+spec_json="$(cat "$spec_file")"
+intake_profile_json="$(cat "$intake_profile_file")"
+issue_title="$(printf '%s' "$source_json" | jq -r '.title // ""')"
+issue_body="$(printf '%s' "$source_json" | jq -r '.body // ""')"
 
 reply_text=""
 reply_task="$(cat "${CODEX_DIR}/daemon_user_reply_task_id.txt" 2>/dev/null || true)"
@@ -57,9 +62,23 @@ fi
   printf '%s\n' 'Контекст задачи:'
   printf '%s\n' "- Task ID: ${task_id}"
   printf '%s\n' "- Issue: #${issue_number}"
-  printf '%s\n' "- Issue title: ${issue_title}"
+  printf '%s\n' "- Source title: ${issue_title}"
   printf '\n'
-  printf '%s\n' 'Описание issue:'
+  printf '%s\n' 'Normalized task spec:'
+  printf '%s\n' "- Profile decision: $(printf '%s' "$spec_json" | jq -r '.profileDecision // "standard"')"
+  printf '%s\n' "- Decision reason: $(printf '%s' "$spec_json" | jq -r '.decisionReason // ""')"
+  printf '%s\n' "- Interpreted intent: $(printf '%s' "$spec_json" | jq -r '.interpretedIntent // ""')"
+  printf '%s\n' '- Candidate target files:'
+  printf '%s' "$spec_json" | jq -r '.candidateTargetFiles[]? | "  - " + .' || true
+  printf '%s\n' '- Expected change:'
+  printf '%s' "$spec_json" | jq -r '.expectedChange[]? | "  - " + .' || true
+  printf '%s\n' '- Checks:'
+  printf '%s' "$spec_json" | jq -r '.checks[]? | "  - " + .' || true
+  printf '%s\n' '- Notes:'
+  printf '%s' "$spec_json" | jq -r '.notes[]? | "  - " + .' || true
+  printf '%s\n' "- Confidence: $(printf '%s' "$spec_json" | jq -r '.confidence.label // "unknown"') ($(printf '%s' "$spec_json" | jq -r '(.confidence.score // 0) | tostring'))"
+  printf '\n'
+  printf '%s\n' 'Source Definition (audit only, not primary execution contract):'
   printf '%s\n' "${issue_body}"
   printf '\n'
   printf '%s\n' 'Последний ответ пользователя в Issue (если есть):'

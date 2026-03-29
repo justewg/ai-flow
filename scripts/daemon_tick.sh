@@ -24,7 +24,6 @@ repo_owner="$FLOW_REPO_OWNER"
 flow_base_branch="$FLOW_BASE_BRANCH"
 flow_head_branch="$FLOW_HEAD_BRANCH"
 trigger_status="${TRIGGER_STATUS:-Todo}"
-trigger_flow="${TRIGGER_FLOW:-Ready}"
 target_status="${TARGET_STATUS:-In Progress}"
 target_flow="${TARGET_FLOW:-In Progress}"
 review_task_file="${CODEX_DIR}/daemon_review_task_id.txt"
@@ -960,7 +959,7 @@ query($projectId: ID!, $itemsFirst: Int!) {
     return "$?"
   fi
 
-  printf '%s' "$project_json" | jq -c --arg trigger "$trigger_status" --arg trigger_flow "$trigger_flow" --arg ignore_labels_csv "$ignore_labels_csv" '
+  printf '%s' "$project_json" | jq -c --arg trigger "$trigger_status" --arg ignore_labels_csv "$ignore_labels_csv" '
     def norm: gsub("^\\s+|\\s+$";"") | ascii_downcase;
     def ignore_labels: ($ignore_labels_csv | split(",") | map(norm) | map(select(length > 0)));
     def has_auto_ignore($labels):
@@ -973,7 +972,6 @@ query($projectId: ID!, $itemsFirst: Int!) {
       | select(((.content.__typename // "") == "Issue") or ((.content.__typename // "") == "DraftIssue"))
       | select((((.content.title // "") | test("^DIRTY-GATE:")) | not))
       | select((.status.name // "" | norm) == ($trigger | norm))
-      | select((.flow.name // "" | norm) == ($trigger_flow | norm))
       | select(
           if (.content.__typename // "") == "Issue"
           then (has_auto_ignore([.content.labels.nodes[]?.name]) | not)
@@ -2981,11 +2979,10 @@ else
 fi
 
 matched_json="$(
-  printf '%s' "$project_json" | jq -c --arg trigger "$trigger_status" --arg trigger_flow "$trigger_flow" '
+  printf '%s' "$project_json" | jq -c --arg trigger "$trigger_status" '
     def norm: gsub("^\\s+|\\s+$";"") | ascii_downcase;
     .data.node as $project
     | (($project.fields.nodes[] | select(.name=="Status") | .options[] | select((.name | norm) == ($trigger | norm)) | .id) // null) as $trigger_option_id
-    | (($project.fields.nodes[] | select(.name=="Flow") | .options[] | select((.name | norm) == ($trigger_flow | norm)) | .id) // null) as $trigger_flow_option_id
     | [
       $project.items.nodes[]
       | {
@@ -3020,12 +3017,6 @@ matched_json="$(
           if $trigger_option_id == null
           then ((.status_name | norm) == ($trigger | norm))
           else (.status_option_id == $trigger_option_id)
-          end
-        )
-      | select(
-          if $trigger_flow_option_id == null
-          then ((.flow | norm) == ($trigger_flow | norm))
-          else ((.flow_option_id // "") == $trigger_flow_option_id or (.flow | norm) == ($trigger_flow | norm))
           end
         )
       | select((((.title // "") | test("^DIRTY-GATE:")) | not))
@@ -3088,7 +3079,7 @@ fi
   fi
 
   fallback_queue_json="$(
-    printf '%s' "$fallback_items_json" | jq -c --arg trigger "$trigger_status" --arg trigger_flow "$trigger_flow" '
+    printf '%s' "$fallback_items_json" | jq -c --arg trigger "$trigger_status" '
       def norm: gsub("^\\s+|\\s+$";"") | ascii_downcase;
       [
         .items[]
@@ -3131,7 +3122,6 @@ fi
             priority: (.priority // "")
           }
         | select((.status_name | norm) == ($trigger | norm))
-        | select((.flow | norm) == ($trigger_flow | norm))
         | .pri_w = (
             if .priority == "P0" then 0
             elif .priority == "P1" then 1
@@ -3150,7 +3140,6 @@ fi
   fallback_queue_count="$(printf '%s' "$fallback_queue_json" | jq 'length')"
   if (( fallback_queue_count == 0 )); then
     echo "NO_TASKS_IN_TRIGGER_STATUS=$trigger_status"
-    echo "NO_TASKS_IN_TRIGGER_FLOW=$trigger_flow"
     exit 0
   fi
 

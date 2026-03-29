@@ -491,7 +491,7 @@ Rollback нового профиля:
   - в hybrid mode для Project-операций использует `DAEMON_GH_PROJECT_TOKEN`/`CODEX_GH_PROJECT_TOKEN` (если задан), сохраняя App token для `Issue/PR`
   - при исчерпании GraphQL rate limit пишет `WAIT_GITHUB_RATE_LIMIT=1` + детали (`..._STAGE`, `..._MSG`) и не берет новую задачу
   - ведет статистику окон между rate-limit событиями в `<state-dir>/graphql_rate_stats.log` (`requests`, `duration_sec`, `start_utc`, `end_utc`)
-  - берет задачу только из `Status=Todo`
+  - берет задачу по `Status=Todo`; `Flow` не участвует в claim-gate, потому что при ручном движении карточки на доске пользователь обычно меняет только `Status`
   - issue с label из `AUTO_IGNORE_LABELS` (по умолчанию `auto:ignore`) исключаются из auto-claim очереди
   - `AUTO_IGNORE_LABELS` учитывается и в dirty-gate: такие `Todo`-задачи не считаются блокирующими для создания `DIRTY-GATE`
   - dirty-gate использует один скан `find_first_todo_issue_json` на тик (общий кэш между `maybe_process_dirty_gate_reply` и `maybe_handle_dirty_worktree_gate`)

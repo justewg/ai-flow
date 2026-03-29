@@ -285,7 +285,14 @@ if [[ "$auto_retry_triggered" != "1" ]]; then
   reset_auto_retry_state
 fi
 
-start_out="$("${CODEX_SHARED_SCRIPTS_DIR}/executor_start.sh" "$task_id" "$issue_number" 2>&1)"
+if ! start_out="$("${CODEX_SHARED_SCRIPTS_DIR}/executor_start.sh" "$task_id" "$issue_number" 2>&1)"; then
+  start_rc=$?
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "EXECUTOR_START_ERROR(rc=$start_rc): $line"
+  done <<<"$start_out"
+  exit 0
+fi
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   echo "$line"

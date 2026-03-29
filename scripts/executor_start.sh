@@ -49,10 +49,19 @@ if [[ "$control_mode" != "AUTO" ]]; then
   exit 0
 fi
 
-gate_out="$(
+if ! gate_out="$(
   /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_gate.sh" \
     "$task_id" "$issue_number" "executor_start" "executor_start" 2>&1
-)"
+)"; then
+  gate_rc=$?
+  printf '%s\n' "FAILED" > "$STATE_FILE"
+  printf '%s\n' "gate_${gate_rc}" > "${CODEX_DIR}/executor_last_exit_code.txt"
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "EXECUTOR_START_GATE_ERROR(rc=$gate_rc): $line"
+  done <<<"$gate_out"
+  exit 0
+fi
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   echo "$line"
@@ -65,10 +74,19 @@ if [[ "$gate_status" == "blocked" ]]; then
   exit 0
 fi
 
-classifier_out="$(
+if ! classifier_out="$(
   /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_task_classifier.sh" \
     "$task_id" "$issue_number" "$PROFILE_FILE" 2>&1
-)"
+)"; then
+  classifier_rc=$?
+  printf '%s\n' "FAILED" > "$STATE_FILE"
+  printf '%s\n' "classifier_${classifier_rc}" > "${CODEX_DIR}/executor_last_exit_code.txt"
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "EXECUTOR_START_CLASSIFIER_ERROR(rc=$classifier_rc): $line"
+  done <<<"$classifier_out"
+  exit 0
+fi
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   echo "$line"

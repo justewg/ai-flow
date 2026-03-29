@@ -1172,6 +1172,78 @@ query($projectId: ID!, $itemsFirst: Int!) {
   ' | head -n1
 }
 
+resume_task_from_human_reply() {
+  local resume_task_id="$1"
+  local resume_issue_number="$2"
+  local resume_status_target="$3"
+  local resume_gate_name="$4"
+  local resume_reason_label="$5"
+  local resume_reason_prefix="$6"
+  local materialize_out status_out exec_out rc handoff_out handoff_rc
+
+  [[ -n "$resume_task_id" && -n "$resume_issue_number" ]] || return 0
+
+  if ! run_runtime_v2_gate "$resume_task_id" "$resume_issue_number" "$resume_gate_name" "daemon_claim"; then
+    exit 0
+  fi
+
+  if status_out="$("${CODEX_SHARED_SCRIPTS_DIR}/project_set_status.sh" "$resume_status_target" "$target_status" "$target_flow" 2>&1)"; then
+    emit_lines "$status_out"
+  else
+    rc=$?
+    emit_lines "$status_out"
+    if is_github_network_error "$status_out" || [[ "$rc" -eq 75 ]]; then
+      echo "WAIT_GITHUB_API_UNSTABLE=1"
+      echo "WAIT_GITHUB_STAGE=${resume_reason_prefix}_STATUS_UPDATE"
+      enqueue_project_status_runtime "$resume_status_target" "$target_status" "$target_flow" "$resume_gate_name" || true
+      echo "${resume_reason_prefix}_STATUS_DEFERRED=1"
+      exit 0
+    fi
+    exit "$rc"
+  fi
+
+  if materialize_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$resume_task_id" "$resume_issue_number" 2>&1)"; then
+    emit_lines "$materialize_out"
+  else
+    rc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "TASK_WORKTREE_MATERIALIZE_ERROR(rc=$rc): $line"
+    done <<<"$materialize_out"
+
+    printf '%s\n' "$resume_task_id" > "${CODEX_DIR}/daemon_active_task.txt"
+    if [[ "$resume_status_target" == PVTI_* ]]; then
+      printf '%s\n' "$resume_status_target" > "${CODEX_DIR}/daemon_active_item_id.txt"
+    fi
+    printf '%s\n' "$resume_issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
+    printf '%s\n' "$resume_task_id" > "${CODEX_DIR}/project_task_id.txt"
+
+    if handoff_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_review_handoff.sh" "$resume_task_id" "$resume_issue_number" "materialize_failed" 2>&1)"; then
+      emit_lines "$handoff_out"
+      echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF=1"
+    else
+      handoff_rc=$?
+      emit_lines "$handoff_out"
+      echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF_ERROR=1"
+      echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF_RC=${handoff_rc}"
+    fi
+    echo "WAIT_REVIEW_FEEDBACK=1"
+    echo "WAIT_REVIEW_FEEDBACK_TASK_ID=${resume_task_id}"
+    echo "WAIT_REVIEW_FEEDBACK_ISSUE_NUMBER=${resume_issue_number}"
+    exit 0
+  fi
+
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
+
+  echo "${resume_reason_label}=1"
+  echo "${resume_reason_label}_TASK_ID=${resume_task_id}"
+  echo "${resume_reason_label}_ISSUE_NUMBER=${resume_issue_number}"
+
+  exec_out="$("${CODEX_SHARED_SCRIPTS_DIR}/executor_tick.sh" "$resume_task_id" "$resume_issue_number" 2>&1)"
+  emit_lines "$exec_out"
+  exit 0
+}
+
 find_project_item_status_by_id() {
   local item_id="$1"
   local item_json
@@ -2675,6 +2747,11 @@ if printf '%s' "$reply_probe_out" | grep -q '^WAIT_USER_REPLY=1'; then
 fi
 if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
   reply_kind="$(extract_kv "$reply_probe_out" "REPLY_KIND")"
+  reply_mode="$(printf '%s' "$(extract_kv "$reply_probe_out" "REPLY_MODE")" | tr '[:lower:]' '[:upper:]')"
+  if [[ "$reply_mode" == "QUESTION" ]]; then
+    exit 0
+  fi
+
   if is_review_feedback_kind "$reply_kind"; then
     review_task_id="$(extract_kv "$reply_probe_out" "TASK_ID")"
     review_issue_number="$(extract_kv "$reply_probe_out" "ISSUE_NUMBER")"
@@ -2695,63 +2772,43 @@ if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
       status_target="$review_item_id"
     fi
 
-    if ! run_runtime_v2_gate "$review_task_id" "$review_issue_number" "review_feedback_resume" "daemon_claim"; then
+    resume_task_from_human_reply \
+      "$review_task_id" \
+      "$review_issue_number" \
+      "$status_target" \
+      "review_feedback_resume" \
+      "REVIEW_FEEDBACK_RESUMED" \
+      "REVIEW_RESUME"
+  fi
+
+  if is_blocker_kind "$reply_kind"; then
+    blocker_task_id="$(extract_kv "$reply_probe_out" "TASK_ID")"
+    blocker_issue_number="$(extract_kv "$reply_probe_out" "ISSUE_NUMBER")"
+
+    if [[ -z "$blocker_task_id" || -z "$blocker_issue_number" ]]; then
+      echo "BLOCKED_BLOCKER_CONTEXT=1"
+      echo "BLOCKER_TASK_ID=${blocker_task_id}"
+      echo "BLOCKER_ISSUE_NUMBER=${blocker_issue_number}"
       exit 0
     fi
 
-    if status_out="$("${CODEX_SHARED_SCRIPTS_DIR}/project_set_status.sh" "$status_target" "$target_status" "$target_flow" 2>&1)"; then
-      emit_lines "$status_out"
-    else
-      rc=$?
-      emit_lines "$status_out"
-      if is_github_network_error "$status_out" || [[ "$rc" -eq 75 ]]; then
-        echo "WAIT_GITHUB_API_UNSTABLE=1"
-        echo "WAIT_GITHUB_STAGE=REVIEW_RESUME_STATUS_UPDATE"
-        enqueue_project_status_runtime "$status_target" "$target_status" "$target_flow" "review-feedback-resume" || true
-        echo "REVIEW_FEEDBACK_STATUS_DEFERRED=1"
-      else
-        exit "$rc"
-      fi
-    fi
-
-    if materialize_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$review_task_id" "$review_issue_number" 2>&1)"; then
-      emit_lines "$materialize_out"
-    else
-      rc=$?
-      while IFS= read -r line; do
-        [[ -z "$line" ]] && continue
-        echo "TASK_WORKTREE_MATERIALIZE_ERROR(rc=$rc): $line"
-      done <<<"$materialize_out"
-
-      printf '%s\n' "$review_task_id" > "${CODEX_DIR}/daemon_active_task.txt"
-      if [[ -n "$review_item_id" ]]; then
-        printf '%s\n' "$review_item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"
-      fi
-      printf '%s\n' "$review_issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
-      printf '%s\n' "$review_task_id" > "${CODEX_DIR}/project_task_id.txt"
-
-      if handoff_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_review_handoff.sh" "$review_task_id" "$review_issue_number" "materialize_failed" 2>&1)"; then
-        emit_lines "$handoff_out"
-        echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF=1"
-      else
-        handoff_rc=$?
-        emit_lines "$handoff_out"
-        echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF_ERROR=1"
-        echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF_RC=${handoff_rc}"
-      fi
-      echo "WAIT_REVIEW_FEEDBACK=1"
-      echo "WAIT_REVIEW_FEEDBACK_TASK_ID=${review_task_id}"
-      echo "WAIT_REVIEW_FEEDBACK_ISSUE_NUMBER=${review_issue_number}"
+    if [[ "$blocker_task_id" == DIRTY-GATE-ISSUE-* ]]; then
       exit 0
     fi
-    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
 
-    echo "REVIEW_FEEDBACK_RESUMED=1"
-    echo "REVIEW_FEEDBACK_TASK_ID=$review_task_id"
-    echo "REVIEW_FEEDBACK_ISSUE_NUMBER=$review_issue_number"
+    blocker_item_id="$(project_issue_cache_get_field "$blocker_task_id" "item_id")"
+    status_target="$blocker_task_id"
+    if [[ -n "$blocker_item_id" ]]; then
+      status_target="$blocker_item_id"
+    fi
 
-    exec_out="$("${CODEX_SHARED_SCRIPTS_DIR}/executor_tick.sh" "$review_task_id" "$review_issue_number" 2>&1)"
-    emit_lines "$exec_out"
+    resume_task_from_human_reply \
+      "$blocker_task_id" \
+      "$blocker_issue_number" \
+      "$status_target" \
+      "blocker_resume" \
+      "BLOCKER_RESUMED" \
+      "BLOCKER_RESUME"
     exit 0
   fi
 fi

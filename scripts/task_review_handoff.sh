@@ -115,6 +115,21 @@ human_reason_label() {
     materialize_failed)
       printf '%s' "materialize_failed"
       ;;
+    runtime_gate_max_executions_per_task)
+      printf '%s' "runtime_gate_max_executions_per_task"
+      ;;
+    runtime_gate_max_token_usage_per_task)
+      printf '%s' "runtime_gate_max_token_usage_per_task"
+      ;;
+    runtime_gate_max_estimated_cost_per_task)
+      printf '%s' "runtime_gate_max_estimated_cost_per_task"
+      ;;
+    runtime_gate_blocked)
+      printf '%s' "runtime_gate_blocked"
+      ;;
+    github_api_unavailable)
+      printf '%s' "github_api_unavailable"
+      ;;
     *)
       printf '%s' "automation_stopped"
       ;;
@@ -140,6 +155,21 @@ reason_explanation() {
       ;;
     materialize_failed)
       printf '%s' "Автоматика не смогла подготовить task worktree и toolkit до старта executor, поэтому задача передана в review без PR."
+      ;;
+    runtime_gate_max_executions_per_task)
+      printf '%s' "Автоматика остановила дальнейшую обработку задачи, потому что исчерпан лимит числа запусков для этого taskflow."
+      ;;
+    runtime_gate_max_token_usage_per_task)
+      printf '%s' "Автоматика остановила дальнейшую обработку задачи, потому что исчерпан лимит суммарного token budget для этого taskflow."
+      ;;
+    runtime_gate_max_estimated_cost_per_task)
+      printf '%s' "Автоматика остановила дальнейшую обработку задачи, потому что исчерпан лимит допустимой стоимости для этого taskflow."
+      ;;
+    runtime_gate_blocked)
+      printf '%s' "Автоматика остановила дальнейшую обработку задачи, потому что runtime v2 gate заблокировала продолжение по внутренним ограничениям taskflow."
+      ;;
+    github_api_unavailable)
+      printf '%s' "Автоматика остановила дальнейшую обработку задачи, потому что GitHub API сейчас недоступен, а без него нельзя надёжно продолжить taskflow."
       ;;
     *)
       printf '%s' "Автоматика остановила выполнение до создания PR и передаёт задачу в review без PR."
@@ -185,16 +215,55 @@ reason_detail_block() {
         detail="Детали: целевая правка уже присутствует в ${target_file}."
       fi
       ;;
+    runtime_gate_max_executions_per_task)
+      detail="Детали: runtime v2 gate вернула reason \`max_executions_per_task\`."
+      ;;
+    runtime_gate_max_token_usage_per_task)
+      detail="Детали: runtime v2 gate вернула reason \`max_token_usage_per_task\`."
+      ;;
+    runtime_gate_max_estimated_cost_per_task)
+      detail="Детали: runtime v2 gate вернула reason \`max_estimated_cost_per_task\`."
+      ;;
+    runtime_gate_blocked)
+      detail="Детали: продолжение было остановлено на этапе runtime v2 gate."
+      ;;
+    github_api_unavailable)
+      detail="Детали: продолжение требовало обращения к GitHub API, но запросы в текущий момент не проходили."
+      ;;
   esac
 
   printf '%s' "$detail"
 }
 
+existing_review_pr_number() {
+  local current_review_task current_review_pr
+  current_review_task="$(cat "$review_task_file" 2>/dev/null || true)"
+  current_review_pr="$(cat "$review_pr_file" 2>/dev/null || true)"
+  if [[ "$current_review_task" == "$task_id" && -n "$current_review_pr" ]]; then
+    printf '%s' "$current_review_pr"
+  fi
+}
+
+existing_review_branch_name() {
+  local current_review_task current_review_branch
+  current_review_task="$(cat "$review_task_file" 2>/dev/null || true)"
+  current_review_branch="$(cat "$review_branch_file" 2>/dev/null || true)"
+  if [[ "$current_review_task" == "$task_id" && -n "$current_review_branch" ]]; then
+    printf '%s' "$current_review_branch"
+  fi
+}
+
 build_comment_body() {
   local reason="$1"
-  local explanation detail
+  local explanation detail existing_pr review_note
   explanation="$(reason_explanation "$reason")"
   detail="$(reason_detail_block "$reason")"
+  existing_pr="$(existing_review_pr_number)"
+  if [[ -n "$existing_pr" ]]; then
+    review_note="Открытый PR по задаче: #${existing_pr}. Дальнейшая автоматическая доработка в рамках текущего taskflow не продолжена."
+  else
+    review_note="PR не создавался."
+  fi
 
   cat <<EOF
 CODEX_SIGNAL: AGENT_IN_REVIEW
@@ -205,7 +274,7 @@ CODEX_AUTOMATION_STOP_REASON: ${reason}
 
 ${explanation}
 ${detail}
-PR не создавался.
+${review_note}
 
 Ответь комментарием ниже, как действовать дальше: можно уточнить задачу, подтвердить, что текущего состояния достаточно, или явно дать новую команду на продолжение.
 EOF
@@ -322,8 +391,18 @@ else
   : > "$review_item_file"
 fi
 printf '%s\n' "$issue_number" > "$review_issue_file"
-: > "$review_pr_file"
-: > "$review_branch_file"
+existing_pr_number="$(existing_review_pr_number)"
+existing_branch_name="$(existing_review_branch_name)"
+if [[ -n "$existing_pr_number" ]]; then
+  printf '%s\n' "$existing_pr_number" > "$review_pr_file"
+else
+  : > "$review_pr_file"
+fi
+if [[ -n "$existing_branch_name" ]]; then
+  printf '%s\n' "$existing_branch_name" > "$review_branch_file"
+else
+  : > "$review_branch_file"
+fi
 
 printf '%s\n' "$issue_number" > "$waiting_issue_file"
 printf '%s\n' "$task_id" > "$waiting_task_file"

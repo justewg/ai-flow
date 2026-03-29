@@ -554,6 +554,11 @@ if is_pid_alive "$executor_pid"; then
   executor_pid_alive="1"
 fi
 
+executor_hb_age_sec=-1
+if (( executor_hb_epoch > 0 && now_epoch >= executor_hb_epoch )); then
+  executor_hb_age_sec=$(( now_epoch - executor_hb_epoch ))
+fi
+
 claim_epoch="$(read_file_or_default "${CODEX_DIR}/daemon_last_claim_epoch.txt" "0")"
 claim_epoch="$(parse_uint_or_default "$claim_epoch" "0")"
 claim_age_sec=0
@@ -589,10 +594,11 @@ elif [[ -d "$DAEMON_LOCK_DIR" && $daemon_log_age -gt $daemon_log_stale_threshold
   action="FREEZE_EMERGENCY"
   reason="DAEMON_LOG_STALE_WITH_LOCK"
 elif [[ -n "$active_task" ]]; then
-  if [[ "$executor_state" == "RUNNING" && "$executor_pid_alive" != "1" ]]; then
+  if [[ "$executor_state" == "RUNNING" && "$executor_pid_alive" != "1" &&
+        ( "$executor_hb_epoch" -eq 0 || "$executor_hb_age_sec" -gt $EXECUTOR_STALE_SEC ) ]]; then
     action="STOP_EXECUTOR_AND_FREEZE"
     reason="EXECUTOR_PID_DEAD"
-  elif [[ "$executor_state" == "RUNNING" && "$executor_hb_epoch" -gt 0 && $(( now_epoch - executor_hb_epoch )) -gt $EXECUTOR_STALE_SEC ]]; then
+  elif [[ "$executor_state" == "RUNNING" && "$executor_hb_epoch" -gt 0 && "$executor_hb_age_sec" -gt $EXECUTOR_STALE_SEC ]]; then
     action="STOP_EXECUTOR_AND_FREEZE"
     reason="EXECUTOR_HEARTBEAT_STALE"
   elif [[ "$daemon_state" == "IDLE_NO_TASKS" ]]; then
@@ -606,7 +612,7 @@ elif [[ -n "$active_task" ]]; then
   fi
 fi
 
-summary="active_task=${active_task:-none};active_issue=${active_issue:-none};daemon_agent_state=${daemon_agent_state};daemon_state=${daemon_state};daemon_state_age=${daemon_state_age_sec}s;executor_state=${executor_state:-none};executor_pid=${executor_pid:-none};executor_pid_alive=${executor_pid_alive};daemon_log_age=${daemon_log_age}s;daemon_log_stale_threshold=${daemon_log_stale_threshold}s;claim_age=${claim_age_sec}s;claim_grace_threshold=${ACTIVE_TASK_GRACE_SEC}s"
+summary="active_task=${active_task:-none};active_issue=${active_issue:-none};daemon_agent_state=${daemon_agent_state};daemon_state=${daemon_state};daemon_state_age=${daemon_state_age_sec}s;executor_state=${executor_state:-none};executor_pid=${executor_pid:-none};executor_pid_alive=${executor_pid_alive};executor_hb_age=${executor_hb_age_sec}s;daemon_log_age=${daemon_log_age}s;daemon_log_stale_threshold=${daemon_log_stale_threshold}s;claim_age=${claim_age_sec}s;claim_grace_threshold=${ACTIVE_TASK_GRACE_SEC}s"
 if [[ "${WATCHDOG_AUTH_DEGRADED:-0}" == "1" ]]; then
   auth_detail="${WATCHDOG_AUTH_LAST_DETAIL:-AUTH_UNAVAILABLE}"
   auth_fallback_reason="${WATCHDOG_AUTH_FALLBACK_REASON:-DISABLED}"

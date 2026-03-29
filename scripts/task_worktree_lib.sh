@@ -167,6 +167,14 @@ task_worktree_execution_budget_file() {
   printf '%s/execution_budget.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
 }
 
+task_worktree_noop_probe_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/noop_probe.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
 task_worktree_check_results_file() {
   local task_id="$1"
   local issue_number="$2"

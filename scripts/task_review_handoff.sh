@@ -25,6 +25,7 @@ REPO="$FLOW_GITHUB_REPO"
 STATE_DIR="$(codex_resolve_state_dir)"
 PROFILE_NAME="$(codex_resolve_project_profile_name 2>/dev/null || printf '%s' "${PROJECT_PROFILE:-default}")"
 BUDGET_FILE="$(task_worktree_execution_budget_file "$task_id" "$issue_number" "$STATE_DIR" "$PROFILE_NAME")"
+NOOP_PROBE_FILE="$(task_worktree_noop_probe_file "$task_id" "$issue_number" "$STATE_DIR" "$PROFILE_NAME")"
 
 active_task_file="${CODEX_DIR}/daemon_active_task.txt"
 active_item_file="${CODEX_DIR}/daemon_active_item_id.txt"
@@ -108,6 +109,9 @@ human_reason_label() {
     intake_blocked)
       printf '%s' "intake_blocked"
       ;;
+    already_satisfied)
+      printf '%s' "already_satisfied"
+      ;;
     *)
       printf '%s' "automation_stopped"
       ;;
@@ -128,6 +132,9 @@ reason_explanation() {
     intake_blocked)
       printf '%s' "Автоматика не начала выполнение, потому что intake layer пометила задачу как blocked."
       ;;
+    already_satisfied)
+      printf '%s' "Автоматика не создавала PR, потому что требуемая правка уже присутствует в репозитории."
+      ;;
     *)
       printf '%s' "Автоматика остановила выполнение до создания PR и передаёт задачу в review без PR."
       ;;
@@ -140,6 +147,8 @@ reason_detail_block() {
   local threshold_tokens=""
   local confidence=""
   local detail=""
+  local target_file=""
+  local matched_literal=""
 
   case "$reason" in
     profile_breach)
@@ -157,6 +166,17 @@ reason_detail_block() {
       fi
       if [[ -n "$confidence" ]]; then
         detail="Детали: confidence интерпретации = ${confidence}."
+      fi
+      ;;
+    already_satisfied)
+      if [[ -f "$NOOP_PROBE_FILE" ]]; then
+        target_file="$(jq -r '.targetFile // empty' "$NOOP_PROBE_FILE" 2>/dev/null || true)"
+        matched_literal="$(jq -r '.matchedLiteral // empty' "$NOOP_PROBE_FILE" 2>/dev/null || true)"
+      fi
+      if [[ -n "$target_file" && -n "$matched_literal" ]]; then
+        detail="Детали: в ${target_file} уже найдено `${matched_literal}`."
+      elif [[ -n "$target_file" ]]; then
+        detail="Детали: целевая правка уже присутствует в ${target_file}."
       fi
       ;;
   esac
@@ -181,7 +201,7 @@ ${explanation}
 ${detail}
 PR не создавался.
 
-Ответь комментарием ниже, как действовать дальше: можно уточнить задачу, разрешить другой режим выполнения или явно дать команду на продолжение.
+Ответь комментарием ниже, как действовать дальше: можно уточнить задачу, подтвердить, что текущего состояния достаточно, или явно дать новую команду на продолжение.
 EOF
 }
 

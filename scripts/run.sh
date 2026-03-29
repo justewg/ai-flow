@@ -823,6 +823,11 @@ case "$cmd" in
     /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_interpret.sh" "$@"
     ;;
 
+  task_noop_probe)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_noop_probe.sh" "$@"
+    ;;
+
   micro_task_classifier)
     shift 1
     /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_task_classifier.sh" "$@"

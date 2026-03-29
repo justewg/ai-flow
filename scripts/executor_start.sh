@@ -35,6 +35,7 @@ HEARTBEAT_PID_FILE="${CODEX_DIR}/executor_heartbeat_pid.txt"
 REVIEW_HANDOFF_REASON_FILE="${CODEX_DIR}/executor_review_handoff_reason.txt"
 PROFILE_FILE="$(task_worktree_execution_profile_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
 BUDGET_FILE="$(task_worktree_execution_budget_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
+NOOP_PROBE_FILE="$(task_worktree_noop_probe_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
 
 mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
 mkdir -p "$(dirname "$PROFILE_FILE")"
@@ -116,6 +117,36 @@ if [[ "$execution_profile" == "human_needed" || "$execution_profile" == "blocked
   echo "EXECUTOR_START_BLOCKED_BY_INTAKE=1"
   echo "EXECUTOR_START_BLOCK_REASON=${execution_profile_reason}"
   exit 0
+fi
+if noop_probe_out="$(
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_noop_probe.sh" \
+    "$task_id" "$issue_number" "$NOOP_PROBE_FILE" 2>&1
+)"; then
+  :
+else
+  noop_probe_rc=$?
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "EXECUTOR_START_NOOP_PROBE_ERROR(rc=$noop_probe_rc): $line"
+  done <<<"$noop_probe_out"
+  noop_probe_out=""
+fi
+if [[ -n "$noop_probe_out" ]]; then
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "$line"
+  done <<<"$noop_probe_out"
+  noop_probe_status="$(printf '%s\n' "$noop_probe_out" | sed -n 's/^TASK_NOOP_PROBE_STATUS=//p' | tail -n1)"
+  noop_probe_reason="$(printf '%s\n' "$noop_probe_out" | sed -n 's/^TASK_NOOP_PROBE_REASON=//p' | tail -n1)"
+  if [[ "$noop_probe_status" == "satisfied" ]]; then
+    printf '%s\n' "REVIEW_NEEDED" > "$STATE_FILE"
+    printf '%s\n' "already_satisfied" > "${CODEX_DIR}/executor_last_exit_code.txt"
+    printf '%s\n' "already_satisfied" > "$REVIEW_HANDOFF_REASON_FILE"
+    echo "EXECUTOR_START_ALREADY_SATISFIED=1"
+    [[ -n "$noop_probe_reason" ]] && echo "EXECUTOR_START_ALREADY_SATISFIED_REASON=${noop_probe_reason}"
+    echo "EXECUTOR_START_ALREADY_SATISFIED_PROBE_FILE=${NOOP_PROBE_FILE}"
+    exit 0
+  fi
 fi
 if [[ "$execution_profile" == "micro" ]]; then
   micro_profile_budget_init_json \

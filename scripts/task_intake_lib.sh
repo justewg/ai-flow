@@ -147,6 +147,39 @@ task_intake_interpreted_intent() {
   micro_profile_title_without_task_id "$issue_title"
 }
 
+task_intake_extract_attribute_literals() {
+  local text="${1:-}"
+
+  printf '%s\n' "$text" \
+    | grep -Eo '[[:alpha:]_:-][[:alnum:]_:-]*="[^"]+"' \
+    | awk '
+        {
+          split($0, parts, "=")
+          name=parts[1]
+          if (name ~ /^(aria-[A-Za-z0-9_-]+|alt|role|title)$/) print $0
+        }
+      ' \
+    | awk '!seen[$0]++'
+}
+
+task_intake_extract_anchor_tokens() {
+  local text="${1:-}"
+
+  {
+    printf '%s\n' "$text" | grep -Eo '\.[A-Za-z0-9_-]+' | sed 's/^\.//' | awk '/[-_]/'
+    printf '%s\n' "$text" | grep -Eo 'class="[^"]+"' | sed -E 's/^class="|"$//g' | tr ' ' '\n'
+    printf '%s\n' "$text" | grep -Eo '>[[:space:]]*[^<][^<]+[[:space:]]*<' | sed -E 's/^>[[:space:]]*//; s/[[:space:]]*<$//'
+  } | sed '/^$/d' | awk '!seen[$0]++'
+}
+
+task_intake_extract_file_paths() {
+  local text="${1:-}"
+
+  printf '%s\n' "$text" \
+    | grep -Eo '([A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+' \
+    | awk '/\.[A-Za-z0-9]+$/ && !seen[$0]++'
+}
+
 task_intake_small_change_signal() {
   local combined_text="$1"
   printf '%s' "$combined_text" | tr '[:upper:]' '[:lower:]' | rg -q '\b(alias|readme|docs|documentation|help|label|usage|copy|rename|dispatch|aria-label|alt|role|subtitle|caption)\b'

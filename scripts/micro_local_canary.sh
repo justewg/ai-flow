@@ -134,7 +134,7 @@ EOF
 chmod +x "${mock_bin_dir}/codex"
 
 ROOT_DIR="$task_repo" PATH="${mock_bin_dir}:${PATH}" /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_task_classifier.sh" "$task_id" "$issue_number" "$profile_file" >/dev/null
-micro_profile_budget_init_json "$task_id" "$issue_number" "${EXECUTOR_MICRO_MAX_TOTAL_TOKENS:-15000}" "0" > "$budget_file"
+micro_profile_budget_init_json "$task_id" "$issue_number" "${EXECUTOR_MICRO_MAX_TOTAL_TOKENS:-20000}" "0" > "$budget_file"
 
 printf '%s\n' "$task_id" > "${CODEX_DIR}/project_task_id.txt"
 printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_active_task.txt"

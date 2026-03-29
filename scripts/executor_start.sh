@@ -32,6 +32,7 @@ LOG_FILE="${RUNTIME_LOG_DIR}/executor.log"
 HEARTBEAT_FILE="${CODEX_DIR}/executor_heartbeat_utc.txt"
 HEARTBEAT_EPOCH_FILE="${CODEX_DIR}/executor_heartbeat_epoch.txt"
 HEARTBEAT_PID_FILE="${CODEX_DIR}/executor_heartbeat_pid.txt"
+REVIEW_HANDOFF_REASON_FILE="${CODEX_DIR}/executor_review_handoff_reason.txt"
 PROFILE_FILE="$(task_worktree_execution_profile_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
 BUDGET_FILE="$(task_worktree_execution_budget_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
 
@@ -43,6 +44,7 @@ if [[ "$control_mode" != "AUTO" ]]; then
   control_reason="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" get | awk -F= '/^CONTROL_REASON=/{print substr($0, index($0, "=")+1)}' 2>/dev/null || true)"
   printf '%s\n' "FAILED" > "$STATE_FILE"
   printf '%s\n' "control_mode_${control_mode}" > "${CODEX_DIR}/executor_last_exit_code.txt"
+  : > "$REVIEW_HANDOFF_REASON_FILE"
   echo "EXECUTOR_START_BLOCKED=1"
   echo "CONTROL_MODE=$control_mode"
   [[ -n "$control_reason" ]] && echo "CONTROL_REASON=$control_reason"
@@ -58,6 +60,7 @@ else
   gate_rc=$?
   printf '%s\n' "FAILED" > "$STATE_FILE"
   printf '%s\n' "gate_${gate_rc}" > "${CODEX_DIR}/executor_last_exit_code.txt"
+  : > "$REVIEW_HANDOFF_REASON_FILE"
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
     echo "EXECUTOR_START_GATE_ERROR(rc=$gate_rc): $line"
@@ -85,6 +88,7 @@ else
   classifier_rc=$?
   printf '%s\n' "FAILED" > "$STATE_FILE"
   printf '%s\n' "classifier_${classifier_rc}" > "${CODEX_DIR}/executor_last_exit_code.txt"
+  : > "$REVIEW_HANDOFF_REASON_FILE"
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
     echo "EXECUTOR_START_CLASSIFIER_ERROR(rc=$classifier_rc): $line"
@@ -106,8 +110,9 @@ echo "EXECUTION_PROFILE_FILE=${PROFILE_FILE}"
 [[ -f "$PROFILE_FILE" ]] && echo "SOURCE_DEFINITION_FILE=$(jq -r '.sourceDefinitionFile // empty' "$PROFILE_FILE" 2>/dev/null || true)"
 [[ -f "$PROFILE_FILE" ]] && echo "INTAKE_PROFILE_FILE=$(jq -r '.intakeProfileFile // empty' "$PROFILE_FILE" 2>/dev/null || true)"
 if [[ "$execution_profile" == "human_needed" || "$execution_profile" == "blocked" ]]; then
-  printf '%s\n' "FAILED" > "$STATE_FILE"
+  printf '%s\n' "REVIEW_NEEDED" > "$STATE_FILE"
   printf '%s\n' "intake_${execution_profile}" > "${CODEX_DIR}/executor_last_exit_code.txt"
+  printf '%s\n' "intake_${execution_profile}" > "$REVIEW_HANDOFF_REASON_FILE"
   echo "EXECUTOR_START_BLOCKED_BY_INTAKE=1"
   echo "EXECUTOR_START_BLOCK_REASON=${execution_profile_reason}"
   exit 0
@@ -116,7 +121,7 @@ if [[ "$execution_profile" == "micro" ]]; then
   micro_profile_budget_init_json \
     "$task_id" \
     "$issue_number" \
-    "${EXECUTOR_MICRO_MAX_TOTAL_TOKENS:-15000}" \
+    "${EXECUTOR_MICRO_MAX_TOTAL_TOKENS:-20000}" \
     "${EXECUTOR_MICRO_PROFILE_ENFORCE:-1}" > "$BUDGET_FILE"
   echo "EXECUTION_BUDGET_FILE=${BUDGET_FILE}"
 fi
@@ -124,6 +129,7 @@ fi
 if ! command -v codex >/dev/null 2>&1; then
   printf '%s\n' "FAILED" > "$STATE_FILE"
   printf '%s\n' "127" > "${CODEX_DIR}/executor_last_exit_code.txt"
+  : > "$REVIEW_HANDOFF_REASON_FILE"
   echo "EXECUTOR_START_FAILED=codex_cli_not_found"
   exit 0
 fi
@@ -181,6 +187,7 @@ fi
 printf '%s\n' "RUNNING" > "$STATE_FILE"
 printf '%s\n' "$task_id" > "$TASK_FILE"
 printf '%s\n' "$issue_number" > "$ISSUE_FILE"
+: > "$REVIEW_HANDOFF_REASON_FILE"
 date -u '+%Y-%m-%dT%H:%M:%SZ' > "$START_FILE"
 date +%s > "$START_EPOCH_FILE"
 date -u '+%Y-%m-%dT%H:%M:%SZ' > "$HEARTBEAT_FILE"

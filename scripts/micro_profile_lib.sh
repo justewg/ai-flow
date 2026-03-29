@@ -363,7 +363,7 @@ micro_profile_file_context_json() {
 micro_profile_budget_init_json() {
   local task_id="$1"
   local issue_number="$2"
-  local threshold_tokens="${3:-15000}"
+  local threshold_tokens="${3:-20000}"
   local enforce="${4:-0}"
   jq -nc \
     --arg taskId "$task_id" \

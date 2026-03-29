@@ -32,12 +32,14 @@ PID_FILE="${CODEX_DIR}/executor_pid.txt"
 TASK_FILE="${CODEX_DIR}/executor_task_id.txt"
 ISSUE_FILE="${CODEX_DIR}/executor_issue_number.txt"
 EXIT_FILE="${CODEX_DIR}/executor_last_exit_code.txt"
+REVIEW_HANDOFF_REASON_FILE="${CODEX_DIR}/executor_review_handoff_reason.txt"
 FAIL_NOTIFY_FILE="${CODEX_DIR}/executor_failure_notified_task.txt"
 DONE_NOTIFY_FILE="${CODEX_DIR}/executor_done_wait_notified_task.txt"
 RETRY_REPLY_FILE="${CODEX_DIR}/executor_last_retry_reply_comment_id.txt"
 LAST_MSG_FILE="${CODEX_DIR}/executor_last_message.txt"
 AUTO_RETRY_TASK_FILE="${CODEX_DIR}/executor_auto_retry_task_id.txt"
 AUTO_RETRY_COUNT_FILE="${CODEX_DIR}/executor_auto_retry_count.txt"
+WAITING_KIND_FILE="${CODEX_DIR}/daemon_waiting_kind.txt"
 
 mkdir -p "$CODEX_DIR"
 auto_retry_triggered="0"
@@ -72,6 +74,38 @@ executor_explicit_user_reply_requested() {
     | grep -Eiq '^(ASK_QUESTION|ASK_REASON|ASK_KIND)=|^CODEX_EXPECT:[[:space:]]*USER_REPLY$|^Вопрос executor:|^QUESTION:'
 }
 
+current_review_handoff_reason() {
+  local reason=""
+  reason="$(cat "$REVIEW_HANDOFF_REASON_FILE" 2>/dev/null || true)"
+  if [[ -n "$reason" ]]; then
+    printf '%s' "$reason"
+    return 0
+  fi
+  if [[ "$last_rc" == "42" ]]; then
+    printf '%s' "profile_breach"
+    return 0
+  fi
+  return 1
+}
+
+invoke_review_handoff() {
+  local reason="$1"
+  local handoff_out rc
+  if handoff_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_review_handoff.sh" "$task_id" "$issue_number" "$reason" 2>&1)"; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "EXECUTOR: $line"
+    done <<<"$handoff_out"
+    return 0
+  fi
+  rc=$?
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "EXECUTOR_REVIEW_HANDOFF_ERROR(rc=$rc): $line"
+  done <<<"$handoff_out"
+  return "$rc"
+}
+
 runtime_status_out="$("${CODEX_SHARED_SCRIPTS_DIR}/project_status_runtime.sh" apply 3 2>&1 || true)"
 if [[ -n "$runtime_status_out" ]]; then
   while IFS= read -r line; do
@@ -90,6 +124,7 @@ exec_task="$(cat "$TASK_FILE" 2>/dev/null || true)"
 exec_issue="$(cat "$ISSUE_FILE" 2>/dev/null || true)"
 pid="$(cat "$PID_FILE" 2>/dev/null || true)"
 last_rc="$(cat "$EXIT_FILE" 2>/dev/null || true)"
+review_handoff_reason="$(current_review_handoff_reason 2>/dev/null || true)"
 reply_task="$(cat "${CODEX_DIR}/daemon_user_reply_task_id.txt" 2>/dev/null || true)"
 reply_issue="$(cat "${CODEX_DIR}/daemon_user_reply_issue_number.txt" 2>/dev/null || true)"
 reply_comment_id="$(cat "${CODEX_DIR}/daemon_user_reply_comment_id.txt" 2>/dev/null || true)"
@@ -118,6 +153,8 @@ if [[ "$state" == "RUNNING" ]]; then
   if [[ -n "$last_rc" ]]; then
     if [[ "$last_rc" == "0" ]]; then
       state="DONE"
+    elif [[ -n "$review_handoff_reason" ]]; then
+      state="REVIEW_NEEDED"
     else
       state="FAILED"
     fi
@@ -127,6 +164,28 @@ if [[ "$state" == "RUNNING" ]]; then
   fi
   printf '%s\n' "$state" > "$STATE_FILE"
   : > "$PID_FILE"
+fi
+
+if [[ "$state" == "REVIEW_NEEDED" || ( "$state" == "FAILED" && -n "$review_handoff_reason" ) ]]; then
+  if [[ "$is_waiting_user" == "1" ]]; then
+    waiting_kind="$(cat "$WAITING_KIND_FILE" 2>/dev/null || true)"
+    if [[ "$waiting_kind" == "REVIEW_FEEDBACK" ]]; then
+      echo "WAIT_REVIEW_FEEDBACK=1"
+    else
+      echo "EXECUTOR_WAIT_USER_REPLY=1"
+    fi
+    echo "EXECUTOR_TASK_ID=$task_id"
+    exit 0
+  fi
+
+  review_handoff_reason="${review_handoff_reason:-automation_stopped}"
+  echo "EXECUTOR_REVIEW_HANDOFF_REQUIRED=1"
+  echo "EXECUTOR_REVIEW_HANDOFF_REASON=${review_handoff_reason}"
+  if invoke_review_handoff "$review_handoff_reason"; then
+    echo "WAIT_REVIEW_FEEDBACK=1"
+    exit 0
+  fi
+  exit 0
 fi
 
 if [[ "$state" == "FAILED" ]]; then

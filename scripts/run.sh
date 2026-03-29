@@ -1160,6 +1160,14 @@ case "$cmd" in
     "${CODEX_SHARED_SCRIPTS_DIR}/task_ask.sh" "$2" "$3"
     ;;
 
+  task_review_handoff)
+    if [[ $# -lt 3 || $# -gt 4 ]]; then
+      echo "Usage: .flow/shared/scripts/run.sh task_review_handoff <task-id> <issue-number> [reason]"
+      exit 1
+    fi
+    "${CODEX_SHARED_SCRIPTS_DIR}/task_review_handoff.sh" "${@:2}"
+    ;;
+
   daemon_check_replies)
     "${CODEX_SHARED_SCRIPTS_DIR}/daemon_check_replies.sh"
     ;;

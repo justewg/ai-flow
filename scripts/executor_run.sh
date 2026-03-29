@@ -31,6 +31,7 @@ HEARTBEAT_FILE="${CODEX_DIR}/executor_heartbeat_utc.txt"
 HEARTBEAT_EPOCH_FILE="${CODEX_DIR}/executor_heartbeat_epoch.txt"
 HEARTBEAT_PID_FILE="${CODEX_DIR}/executor_heartbeat_pid.txt"
 DETACH_FILE="${CODEX_DIR}/executor_detach_requested.txt"
+REVIEW_HANDOFF_REASON_FILE="${CODEX_DIR}/executor_review_handoff_reason.txt"
 RUN_STARTED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 state_dir="$(codex_resolve_state_dir)"
 profile_name="$(codex_resolve_project_profile_name 2>/dev/null || printf '%s' "${PROJECT_PROFILE:-default}")"
@@ -47,6 +48,7 @@ mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR" "$execution_dir"
 : > "$DETACH_FILE"
 : > "$LAST_MSG_FILE"
 : > "$failed_checks_file"
+: > "$REVIEW_HANDOFF_REASON_FILE"
 
 record_execution() {
   local rc="$1"
@@ -461,8 +463,22 @@ fi
 if [[ "$rc" == "0" ]]; then
   printf '%s\n' "DONE" > "$STATE_FILE"
 else
-  printf '%s\n' "FAILED" > "$STATE_FILE"
-  if [[ "$provider_error_class" == "none" ]]; then
+  review_handoff_reason=""
+  if [[ "$rc" -eq 42 ]]; then
+    review_handoff_reason="profile_breach"
+  elif [[ "$provider_error_class" == "quota_exceeded" ]]; then
+    review_handoff_reason="provider_quota_exceeded"
+  fi
+
+  if [[ -n "$review_handoff_reason" ]]; then
+    printf '%s\n' "REVIEW_NEEDED" > "$STATE_FILE"
+    printf '%s\n' "$review_handoff_reason" > "$REVIEW_HANDOFF_REASON_FILE"
+  else
+    printf '%s\n' "FAILED" > "$STATE_FILE"
+    : > "$REVIEW_HANDOFF_REASON_FILE"
+  fi
+
+  if [[ "$provider_error_class" == "none" && -z "$review_handoff_reason" ]]; then
     termination_reason="executor_failed"
   fi
 fi

@@ -19,6 +19,23 @@ LAST_ACTION_FILE="${CODEX_DIR}/watchdog_last_action.txt"
 LAST_ACTION_EPOCH_FILE="${CODEX_DIR}/watchdog_last_action_epoch.txt"
 DAEMON_LOG_FILE="${RUNTIME_LOG_DIR}/daemon.log"
 DAEMON_LOCK_DIR="${CODEX_DIR}/daemon.lock"
+ACTIVE_TASK_FILE="${CODEX_DIR}/daemon_active_task.txt"
+ACTIVE_ITEM_FILE="${CODEX_DIR}/daemon_active_item_id.txt"
+ACTIVE_ISSUE_FILE="${CODEX_DIR}/daemon_active_issue_number.txt"
+WAITING_ISSUE_FILE="${CODEX_DIR}/daemon_waiting_issue_number.txt"
+WAITING_TASK_FILE="${CODEX_DIR}/daemon_waiting_task_id.txt"
+WAITING_COMMENT_ID_FILE="${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
+WAITING_KIND_FILE="${CODEX_DIR}/daemon_waiting_kind.txt"
+WAITING_PENDING_POST_FILE="${CODEX_DIR}/daemon_waiting_pending_post.txt"
+WAITING_SINCE_FILE="${CODEX_DIR}/daemon_waiting_since_utc.txt"
+WAITING_COMMENT_URL_FILE="${CODEX_DIR}/daemon_waiting_comment_url.txt"
+REVIEW_TASK_FILE="${CODEX_DIR}/daemon_review_task_id.txt"
+REVIEW_ITEM_FILE="${CODEX_DIR}/daemon_review_item_id.txt"
+REVIEW_ISSUE_FILE="${CODEX_DIR}/daemon_review_issue_number.txt"
+REVIEW_PR_FILE="${CODEX_DIR}/daemon_review_pr_number.txt"
+REVIEW_BRANCH_FILE="${CODEX_DIR}/daemon_review_branch_name.txt"
+PROJECT_TASK_FILE="${CODEX_DIR}/project_task_id.txt"
+CLAIM_EPOCH_FILE="${CODEX_DIR}/daemon_last_claim_epoch.txt"
 
 DAEMON_LABEL="${WATCHDOG_DAEMON_LABEL:-$DEFAULT_DAEMON_LABEL}"
 DAEMON_INTERVAL="${WATCHDOG_DAEMON_INTERVAL_SEC:-45}"
@@ -174,6 +191,128 @@ emit_lines() {
     echo "$line"
     log "$line"
   done <<< "$text"
+}
+
+is_github_network_error() {
+  local text="$1"
+  printf '%s' "$text" | grep -Eiq \
+    'error connecting to api\.github\.com|could not resolve host: api\.github\.com|could not resolve host: github\.com|could not resolve hostname github\.com|temporary failure in name resolution|connection timed out|operation timed out|tls handshake timeout|failed to connect|api rate limit already exceeded|graphql_rate_limit|rate limit'
+}
+
+enqueue_project_status_runtime() {
+  local target="$1"
+  local status_name="$2"
+  local flow_name="$3"
+  local reason="$4"
+  local runtime_out runtime_rc
+  if runtime_out="$("${CODEX_SHARED_SCRIPTS_DIR}/project_status_runtime.sh" enqueue "$target" "$status_name" "$flow_name" "$reason" 2>&1)"; then
+    emit_lines "$runtime_out"
+    return 0
+  fi
+  runtime_rc=$?
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "WATCHDOG_PROJECT_STATUS_RUNTIME_ENQUEUE_ERROR(rc=${runtime_rc}): $line"
+  done <<< "$runtime_out"
+  return "$runtime_rc"
+}
+
+clear_terminal_review_contexts() {
+  local issue_number="$1"
+  local task_id="$2"
+  local active_task active_issue
+
+  active_task="$(read_file_or_default "$ACTIVE_TASK_FILE" "")"
+  active_issue="$(read_file_or_default "$ACTIVE_ISSUE_FILE" "")"
+
+  if [[ -n "$task_id" || -n "$issue_number" ]]; then
+    if [[ "$active_task" == "$task_id" || ( -n "$issue_number" && "$active_issue" == "$issue_number" ) ]]; then
+      "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
+      : > "$ACTIVE_TASK_FILE"
+      : > "$ACTIVE_ITEM_FILE"
+      : > "$ACTIVE_ISSUE_FILE"
+      : > "$PROJECT_TASK_FILE"
+      : > "$CLAIM_EPOCH_FILE"
+      echo "WATCHDOG_TERMINAL_REVIEW_ACTIVE_CLEARED=1"
+      [[ -n "$task_id" ]] && echo "WATCHDOG_TERMINAL_REVIEW_TASK_ID=${task_id}"
+      [[ -n "$issue_number" ]] && echo "WATCHDOG_TERMINAL_REVIEW_ISSUE_NUMBER=${issue_number}"
+    fi
+  fi
+
+  : > "$WAITING_ISSUE_FILE"
+  : > "$WAITING_TASK_FILE"
+  : > "$WAITING_COMMENT_ID_FILE"
+  : > "$WAITING_KIND_FILE"
+  : > "$WAITING_PENDING_POST_FILE"
+  : > "$WAITING_SINCE_FILE"
+  : > "$WAITING_COMMENT_URL_FILE"
+  : > "$REVIEW_TASK_FILE"
+  : > "$REVIEW_ITEM_FILE"
+  : > "$REVIEW_ISSUE_FILE"
+  : > "$REVIEW_PR_FILE"
+  : > "$REVIEW_BRANCH_FILE"
+  echo "WATCHDOG_TERMINAL_REVIEW_CONTEXTS_CLEARED=1"
+}
+
+maybe_finalize_terminal_review_context() {
+  local pre_review_task pre_review_issue reply_probe_out rc stale_reason stale_issue_number
+  local stale_status_target stale_status_out stale_status_rc
+
+  if [[ ! -s "$REVIEW_PR_FILE" && ! -s "$REVIEW_TASK_FILE" && ! -s "$WAITING_KIND_FILE" ]]; then
+    return 0
+  fi
+
+  pre_review_task="$(read_file_or_default "$REVIEW_TASK_FILE" "")"
+  pre_review_issue="$(read_file_or_default "$REVIEW_ISSUE_FILE" "")"
+
+  if reply_probe_out="$("${CODEX_SHARED_SCRIPTS_DIR}/daemon_check_replies.sh" 2>&1)"; then
+    :
+  else
+    rc=$?
+    emit_lines "$reply_probe_out"
+    [[ "$rc" -eq 75 ]] && return 75
+    return 0
+  fi
+
+  while IFS= read -r line; do
+    [[ -z "$line" || "$line" == "NO_WAITING_USER_REPLY=1" ]] && continue
+    echo "$line"
+  done <<< "$reply_probe_out"
+
+  stale_reason="$(printf '%s\n' "$reply_probe_out" | sed -n 's/^STALE_WAITING_CONTEXT_CLEARED=//p' | tail -n1)"
+  stale_issue_number="$(printf '%s\n' "$reply_probe_out" | sed -n 's/^STALE_WAITING_ISSUE_NUMBER=//p' | tail -n1)"
+
+  if [[ "$stale_reason" != "REVIEW_PR_MERGED" && "$stale_reason" != "ISSUE_CLOSED" ]]; then
+    return 0
+  fi
+
+  if [[ "$stale_issue_number" =~ ^[0-9]+$ ]]; then
+    stale_status_target="ISSUE-${stale_issue_number}"
+    if stale_status_out="$("${CODEX_SHARED_SCRIPTS_DIR}/project_set_status.sh" "$stale_status_target" "Done" "Done" 2>&1)"; then
+      emit_lines "$stale_status_out"
+      echo "WATCHDOG_TERMINAL_REVIEW_DONE_SYNCED=1"
+      echo "WATCHDOG_TERMINAL_REVIEW_DONE_TARGET=${stale_status_target}"
+    else
+      stale_status_rc=$?
+      emit_lines "$stale_status_out"
+      if is_github_network_error "$stale_status_out" || [[ "$stale_status_rc" -eq 75 ]]; then
+        echo "WAIT_GITHUB_API_UNSTABLE=1"
+        echo "WAIT_GITHUB_STAGE=WATCHDOG_TERMINAL_REVIEW_DONE_STATUS_UPDATE"
+        enqueue_project_status_runtime "$stale_status_target" "Done" "Done" "watchdog-terminal-review:${stale_reason}" || true
+        echo "WATCHDOG_TERMINAL_REVIEW_DONE_DEFERRED=1"
+      else
+        while IFS= read -r line; do
+          [[ -z "$line" ]] && continue
+          echo "WATCHDOG_TERMINAL_REVIEW_DONE_WARN: $line"
+        done <<< "$stale_status_out"
+      fi
+    fi
+  fi
+
+  clear_terminal_review_contexts "${stale_issue_number:-$pre_review_issue}" "$pre_review_task"
+  echo "WATCHDOG_TERMINAL_REVIEW_RESOLVED=1"
+  echo "WATCHDOG_TERMINAL_REVIEW_REASON=${stale_reason}"
+  return 0
 }
 
 reconcile_runtime_v2_primary_contexts() {
@@ -421,6 +560,21 @@ claim_age_sec=0
 if (( claim_epoch > 0 && now_epoch >= claim_epoch )); then
   claim_age_sec=$(( now_epoch - claim_epoch ))
 fi
+
+terminal_review_rc=0
+if ! maybe_finalize_terminal_review_context; then
+  terminal_review_rc=$?
+fi
+if [[ "$terminal_review_rc" -eq 75 ]]; then
+  detail="terminal_review_sync_deferred=1; ${summary:-review-sync-pending}"
+  set_state "WAIT_GITHUB_API_UNSTABLE" "$detail"
+  echo "WATCHDOG_ACTION=DEFERRED_GITHUB_API"
+  echo "WATCHDOG_REASON=TERMINAL_REVIEW_SYNC_DEFERRED"
+  exit 0
+fi
+
+active_task="$(read_file_or_default "$ACTIVE_TASK_FILE" "")"
+active_issue="$(read_file_or_default "$ACTIVE_ISSUE_FILE" "")"
 
 action="NONE"
 reason=""

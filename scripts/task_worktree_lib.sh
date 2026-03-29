@@ -250,6 +250,7 @@ task_worktree_toolkit_ready() {
 
 task_worktree_ensure_toolkit_materialized() {
   local repo_path="${1:-}"
+  local git_dir=""
   [[ -n "$repo_path" ]] || return 1
   task_worktree_repo_present "$repo_path" || return 1
 
@@ -261,6 +262,12 @@ task_worktree_ensure_toolkit_materialized() {
     return 0
   fi
 
+  git_dir="$(git -C "$repo_path" rev-parse --git-dir 2>/dev/null || true)"
+  if [[ -n "$git_dir" ]]; then
+    mkdir -p "${git_dir}/modules/.flow/shared" 2>/dev/null || true
+  fi
+
+  git -C "$repo_path" submodule sync --recursive -- ".flow/shared" >/dev/null 2>&1 || true
   git -C "$repo_path" submodule update --init --recursive -- ".flow/shared" >/dev/null 2>&1 || return 1
   task_worktree_toolkit_ready "$repo_path"
 }

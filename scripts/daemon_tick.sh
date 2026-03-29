@@ -24,6 +24,7 @@ repo_owner="$FLOW_REPO_OWNER"
 flow_base_branch="$FLOW_BASE_BRANCH"
 flow_head_branch="$FLOW_HEAD_BRANCH"
 trigger_status="${TRIGGER_STATUS:-Todo}"
+trigger_flow="${TRIGGER_FLOW:-Ready}"
 target_status="${TARGET_STATUS:-In Progress}"
 target_flow="${TARGET_FLOW:-In Progress}"
 review_task_file="${CODEX_DIR}/daemon_review_task_id.txt"
@@ -959,7 +960,7 @@ query($projectId: ID!, $itemsFirst: Int!) {
     return "$?"
   fi
 
-  printf '%s' "$project_json" | jq -c --arg trigger "$trigger_status" --arg ignore_labels_csv "$ignore_labels_csv" '
+  printf '%s' "$project_json" | jq -c --arg trigger "$trigger_status" --arg trigger_flow "$trigger_flow" --arg ignore_labels_csv "$ignore_labels_csv" '
     def norm: gsub("^\\s+|\\s+$";"") | ascii_downcase;
     def ignore_labels: ($ignore_labels_csv | split(",") | map(norm) | map(select(length > 0)));
     def has_auto_ignore($labels):
@@ -972,6 +973,7 @@ query($projectId: ID!, $itemsFirst: Int!) {
       | select(((.content.__typename // "") == "Issue") or ((.content.__typename // "") == "DraftIssue"))
       | select((((.content.title // "") | test("^DIRTY-GATE:")) | not))
       | select((.status.name // "" | norm) == ($trigger | norm))
+      | select((.flow.name // "" | norm) == ($trigger_flow | norm))
       | select(
           if (.content.__typename // "") == "Issue"
           then (has_auto_ignore([.content.labels.nodes[]?.name]) | not)
@@ -2951,10 +2953,11 @@ else
 fi
 
 matched_json="$(
-  printf '%s' "$project_json" | jq -c --arg trigger "$trigger_status" '
+  printf '%s' "$project_json" | jq -c --arg trigger "$trigger_status" --arg trigger_flow "$trigger_flow" '
     def norm: gsub("^\\s+|\\s+$";"") | ascii_downcase;
     .data.node as $project
     | (($project.fields.nodes[] | select(.name=="Status") | .options[] | select((.name | norm) == ($trigger | norm)) | .id) // null) as $trigger_option_id
+    | (($project.fields.nodes[] | select(.name=="Flow") | .options[] | select((.name | norm) == ($trigger_flow | norm)) | .id) // null) as $trigger_flow_option_id
     | [
       $project.items.nodes[]
       | {
@@ -2982,12 +2985,19 @@ matched_json="$(
           status_name: (.status.name // ""),
           status_option_id: (.status.optionId // ""),
           flow: (.flow.name // ""),
+          flow_option_id: (.flow.optionId // ""),
           priority: (.priority.name // "")
         }
       | select(
           if $trigger_option_id == null
           then ((.status_name | norm) == ($trigger | norm))
           else (.status_option_id == $trigger_option_id)
+          end
+        )
+      | select(
+          if $trigger_flow_option_id == null
+          then ((.flow | norm) == ($trigger_flow | norm))
+          else ((.flow_option_id // "") == $trigger_flow_option_id or (.flow | norm) == ($trigger_flow | norm))
           end
         )
       | select((((.title // "") | test("^DIRTY-GATE:")) | not))
@@ -3050,7 +3060,7 @@ fi
   fi
 
   fallback_queue_json="$(
-    printf '%s' "$fallback_items_json" | jq -c --arg trigger "$trigger_status" '
+    printf '%s' "$fallback_items_json" | jq -c --arg trigger "$trigger_status" --arg trigger_flow "$trigger_flow" '
       def norm: gsub("^\\s+|\\s+$";"") | ascii_downcase;
       [
         .items[]
@@ -3093,6 +3103,7 @@ fi
             priority: (.priority // "")
           }
         | select((.status_name | norm) == ($trigger | norm))
+        | select((.flow | norm) == ($trigger_flow | norm))
         | .pri_w = (
             if .priority == "P0" then 0
             elif .priority == "P1" then 1
@@ -3111,6 +3122,7 @@ fi
   fallback_queue_count="$(printf '%s' "$fallback_queue_json" | jq 'length')"
   if (( fallback_queue_count == 0 )); then
     echo "NO_TASKS_IN_TRIGGER_STATUS=$trigger_status"
+    echo "NO_TASKS_IN_TRIGGER_FLOW=$trigger_flow"
     exit 0
   fi
 
@@ -3146,7 +3158,7 @@ fi
 
 if (( valid_queue_count == 0 )); then
   if (( valid_queue_before_filter_count > 0 )); then
-    echo "NO_CLAIMABLE_TASKS_AFTER_FILTER=1"
+  echo "NO_CLAIMABLE_TASKS_AFTER_FILTER=1"
   fi
   exit 0
 fi
@@ -3356,27 +3368,23 @@ else
     echo "TASK_WORKTREE_MATERIALIZE_ERROR(rc=$rc): $line"
   done <<<"$materialize_out"
 
-  revert_flow="$source_flow"
-  [[ -n "$revert_flow" && "$revert_flow" != "null" ]] || revert_flow="$trigger_status"
-  if revert_out="$("${CODEX_SHARED_SCRIPTS_DIR}/project_set_status.sh" "$item_id" "$trigger_status" "$revert_flow" 2>&1)"; then
-    emit_lines "$revert_out"
-    echo "TASK_WORKTREE_MATERIALIZE_REVERTED=1"
-    echo "TASK_WORKTREE_MATERIALIZE_REVERT_STATUS=${trigger_status}"
-    echo "TASK_WORKTREE_MATERIALIZE_REVERT_FLOW=${revert_flow}"
+  printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_active_task.txt"
+  printf '%s\n' "$item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"
+  printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
+  printf '%s\n' "$task_id" > "${CODEX_DIR}/project_task_id.txt"
+
+  if handoff_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_review_handoff.sh" "$task_id" "$issue_number" "materialize_failed" 2>&1)"; then
+    emit_lines "$handoff_out"
+    echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF=1"
   else
-    revert_rc=$?
-    emit_lines "$revert_out"
-    if is_github_network_error "$revert_out" || [[ "$revert_rc" -eq 75 ]]; then
-      enqueue_project_status_runtime "$item_id" "$trigger_status" "$revert_flow" "materialize-failed:${task_id}" || true
-      echo "TASK_WORKTREE_MATERIALIZE_REVERT_DEFERRED=1"
-    else
-      echo "TASK_WORKTREE_MATERIALIZE_REVERT_ERROR=1"
-      echo "TASK_WORKTREE_MATERIALIZE_REVERT_RC=${revert_rc}"
-    fi
+    handoff_rc=$?
+    emit_lines "$handoff_out"
+    echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF_ERROR=1"
+    echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF_RC=${handoff_rc}"
   fi
-  echo "WAIT_TASK_WORKTREE_MATERIALIZE=1"
-  echo "WAIT_TASK_WORKTREE_MATERIALIZE_TASK_ID=${task_id}"
-  echo "WAIT_TASK_WORKTREE_MATERIALIZE_ISSUE_NUMBER=${issue_number}"
+  echo "WAIT_REVIEW_FEEDBACK=1"
+  echo "WAIT_REVIEW_FEEDBACK_TASK_ID=${task_id}"
+  echo "WAIT_REVIEW_FEEDBACK_ISSUE_NUMBER=${issue_number}"
   exit 0
 fi
 

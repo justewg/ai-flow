@@ -326,6 +326,8 @@ load_git_temp_repo_args() {
     GIT_TEMP_COMMIT_MESSAGE \
     GIT_TEMP_PATHS \
     GIT_TEMP_REV \
+    GIT_TEMP_GITLINK_PATH \
+    GIT_TEMP_GITLINK_SHA \
     GIT_TEMP_SET_UPSTREAM \
     GIT_TEMP_FORCE_WITH_LEASE \
     GIT_TEMP_ALLOW_EMPTY
@@ -364,6 +366,7 @@ run_git_in() {
 run_git_temp_repo() {
   local action="${1:-}"
   local repo_root branch remote start_point merge_ref refspec commit_message rev
+  local gitlink_path gitlink_sha
   local pathspecs=()
   local push_args=()
   load_git_temp_repo_args
@@ -440,9 +443,19 @@ run_git_temp_repo() {
       git -C "$repo_root" rev-parse "$rev"
       ;;
 
+    update_gitlink)
+      gitlink_path="${GIT_TEMP_GITLINK_PATH:-}"
+      gitlink_sha="${GIT_TEMP_GITLINK_SHA:-}"
+      if [[ -z "$gitlink_path" || -z "$gitlink_sha" ]]; then
+        echo "git_temp_repo update_gitlink requires GIT_TEMP_GITLINK_PATH and GIT_TEMP_GITLINK_SHA"
+        exit 1
+      fi
+      git -C "$repo_root" update-index --cacheinfo "160000,${gitlink_sha},${gitlink_path}"
+      ;;
+
     *)
       echo "Unsupported git_temp_repo action: ${action:-<empty>}"
-      echo "Allowed: checkout_branch merge_ref add_paths commit push_branch status rev_parse"
+      echo "Allowed: checkout_branch merge_ref add_paths commit push_branch status rev_parse update_gitlink"
       exit 1
       ;;
   esac
@@ -729,7 +742,7 @@ case "$cmd" in
 
   git_temp_repo)
     if [[ $# -ne 1 ]]; then
-      echo "Usage: .flow/shared/scripts/run.sh git_temp_repo <checkout_branch|merge_ref|add_paths|commit|push_branch|status|rev_parse>"
+      echo "Usage: .flow/shared/scripts/run.sh git_temp_repo <checkout_branch|merge_ref|add_paths|commit|push_branch|status|rev_parse|update_gitlink>"
       exit 1
     fi
     run_git_temp_repo "$1"

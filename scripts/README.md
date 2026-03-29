@@ -42,6 +42,7 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh pr_merge`
 - `.flow/shared/scripts/run.sh commit_push`
 - `.flow/shared/scripts/run.sh git_temp_repo <checkout_branch|merge_ref|add_paths|commit|push_branch|status|rev_parse>`
+- `.flow/shared/scripts/run.sh git_temp_repo <checkout_branch|merge_ref|add_paths|commit|push_branch|status|rev_parse|update_gitlink>`
 - `.flow/shared/scripts/run.sh git_ls_remote_heads`
 - `.flow/shared/scripts/run.sh git_delete_branch`
 - `.flow/shared/scripts/run.sh project_add_task`
@@ -115,6 +116,9 @@ Linux-hosted bootstrap launchers:
       - без дополнительных параметров
     - `rev_parse`
       - optional `GIT_TEMP_REV=HEAD`
+    - `update_gitlink`
+      - `GIT_TEMP_GITLINK_PATH=.flow/shared`
+      - `GIT_TEMP_GITLINK_SHA=<toolkit-commit-sha>`
   - это wrapper для случаев, где раньше приходилось звать raw команды вида `git -C /tmp/... push -u origin ...`
 - `.flow/shared/scripts/run.sh project_status_runtime <enqueue|apply|list|clear> ...` — runtime-очередь отложенных обновлений `Project Status/Flow`.
 - `.flow/shared/scripts/run.sh runtime_v2_shadow_sync` — materialize-ит отдельный `v2` shadow state из текущего legacy runtime в `<state-dir>/runtime_v2/store`.

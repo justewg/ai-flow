@@ -43,6 +43,7 @@ task_worktree_remove_existing() {
 task_worktree_create_fresh() {
   task_worktree_remove_existing
   git -C "${ROOT_DIR}" worktree add -B "$task_branch" "$task_repo" "origin/${FLOW_HEAD_BRANCH}"
+  mkdir -p "$task_meta_dir" "$task_logs_dir"
 }
 
 materialized_now="0"
@@ -79,6 +80,8 @@ if task_worktree_declares_toolkit_submodule "$task_repo"; then
   fi
   toolkit_materialized="1"
 fi
+
+mkdir -p "$task_meta_dir" "$task_logs_dir"
 
 claimed_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 cat > "$task_env_file" <<EOF

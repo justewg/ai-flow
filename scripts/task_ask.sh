@@ -49,6 +49,8 @@ pending_post_file="${CODEX_DIR}/daemon_waiting_pending_post.txt"
 executor_pid_file="${CODEX_DIR}/executor_pid.txt"
 executor_heartbeat_pid_file="${CODEX_DIR}/executor_heartbeat_pid.txt"
 executor_detach_file="${CODEX_DIR}/executor_detach_requested.txt"
+executor_state_file="${CODEX_DIR}/executor_state.txt"
+executor_review_handoff_reason_file="${CODEX_DIR}/executor_review_handoff_reason.txt"
 
 emit_runtime_v2_event() {
   local event_type="$1"
@@ -616,6 +618,9 @@ request_executor_stop() {
   pid="$(cat "$executor_pid_file" 2>/dev/null || true)"
   heartbeat_pid="$(cat "$executor_heartbeat_pid_file" 2>/dev/null || true)"
 
+  # Drop RUNNING immediately so watchdog does not freeze on a deliberate wait handoff.
+  printf '%s\n' "REVIEW_NEEDED" > "$executor_state_file"
+  printf '%s\n' "waiting_user_reply" > "$executor_review_handoff_reason_file"
   printf '%s\n' "stop-requested" > "$executor_detach_file"
   kill_pid_gracefully "$heartbeat_pid"
   kill_pid_gracefully "$pid"

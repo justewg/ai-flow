@@ -420,6 +420,23 @@ if [[ -s "$DETACH_FILE" ]]; then
 fi
 
 if [[ "$detach_requested" == "1" ]]; then
+  waiting_issue_number="$(cat "${CODEX_DIR}/daemon_waiting_issue_number.txt" 2>/dev/null || true)"
+  waiting_kind="$(cat "${CODEX_DIR}/daemon_waiting_kind.txt" 2>/dev/null || true)"
+  if [[ -n "$waiting_issue_number" ]]; then
+    printf '%s\n' "REVIEW_NEEDED" > "$STATE_FILE"
+    if [[ "$waiting_kind" == "REVIEW_FEEDBACK" ]]; then
+      printf '%s\n' "review_feedback_wait" > "$REVIEW_HANDOFF_REASON_FILE"
+    else
+      printf '%s\n' "waiting_user_reply" > "$REVIEW_HANDOFF_REASON_FILE"
+    fi
+  elif [[ "$rc" == "0" ]]; then
+    printf '%s\n' "DONE" > "$STATE_FILE"
+    : > "$REVIEW_HANDOFF_REASON_FILE"
+  else
+    printf '%s\n' "FAILED" > "$STATE_FILE"
+  fi
+  printf '%s\n' "$rc" > "$EXIT_FILE"
+  date -u '+%Y-%m-%dT%H:%M:%SZ' > "$FINISH_FILE"
   : > "${CODEX_DIR}/executor_pid.txt"
   : > "$HEARTBEAT_PID_FILE"
   : > "$DETACH_FILE"

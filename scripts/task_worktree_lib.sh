@@ -255,6 +255,42 @@ task_worktree_toolkit_ready() {
   [[ -f "$repo_path/.flow/shared/scripts/run.sh" ]]
 }
 
+task_worktree_reset_toolkit_submodule() {
+  local repo_path="${1:-}"
+  local git_dir=""
+  [[ -n "$repo_path" ]] || return 1
+  task_worktree_repo_present "$repo_path" || return 1
+
+  git_dir="$(git -C "$repo_path" rev-parse --git-dir 2>/dev/null || true)"
+  git -C "$repo_path" submodule deinit -f -- ".flow/shared" >/dev/null 2>&1 || true
+  rm -rf "$repo_path/.flow/shared"
+  if [[ -n "$git_dir" ]]; then
+    rm -rf "${git_dir}/modules/.flow/shared"
+  fi
+}
+
+task_worktree_run_toolkit_update() {
+  local repo_path="${1:-}"
+  local err_file=""
+  local rc=0
+  [[ -n "$repo_path" ]] || return 1
+
+  err_file="$(mktemp "${TMPDIR:-/tmp}/task_worktree_toolkit_update.XXXXXX")"
+  git -C "$repo_path" submodule sync --recursive -- ".flow/shared" >/dev/null 2>&1 || true
+  if git -C "$repo_path" submodule update --init --recursive -- ".flow/shared" >/dev/null 2>"$err_file"; then
+    rm -f "$err_file"
+    return 0
+  fi
+
+  rc=$?
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "TASK_WORKTREE_TOOLKIT_UPDATE_ERROR: $line" >&2
+  done <"$err_file"
+  rm -f "$err_file"
+  return "$rc"
+}
+
 task_worktree_ensure_toolkit_materialized() {
   local repo_path="${1:-}"
   local git_dir=""
@@ -274,7 +310,22 @@ task_worktree_ensure_toolkit_materialized() {
     mkdir -p "${git_dir}/modules/.flow/shared" 2>/dev/null || true
   fi
 
-  git -C "$repo_path" submodule sync --recursive -- ".flow/shared" >/dev/null 2>&1 || true
-  git -C "$repo_path" submodule update --init --recursive -- ".flow/shared" >/dev/null 2>&1 || return 1
-  task_worktree_toolkit_ready "$repo_path"
+  if task_worktree_run_toolkit_update "$repo_path" && task_worktree_toolkit_ready "$repo_path"; then
+    return 0
+  fi
+
+  echo "TASK_WORKTREE_TOOLKIT_REINIT=1" >&2
+  task_worktree_reset_toolkit_submodule "$repo_path" || true
+
+  if [[ -n "$git_dir" ]]; then
+    mkdir -p "${git_dir}/modules/.flow/shared" 2>/dev/null || true
+  fi
+
+  task_worktree_run_toolkit_update "$repo_path" || return 1
+  if task_worktree_toolkit_ready "$repo_path"; then
+    return 0
+  fi
+
+  echo "TASK_WORKTREE_TOOLKIT_READY_MISSING=1" >&2
+  return 1
 }

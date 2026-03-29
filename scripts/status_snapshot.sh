@@ -257,6 +257,9 @@ github_rate_limit_remaining="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_L
 github_rate_limit_reset_epoch="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_LIMIT_RESET_EPOCH")"
 github_rate_limit_reset_at="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_LIMIT_RESET_AT")"
 github_rate_limit_reset_human="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_LIMIT_RESET_IN_HUMAN")"
+github_auth_stage="$(detail_value "$daemon_detail" "WAIT_GITHUB_AUTH_STAGE")"
+github_auth_msg="$(detail_value "$daemon_detail" "WAIT_GITHUB_AUTH_MSG")"
+github_auth_source="$(detail_value "$daemon_detail" "WAIT_GITHUB_AUTH_SOURCE")"
 
 [[ -z "$github_status" ]] && github_status="UNKNOWN"
 [[ -z "$telegram_status" ]] && telegram_status="SKIPPED"
@@ -315,6 +318,11 @@ case "$daemon_state" in
     if [[ -n "$github_rate_limit_reset_human" && "$github_rate_limit_reset_human" != "0s" ]]; then
       headline="GitHub GraphQL rate limit; reset in ${github_rate_limit_reset_human}"
     fi
+    ;;
+  WAIT_GITHUB_AUTH)
+    overall_status="DEGRADED"
+    action_required="fix_github_auth"
+    headline="GitHub project credential rejected; daemon is waiting for config fix"
     ;;
   WAIT_GITHUB_OFFLINE|WAIT_AUTH_SERVICE)
     overall_status="DEGRADED"

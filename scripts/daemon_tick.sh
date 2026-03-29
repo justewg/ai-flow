@@ -369,6 +369,61 @@ graphql_payload_has_rate_limit() {
   ' >/dev/null 2>&1
 }
 
+github_output_has_auth_error() {
+  local payload="$1"
+  printf '%s' "$payload" | grep -Eiq \
+    'bad credentials|http 401|status[^[:alnum:]]*401|requires authentication|resource not accessible by personal access token|invalid token|unauthorized'
+}
+
+graphql_payload_has_auth_error() {
+  local payload="$1"
+  printf '%s' "$payload" | jq -e '
+    (
+      ((.message // "") | ascii_downcase) | test("bad credentials|requires authentication|resource not accessible by personal access token|invalid token|unauthorized")
+    )
+    or ((.status // "" | tostring) == "401")
+    or (
+      (.errors // [])
+      | any(
+          ((.type // "" | ascii_downcase) | test("forbidden|unauthorized|authentication"))
+          or ((.extensions.code // "" | ascii_downcase) | test("forbidden|unauthorized|authentication"))
+          or ((.message // "" | ascii_downcase) | test("bad credentials|requires authentication|resource not accessible by personal access token|invalid token|unauthorized"))
+        )
+    )
+  ' >/dev/null 2>&1
+}
+
+graphql_payload_first_auth_error_message() {
+  local payload="$1"
+  local message
+  message="$(
+    printf '%s' "$payload" | jq -r '
+      (
+        if ((.message // "") | length) > 0 then
+          .message
+        else
+          (
+            (.errors // [])
+            | map(
+                select(
+                  ((.type // "" | ascii_downcase) | test("forbidden|unauthorized|authentication"))
+                  or ((.extensions.code // "" | ascii_downcase) | test("forbidden|unauthorized|authentication"))
+                  or ((.message // "" | ascii_downcase) | test("bad credentials|requires authentication|resource not accessible by personal access token|invalid token|unauthorized"))
+                )
+                | .message
+              )
+            | .[0]
+          )
+        end
+      ) // ""
+    ' 2>/dev/null || true
+  )"
+  if [[ -z "$message" ]]; then
+    message="GitHub credential rejected"
+  fi
+  sanitize_for_log "$message"
+}
+
 graphql_payload_first_rate_limit_message() {
   local payload="$1"
   local message
@@ -3092,6 +3147,14 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
     -F fieldsFirst=100 \
     -F itemsFirst=100
 )"; then
+  if graphql_payload_has_auth_error "$project_json"; then
+    auth_msg="$(graphql_payload_first_auth_error_message "$project_json")"
+    echo "WAIT_GITHUB_AUTH=1"
+    echo "WAIT_GITHUB_AUTH_STAGE=PROJECT_QUERY"
+    echo "WAIT_GITHUB_AUTH_SOURCE=PROJECT_TOKEN"
+    echo "WAIT_GITHUB_AUTH_MSG=$auth_msg"
+    exit 0
+  fi
   if graphql_payload_has_rate_limit "$project_json"; then
     rate_msg="$(graphql_payload_first_rate_limit_message "$project_json")"
     stats_payload="$(gql_stats_on_limit "PROJECT_QUERY" "$rate_msg")"
@@ -3208,6 +3271,14 @@ fi
       echo "WAIT_GITHUB_RATE_LIMIT_STAGE=PROJECT_ITEM_LIST_FALLBACK"
       echo "WAIT_GITHUB_RATE_LIMIT_MSG=$(sanitize_for_log "$fallback_items_json")"
       emit_wait_github_rate_limit_probe
+      exit 0
+    fi
+
+    if github_output_has_auth_error "$fallback_items_json"; then
+      echo "WAIT_GITHUB_AUTH=1"
+      echo "WAIT_GITHUB_AUTH_STAGE=PROJECT_ITEM_LIST_FALLBACK"
+      echo "WAIT_GITHUB_AUTH_SOURCE=PROJECT_TOKEN"
+      echo "WAIT_GITHUB_AUTH_MSG=$(sanitize_for_log "$fallback_items_json")"
       exit 0
     fi
 

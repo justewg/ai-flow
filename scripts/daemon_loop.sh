@@ -295,7 +295,11 @@ enforce_runtime_ownership() {
 
 classify_success_state() {
   local output="$1"
-  if printf '%s' "$output" | grep -q '^WAIT_GITHUB_RATE_LIMIT=1'; then
+  if printf '%s' "$output" | grep -q '^WAIT_GITHUB_AUTH=1'; then
+    echo "WAIT_GITHUB_AUTH"
+  elif printf '%s' "$output" | grep -Eiq 'bad credentials|http 401|status[^[:alnum:]]*401|requires authentication|resource not accessible by personal access token|invalid token|unauthorized'; then
+    echo "WAIT_GITHUB_AUTH"
+  elif printf '%s' "$output" | grep -q '^WAIT_GITHUB_RATE_LIMIT=1'; then
     echo "WAIT_GITHUB_RATE_LIMIT"
   elif printf '%s' "$output" | grep -Eiq 'graphql:.*rate limit|api rate limit already exceeded|graphql_rate_limit|rate limit exceeded'; then
     echo "WAIT_GITHUB_RATE_LIMIT"
@@ -386,6 +390,19 @@ build_success_detail() {
     WAIT_GITHUB_OFFLINE)
       line="$(printf '%s\n' "$output" | grep -m1 -E '^(WAIT_GITHUB_STAGE=|WAIT_GITHUB_API_UNSTABLE=1)' || true)"
       ;;
+    WAIT_GITHUB_AUTH)
+      local auth_stage_line auth_msg_line auth_source_line
+      local auth_parts=()
+      auth_stage_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_AUTH_STAGE=' || true)"
+      auth_msg_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_AUTH_MSG=' || true)"
+      auth_source_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_AUTH_SOURCE=' || true)"
+      auth_parts+=("DEGRADED=GITHUB_AUTH_INVALID")
+      [[ -z "$auth_stage_line" ]] && auth_stage_line="WAIT_GITHUB_AUTH_STAGE=PROJECT_QUERY_OR_FALLBACK"
+      [[ -n "$auth_stage_line" ]] && auth_parts+=("$auth_stage_line")
+      [[ -n "$auth_source_line" ]] && auth_parts+=("$auth_source_line")
+      [[ -n "$auth_msg_line" ]] && auth_parts+=("$auth_msg_line")
+      line="$(IFS=';'; echo "${auth_parts[*]}")"
+      ;;
     WAIT_GITHUB_RATE_LIMIT)
       local stage_line msg_line req_line dur_line raw_rate_line reset_epoch_line reset_at_line reset_human_line remaining_line
       local parts=()
@@ -453,7 +470,9 @@ build_success_detail() {
 
 classify_error_state() {
   local output="$1"
-  if printf '%s' "$output" | grep -Eiq 'graphql:.*rate limit|api rate limit exceeded|rate limit exceeded'; then
+  if printf '%s' "$output" | grep -Eiq 'bad credentials|http 401|status[^[:alnum:]]*401|requires authentication|resource not accessible by personal access token|invalid token|unauthorized'; then
+    echo "WAIT_GITHUB_AUTH"
+  elif printf '%s' "$output" | grep -Eiq 'graphql:.*rate limit|api rate limit exceeded|rate limit exceeded'; then
     echo "WAIT_GITHUB_RATE_LIMIT"
   elif printf '%s' "$output" | grep -Eiq 'error connecting to api\.github\.com|could not resolve host: api\.github\.com|could not resolve host: github\.com|connection timed out|tls handshake timeout|temporary failure in name resolution|failed to connect'; then
     echo "WAIT_GITHUB_OFFLINE"
@@ -684,7 +703,7 @@ notify_github_runtime_if_needed() {
   if [[ "$runtime_wait_marker" == "1" ]]; then
     github_wait="1"
   elif (( queue_count_num > 0 )); then
-    if [[ "$state" == "WAIT_GITHUB_OFFLINE" || "$state" == "WAIT_GITHUB_RATE_LIMIT" ]]; then
+    if [[ "$state" == "WAIT_GITHUB_OFFLINE" || "$state" == "WAIT_GITHUB_RATE_LIMIT" || "$state" == "WAIT_GITHUB_AUTH" ]]; then
       github_wait="1"
     elif [[ "$detail" == *"DEGRADED=GITHUB_"* || "$detail" == *"DEGRADED=GITHUB_GRAPHQL_RATE_LIMIT"* ]]; then
       github_wait="1"
@@ -737,11 +756,14 @@ notify_github_runtime_if_needed() {
   if [[ "$github_wait" == "1" ]]; then
     if [[ "$mode" != "WAITING" ]]; then
       local wait_line msg msg_file notify_out rc title_line action_line
-      wait_line="$(printf '%s\n' "$output" | grep -m1 -E '^(WAIT_GITHUB_STAGE=|RUNTIME_PROJECT_STATUS_WAIT_ERROR=|WAIT_GITHUB_RATE_LIMIT_STAGE=|WAIT_GITHUB_RATE_LIMIT_MSG=)' || true)"
+      wait_line="$(printf '%s\n' "$output" | grep -m1 -E '^(WAIT_GITHUB_STAGE=|RUNTIME_PROJECT_STATUS_WAIT_ERROR=|WAIT_GITHUB_RATE_LIMIT_STAGE=|WAIT_GITHUB_RATE_LIMIT_MSG=|WAIT_GITHUB_AUTH_STAGE=|WAIT_GITHUB_AUTH_MSG=)' || true)"
       [[ -z "$wait_line" ]] && wait_line="$(printf '%s' "$detail" | tr '|' '\n' | sed 's/^[[:space:]]*//' | grep -m1 -E '^(DEGRADED=GITHUB_|GITHUB_STATUS=)' || true)"
       title_line="<b>⛔ ${PROJECT_LABEL}: GitHub недоступен, ждём восстановление</b>"
       action_line="<b>➡️ Action:</b> <code>авто-ретраи включены, выполняем при восстановлении GitHub</code>"
-      if [[ "$state" == "WAIT_GITHUB_RATE_LIMIT" || "$wait_line" == *"RATE_LIMIT"* || "$detail" == *"GITHUB_GRAPHQL_RATE_LIMIT"* ]]; then
+      if [[ "$state" == "WAIT_GITHUB_AUTH" || "$wait_line" == *"WAIT_GITHUB_AUTH"* || "$detail" == *"GITHUB_AUTH_INVALID"* ]]; then
+        title_line="<b>⛔ ${PROJECT_LABEL}: GitHub credential rejected</b>"
+        action_line="<b>➡️ Action:</b> <code>нужен валидный project token; авто-очередь остановлена</code>"
+      elif [[ "$state" == "WAIT_GITHUB_RATE_LIMIT" || "$wait_line" == *"RATE_LIMIT"* || "$detail" == *"GITHUB_GRAPHQL_RATE_LIMIT"* ]]; then
         title_line="<b>⏳ ${PROJECT_LABEL}: GitHub GraphQL rate limit, ждём окно</b>"
         action_line="<b>➡️ Action:</b> <code>авто-ретраи включены, продолжим после сброса лимита</code>"
       fi
@@ -793,7 +815,7 @@ is_reaction_required() {
   fi
 
   case "$state" in
-    WAIT_USER_REPLY|WAIT_REVIEW_FEEDBACK|WAIT_DIRTY_WORKTREE|WAIT_GITHUB_RATE_LIMIT|WAIT_GITHUB_OFFLINE|WAIT_BRANCH_SYNC|BLOCKED_*|ERROR_LOCAL_FLOW)
+    WAIT_USER_REPLY|WAIT_REVIEW_FEEDBACK|WAIT_DIRTY_WORKTREE|WAIT_GITHUB_RATE_LIMIT|WAIT_GITHUB_OFFLINE|WAIT_GITHUB_AUTH|WAIT_BRANCH_SYNC|BLOCKED_*|ERROR_LOCAL_FLOW)
       echo "1"
       ;;
     *)

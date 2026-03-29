@@ -882,6 +882,60 @@ is_truthy_flag() {
   esac
 }
 
+LAST_RUNTIME_V2_GATE_REASON=""
+
+runtime_v2_gate_handoff_reason() {
+  case "$1" in
+    max_executions_per_task)
+      printf '%s' "runtime_gate_max_executions_per_task"
+      ;;
+    max_token_usage_per_task)
+      printf '%s' "runtime_gate_max_token_usage_per_task"
+      ;;
+    max_estimated_cost_per_task)
+      printf '%s' "runtime_gate_max_estimated_cost_per_task"
+      ;;
+    *)
+      printf '%s' "runtime_gate_blocked"
+      ;;
+  esac
+}
+
+prepare_task_context_for_review_handoff() {
+  local handoff_task_id="$1"
+  local handoff_issue_number="$2"
+  local handoff_status_target="${3:-}"
+
+  printf '%s\n' "$handoff_task_id" > "${CODEX_DIR}/daemon_active_task.txt"
+  if [[ "$handoff_status_target" == PVTI_* ]]; then
+    printf '%s\n' "$handoff_status_target" > "${CODEX_DIR}/daemon_active_item_id.txt"
+  else
+    : > "${CODEX_DIR}/daemon_active_item_id.txt"
+  fi
+  printf '%s\n' "$handoff_issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
+  printf '%s\n' "$handoff_task_id" > "${CODEX_DIR}/project_task_id.txt"
+}
+
+invoke_task_review_handoff() {
+  local handoff_task_id="$1"
+  local handoff_issue_number="$2"
+  local handoff_status_target="$3"
+  local handoff_reason="$4"
+  local handoff_out handoff_rc
+
+  prepare_task_context_for_review_handoff "$handoff_task_id" "$handoff_issue_number" "$handoff_status_target"
+  if handoff_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_review_handoff.sh" "$handoff_task_id" "$handoff_issue_number" "$handoff_reason" 2>&1)"; then
+    emit_lines "$handoff_out"
+    return 0
+  fi
+  handoff_rc=$?
+  emit_lines "$handoff_out"
+  echo "TASK_REVIEW_HANDOFF_ERROR=1"
+  echo "TASK_REVIEW_HANDOFF_RC=${handoff_rc}"
+  echo "TASK_REVIEW_HANDOFF_REASON=${handoff_reason}"
+  return "$handoff_rc"
+}
+
 run_runtime_v2_gate() {
   local gate_task_id="$1"
   local gate_issue_number="$2"
@@ -907,6 +961,7 @@ run_runtime_v2_gate() {
 
   gate_status="$(printf '%s\n' "$gate_out" | sed -n 's/^RUNTIME_V2_GATE_STATUS=//p' | tail -n1)"
   gate_reason="$(printf '%s\n' "$gate_out" | sed -n 's/^RUNTIME_V2_GATE_REASON=//p' | tail -n1)"
+  LAST_RUNTIME_V2_GATE_REASON="$gate_reason"
   if [[ "$gate_status" == "blocked" ]]; then
     echo "WAIT_RUNTIME_V2_GATE=1"
     echo "WAIT_RUNTIME_V2_GATE_NAME=$gate_name"
@@ -1189,6 +1244,18 @@ resume_task_from_human_reply() {
   [[ -n "$resume_task_id" && -n "$resume_issue_number" ]] || return 0
 
   if ! run_runtime_v2_gate "$resume_task_id" "$resume_issue_number" "$resume_gate_name" "daemon_claim"; then
+    rc=$?
+    if [[ "$rc" -eq 1 ]]; then
+      if invoke_task_review_handoff \
+        "$resume_task_id" \
+        "$resume_issue_number" \
+        "$resume_status_target" \
+        "$(runtime_v2_gate_handoff_reason "$LAST_RUNTIME_V2_GATE_REASON")"; then
+        echo "WAIT_REVIEW_FEEDBACK=1"
+        echo "WAIT_REVIEW_FEEDBACK_TASK_ID=${resume_task_id}"
+        echo "WAIT_REVIEW_FEEDBACK_ISSUE_NUMBER=${resume_issue_number}"
+      fi
+    fi
     exit 0
   fi
 
@@ -1198,10 +1265,20 @@ resume_task_from_human_reply() {
     rc=$?
     emit_lines "$status_out"
     if is_github_network_error "$status_out" || [[ "$rc" -eq 75 ]]; then
-      echo "WAIT_GITHUB_API_UNSTABLE=1"
-      echo "WAIT_GITHUB_STAGE=${resume_reason_prefix}_STATUS_UPDATE"
-      enqueue_project_status_runtime "$resume_status_target" "$target_status" "$target_flow" "$resume_gate_name" || true
-      echo "${resume_reason_prefix}_STATUS_DEFERRED=1"
+      if invoke_task_review_handoff \
+        "$resume_task_id" \
+        "$resume_issue_number" \
+        "$resume_status_target" \
+        "github_api_unavailable"; then
+        echo "WAIT_REVIEW_FEEDBACK=1"
+        echo "WAIT_REVIEW_FEEDBACK_TASK_ID=${resume_task_id}"
+        echo "WAIT_REVIEW_FEEDBACK_ISSUE_NUMBER=${resume_issue_number}"
+      else
+        echo "WAIT_GITHUB_API_UNSTABLE=1"
+        echo "WAIT_GITHUB_STAGE=${resume_reason_prefix}_STATUS_UPDATE"
+        enqueue_project_status_runtime "$resume_status_target" "$target_status" "$target_flow" "$resume_gate_name" || true
+        echo "${resume_reason_prefix}_STATUS_DEFERRED=1"
+      fi
       exit 0
     fi
     exit "$rc"
@@ -3396,8 +3473,14 @@ if (( skip_sync_branches == 0 )); then
     rc=$?
     emit_lines "$sync_out"
     if is_github_network_error "$sync_out"; then
-      echo "WAIT_GITHUB_API_UNSTABLE=1"
-      echo "WAIT_GITHUB_STAGE=SYNC_BRANCHES"
+      if invoke_task_review_handoff "$task_id" "$issue_number" "$item_id" "github_api_unavailable"; then
+        echo "WAIT_REVIEW_FEEDBACK=1"
+        echo "WAIT_REVIEW_FEEDBACK_TASK_ID=${task_id}"
+        echo "WAIT_REVIEW_FEEDBACK_ISSUE_NUMBER=${issue_number}"
+      else
+        echo "WAIT_GITHUB_API_UNSTABLE=1"
+        echo "WAIT_GITHUB_STAGE=SYNC_BRANCHES"
+      fi
       exit 0
     fi
     if [[ "$rc" -eq 78 ]] ||
@@ -3412,6 +3495,18 @@ if (( skip_sync_branches == 0 )); then
 fi
 
 if ! run_runtime_v2_gate "$task_id" "$issue_number" "daemon_claim" "daemon_claim"; then
+  rc=$?
+  if [[ "$rc" -eq 1 ]]; then
+    if invoke_task_review_handoff \
+      "$task_id" \
+      "$issue_number" \
+      "$item_id" \
+      "$(runtime_v2_gate_handoff_reason "$LAST_RUNTIME_V2_GATE_REASON")"; then
+      echo "WAIT_REVIEW_FEEDBACK=1"
+      echo "WAIT_REVIEW_FEEDBACK_TASK_ID=${task_id}"
+      echo "WAIT_REVIEW_FEEDBACK_ISSUE_NUMBER=${issue_number}"
+    fi
+  fi
   exit 0
 fi
 
@@ -3421,10 +3516,16 @@ else
   rc=$?
   emit_lines "$status_out"
   if is_github_network_error "$status_out" || [[ "$rc" -eq 75 ]]; then
-    echo "WAIT_GITHUB_API_UNSTABLE=1"
-    echo "WAIT_GITHUB_STAGE=PROJECT_STATUS_UPDATE"
-    enqueue_project_status_runtime "$item_id" "$target_status" "$target_flow" "claim-task:${task_id}" || true
-    echo "PROJECT_STATUS_UPDATE_DEFERRED=1"
+    if invoke_task_review_handoff "$task_id" "$issue_number" "$item_id" "github_api_unavailable"; then
+      echo "WAIT_REVIEW_FEEDBACK=1"
+      echo "WAIT_REVIEW_FEEDBACK_TASK_ID=${task_id}"
+      echo "WAIT_REVIEW_FEEDBACK_ISSUE_NUMBER=${issue_number}"
+    else
+      echo "WAIT_GITHUB_API_UNSTABLE=1"
+      echo "WAIT_GITHUB_STAGE=PROJECT_STATUS_UPDATE"
+      enqueue_project_status_runtime "$item_id" "$target_status" "$target_flow" "claim-task:${task_id}" || true
+      echo "PROJECT_STATUS_UPDATE_DEFERRED=1"
+    fi
   else
     exit "$rc"
   fi

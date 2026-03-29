@@ -56,6 +56,9 @@ Commands:
   runtime_v2_validate_rollout
   runtime_v2_single_task_loop
   runtime_v2_clear
+  task_capture_source_definition
+  task_standardize_spec
+  task_interpret
   micro_task_classifier
   context_builder
   canonical_diff
@@ -803,6 +806,21 @@ case "$cmd" in
   runtime_v2_clear)
     shift 1
     /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_clear.sh" "$@"
+    ;;
+
+  task_capture_source_definition)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_capture_source_definition.sh" "$@"
+    ;;
+
+  task_standardize_spec)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_standardize_spec.sh" "$@"
+    ;;
+
+  task_interpret)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_interpret.sh" "$@"
     ;;
 
   micro_task_classifier)

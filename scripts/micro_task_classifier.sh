@@ -58,7 +58,9 @@ jq -nc \
   }' > "$execution_profile_file"
 
 if [[ -n "$output_file" ]]; then
-  cp "$execution_profile_file" "$output_file"
+  if [[ "$output_file" != "$execution_profile_file" ]]; then
+    cp "$execution_profile_file" "$output_file"
+  fi
 fi
 
 echo "EXECUTION_PROFILE=${decision}"

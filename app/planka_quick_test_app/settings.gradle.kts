@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "PLANKA Quick Test"
+rootProject.name = "PLANKA Diagnostic Shell"
 include(":app")

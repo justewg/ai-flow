@@ -80,3 +80,5 @@
 - Это закрывает forensic-gap после `PL-117`: live run, ушедший в `standard`, теперь объясняется по первым строкам executor log без чтения полного transcript, а следующий живой `micro` canary должен идти вне `/.flow/shared` и вне toolkit/infra scope.
 - `PL-119 / Micro classifier target extraction fix` завершена локально: `micro_profile_extract_target_files` больше не засчитывает backtick-path из `Вне scope` и не поднимает target count от command-like snippets.
 - Реплика live issue `PL-119` теперь даёт `targetFiles=["narrative/index.html"]` и classifier verdict `micro`, что возвращает следующий живой canary обратно в валидную acceptance-проверку micro profile.
+- `PL-122 / Micro parser indentation tolerance` завершена локально: parser теперь tolerant к ведущим пробелам перед `Проверки:` / `Вне scope:` и bullet lines, которые появляются при копировании issue body из интерфейса `codex-cli`.
+- Реплика live-like issue body с двумя leading spaces на каждой строке теперь корректно даёт `targetFiles=["narrative/index.html"]` и восстанавливает три check-команды, вместо пустого `checks` и inflated target list.

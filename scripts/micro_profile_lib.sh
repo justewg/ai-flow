@@ -45,38 +45,37 @@ micro_profile_extract_target_files() {
   local issue_text="${1:-}"
   local root_dir="${2:-$ROOT_DIR}"
   local tmp_file
-  local body_without_checks
   local line
-  local in_frontmatter="1"
+  local trimmed_line
+  local candidate
 
   tmp_file="$(mktemp)"
 
-  body_without_checks="$(
-    while IFS= read -r line; do
-      if [[ "$line" =~ ^Проверки: || "$line" =~ ^Вне\ scope: || "$line" =~ ^Вне\ scope ]]; then
-        break
+  while IFS= read -r line; do
+    trimmed_line="$(micro_profile_trim "$line")"
+
+    if [[ "$trimmed_line" == "Проверки:" || "$trimmed_line" == "Вне scope:" || "$trimmed_line" == "Вне scope" ]]; then
+      break
+    fi
+
+    if [[ "$trimmed_line" == -[[:space:]]Не\ * || "$trimmed_line" == -[[:space:]]не\ * ]]; then
+      continue
+    fi
+    if [[ "$trimmed_line" == *"не трогать"* || "$trimmed_line" == *"не менять"* || "$trimmed_line" == *"любые изменения"* ]]; then
+      continue
+    fi
+
+    while IFS= read -r candidate; do
+      [[ -z "$candidate" ]] && continue
+      [[ "$candidate" == *" "* ]] && continue
+      candidate="$(printf '%s' "$candidate" | sed -E 's/^`//; s/`$//')"
+      if [[ -e "${root_dir}/${candidate}" ]]; then
+        printf '%s\n' "$candidate"
+      elif [[ "$candidate" == ./* && -e "${root_dir}/${candidate#./}" ]]; then
+        printf '%s\n' "${candidate#./}"
       fi
-
-      # Keep the title/frontmatter and the descriptive task sections, but stop before
-      # checks/out-of-scope so those command snippets do not inflate target file count.
-      printf '%s\n' "$line"
-      in_frontmatter="0"
-    done <<< "$issue_text"
-  )"
-
-  printf '%s\n' "$body_without_checks" \
-    | rg -o '`[^`]+`' \
-    | sed -E 's/^`//; s/`$//' \
-    | while IFS= read -r candidate; do
-        [[ -z "$candidate" ]] && continue
-        [[ "$candidate" == *" "* ]] && continue
-        if [[ -e "${root_dir}/${candidate}" ]]; then
-          printf '%s\n' "$candidate"
-        elif [[ "$candidate" == ./* && -e "${root_dir}/${candidate#./}" ]]; then
-          printf '%s\n' "${candidate#./}"
-        fi
-      done \
-    | awk '!seen[$0]++' > "$tmp_file"
+    done < <(printf '%s\n' "$trimmed_line" | rg -o '`[^`]+`')
+  done <<< "$issue_text" | awk '!seen[$0]++' > "$tmp_file"
 
   cat "$tmp_file"
   rm -f "$tmp_file"
@@ -85,15 +84,19 @@ micro_profile_extract_target_files() {
 micro_profile_extract_check_commands() {
   local issue_body="${1:-}"
   local in_checks="0"
+  local trimmed_line=""
+  local item=""
   local trimmed=""
 
   while IFS= read -r line; do
-    if [[ "$line" =~ ^Проверки: ]]; then
+    trimmed_line="$(micro_profile_trim "$line")"
+
+    if [[ "$trimmed_line" == "Проверки:" ]]; then
       in_checks="1"
       continue
     fi
 
-    if [[ "$line" =~ ^Вне\ scope: || "$line" =~ ^Вне\ scope ]]; then
+    if [[ "$trimmed_line" == "Вне scope:" || "$trimmed_line" == "Вне scope" ]]; then
       break
     fi
 
@@ -101,21 +104,23 @@ micro_profile_extract_check_commands() {
       continue
     fi
 
-    if [[ "$line" =~ ^-[[:space:]]*\`(.+)\`[[:space:]]*$ ]]; then
-      printf '%s\n' "${BASH_REMATCH[1]}"
+    if [[ "$trimmed_line" != -[[:space:]]* ]]; then
       continue
     fi
 
-    if [[ "$line" =~ ^-[[:space:]]*(.+)$ ]]; then
-      trimmed="${BASH_REMATCH[1]}"
-      trimmed="$(printf '%s' "$trimmed" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
-      [[ -n "$trimmed" ]] || continue
-      if [[ "$trimmed" == \`* && "$trimmed" == *\` ]]; then
-        trimmed="${trimmed#\`}"
-        trimmed="${trimmed%\`}"
-      fi
-      printf '%s\n' "$trimmed"
+    item="${trimmed_line#- }"
+    item="$(micro_profile_trim "$item")"
+    [[ -n "$item" ]] || continue
+
+    if [[ "$item" == \`* && "$item" == *\` ]]; then
+      item="${item#\`}"
+      item="${item%\`}"
+      printf '%s\n' "$item"
+      continue
     fi
+
+    trimmed="$item"
+    printf '%s\n' "$trimmed"
   done <<< "$issue_body"
 }
 

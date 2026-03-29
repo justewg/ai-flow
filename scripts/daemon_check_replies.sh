@@ -391,6 +391,14 @@ has_waiting_context_artifacts() {
     [[ -s "$waiting_comment_url_file" ]]
 }
 
+has_review_context_artifacts() {
+  [[ -s "$review_task_file" ]] ||
+    [[ -s "$review_item_file" ]] ||
+    [[ -s "$review_issue_file" ]] ||
+    [[ -s "$review_pr_file" ]] ||
+    [[ -s "$review_branch_file" ]]
+}
+
 clear_waiting_state() {
   : > "$issue_file"
   : > "$task_file"
@@ -475,6 +483,62 @@ clear_waiting_for_terminal_review_pr() {
   fi
 }
 
+probe_terminal_review_pr_from_review_context() {
+  local review_pr_number=""
+  local review_issue_number=""
+  local review_branch_name=""
+  local review_pr_json=""
+  local review_pr_state=""
+  local review_pr_merged_at=""
+  local review_pr_closed_at=""
+  local rc=0
+
+  [[ -s "$review_pr_file" ]] && review_pr_number="$(<"$review_pr_file")"
+  [[ -s "$review_issue_file" ]] && review_issue_number="$(<"$review_issue_file")"
+  [[ -s "$review_branch_file" ]] && review_branch_name="$(<"$review_branch_file")"
+
+  if ! [[ "$review_pr_number" =~ ^[0-9]+$ && "$review_issue_number" =~ ^[0-9]+$ ]]; then
+    return 1
+  fi
+
+  if ! review_pr_json="$(
+    "${CODEX_SHARED_SCRIPTS_DIR}/gh_retry.sh" \
+      gh api "repos/${REPO}/pulls/${review_pr_number}" \
+        --jq '{state: (.state // ""), mergedAt: (.merged_at // ""), closedAt: (.closed_at // "")}'
+  )"; then
+    rc=$?
+    if [[ "$rc" -eq 75 ]]; then
+      echo "WAIT_GITHUB_API_UNSTABLE=1"
+      echo "WAITING_FOR_REVIEW_CONTEXT_ONLY=1"
+      echo "WAITING_REVIEW_PR_NUMBER=$review_pr_number"
+      return 0
+    fi
+    clear_review_context
+    echo "STALE_WAITING_CONTEXT_CLEARED=REVIEW_PR_LOOKUP_FAILED"
+    echo "STALE_WAITING_ISSUE_NUMBER=$review_issue_number"
+    echo "STALE_WAITING_PR_NUMBER=$review_pr_number"
+    echo "NO_WAITING_USER_REPLY=1"
+    exit 0
+  fi
+
+  review_pr_state="$(printf '%s' "$review_pr_json" | jq -r '.state // ""' | tr '[:lower:]' '[:upper:]')"
+  review_pr_merged_at="$(printf '%s' "$review_pr_json" | jq -r '.mergedAt // ""')"
+  review_pr_closed_at="$(printf '%s' "$review_pr_json" | jq -r '.closedAt // ""')"
+
+  clear_waiting_for_terminal_review_pr \
+    "$review_issue_number" \
+    "REVIEW_FEEDBACK" \
+    "$review_branch_name" \
+    "$review_pr_number" \
+    "$review_pr_state" \
+    "$review_pr_merged_at" \
+    "$review_pr_closed_at"
+
+  echo "WAITING_FOR_REVIEW_CONTEXT_ONLY=1"
+  echo "WAITING_REVIEW_PR_NUMBER=$review_pr_number"
+  return 0
+}
+
 clear_stale_waiting_context() {
   local reason="$1"
   local issue_number="${2:-}"
@@ -527,6 +591,9 @@ recover_anchor_comment_id() {
 }
 
 if [[ ! -s "$issue_file" || ! -s "$question_id_file" ]]; then
+  if has_review_context_artifacts; then
+    probe_terminal_review_pr_from_review_context
+  fi
   if has_waiting_context_artifacts; then
     clear_waiting_state
     echo "STALE_WAITING_CONTEXT_CLEARED=MISSING_WAITING_MARKERS"

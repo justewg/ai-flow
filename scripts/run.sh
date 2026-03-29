@@ -289,7 +289,11 @@ ensure_git_in_repo_root() {
 }
 
 git_temp_repo_args_file() {
-  printf '%s\n' "${CODEX_DIR}/git_temp_repo.env"
+  if [[ -n "${CODEX_GIT_TEMP_REPO_ARGS_FILE:-}" ]]; then
+    printf '%s\n' "${CODEX_GIT_TEMP_REPO_ARGS_FILE}"
+    return 0
+  fi
+  printf '%s\n' "${ROOT_DIR}/.tmp/git_temp_repo.env"
 }
 
 read_multiline_value_into_array() {

@@ -71,6 +71,94 @@ task_worktree_json_file() {
   printf '%s/task.json' "$(task_worktree_meta_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
 }
 
+task_worktree_execution_dir() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/execution' "$(task_worktree_meta_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_execution_profile_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/execution_profile.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_context_cache_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/context_cache.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_micro_prompt_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/micro_prompt_input.txt' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_canonical_diff_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/canonical_diff.patch' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_changed_files_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/changed_files.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_diff_summary_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/diff_summary.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_llm_calls_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/llm_calls.jsonl' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_execution_budget_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/execution_budget.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_check_results_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/check_results.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_failed_checks_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/failed_checks.txt' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
 task_worktree_branch_name() {
   local task_id="$1"
   local issue_number="$2"

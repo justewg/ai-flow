@@ -13,10 +13,30 @@ output_file="$3"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./env/bootstrap.sh
 source "${SCRIPT_DIR}/env/bootstrap.sh"
+# shellcheck source=./task_worktree_lib.sh
+source "${SCRIPT_DIR}/task_worktree_lib.sh"
 CODEX_DIR="$(codex_export_state_dir)"
 REPO="${GITHUB_REPO:-justewg/planka}"
+state_dir="$(codex_resolve_state_dir)"
+profile_name="$(codex_resolve_project_profile_name 2>/dev/null || printf '%s' "${PROJECT_PROFILE:-default}")"
+profile_file="$(task_worktree_execution_profile_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
 
 mkdir -p "$CODEX_DIR"
+
+profile_kind=""
+if [[ -f "$profile_file" ]]; then
+  profile_kind="$(jq -r '.profile // ""' "$profile_file" 2>/dev/null || true)"
+fi
+
+if [[ "$profile_kind" == "micro" ]]; then
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/context_builder.sh" "$task_id" "$issue_number" "$output_file"
+  echo "EXECUTOR_PROMPT_READY=1"
+  echo "TASK_ID=$task_id"
+  echo "ISSUE_NUMBER=$issue_number"
+  echo "PROMPT_FILE=$output_file"
+  echo "EXECUTION_PROFILE=micro"
+  exit 0
+fi
 
 issue_title=""
 issue_body=""
@@ -87,3 +107,4 @@ echo "EXECUTOR_PROMPT_READY=1"
 echo "TASK_ID=$task_id"
 echo "ISSUE_NUMBER=$issue_number"
 echo "PROMPT_FILE=$output_file"
+echo "EXECUTION_PROFILE=standard"

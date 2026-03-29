@@ -14,7 +14,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/env/bootstrap.sh"
 # shellcheck source=./task_worktree_lib.sh
 source "${SCRIPT_DIR}/task_worktree_lib.sh"
+# shellcheck source=./micro_profile_lib.sh
+source "${SCRIPT_DIR}/micro_profile_lib.sh"
 codex_load_flow_env
+
 CODEX_DIR="$(codex_export_state_dir)"
 RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
 LOG_FILE="${RUNTIME_LOG_DIR}/executor.log"
@@ -29,9 +32,20 @@ HEARTBEAT_EPOCH_FILE="${CODEX_DIR}/executor_heartbeat_epoch.txt"
 HEARTBEAT_PID_FILE="${CODEX_DIR}/executor_heartbeat_pid.txt"
 DETACH_FILE="${CODEX_DIR}/executor_detach_requested.txt"
 RUN_STARTED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+state_dir="$(codex_resolve_state_dir)"
+profile_name="$(codex_resolve_project_profile_name 2>/dev/null || printf '%s' "${PROJECT_PROFILE:-default}")"
+execution_dir="$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile_name")"
+profile_file="$(task_worktree_execution_profile_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
+context_cache_file="$(task_worktree_context_cache_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
+canonical_diff_file="$(task_worktree_canonical_diff_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
+failed_checks_file="$(task_worktree_failed_checks_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
+check_results_file="$(task_worktree_check_results_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
+guard_violations_file="${execution_dir}/blocked_commands.jsonl"
 
-mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
+mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR" "$execution_dir"
 : > "$DETACH_FILE"
+: > "$LAST_MSG_FILE"
+: > "$failed_checks_file"
 
 record_execution() {
   local rc="$1"
@@ -67,7 +81,26 @@ emit_runtime_v2_event() {
   fi
 }
 
-task_repo="$(task_worktree_repo_dir "$task_id" "$issue_number")"
+is_truthy() {
+  local raw_value="${1:-}"
+  local value
+  value="$(printf '%s' "$raw_value" | tr '[:upper:]' '[:lower:]')"
+  case "$value" in
+    1|true|yes|on)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+touch_heartbeat() {
+  date -u '+%Y-%m-%dT%H:%M:%SZ' > "$HEARTBEAT_FILE"
+  date +%s > "$HEARTBEAT_EPOCH_FILE"
+}
+
+task_repo="$(task_worktree_repo_dir "$task_id" "$issue_number" "$state_dir" "$profile_name")"
 if ! task_worktree_repo_present "$task_repo"; then
   {
     echo "EXECUTOR_TASK_WORKTREE_MISSING=1"
@@ -101,24 +134,10 @@ if ! task_worktree_ensure_toolkit_materialized "$task_repo"; then
   exit 0
 fi
 
-is_truthy() {
-  local raw_value="${1:-}"
-  local value
-  value="$(printf '%s' "$raw_value" | tr '[:upper:]' '[:lower:]')"
-  case "$value" in
-    1|true|yes|on)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
-touch_heartbeat() {
-  date -u '+%Y-%m-%dT%H:%M:%SZ' > "$HEARTBEAT_FILE"
-  date +%s > "$HEARTBEAT_EPOCH_FILE"
-}
+execution_profile="standard"
+if [[ -f "$profile_file" ]]; then
+  execution_profile="$(jq -r '.profile // "standard"' "$profile_file" 2>/dev/null || printf '%s' "standard")"
+fi
 
 {
   echo "=== EXECUTOR_RUN_START task=${task_id} issue=${issue_number} at ${RUN_STARTED_AT} ==="
@@ -137,43 +156,223 @@ if [[ -f "$LOG_FILE" ]]; then
   run_log_start_line=$(( $(wc -l < "$LOG_FILE") + 1 ))
 fi
 
-codex_args=(codex exec -C "$task_repo" --output-last-message "$LAST_MSG_FILE")
+codex_base_args=(codex exec -C "$task_repo")
 executor_mode="full-auto"
 if is_truthy "${EXECUTOR_CODEX_BYPASS_SANDBOX:-0}"; then
-  codex_args+=(--dangerously-bypass-approvals-and-sandbox)
+  codex_base_args+=(--dangerously-bypass-approvals-and-sandbox)
   executor_mode="danger-full-access"
 else
-  codex_args+=(--full-auto)
+  codex_base_args+=(--full-auto)
 fi
 
 {
   echo "EXECUTOR_CODEX_MODE=${executor_mode}"
   echo "EXECUTOR_CODEX_BYPASS_SANDBOX=${EXECUTOR_CODEX_BYPASS_SANDBOX:-0}"
   echo "EXECUTOR_TASK_WORKTREE_PATH=${task_repo}"
+  echo "EXECUTION_PROFILE=${execution_profile}"
 } >>"$LOG_FILE" 2>&1
 
-"${codex_args[@]}" - < "$PROMPT_FILE" >>"$LOG_FILE" 2>&1 &
-codex_pid="$!"
+run_codex_call() {
+  local phase="$1"
+  local prompt_file="$2"
+  local response_file="$3"
+  local call_index="$4"
+  local call_log_file="${execution_dir}/llm-call-${call_index}-${phase}.log"
+  local rc=0
+  local codex_pid heartbeat_pid
+  local guard_rc=0
+  local guard_out=""
+  local guard_bin_dir=""
+  local -a call_args=("${codex_base_args[@]}" --output-last-message "$response_file")
 
-(
-  while kill -0 "$codex_pid" 2>/dev/null; do
-    touch_heartbeat
-    sleep "$heartbeat_sec"
-  done
-) &
-heartbeat_pid="$!"
-printf '%s\n' "$heartbeat_pid" > "$HEARTBEAT_PID_FILE"
+  : > "$response_file"
+  : > "$call_log_file"
+
+  if [[ "$execution_profile" == "micro" ]]; then
+    guard_out="$(
+      /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_prepare_guard_bin.sh" "$task_id" "$issue_number" 2>&1
+    )"
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "$line"
+    done <<<"$guard_out" >>"$LOG_FILE" 2>&1
+    guard_bin_dir="$(printf '%s\n' "$guard_out" | sed -n 's/^MICRO_GUARD_BIN_DIR=//p' | tail -n1)"
+  fi
+
+  (
+    set -o pipefail
+    if [[ -n "$guard_bin_dir" ]]; then
+      PATH="${guard_bin_dir}:$PATH" "${call_args[@]}" - < "$prompt_file" 2>&1 | tee -a "$call_log_file" >>"$LOG_FILE"
+    else
+      "${call_args[@]}" - < "$prompt_file" 2>&1 | tee -a "$call_log_file" >>"$LOG_FILE"
+    fi
+  ) &
+  codex_pid="$!"
+
+  (
+    while kill -0 "$codex_pid" 2>/dev/null; do
+      touch_heartbeat
+      sleep "$heartbeat_sec"
+    done
+  ) &
+  heartbeat_pid="$!"
+  printf '%s\n' "$heartbeat_pid" > "$HEARTBEAT_PID_FILE"
+
+  if wait "$codex_pid"; then
+    rc=0
+  else
+    rc=$?
+  fi
+
+  kill "$heartbeat_pid" 2>/dev/null || true
+  wait "$heartbeat_pid" 2>/dev/null || true
+  touch_heartbeat
+
+  [[ -f "$response_file" ]] && cp "$response_file" "$LAST_MSG_FILE"
+
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/llm_call_telemetry.sh" \
+    "$task_id" "$issue_number" "$phase" "$call_index" "$prompt_file" "$response_file" "$call_log_file" >>"$LOG_FILE" 2>&1 || true
+  guard_rc=0
+  if ! /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_profile_guard.sh" \
+    "$task_id" "$issue_number" >>"$LOG_FILE" 2>&1; then
+    guard_rc=$?
+  fi
+  if [[ "$guard_rc" -eq 42 ]]; then
+    echo "FAILED_PROFILE_BREACH=1" >>"$LOG_FILE" 2>&1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/incident_append.sh" profile_breach "task=${task_id} issue=${issue_number} phase=${phase}" >/dev/null 2>&1 || true
+    return 42
+  fi
+
+  return "$rc"
+}
+
+run_micro_checks() {
+  local results_tmp
+  local failed=0
+  local cmd rc out status
+
+  results_tmp="$(mktemp "${execution_dir}/micro_checks.XXXXXX")"
+  : > "$failed_checks_file"
+
+  if [[ ! -f "$context_cache_file" ]]; then
+    jq -nc '{results:[]}' > "$check_results_file"
+    rm -f "$results_tmp"
+    return 0
+  fi
+
+  while IFS= read -r cmd; do
+    [[ -z "$cmd" ]] && continue
+    rc=0
+    out=""
+
+    if ! micro_profile_allowlist_verification_command "$cmd"; then
+      status="blocked_not_in_whitelist"
+      rc=126
+      out="Command is not allowed by micro-profile verification whitelist."
+      failed=1
+    elif out="$(cd "$task_repo" && /bin/bash -lc "$cmd" 2>&1)"; then
+      status="passed"
+      rc=0
+    else
+      rc=$?
+      status="failed"
+      failed=1
+    fi
+
+    jq -nc \
+      --arg command "$cmd" \
+      --arg status "$status" \
+      --arg output "$out" \
+      --argjson rc "$rc" \
+      '{command:$command, status:$status, rc:$rc, output:$output}' >> "$results_tmp"
+
+    if [[ "$status" != "passed" ]]; then
+      {
+        printf 'COMMAND: %s\n' "$cmd"
+        printf 'STATUS: %s\n' "$status"
+        printf 'RC: %s\n' "$rc"
+        printf '%s\n\n' "$out"
+      } >> "$failed_checks_file"
+    fi
+  done < <(jq -r '.checkCommands[]? // empty' "$context_cache_file")
+
+  jq -s '{results:.}' "$results_tmp" > "$check_results_file"
+  rm -f "$results_tmp"
+  return "$failed"
+}
+
+build_micro_repair_prompt() {
+  local repair_prompt_file="$1"
+  local diff_text=""
+  local failed_text=""
+  local issue_summary=""
+
+  [[ -f "$canonical_diff_file" ]] && diff_text="$(cat "$canonical_diff_file")"
+  [[ -f "$failed_checks_file" ]] && failed_text="$(cat "$failed_checks_file")"
+  if [[ -f "$context_cache_file" ]]; then
+    issue_summary="$(jq -r '.issueSummary // ""' "$context_cache_file")"
+  fi
+
+  {
+    printf '%s\n' 'Ты продолжаешь micro-task для репозитория PLANKA.'
+    printf '%s\n' 'Discovery и повторные чтения файлов запрещены. Используй только canonical diff и failed checks ниже.'
+    printf '\n'
+    printf '%s\n' "Task ID: ${task_id}"
+    printf '%s\n' "Issue: #${issue_number}"
+    printf '\n'
+    printf '%s\n' 'Issue summary:'
+    printf '%s\n' "$issue_summary"
+    printf '\n'
+    printf '%s\n' 'Canonical diff:'
+    printf '%s\n' "$diff_text"
+    printf '\n'
+    printf '%s\n' 'Failed checks:'
+    printf '%s\n' "$failed_text"
+    printf '\n'
+    printf '%s\n' 'Исправь только причины падения проверок, затем выполни проверки и остановись. Не трогай finalize/PR metadata.'
+  } > "$repair_prompt_file"
+}
 
 rc=0
-if wait "$codex_pid"; then
+if run_codex_call "implementation" "$PROMPT_FILE" "${execution_dir}/llm-response-1.txt" 1; then
   rc=0
 else
   rc=$?
 fi
 
-kill "$heartbeat_pid" 2>/dev/null || true
-wait "$heartbeat_pid" 2>/dev/null || true
-touch_heartbeat
+if [[ "$execution_profile" == "micro" && "$rc" -eq 0 ]]; then
+  if run_micro_checks; then
+    :
+  else
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/canonical_diff.sh" "$task_id" "$issue_number" >>"$LOG_FILE" 2>&1 || true
+    build_micro_repair_prompt "${execution_dir}/micro_repair_prompt.txt"
+    if run_codex_call "repair" "${execution_dir}/micro_repair_prompt.txt" "${execution_dir}/llm-response-2.txt" 2; then
+      rc=0
+    else
+      rc=$?
+    fi
+    if [[ "$rc" -eq 0 ]]; then
+      if run_micro_checks; then
+        :
+      else
+        rc=1
+      fi
+    fi
+  fi
+
+  if [[ "$rc" -eq 0 ]]; then
+    if is_truthy "${EXECUTOR_MICRO_SKIP_FINALIZE:-0}"; then
+      /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/canonical_diff.sh" "$task_id" "$issue_number" >>"$LOG_FILE" 2>&1 || rc=$?
+      /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/metadata_builder.sh" "$task_id" "$issue_number" >>"$LOG_FILE" 2>&1 || rc=$?
+      {
+        echo "EXECUTOR_MICRO_SKIP_FINALIZE=1"
+        echo "EXECUTOR_MICRO_FINALIZE_SKIPPED=1"
+      } >>"$LOG_FILE" 2>&1
+    else
+      /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_finalize.sh" "$task_id" "$issue_number" >>"$LOG_FILE" 2>&1 || rc=$?
+    fi
+  fi
+fi
 
 detach_requested="0"
 if [[ -s "$DETACH_FILE" ]]; then
@@ -196,9 +395,13 @@ fi
 provider_error_class="none"
 termination_reason="completed"
 run_log_slice="$(sed -n "${run_log_start_line},\$p" "$LOG_FILE" 2>/dev/null || true)"
+if [[ "$rc" -eq 42 ]]; then
+  termination_reason="failed_profile_breach"
+fi
 if printf '%s\n' "$run_log_slice" | rg -n "Quota exceeded" >/dev/null 2>&1; then
   provider_error_class="quota_exceeded"
   termination_reason="provider_quota_exceeded"
+  execution_id_for_budget="$(cat "$EXECUTION_ID_FILE" 2>/dev/null || true)"
   budget_payload="$(
     jq -nc \
       --arg reason "provider quota exceeded during executor run" \
@@ -209,7 +412,7 @@ if printf '%s\n' "$run_log_slice" | rg -n "Quota exceeded" >/dev/null 2>&1; then
   )"
   emit_runtime_v2_event \
     "budget.breached" \
-    "legacy-v2-budget-breach-${task_id}-${execution_id:-quota}" \
+    "legacy-v2-budget-breach-${task_id}-${execution_id_for_budget:-quota}" \
     "legacy.budget.breached:${task_id}:provider_quota_exceeded" \
     "$budget_payload"
   /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_sync_control_mode.sh" >/dev/null 2>&1 || true

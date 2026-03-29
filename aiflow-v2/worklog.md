@@ -82,3 +82,5 @@
 - Реплика live issue `PL-119` теперь даёт `targetFiles=["narrative/index.html"]` и classifier verdict `micro`, что возвращает следующий живой canary обратно в валидную acceptance-проверку micro profile.
 - `PL-122 / Micro parser indentation tolerance` завершена локально: parser теперь tolerant к ведущим пробелам перед `Проверки:` / `Вне scope:` и bullet lines, которые появляются при копировании issue body из интерфейса `codex-cli`.
 - Реплика live-like issue body с двумя leading spaces на каждой строке теперь корректно даёт `targetFiles=["narrative/index.html"]` и восстанавливает три check-команды, вместо пустого `checks` и inflated target list.
+- `PL-123 / Live micro follow-up` завершена локально: в `micro` whitelist добавлен `git diff -- <path>`, `executor_run` теперь повторно проверяет budget breach после каждого call и не идёт в repair branch после первого `FAILED_PROFILE_BREACH`.
+- Для already-satisfied micro tasks добавлен deterministic `MICRO_NOOP_ALREADY_SATISFIED=1` short-circuit на пустом canonical diff, чтобы no-op run не тратил второй LLM call и не уходил в finalize chatter.

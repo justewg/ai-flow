@@ -1,0 +1,65 @@
+[
+  {
+    "task_id": "PL-090",
+    "title": "[AI-FLOW V2] Containment and SAFE mode baseline",
+    "status": "Done",
+    "flow": "Done",
+    "scope": "V1+",
+    "priority": "P1",
+    "body": "Зафиксирован Containment baseline для AI Flow v2.\n\nЧто сделано:\n- введены AUTO / SAFE / EMERGENCY_STOP\n- добавлены incident и rough execution ledgers\n- daemon/watchdog/executor блокируют expensive path вне AUTO\n- provider quota failure переводит runtime в EMERGENCY_STOP\n\nАртефакты:\n- ai-flow PR #11\n- planka PR #523\n- локальный result log: aiflow-v2/results/PL-090.md"
+  },
+  {
+    "task_id": "PL-091",
+    "title": "[AI-FLOW V2] State store bootstrap",
+    "status": "Done",
+    "flow": "Done",
+    "scope": "V1+",
+    "priority": "P1",
+    "body": "Поднят bootstrap state layer для AI Flow v2.\n\nЧто сделано:\n- создан .flow/shared/runtime-v2\n- введены Task / TaskState / Execution / Event\n- добавлены memory и mongo adapters\n- реализован getTaskBundle()\n\nАртефакты:\n- ai-flow PR #11\n- planka PR #523\n- локальный result log: aiflow-v2/results/PL-091.md"
+  },
+  {
+    "task_id": "PL-092",
+    "title": "[AI-FLOW V2] Orchestrator core and WAIT_HUMAN contract",
+    "status": "Done",
+    "flow": "Done",
+    "scope": "V1+",
+    "priority": "P1",
+    "body": "Реализован минимальный transition engine AI Flow v2.\n\nЧто сделано:\n- applyEvent() как единая transition entrypoint\n- canonical review artifact policy\n- terminal WAIT_HUMAN\n- active execution invariant\n- duplicate finalize/review transitions -> noop\n\nАртефакты:\n- ai-flow PR #11\n- planka PR #523\n- локальный result log: aiflow-v2/results/PL-092.md"
+  },
+  {
+    "task_id": "PL-093",
+    "title": "[AI-FLOW V2] Dedup and execution lease policy",
+    "status": "Done",
+    "flow": "Done",
+    "scope": "V1+",
+    "priority": "P1",
+    "body": "Добавлен execution policy layer для AI Flow v2.\n\nЧто сделано:\n- execution dedup key\n- lease acquire / heartbeat / release\n- stale execution evaluation\n- stale execution -> terminal failed без restart chain\n\nАртефакты:\n- ai-flow PR #11\n- planka PR #523\n- локальный result log: aiflow-v2/results/PL-093.md"
+  },
+  {
+    "task_id": "PL-094",
+    "title": "[AI-FLOW V2] Budget guardrails and controlled rollout scaffold",
+    "status": "Done",
+    "flow": "Done",
+    "scope": "V1+",
+    "priority": "P1",
+    "body": "Добавлен policy layer для budget и rollout control.\n\nЧто сделано:\n- task-level budget caps\n- paused_budget / emergency_stop\n- rollout modes: dry_run, shadow, single_task, limited, auto\n- automation gate для controlled rollout\n\nАртефакты:\n- ai-flow PR #11\n- planka PR #523\n- локальный result log: aiflow-v2/results/PL-094.md"
+  },
+  {
+    "task_id": "PL-095",
+    "title": "[AI-FLOW V2] Integration 1 shadow bridge",
+    "status": "Done",
+    "flow": "Done",
+    "scope": "V1+",
+    "priority": "P1",
+    "body": "Добавлен отдельный runtime_v2 shadow contour рядом с legacy runtime.\n\nЧто сделано:\n- persistent file adapter для shadow state\n- runtime_v2_shadow_sync / runtime_v2_snapshot / runtime_v2_clear\n- shadow sync materialize-ит legacy waiting/review/execution state в отдельный runtime_v2/store\n\nАртефакты:\n- ai-flow PR #11\n- planka PR #523\n- локальный result log: aiflow-v2/results/PL-095.md"
+  },
+  {
+    "task_id": "PL-096",
+    "title": "[AI-FLOW V2] Integration 2 policy-first gating",
+    "status": "Backlog",
+    "flow": "Backlog",
+    "scope": "V1+",
+    "priority": "P1",
+    "body": "Следующий planned step после shadow bridge.\n\nЦель:\n- начать читать rollout/budget/stale verdicts из runtime-v2 перед expensive path legacy runtime\n- shell runtime пока остаётся transport/effect layer\n- без full cutover в auto mode\n\nПланируемый scope:\n- policy-first gating для daemon/executor\n- чтение rollout gate и budget gate из runtime-v2\n- первые supervisor reads из stale/budget state\n- controlled rollout только через dry_run -> shadow -> single_task -> limited"
+  }
+]

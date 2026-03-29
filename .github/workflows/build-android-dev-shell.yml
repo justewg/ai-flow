@@ -1,0 +1,259 @@
+name: Build and Publish Android Dev Shell
+
+run-name: >-
+  Android dev shell
+  ${{ github.event_name == 'workflow_dispatch' && format('manual {0}', inputs.ref) || format('{0} {1}', github.ref_name, github.sha) }}
+
+on:
+  push:
+    branches:
+      - development
+    paths:
+      - "app/**"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to build and publish
+        required: false
+        default: development
+
+concurrency:
+  group: android-dev-shell-${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: [self-hosted, planka-deploy]
+    env:
+      ANDROID_COMPILE_SDK: "34"
+      ANDROID_BUILD_TOOLS: "34.0.0"
+    outputs:
+      app_version_code: ${{ steps.version.outputs.app_version_code }}
+      app_version_name: ${{ steps.version.outputs.app_version_name }}
+      config_version: ${{ steps.version.outputs.config_version }}
+      channel: ${{ steps.version.outputs.channel }}
+      short_sha: ${{ steps.version.outputs.short_sha }}
+      source_branch: ${{ steps.version.outputs.source_branch }}
+      source_sha: ${{ steps.version.outputs.source_sha }}
+
+    steps:
+      - name: Checkout manual ref
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          submodules: recursive
+
+      - name: Checkout push ref
+        if: ${{ github.event_name == 'push' }}
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Compute dev build version
+        id: version
+        run: |
+          set -euo pipefail
+
+          BASE_VERSION_NAME="$(
+            sed -n 's/^val baseVersionName = "\(.*\)"/\1/p' app/planka_quick_test_app/app/build.gradle.kts | head -n1
+          )"
+          if [[ -z "${BASE_VERSION_NAME}" ]]; then
+            echo "Failed to extract baseVersionName from build.gradle.kts" >&2
+            exit 1
+          fi
+
+          APP_VERSION_CODE=$((200000 + GITHUB_RUN_NUMBER))
+          APP_VERSION_NAME="${BASE_VERSION_NAME}-dev.${GITHUB_RUN_NUMBER}"
+          CONFIG_VERSION="${APP_VERSION_CODE}"
+          CHANNEL="stable"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            SOURCE_BRANCH="${{ inputs.ref }}"
+          else
+            SOURCE_BRANCH="${GITHUB_REF_NAME}"
+          fi
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          SHORT_SHA="$(printf '%s' "${SOURCE_SHA}" | cut -c1-8)"
+
+          echo "app_version_code=${APP_VERSION_CODE}" >> "$GITHUB_OUTPUT"
+          echo "app_version_name=${APP_VERSION_NAME}" >> "$GITHUB_OUTPUT"
+          echo "config_version=${CONFIG_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "channel=${CHANNEL}" >> "$GITHUB_OUTPUT"
+          echo "source_branch=${SOURCE_BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "source_sha=${SOURCE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare Android builder
+        run: |
+          set -euo pipefail
+          ./.flow/shared/scripts/run.sh android_builder config
+          ./.flow/shared/scripts/run.sh android_builder up
+
+      - name: Build debug APK
+        env:
+          PLANKA_ANDROID_VERSION_CODE: ${{ steps.version.outputs.app_version_code }}
+          PLANKA_ANDROID_VERSION_NAME: ${{ steps.version.outputs.app_version_name }}
+        run: |
+          set -euo pipefail
+          ./.flow/shared/scripts/run.sh android_builder run bash -lc '
+            cd app/planka_quick_test_app
+            chmod +x ./gradlew
+            ./gradlew --no-daemon assembleDebug
+          '
+
+      - name: Stop Android builder
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          ./.flow/shared/scripts/run.sh android_builder down || true
+
+      - name: Stage publish payload
+        run: |
+          set -euo pipefail
+
+          mkdir -p .tmp/android-dev-shell
+          APK_SOURCE="app/planka_quick_test_app/app/build/outputs/apk/debug/app-debug.apk"
+          APK_TARGET=".tmp/android-dev-shell/planka-shell-${{ steps.version.outputs.app_version_name }}.apk"
+          CONFIG_TARGET=".tmp/android-dev-shell/config-${{ steps.version.outputs.config_version }}.json"
+          META_TARGET=".tmp/android-dev-shell/release.env"
+
+          test -f "${APK_SOURCE}"
+          cp "${APK_SOURCE}" "${APK_TARGET}"
+
+          cat > "${CONFIG_TARGET}" <<EOF
+          {
+            "schemaVersion": 1,
+            "channel": "dev-shell",
+            "build": {
+              "sourceBranch": "${{ steps.version.outputs.source_branch }}",
+              "sourceSha": "${{ steps.version.outputs.source_sha }}",
+              "runId": "${GITHUB_RUN_ID}",
+              "runNumber": "${GITHUB_RUN_NUMBER}"
+            },
+            "ui": {
+              "asset": "index.html"
+            }
+          }
+          EOF
+
+          cat > "${META_TARGET}" <<EOF
+          APP_VERSION_CODE=${{ steps.version.outputs.app_version_code }}
+          APP_VERSION_NAME=${{ steps.version.outputs.app_version_name }}
+          CONFIG_VERSION=${{ steps.version.outputs.config_version }}
+          CHANNEL=${{ steps.version.outputs.channel }}
+          SHORT_SHA=${{ steps.version.outputs.short_sha }}
+          SOURCE_BRANCH=${{ steps.version.outputs.source_branch }}
+          SOURCE_SHA=${{ steps.version.outputs.source_sha }}
+          APK_FILE=$(basename "${APK_TARGET}")
+          CONFIG_FILE=$(basename "${CONFIG_TARGET}")
+          EOF
+
+      - name: Upload publish payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-dev-shell-payload
+          path: .tmp/android-dev-shell/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: [self-hosted, planka-deploy]
+    outputs:
+      manifest_url: ${{ steps.publish.outputs.manifest_url }}
+      apk_url: ${{ steps.publish.outputs.apk_url }}
+      app_version_name: ${{ needs.build.outputs.app_version_name }}
+      app_version_code: ${{ needs.build.outputs.app_version_code }}
+      short_sha: ${{ needs.build.outputs.short_sha }}
+      source_branch: ${{ needs.build.outputs.source_branch }}
+
+    env:
+      ANDROID_SHELL_DEV_DEPLOY_PATH: ${{ vars.ANDROID_SHELL_DEV_DEPLOY_PATH }}
+      ANDROID_SHELL_DEV_BASE_URL: ${{ vars.ANDROID_SHELL_DEV_BASE_URL }}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download publish payload
+        uses: actions/download-artifact@v4
+        with:
+          name: android-dev-shell-payload
+          path: .tmp/android-dev-shell
+
+      - name: Publish Android dev release
+        id: publish
+        run: |
+          set -euo pipefail
+
+          DEPLOY_ROOT="${ANDROID_SHELL_DEV_DEPLOY_PATH:-/var/sites/planka-android-shell}"
+          BASE_URL="${ANDROID_SHELL_DEV_BASE_URL:-https://planka-dev.ewg40.ru/android-shell}"
+
+          # shellcheck disable=SC1091
+          source .tmp/android-dev-shell/release.env
+
+          chmod +x scripts/android_release/render_manifest.sh scripts/android_release/publish_release.sh
+
+          publish_output="$(
+            scripts/android_release/publish_release.sh \
+              --deploy-root "${DEPLOY_ROOT}" \
+              --public-base-url "${BASE_URL}" \
+              --channel "${CHANNEL}" \
+              --apk-file ".tmp/android-dev-shell/${APK_FILE}" \
+              --config-file ".tmp/android-dev-shell/${CONFIG_FILE}" \
+              --app-version "${APP_VERSION_CODE}" \
+              --app-version-name "${APP_VERSION_NAME}" \
+              --config-version "${CONFIG_VERSION}" \
+              --min-supported-app-version 1 \
+              --message "Dev Android build ${APP_VERSION_NAME} (${SHORT_SHA})"
+          )"
+
+          printf '%s\n' "${publish_output}"
+
+          manifest_url="$(printf '%s\n' "${publish_output}" | sed -n 's/^PUBLISH_MANIFEST_URL=//p' | tail -n1)"
+          apk_url="$(printf '%s\n' "${publish_output}" | sed -n 's/^PUBLISH_APK_URL=//p' | tail -n1)"
+
+          echo "manifest_url=${manifest_url}" >> "$GITHUB_OUTPUT"
+          echo "apk_url=${apk_url}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify published manifest
+        run: |
+          set -euo pipefail
+          curl -fsS "${{ steps.publish.outputs.manifest_url }}" | jq .
+
+  notify_telegram:
+    needs: publish
+    runs-on: [self-hosted, planka-deploy]
+    env:
+      TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+      TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+      TELEGRAM_SOFT_FAIL: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Send Telegram push
+        run: |
+          set -euo pipefail
+
+          html_escape() {
+            jq -rn --arg v "${1:-}" '$v|@html'
+          }
+
+          payload_file="$(mktemp)"
+          {
+            echo "<b>📱 Новый dev APK build опубликован</b>"
+            echo "📦 <code>${{ github.repository }}</code>"
+            echo "🌿 <b>Branch:</b> <code>$(html_escape "${{ needs.publish.outputs.source_branch }}")</code>"
+            echo "🏷️ <b>Version:</b> <code>$(html_escape "${{ needs.publish.outputs.app_version_name }}")</code> (<code>$(html_escape "${{ needs.publish.outputs.app_version_code }}")</code>)"
+            echo "🔖 <b>SHA:</b> <code>$(html_escape "${{ needs.publish.outputs.short_sha }}")</code>"
+            echo "🧾 <a href=\"$(html_escape "${{ needs.publish.outputs.manifest_url }}")\">manifest.json</a>"
+            echo "📥 <a href=\"$(html_escape "${{ needs.publish.outputs.apk_url }}")\">APK build</a>"
+          } > "${payload_file}"
+
+          bash scripts/github/send_telegram_message.sh "${payload_file}"

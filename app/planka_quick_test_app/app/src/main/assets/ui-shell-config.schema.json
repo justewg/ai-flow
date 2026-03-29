@@ -1,0 +1,323 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://planka.local/contracts/ui-shell-config.schema.json",
+  "title": "PLANKA UI Shell Config v1",
+  "$comment": "Schema v1 combines standard JSON Schema constraints with x-planka-invariants for cross-field rules consumed by the Android shell runtime validator.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "compatibility",
+    "configVersion",
+    "contractName",
+    "contractVersion",
+    "keyboard",
+    "labels",
+    "layout",
+    "shell"
+  ],
+  "properties": {
+    "contractName": {
+      "const": "planka.ui-shell"
+    },
+    "contractVersion": {
+      "const": 1
+    },
+    "configVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minShellVersion", "maxShellVersion"],
+      "x-planka-invariants": [
+        {
+          "rule": "orderedProperties",
+          "lowerProperty": "minShellVersion",
+          "upperProperty": "maxShellVersion"
+        }
+      ],
+      "properties": {
+        "minShellVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxShellVersion": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "appPaddingPx",
+        "keyGapPx",
+        "keyboardRatio",
+        "keyboardRowGapPx",
+        "keySizeMultiplier",
+        "sectionGapPx",
+        "textRatio",
+        "textSizeMultiplier"
+      ],
+      "properties": {
+        "textRatio": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 4
+        },
+        "keyboardRatio": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 4
+        },
+        "appPaddingPx": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "sectionGapPx": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "keyGapPx": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "keyboardRowGapPx": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "textSizeMultiplier": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2
+        },
+        "keySizeMultiplier": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2
+        }
+      }
+    },
+    "keyboard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["defaultLocale", "locales"],
+      "x-planka-invariants": [
+        {
+          "rule": "propertyMatchesObjectKey",
+          "property": "defaultLocale",
+          "objectProperty": "locales"
+        }
+      ],
+      "properties": {
+        "defaultLocale": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 16
+        },
+        "locales": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "$ref": "#/$defs/localeConfig"
+          }
+        }
+      }
+    },
+    "shell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["featureFlags", "serviceButtonOrder"],
+      "properties": {
+        "featureFlags": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["showClearButton", "showExitButton", "showLocaleButton"],
+          "properties": {
+            "showClearButton": { "type": "boolean" },
+            "showExitButton": { "type": "boolean" },
+            "showLocaleButton": { "type": "boolean" }
+          }
+        },
+        "serviceButtonOrder": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["clear", "locale", "exit"]
+          }
+        }
+      }
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["placeholder", "serviceButtons", "specialKeys"],
+      "properties": {
+        "placeholder": {
+          "$ref": "#/$defs/localizedTextMap"
+        },
+        "serviceButtons": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["clear", "locale", "exit"],
+          "properties": {
+            "clear": {
+              "$ref": "#/$defs/staticServiceButtonLabel"
+            },
+            "locale": {
+              "$ref": "#/$defs/dynamicServiceButtonLabel"
+            },
+            "exit": {
+              "$ref": "#/$defs/staticServiceButtonLabel"
+            }
+          }
+        },
+        "specialKeys": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["space", "backspace", "enter"],
+          "properties": {
+            "space": { "$ref": "#/$defs/localizedTextMap" },
+            "backspace": { "$ref": "#/$defs/localizedTextMap" },
+            "enter": { "$ref": "#/$defs/localizedTextMap" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "localizedTextMap": {
+      "type": "object",
+      "minProperties": 1,
+      "x-planka-invariants": [
+        {
+          "rule": "exactObjectKeysFrom",
+          "jsonPointer": "/keyboard/locales"
+        }
+      ],
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 120
+      }
+    },
+    "dynamicServiceButtonLabel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["titles"],
+      "properties": {
+        "titles": {
+          "$ref": "#/$defs/localizedTextMap"
+        }
+      }
+    },
+    "staticServiceButtonLabel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "titles"],
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8
+        },
+        "titles": {
+          "$ref": "#/$defs/localizedTextMap"
+        }
+      }
+    },
+    "localeConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["displayName", "rows"],
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8
+        },
+        "rows": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/keyboardRow"
+          }
+        }
+      }
+    },
+    "keyboardRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "template", "keys"],
+      "x-planka-invariants": [
+        {
+          "rule": "equalArrayLengths",
+          "left": "/template/columns",
+          "right": "/keys"
+        }
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 48
+        },
+        "template": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["columns"],
+          "properties": {
+            "columns": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            }
+          }
+        },
+        "keys": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/key"
+          }
+        }
+      }
+    },
+    "key": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "value"],
+          "properties": {
+            "kind": { "const": "input" },
+            "value": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "enum": ["space", "backspace", "enter"]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

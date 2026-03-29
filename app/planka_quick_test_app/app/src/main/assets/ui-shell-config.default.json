@@ -1,0 +1,248 @@
+{
+  "contractName": "planka.ui-shell",
+  "contractVersion": 1,
+  "configVersion": 1,
+  "compatibility": {
+    "minShellVersion": 1,
+    "maxShellVersion": 2147483647
+  },
+  "layout": {
+    "textRatio": 1.0,
+    "keyboardRatio": 0.95,
+    "appPaddingPx": 8,
+    "sectionGapPx": 10,
+    "keyGapPx": 8,
+    "keyboardRowGapPx": 8,
+    "textSizeMultiplier": 1.0,
+    "keySizeMultiplier": 1.0
+  },
+  "keyboard": {
+    "defaultLocale": "ru",
+    "locales": {
+      "ru": {
+        "displayName": "RU",
+        "rows": [
+          {
+            "id": "numbers",
+            "template": {
+              "columns": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+            },
+            "keys": [
+              { "kind": "input", "value": "1" },
+              { "kind": "input", "value": "2" },
+              { "kind": "input", "value": "3" },
+              { "kind": "input", "value": "4" },
+              { "kind": "input", "value": "5" },
+              { "kind": "input", "value": "6" },
+              { "kind": "input", "value": "7" },
+              { "kind": "input", "value": "8" },
+              { "kind": "input", "value": "9" },
+              { "kind": "input", "value": "0" }
+            ]
+          },
+          {
+            "id": "letters-1",
+            "template": {
+              "columns": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+            },
+            "keys": [
+              { "kind": "input", "value": "Й" },
+              { "kind": "input", "value": "Ц" },
+              { "kind": "input", "value": "У" },
+              { "kind": "input", "value": "К" },
+              { "kind": "input", "value": "Е" },
+              { "kind": "input", "value": "Н" },
+              { "kind": "input", "value": "Г" },
+              { "kind": "input", "value": "Ш" },
+              { "kind": "input", "value": "Щ" },
+              { "kind": "input", "value": "З" },
+              { "kind": "input", "value": "Х" },
+              { "kind": "input", "value": "Ъ" }
+            ]
+          },
+          {
+            "id": "letters-2",
+            "template": {
+              "columns": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+            },
+            "keys": [
+              { "kind": "input", "value": "Ф" },
+              { "kind": "input", "value": "Ы" },
+              { "kind": "input", "value": "В" },
+              { "kind": "input", "value": "А" },
+              { "kind": "input", "value": "П" },
+              { "kind": "input", "value": "Р" },
+              { "kind": "input", "value": "О" },
+              { "kind": "input", "value": "Л" },
+              { "kind": "input", "value": "Д" },
+              { "kind": "input", "value": "Ж" },
+              { "kind": "input", "value": "Э" }
+            ]
+          },
+          {
+            "id": "letters-3",
+            "template": {
+              "columns": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+            },
+            "keys": [
+              { "kind": "input", "value": "Я" },
+              { "kind": "input", "value": "Ч" },
+              { "kind": "input", "value": "С" },
+              { "kind": "input", "value": "М" },
+              { "kind": "input", "value": "И" },
+              { "kind": "input", "value": "Т" },
+              { "kind": "input", "value": "Ь" },
+              { "kind": "input", "value": "Б" },
+              { "kind": "input", "value": "Ю" },
+              { "kind": "enter" }
+            ]
+          },
+          {
+            "id": "actions",
+            "template": {
+              "columns": [2, 1]
+            },
+            "keys": [
+              { "kind": "space" },
+              { "kind": "backspace" }
+            ]
+          }
+        ]
+      },
+      "en": {
+        "displayName": "EN",
+        "rows": [
+          {
+            "id": "numbers",
+            "template": {
+              "columns": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+            },
+            "keys": [
+              { "kind": "input", "value": "1" },
+              { "kind": "input", "value": "2" },
+              { "kind": "input", "value": "3" },
+              { "kind": "input", "value": "4" },
+              { "kind": "input", "value": "5" },
+              { "kind": "input", "value": "6" },
+              { "kind": "input", "value": "7" },
+              { "kind": "input", "value": "8" },
+              { "kind": "input", "value": "9" },
+              { "kind": "input", "value": "0" }
+            ]
+          },
+          {
+            "id": "letters-1",
+            "template": {
+              "columns": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+            },
+            "keys": [
+              { "kind": "input", "value": "Q" },
+              { "kind": "input", "value": "W" },
+              { "kind": "input", "value": "E" },
+              { "kind": "input", "value": "R" },
+              { "kind": "input", "value": "T" },
+              { "kind": "input", "value": "Y" },
+              { "kind": "input", "value": "U" },
+              { "kind": "input", "value": "I" },
+              { "kind": "input", "value": "O" },
+              { "kind": "input", "value": "P" }
+            ]
+          },
+          {
+            "id": "letters-2",
+            "template": {
+              "columns": [1, 1, 1, 1, 1, 1, 1, 1, 1]
+            },
+            "keys": [
+              { "kind": "input", "value": "A" },
+              { "kind": "input", "value": "S" },
+              { "kind": "input", "value": "D" },
+              { "kind": "input", "value": "F" },
+              { "kind": "input", "value": "G" },
+              { "kind": "input", "value": "H" },
+              { "kind": "input", "value": "J" },
+              { "kind": "input", "value": "K" },
+              { "kind": "input", "value": "L" }
+            ]
+          },
+          {
+            "id": "letters-3",
+            "template": {
+              "columns": [1, 1, 1, 1, 1, 1, 1, 1]
+            },
+            "keys": [
+              { "kind": "input", "value": "Z" },
+              { "kind": "input", "value": "X" },
+              { "kind": "input", "value": "C" },
+              { "kind": "input", "value": "V" },
+              { "kind": "input", "value": "B" },
+              { "kind": "input", "value": "N" },
+              { "kind": "input", "value": "M" },
+              { "kind": "enter" }
+            ]
+          },
+          {
+            "id": "actions",
+            "template": {
+              "columns": [2, 1]
+            },
+            "keys": [
+              { "kind": "space" },
+              { "kind": "backspace" }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "shell": {
+    "featureFlags": {
+      "showClearButton": true,
+      "showLocaleButton": true,
+      "showExitButton": true
+    },
+    "serviceButtonOrder": ["clear", "locale", "exit"]
+  },
+  "labels": {
+    "placeholder": {
+      "ru": "Текст появится здесь",
+      "en": "Text appears here"
+    },
+    "serviceButtons": {
+      "clear": {
+        "label": "⌫",
+        "titles": {
+          "ru": "Очистить",
+          "en": "Clear"
+        }
+      },
+      "locale": {
+        "titles": {
+          "ru": "Язык",
+          "en": "Language"
+        }
+      },
+      "exit": {
+        "label": "×",
+        "titles": {
+          "ru": "Выход",
+          "en": "Exit"
+        }
+      }
+    },
+    "specialKeys": {
+      "space": {
+        "ru": "ПРОБЕЛ",
+        "en": "SPACE"
+      },
+      "backspace": {
+        "ru": "←",
+        "en": "←"
+      },
+      "enter": {
+        "ru": "↵",
+        "en": "↵"
+      }
+    }
+  }
+}

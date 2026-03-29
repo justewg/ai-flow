@@ -12,8 +12,14 @@ issue_number="$2"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./env/bootstrap.sh
 source "${SCRIPT_DIR}/env/bootstrap.sh"
+# shellcheck source=./task_worktree_lib.sh
+source "${SCRIPT_DIR}/task_worktree_lib.sh"
+# shellcheck source=./micro_profile_lib.sh
+source "${SCRIPT_DIR}/micro_profile_lib.sh"
 CODEX_DIR="$(codex_export_state_dir)"
 RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
+state_dir="$(codex_resolve_state_dir)"
+profile_name="$(codex_resolve_project_profile_name 2>/dev/null || printf '%s' "${PROJECT_PROFILE:-default}")"
 
 STATE_FILE="${CODEX_DIR}/executor_state.txt"
 PID_FILE="${CODEX_DIR}/executor_pid.txt"
@@ -26,8 +32,11 @@ LOG_FILE="${RUNTIME_LOG_DIR}/executor.log"
 HEARTBEAT_FILE="${CODEX_DIR}/executor_heartbeat_utc.txt"
 HEARTBEAT_EPOCH_FILE="${CODEX_DIR}/executor_heartbeat_epoch.txt"
 HEARTBEAT_PID_FILE="${CODEX_DIR}/executor_heartbeat_pid.txt"
+PROFILE_FILE="$(task_worktree_execution_profile_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
+BUDGET_FILE="$(task_worktree_execution_budget_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
 
 mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
+mkdir -p "$(dirname "$PROFILE_FILE")"
 
 control_mode="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" get --raw 2>/dev/null || printf 'AUTO')"
 if [[ "$control_mode" != "AUTO" ]]; then
@@ -54,6 +63,24 @@ if [[ "$gate_status" == "blocked" ]]; then
   echo "EXECUTOR_START_BLOCKED_BY_V2_GATE=1"
   [[ -n "$gate_reason" ]] && echo "EXECUTOR_START_BLOCK_REASON=$gate_reason"
   exit 0
+fi
+
+classifier_out="$(
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_task_classifier.sh" \
+    "$task_id" "$issue_number" "$PROFILE_FILE" 2>&1
+)"
+while IFS= read -r line; do
+  [[ -z "$line" ]] && continue
+  echo "$line"
+done <<<"$classifier_out"
+execution_profile="$(printf '%s\n' "$classifier_out" | sed -n 's/^EXECUTION_PROFILE=//p' | tail -n1)"
+if [[ "$execution_profile" == "micro" ]]; then
+  micro_profile_budget_init_json \
+    "$task_id" \
+    "$issue_number" \
+    "${EXECUTOR_MICRO_MAX_TOTAL_TOKENS:-15000}" \
+    "${EXECUTOR_MICRO_PROFILE_ENFORCE:-1}" > "$BUDGET_FILE"
+  echo "EXECUTION_BUDGET_FILE=${BUDGET_FILE}"
 fi
 
 if ! command -v codex >/dev/null 2>&1; then

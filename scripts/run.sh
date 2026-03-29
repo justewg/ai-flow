@@ -56,6 +56,15 @@ Commands:
   runtime_v2_validate_rollout
   runtime_v2_single_task_loop
   runtime_v2_clear
+  micro_task_classifier
+  context_builder
+  canonical_diff
+  metadata_builder
+  llm_call_telemetry
+  micro_profile_guard
+  micro_prepare_guard_bin
+  micro_finalize
+  micro_local_canary
   log_summary
   log_tail_executor
   log_tail_daemon_executor
@@ -794,6 +803,51 @@ case "$cmd" in
   runtime_v2_clear)
     shift 1
     /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_clear.sh" "$@"
+    ;;
+
+  micro_task_classifier)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_task_classifier.sh" "$@"
+    ;;
+
+  context_builder)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/context_builder.sh" "$@"
+    ;;
+
+  canonical_diff)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/canonical_diff.sh" "$@"
+    ;;
+
+  metadata_builder)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/metadata_builder.sh" "$@"
+    ;;
+
+  llm_call_telemetry)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/llm_call_telemetry.sh" "$@"
+    ;;
+
+  micro_profile_guard)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_profile_guard.sh" "$@"
+    ;;
+
+  micro_prepare_guard_bin)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_prepare_guard_bin.sh" "$@"
+    ;;
+
+  micro_finalize)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_finalize.sh" "$@"
+    ;;
+
+  micro_local_canary)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_local_canary.sh" "$@"
     ;;
 
   log_summary)

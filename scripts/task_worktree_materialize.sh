@@ -33,20 +33,49 @@ base_commit="$(git -C "${ROOT_DIR}" rev-parse "origin/${FLOW_HEAD_BRANCH}")"
 
 mkdir -p "$task_meta_dir" "$task_logs_dir"
 
-if ! task_worktree_repo_present "$task_repo"; then
+task_worktree_remove_existing() {
+  if git -C "${ROOT_DIR}" worktree list --porcelain | grep -Fq "worktree ${task_repo}"; then
+    git -C "${ROOT_DIR}" worktree remove --force "$task_repo" >/dev/null 2>&1 || true
+  fi
+  rm -rf "$task_root"
+}
+
+task_worktree_create_fresh() {
   rm -rf "$task_repo"
   git -C "${ROOT_DIR}" worktree add -B "$task_branch" "$task_repo" "origin/${FLOW_HEAD_BRANCH}"
-  materialized_now="1"
+}
+
+materialized_now="0"
+recreated_reason=""
+existing_base_commit=""
+
+if task_worktree_repo_present "$task_repo"; then
+  existing_base_commit="$(task_worktree_head_commit "$task_repo" || true)"
+  if [[ -n "$existing_base_commit" && "$existing_base_commit" != "$base_commit" ]]; then
+    task_worktree_remove_existing
+    task_worktree_create_fresh
+    materialized_now="1"
+    recreated_reason="stale_base_commit"
+  fi
 else
-  materialized_now="0"
+  task_worktree_create_fresh
+  materialized_now="1"
 fi
 
 toolkit_materialized="0"
 if task_worktree_declares_toolkit_submodule "$task_repo"; then
   if ! task_worktree_ensure_toolkit_materialized "$task_repo"; then
-    echo "TASK_WORKTREE_TOOLKIT_INIT_FAILED=1"
-    echo "TASK_WORKTREE_TOOLKIT_PATH=${task_repo}/.flow/shared"
-    exit 1
+    if [[ "$materialized_now" == "0" ]]; then
+      task_worktree_remove_existing
+      task_worktree_create_fresh
+      materialized_now="1"
+      recreated_reason="${recreated_reason:-toolkit_init_retry}"
+    fi
+    if ! task_worktree_ensure_toolkit_materialized "$task_repo"; then
+      echo "TASK_WORKTREE_TOOLKIT_INIT_FAILED=1"
+      echo "TASK_WORKTREE_TOOLKIT_PATH=${task_repo}/.flow/shared"
+      exit 1
+    fi
   fi
   toolkit_materialized="1"
 fi
@@ -117,3 +146,7 @@ echo "TASK_WORKTREE_BRANCH=${task_branch}"
 echo "TASK_WORKTREE_BASE_COMMIT=${base_commit}"
 echo "TASK_WORKTREE_MATERIALIZED=${materialized_now}"
 echo "TASK_WORKTREE_TOOLKIT_MATERIALIZED=${toolkit_materialized}"
+if [[ -n "$recreated_reason" ]]; then
+  echo "TASK_WORKTREE_RECREATED=1"
+  echo "TASK_WORKTREE_RECREATE_REASON=${recreated_reason}"
+fi

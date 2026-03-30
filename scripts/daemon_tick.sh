@@ -1320,9 +1320,10 @@ resume_task_from_human_reply() {
 
   [[ -n "$resume_task_id" && -n "$resume_issue_number" ]] || return 0
 
-  run_runtime_v2_gate "$resume_task_id" "$resume_issue_number" "$resume_gate_name" "daemon_claim"
-  rc=$?
-  if [[ "$rc" -ne 0 ]]; then
+  if run_runtime_v2_gate "$resume_task_id" "$resume_issue_number" "$resume_gate_name" "daemon_claim"; then
+    :
+  else
+    rc=$?
     if [[ "$rc" -eq 1 ]]; then
       if invoke_task_review_handoff \
         "$resume_task_id" \
@@ -3627,9 +3628,10 @@ if (( skip_sync_branches == 0 )); then
   emit_lines "$sync_out"
 fi
 
-run_runtime_v2_gate "$task_id" "$issue_number" "daemon_claim" "daemon_claim"
-rc=$?
-if [[ "$rc" -ne 0 ]]; then
+if run_runtime_v2_gate "$task_id" "$issue_number" "daemon_claim" "daemon_claim"; then
+  :
+else
+  rc=$?
   if [[ "$rc" -eq 1 ]]; then
     if invoke_task_review_handoff \
       "$task_id" \

@@ -3227,7 +3227,8 @@ if (( cached_queue_count > 0 )); then
   queue_json="$cached_queue_json"
   queue_count="$cached_queue_count"
 else
-local project_fields_json project_items_json
+project_fields_json=""
+project_items_json=""
 if project_fields_json="$(fetch_project_fields_json)" && project_items_json="$(
   fetch_project_items_paginated '
           id

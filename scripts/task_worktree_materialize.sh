@@ -66,12 +66,26 @@ fi
 toolkit_materialized="0"
 if task_worktree_declares_toolkit_submodule "$task_repo"; then
   if ! task_worktree_ensure_toolkit_materialized "$task_repo"; then
-    if [[ "$materialized_now" == "0" ]]; then
+    if [[ "$materialized_now" == "0" || "$TASK_WORKTREE_TOOLKIT_NEEDS_RECREATE" == "1" ]]; then
       task_worktree_remove_existing
       task_worktree_create_fresh
       materialized_now="1"
-      recreated_reason="${recreated_reason:-toolkit_init_retry}"
+      if [[ "$TASK_WORKTREE_TOOLKIT_NEEDS_RECREATE" == "1" ]]; then
+        recreated_reason="${recreated_reason:-toolkit_revision_missing}"
+      else
+        recreated_reason="${recreated_reason:-toolkit_init_retry}"
+      fi
     fi
+    if ! task_worktree_ensure_toolkit_materialized "$task_repo"; then
+      echo "TASK_WORKTREE_TOOLKIT_INIT_FAILED=1"
+      echo "TASK_WORKTREE_TOOLKIT_PATH=${task_repo}/.flow/shared"
+      exit 1
+    fi
+  elif [[ "$materialized_now" == "0" && "$TASK_WORKTREE_TOOLKIT_NEEDS_RECREATE" == "1" ]]; then
+    task_worktree_remove_existing
+    task_worktree_create_fresh
+    materialized_now="1"
+    recreated_reason="${recreated_reason:-toolkit_revision_missing}"
     if ! task_worktree_ensure_toolkit_materialized "$task_repo"; then
       echo "TASK_WORKTREE_TOOLKIT_INIT_FAILED=1"
       echo "TASK_WORKTREE_TOOLKIT_PATH=${task_repo}/.flow/shared"

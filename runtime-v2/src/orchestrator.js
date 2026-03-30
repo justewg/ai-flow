@@ -219,6 +219,29 @@ async function applyEvent(store, eventInput) {
       break;
     }
 
+    case "review.terminal_resolved": {
+      const outcome = event.payload.outcome || "resolved";
+      nextState.phase = "done";
+      nextState.reason = event.payload.reason || `review terminal resolved: ${outcome}`;
+      nextState.activeExecutionId = null;
+      nextState.canonicalWaitCommentId = null;
+      nextState.budgetState = "normal";
+      nextState.lockState = "unlocked";
+      delete nextState.meta.waiting;
+      delete nextState.meta.reviewFeedback;
+      nextState.meta.reviewResolution = {
+        outcome,
+        prNumber: Number.isInteger(event.payload.prNumber) ? event.payload.prNumber : null,
+        resolvedAt: event.payload.resolvedAt || nowIso(),
+      };
+      nextState.lastMeaningfulTransitionHash = transitionHash({
+        eventType: event.eventType,
+        outcome,
+        prNumber: nextState.meta.reviewResolution.prNumber,
+      });
+      break;
+    }
+
     case "human.wait_requested": {
       const waitCommentId = event.payload.waitCommentId;
       if (!waitCommentId) {

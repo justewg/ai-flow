@@ -601,8 +601,10 @@ elif [[ -n "$active_task" ]]; then
     action="STOP_EXECUTOR_AND_FREEZE"
     reason="EXECUTOR_HEARTBEAT_STALE"
   elif [[ "$daemon_state" == "IDLE_NO_TASKS" ]]; then
-    action="FREEZE_SAFE"
-    reason="DAEMON_IDLE_WITH_ACTIVE_TASK"
+    if (( claim_age_sec >= ACTIVE_TASK_GRACE_SEC )); then
+      action="FREEZE_SAFE"
+      reason="DAEMON_IDLE_WITH_ACTIVE_TASK"
+    fi
   elif [[ -z "$executor_state" ]]; then
     if (( claim_age_sec >= ACTIVE_TASK_GRACE_SEC )); then
       action="FREEZE_SAFE"

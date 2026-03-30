@@ -260,7 +260,7 @@ build_comment_body() {
   detail="$(reason_detail_block "$reason")"
   existing_pr="$(existing_review_pr_number)"
   if [[ -n "$existing_pr" ]]; then
-    review_note="Открытый PR по задаче: #${existing_pr}. Дальнейшая автоматическая доработка в рамках текущего taskflow не продолжена."
+    review_note="Новый PR не создавался; дальнейшая автоматическая доработка по уже открытому PR #${existing_pr} не продолжена."
   else
     review_note="PR не создавался."
   fi

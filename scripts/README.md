@@ -41,8 +41,8 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh pr_edit`
 - `.flow/shared/scripts/run.sh pr_merge`
 - `.flow/shared/scripts/run.sh commit_push`
-- `.flow/shared/scripts/run.sh git_temp_repo <checkout_branch|merge_ref|add_paths|commit|push_branch|status|rev_parse>`
-- `.flow/shared/scripts/run.sh git_temp_repo <checkout_branch|merge_ref|add_paths|commit|push_branch|status|rev_parse|update_gitlink>`
+- `.flow/shared/scripts/run.sh git_temp_repo <fetch|checkout_branch|merge_ref|add_paths|commit|push_branch|status|rev_parse>`
+- `.flow/shared/scripts/run.sh git_temp_repo <fetch|checkout_branch|merge_ref|add_paths|commit|push_branch|status|rev_parse|update_gitlink>`
 - `.flow/shared/scripts/run.sh git_ls_remote_heads`
 - `.flow/shared/scripts/run.sh git_delete_branch`
 - `.flow/shared/scripts/run.sh project_add_task`
@@ -97,6 +97,9 @@ Linux-hosted bootstrap launchers:
   - обязательный параметр:
     - `GIT_TEMP_REPO_ROOT=/tmp/planka-578`
   - поддерживаемые actions и их параметры:
+    - `fetch`
+      - optional `GIT_TEMP_REMOTE=origin`
+      - optional `GIT_TEMP_FETCH_REFSPEC=origin/development`
     - `checkout_branch`
       - `GIT_TEMP_BRANCH=feature-branch`
       - optional `GIT_TEMP_START_POINT=origin/development`

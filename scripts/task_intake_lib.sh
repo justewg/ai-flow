@@ -136,11 +136,23 @@ task_intake_extract_notes_lines() {
 task_intake_interpreted_intent() {
   local issue_title="$1"
   local issue_body="$2"
+  local reply_text="${3:-}"
   local first_change
+
+  first_change="$(task_intake_extract_expected_change_lines "$reply_text" | head -n1)"
+  if [[ -n "$first_change" ]]; then
+    printf '%s' "$first_change"
+    return 0
+  fi
 
   first_change="$(task_intake_extract_expected_change_lines "$issue_body" | head -n1)"
   if [[ -n "$first_change" ]]; then
     printf '%s' "$first_change"
+    return 0
+  fi
+
+  if [[ -n "$(micro_profile_trim "$reply_text")" ]]; then
+    printf '%s' "$(micro_profile_trim "$reply_text")"
     return 0
   fi
 
@@ -215,6 +227,13 @@ runtime-v2
 runtime_v2
 infra
 toolkit
+android
+toolbar
+app bar
+mainactivity
+activity_main.xml
+androidmanifest.xml
+kiosk
 EOF
 }
 

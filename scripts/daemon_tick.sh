@@ -352,6 +352,28 @@ sanitize_for_log() {
   printf '%s' "$value" | tr '\n' ' ' | tr '\t' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//'
 }
 
+emit_wait_github_auth() {
+  local stage="$1"
+  local source="$2"
+  local message="${3:-}"
+  local call_name="${4:-}"
+  echo "WAIT_GITHUB_AUTH=1"
+  echo "WAIT_GITHUB_AUTH_STAGE=$stage"
+  echo "WAIT_GITHUB_AUTH_SOURCE=$source"
+  [[ -n "$call_name" ]] && echo "WAIT_GITHUB_AUTH_CALL=$call_name"
+  [[ -n "$message" ]] && echo "WAIT_GITHUB_AUTH_MSG=$(sanitize_for_log "$message")"
+}
+
+emit_wait_github_rate_limit() {
+  local stage="$1"
+  local message="${2:-}"
+  local call_name="${3:-}"
+  echo "WAIT_GITHUB_RATE_LIMIT=1"
+  echo "WAIT_GITHUB_RATE_LIMIT_STAGE=$stage"
+  [[ -n "$call_name" ]] && echo "WAIT_GITHUB_RATE_LIMIT_CALL=$call_name"
+  [[ -n "$message" ]] && echo "WAIT_GITHUB_RATE_LIMIT_MSG=$(sanitize_for_log "$message")"
+}
+
 json_payload_is_valid() {
   local payload="$1"
   printf '%s' "$payload" | jq -e . >/dev/null 2>&1
@@ -3027,16 +3049,26 @@ fi
 
 open_prs_json=""
 if open_prs_json="$(
-  list_open_flow_prs_json "$open_pr_base" "$open_pr_head"
+  list_open_flow_prs_json "$open_pr_base" "$open_pr_head" 2>&1
 )"; then
   :
 else
   rc=$?
+  if github_output_has_auth_error "$open_prs_json"; then
+    emit_wait_github_auth "OPEN_PR_CHECK" "APP_TOKEN" "$open_prs_json" "OPEN_PR_LIST"
+    exit 0
+  fi
+  if printf '%s' "$open_prs_json" | grep -Eiq 'api rate limit already exceeded|graphql_rate_limit|rate limit'; then
+    emit_wait_github_rate_limit "OPEN_PR_CHECK" "$open_prs_json" "OPEN_PR_LIST"
+    emit_wait_github_rate_limit_probe
+    exit 0
+  fi
   if [[ "$rc" -eq 75 ]]; then
     echo "WAIT_GITHUB_API_UNSTABLE=1"
     echo "WAIT_GITHUB_STAGE=OPEN_PR_CHECK"
     exit 0
   fi
+  printf '%s\n' "$open_prs_json" >&2
   exit "$rc"
 fi
 
@@ -3149,19 +3181,14 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
 )"; then
   if graphql_payload_has_auth_error "$project_json"; then
     auth_msg="$(graphql_payload_first_auth_error_message "$project_json")"
-    echo "WAIT_GITHUB_AUTH=1"
-    echo "WAIT_GITHUB_AUTH_STAGE=PROJECT_QUERY"
-    echo "WAIT_GITHUB_AUTH_SOURCE=PROJECT_TOKEN"
-    echo "WAIT_GITHUB_AUTH_MSG=$auth_msg"
+    emit_wait_github_auth "PROJECT_QUERY" "PROJECT_TOKEN" "$auth_msg" "PROJECT_QUERY_GRAPHQL"
     exit 0
   fi
   if graphql_payload_has_rate_limit "$project_json"; then
     rate_msg="$(graphql_payload_first_rate_limit_message "$project_json")"
     stats_payload="$(gql_stats_on_limit "PROJECT_QUERY" "$rate_msg")"
     IFS='|' read -r stats_requests stats_duration stats_start_utc stats_end_utc <<< "$stats_payload"
-    echo "WAIT_GITHUB_RATE_LIMIT=1"
-    echo "WAIT_GITHUB_RATE_LIMIT_STAGE=PROJECT_QUERY"
-    echo "WAIT_GITHUB_RATE_LIMIT_MSG=$rate_msg"
+    emit_wait_github_rate_limit "PROJECT_QUERY" "$rate_msg" "PROJECT_QUERY_GRAPHQL"
     emit_wait_github_rate_limit_probe
     echo "GQL_STATS_WINDOW_REQUESTS=$stats_requests"
     echo "GQL_STATS_WINDOW_DURATION_SEC=$stats_duration"
@@ -3172,11 +3199,28 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
   gql_stats_on_success
 else
   rc=$?
+  if github_output_has_auth_error "$project_json"; then
+    emit_wait_github_auth "PROJECT_QUERY" "PROJECT_TOKEN" "$project_json" "PROJECT_QUERY_GRAPHQL"
+    exit 0
+  fi
+  if printf '%s' "$project_json" | grep -Eiq 'api rate limit already exceeded|graphql_rate_limit|rate limit'; then
+    rate_msg="$(sanitize_for_log "$project_json")"
+    stats_payload="$(gql_stats_on_limit "PROJECT_QUERY" "$rate_msg")"
+    IFS='|' read -r stats_requests stats_duration stats_start_utc stats_end_utc <<< "$stats_payload"
+    emit_wait_github_rate_limit "PROJECT_QUERY" "$rate_msg" "PROJECT_QUERY_GRAPHQL"
+    emit_wait_github_rate_limit_probe
+    echo "GQL_STATS_WINDOW_REQUESTS=$stats_requests"
+    echo "GQL_STATS_WINDOW_DURATION_SEC=$stats_duration"
+    [[ -n "$stats_start_utc" ]] && echo "GQL_STATS_WINDOW_START_UTC=$stats_start_utc"
+    [[ -n "$stats_end_utc" ]] && echo "GQL_STATS_WINDOW_END_UTC=$stats_end_utc"
+    exit 0
+  fi
   if [[ "$rc" -eq 75 ]]; then
     echo "WAIT_GITHUB_API_UNSTABLE=1"
     echo "WAIT_GITHUB_STAGE=PROJECT_QUERY"
     exit 0
   fi
+  printf '%s\n' "$project_json" >&2
   exit "$rc"
 fi
 
@@ -3267,18 +3311,13 @@ fi
 
     if ! json_payload_is_valid "$fallback_items_json"; then
     if printf '%s' "$fallback_items_json" | grep -Eiq 'api rate limit already exceeded|graphql_rate_limit|rate limit'; then
-      echo "WAIT_GITHUB_RATE_LIMIT=1"
-      echo "WAIT_GITHUB_RATE_LIMIT_STAGE=PROJECT_ITEM_LIST_FALLBACK"
-      echo "WAIT_GITHUB_RATE_LIMIT_MSG=$(sanitize_for_log "$fallback_items_json")"
+      emit_wait_github_rate_limit "PROJECT_ITEM_LIST_FALLBACK" "$fallback_items_json" "PROJECT_ITEM_LIST"
       emit_wait_github_rate_limit_probe
       exit 0
     fi
 
     if github_output_has_auth_error "$fallback_items_json"; then
-      echo "WAIT_GITHUB_AUTH=1"
-      echo "WAIT_GITHUB_AUTH_STAGE=PROJECT_ITEM_LIST_FALLBACK"
-      echo "WAIT_GITHUB_AUTH_SOURCE=PROJECT_TOKEN"
-      echo "WAIT_GITHUB_AUTH_MSG=$(sanitize_for_log "$fallback_items_json")"
+      emit_wait_github_auth "PROJECT_ITEM_LIST_FALLBACK" "PROJECT_TOKEN" "$fallback_items_json" "PROJECT_ITEM_LIST"
       exit 0
     fi
 

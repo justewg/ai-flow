@@ -391,23 +391,26 @@ build_success_detail() {
       line="$(printf '%s\n' "$output" | grep -m1 -E '^(WAIT_GITHUB_STAGE=|WAIT_GITHUB_API_UNSTABLE=1)' || true)"
       ;;
     WAIT_GITHUB_AUTH)
-      local auth_stage_line auth_msg_line auth_source_line
+      local auth_stage_line auth_msg_line auth_source_line auth_call_line
       local auth_parts=()
       auth_stage_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_AUTH_STAGE=' || true)"
       auth_msg_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_AUTH_MSG=' || true)"
       auth_source_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_AUTH_SOURCE=' || true)"
+      auth_call_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_AUTH_CALL=' || true)"
       auth_parts+=("DEGRADED=GITHUB_AUTH_INVALID")
       [[ -z "$auth_stage_line" ]] && auth_stage_line="WAIT_GITHUB_AUTH_STAGE=PROJECT_QUERY_OR_FALLBACK"
       [[ -n "$auth_stage_line" ]] && auth_parts+=("$auth_stage_line")
       [[ -n "$auth_source_line" ]] && auth_parts+=("$auth_source_line")
+      [[ -n "$auth_call_line" ]] && auth_parts+=("$auth_call_line")
       [[ -n "$auth_msg_line" ]] && auth_parts+=("$auth_msg_line")
       line="$(IFS=';'; echo "${auth_parts[*]}")"
       ;;
     WAIT_GITHUB_RATE_LIMIT)
-      local stage_line msg_line req_line dur_line raw_rate_line reset_epoch_line reset_at_line reset_human_line remaining_line
+      local stage_line msg_line req_line dur_line raw_rate_line reset_epoch_line reset_at_line reset_human_line remaining_line call_line
       local parts=()
       stage_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_RATE_LIMIT_STAGE=' || true)"
       msg_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_RATE_LIMIT_MSG=' || true)"
+      call_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_RATE_LIMIT_CALL=' || true)"
       remaining_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_RATE_LIMIT_REMAINING=' || true)"
       reset_epoch_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_RATE_LIMIT_RESET_EPOCH=' || true)"
       reset_at_line="$(printf '%s\n' "$output" | grep -m1 '^WAIT_GITHUB_RATE_LIMIT_RESET_AT=' || true)"
@@ -421,6 +424,7 @@ build_success_detail() {
         msg_line="WAIT_GITHUB_RATE_LIMIT_MSG=$raw_rate_line"
       fi
       [[ -n "$stage_line" ]] && parts+=("$stage_line")
+      [[ -n "$call_line" ]] && parts+=("$call_line")
       [[ -n "$msg_line" ]] && parts+=("$msg_line")
       [[ -n "$remaining_line" ]] && parts+=("$remaining_line")
       [[ -n "$reset_epoch_line" ]] && parts+=("$reset_epoch_line")

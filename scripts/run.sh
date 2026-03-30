@@ -325,6 +325,7 @@ load_git_temp_repo_args() {
     GIT_TEMP_BRANCH \
     GIT_TEMP_START_POINT \
     GIT_TEMP_REMOTE \
+    GIT_TEMP_FETCH_REFSPEC \
     GIT_TEMP_MERGE_REF \
     GIT_TEMP_PUSH_REFSPEC \
     GIT_TEMP_COMMIT_MESSAGE \
@@ -380,6 +381,15 @@ run_git_temp_repo() {
   remote="${GIT_TEMP_REMOTE:-origin}"
 
   case "$action" in
+    fetch)
+      refspec="${GIT_TEMP_FETCH_REFSPEC:-}"
+      if [[ -n "$refspec" ]]; then
+        git -C "$repo_root" fetch "$remote" "$refspec"
+      else
+        git -C "$repo_root" fetch "$remote"
+      fi
+      ;;
+
     checkout_branch)
       if [[ -z "$branch" ]]; then
         echo "git_temp_repo checkout_branch requires GIT_TEMP_BRANCH"
@@ -459,7 +469,7 @@ run_git_temp_repo() {
 
     *)
       echo "Unsupported git_temp_repo action: ${action:-<empty>}"
-      echo "Allowed: checkout_branch merge_ref add_paths commit push_branch status rev_parse update_gitlink"
+      echo "Allowed: fetch checkout_branch merge_ref add_paths commit push_branch status rev_parse update_gitlink"
       exit 1
       ;;
   esac
@@ -746,7 +756,7 @@ case "$cmd" in
 
   git_temp_repo)
     if [[ $# -ne 2 ]]; then
-      echo "Usage: .flow/shared/scripts/run.sh git_temp_repo <checkout_branch|merge_ref|add_paths|commit|push_branch|status|rev_parse|update_gitlink>"
+      echo "Usage: .flow/shared/scripts/run.sh git_temp_repo <fetch|checkout_branch|merge_ref|add_paths|commit|push_branch|status|rev_parse|update_gitlink>"
       exit 1
     fi
     run_git_temp_repo "$2"

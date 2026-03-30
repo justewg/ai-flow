@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+TASK_WORKTREE_TOOLKIT_LAST_ERROR=""
+TASK_WORKTREE_TOOLKIT_NEEDS_RECREATE="0"
+
 task_worktree_slug_from_title() {
   local title="${1:-}"
   local slug=""
@@ -280,6 +283,7 @@ task_worktree_run_toolkit_update() {
   local rc=0
   [[ -n "$repo_path" ]] || return 1
 
+  TASK_WORKTREE_TOOLKIT_LAST_ERROR=""
   err_file="$(mktemp "${TMPDIR:-/tmp}/task_worktree_toolkit_update.XXXXXX")"
   git -C "$repo_path" submodule sync --recursive -- ".flow/shared" >/dev/null 2>&1 || true
   if git -C "$repo_path" submodule update --init --recursive -- ".flow/shared" >/dev/null 2>"$err_file"; then
@@ -290,6 +294,10 @@ task_worktree_run_toolkit_update() {
   rc=$?
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
+    TASK_WORKTREE_TOOLKIT_LAST_ERROR+="${line}"$'\n'
+    if [[ "$line" == *"Unable to find current revision in submodule path '.flow/shared'"* ]]; then
+      TASK_WORKTREE_TOOLKIT_NEEDS_RECREATE="1"
+    fi
     echo "TASK_WORKTREE_TOOLKIT_UPDATE_ERROR: $line" >&2
   done <"$err_file"
   rm -f "$err_file"
@@ -300,6 +308,8 @@ task_worktree_ensure_toolkit_materialized() {
   local repo_path="${1:-}"
   [[ -n "$repo_path" ]] || return 1
   task_worktree_repo_present "$repo_path" || return 1
+  TASK_WORKTREE_TOOLKIT_LAST_ERROR=""
+  TASK_WORKTREE_TOOLKIT_NEEDS_RECREATE="0"
 
   if ! task_worktree_declares_toolkit_submodule "$repo_path"; then
     return 0

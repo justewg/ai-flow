@@ -293,6 +293,102 @@ run_gh_retry_capture_project() {
   fi
 }
 
+fetch_project_fields_json() {
+  run_gh_retry_capture_project \
+    gh api graphql \
+    -f query='
+query($projectId: ID!, $fieldsFirst: Int!) {
+  node(id: $projectId) {
+    ... on ProjectV2 {
+      fields(first: $fieldsFirst) {
+        nodes {
+          __typename
+          ... on ProjectV2SingleSelectField {
+            id
+            name
+            options {
+              id
+              name
+            }
+          }
+        }
+      }
+    }
+  }
+}
+' \
+    -f projectId="$project_id" \
+    -F fieldsFirst=100
+}
+
+fetch_project_items_paginated() {
+  local item_fragment="$1"
+  local remaining page_size after_cursor has_next_page page_count
+  local payload combined_nodes
+  local cmd=()
+
+  remaining="$project_items_limit"
+  combined_nodes='[]'
+  after_cursor=""
+
+  while (( remaining > 0 )); do
+    page_size="$remaining"
+    if (( page_size > 100 )); then
+      page_size=100
+    fi
+
+    cmd=(
+      gh api graphql
+      -f "query=query(\$projectId: ID!, \$itemsFirst: Int!, \$after: String) {
+  node(id: \$projectId) {
+    ... on ProjectV2 {
+      items(first: \$itemsFirst, after: \$after) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+${item_fragment}
+        }
+      }
+    }
+  }
+}"
+      -f "projectId=$project_id"
+      -F "itemsFirst=$page_size"
+    )
+
+    if [[ -n "$after_cursor" ]]; then
+      cmd+=(-f "after=$after_cursor")
+    fi
+
+    if ! payload="$(run_gh_retry_capture_project "${cmd[@]}")"; then
+      printf '%s' "$payload"
+      return "$?"
+    fi
+
+    combined_nodes="$(
+      printf '%s' "$payload" | jq -c --argjson acc "$combined_nodes" '
+        $acc + (.data.node.items.nodes // [])
+      '
+    )"
+
+    page_count="$(printf '%s' "$payload" | jq '(.data.node.items.nodes // []) | length')"
+    if (( page_count <= 0 )); then
+      break
+    fi
+
+    remaining=$(( remaining - page_count ))
+    has_next_page="$(printf '%s' "$payload" | jq -r '.data.node.items.pageInfo.hasNextPage // false')"
+    after_cursor="$(printf '%s' "$payload" | jq -r '.data.node.items.pageInfo.endCursor // empty')"
+    if [[ "$has_next_page" != "true" || -z "$after_cursor" ]]; then
+      break
+    fi
+  done
+
+  jq -cn --argjson nodes "$combined_nodes" '{data:{node:{items:{nodes:$nodes}}}}'
+}
+
 run_project_item_list_fallback() {
   local owner_value="$1"
   shift
@@ -387,6 +483,17 @@ graphql_payload_has_rate_limit() {
         (.type // "" | ascii_downcase) == "rate_limit"
         or (.extensions.code // "" | ascii_downcase) == "graphql_rate_limit"
         or ((.message // "" | ascii_downcase) | test("rate limit"))
+      )
+  ' >/dev/null 2>&1
+}
+
+graphql_payload_has_excessive_pagination() {
+  local payload="$1"
+  printf '%s' "$payload" | jq -e '
+    (.errors // [])
+    | any(
+        (.type // "" | ascii_downcase) == "excessive_pagination"
+        or ((.message // "" | ascii_downcase) | test("exceeds the `first` limit"))
       )
   ' >/dev/null 2>&1
 }
@@ -1056,14 +1163,7 @@ find_first_todo_issue_json() {
   local ignore_labels_csv
   ignore_labels_csv="$(IFS=,; echo "${AUTO_IGNORE_LABELS[*]}")"
   if ! project_json="$(
-    run_gh_retry_capture_project \
-      gh api graphql \
-      -f query='
-query($projectId: ID!, $itemsFirst: Int!) {
-  node(id: $projectId) {
-    ... on ProjectV2 {
-      items(first: $itemsFirst) {
-        nodes {
+    fetch_project_items_paginated '
           id
           content {
             __typename
@@ -1084,14 +1184,7 @@ query($projectId: ID!, $itemsFirst: Int!) {
             __typename
             ... on ProjectV2ItemFieldSingleSelectValue { name }
           }
-        }
-      }
-    }
-  }
-}
-' \
-      -f projectId="$project_id" \
-      -F itemsFirst="$project_items_limit"
+'
   )"; then
     return "$?"
   fi
@@ -1276,27 +1369,13 @@ find_project_issue_item_id() {
   local project_json
 
   if ! project_json="$(
-    run_gh_retry_capture_project \
-      gh api graphql \
-      -f query='
-query($projectId: ID!, $itemsFirst: Int!) {
-  node(id: $projectId) {
-    ... on ProjectV2 {
-      items(first: $itemsFirst) {
-        nodes {
+    fetch_project_items_paginated '
           id
           content {
             __typename
             ... on Issue { number }
           }
-        }
-      }
-    }
-  }
-}
-' \
-      -f projectId="$project_id" \
-      -F itemsFirst="$project_items_limit"
+'
   )"; then
     return "$?"
   fi
@@ -3148,28 +3227,9 @@ if (( cached_queue_count > 0 )); then
   queue_json="$cached_queue_json"
   queue_count="$cached_queue_count"
 else
-if project_json="$(
-  run_gh_retry_capture_project \
-  gh api graphql \
-  -f query='
-query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
-  node(id: $projectId) {
-    ... on ProjectV2 {
-      fields(first: $fieldsFirst) {
-        nodes {
-          __typename
-          ... on ProjectV2SingleSelectField {
-            id
-            name
-            options {
-              id
-              name
-            }
-          }
-        }
-      }
-      items(first: $itemsFirst) {
-        nodes {
+local project_fields_json project_items_json
+if project_fields_json="$(fetch_project_fields_json)" && project_items_json="$(
+  fetch_project_items_paginated '
           id
           content {
             __typename
@@ -3193,16 +3253,20 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
             __typename
             ... on ProjectV2ItemFieldSingleSelectValue { name optionId }
           }
+'
+)"; then
+  project_json="$(
+    jq -cn --argjson fields "$project_fields_json" --argjson items "$project_items_json" '
+      {
+        data: {
+          node: {
+            fields: ($fields.data.node.fields // {nodes: []}),
+            items: ($items.data.node.items // {nodes: []})
+          }
         }
       }
-    }
-  }
-}
-' \
-    -f projectId="$project_id" \
-    -F fieldsFirst=100 \
-    -F itemsFirst="$project_items_limit"
-)"; then
+    '
+  )"
   if graphql_payload_has_auth_error "$project_json"; then
     auth_msg="$(graphql_payload_first_auth_error_message "$project_json")"
     emit_wait_github_auth "PROJECT_QUERY" "PROJECT_TOKEN" "$auth_msg" "PROJECT_QUERY_GRAPHQL"
@@ -3223,8 +3287,19 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
   gql_stats_on_success
 else
   rc=$?
+  if [[ -n "${project_items_json:-}" ]]; then
+    project_json="$project_items_json"
+  else
+    project_json="${project_fields_json:-}"
+  fi
   if github_output_has_auth_error "$project_json"; then
     emit_wait_github_auth "PROJECT_QUERY" "PROJECT_TOKEN" "$project_json" "PROJECT_QUERY_GRAPHQL"
+    exit 0
+  fi
+  if graphql_payload_has_excessive_pagination "$project_json"; then
+    echo "WAIT_GITHUB_API_UNSTABLE=1"
+    echo "WAIT_GITHUB_STAGE=PROJECT_QUERY"
+    echo "WAIT_GITHUB_STAGE_DETAIL=$(sanitize_for_log "$project_json")"
     exit 0
   fi
   if printf '%s' "$project_json" | grep -Eiq 'api rate limit already exceeded|graphql_rate_limit|rate limit'; then

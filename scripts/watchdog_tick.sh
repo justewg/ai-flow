@@ -381,7 +381,11 @@ filter_dirty_status_lines() {
 }
 
 collect_dirty_tracked_lines() {
-  git -C "${ROOT_DIR}" status --short --untracked-files=no 2>/dev/null | filter_dirty_status_lines
+  local status_out=""
+  status_out="$(
+    git -C "${ROOT_DIR}" status --short --untracked-files=no 2>/dev/null || true
+  )"
+  printf '%s\n' "$status_out" | filter_dirty_status_lines
 }
 
 html_escape() {

@@ -2870,7 +2870,29 @@ if [[ -n "$runtime_status_out" ]]; then
   done <<< "$runtime_status_out"
 fi
 
-reply_probe_out="$("${CODEX_SHARED_SCRIPTS_DIR}/daemon_check_replies.sh" 2>&1)"
+reply_probe_active_task_present="0"
+if [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]]; then
+  reply_probe_active_task_present="1"
+fi
+
+if reply_probe_out="$("${CODEX_SHARED_SCRIPTS_DIR}/daemon_check_replies.sh" 2>&1)"; then
+  :
+else
+  rc=$?
+  emit_lines "$reply_probe_out"
+  if [[ "$reply_probe_active_task_present" == "1" ]]; then
+    echo "DAEMON_CHECK_REPLIES_NONFATAL=1"
+    echo "DAEMON_CHECK_REPLIES_RC=${rc}"
+    echo "DAEMON_CHECK_REPLIES_REASON=ACTIVE_TASK_PRESENT"
+    reply_probe_out=""
+  elif [[ "$rc" -eq 75 ]]; then
+    echo "WAIT_GITHUB_API_UNSTABLE=1"
+    echo "WAIT_GITHUB_STAGE=CHECK_REPLIES"
+    exit 0
+  else
+    exit "$rc"
+  fi
+fi
 while IFS= read -r line; do
   [[ -z "$line" || "$line" == "NO_WAITING_USER_REPLY=1" ]] && continue
   echo "$line"

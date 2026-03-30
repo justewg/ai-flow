@@ -62,6 +62,89 @@ reconcile_runtime_v2_primary_context() {
   fi
 }
 
+sync_runtime_v2_control_mode() {
+  local sync_out rc
+  if sync_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_sync_control_mode.sh" 2>&1
+  )"; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_CONTROL_SYNC: $line"
+    done <<< "$sync_out"
+  else
+    rc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_CONTROL_SYNC_ERROR(rc=$rc): $line"
+    done <<< "$sync_out"
+  fi
+}
+
+emit_runtime_v2_terminal_review_resolved() {
+  local resolved_task_id="$1"
+  local resolved_issue_number="$2"
+  local resolved_pr_number="$3"
+  local resolved_outcome="$4"
+  local payload_json=""
+
+  [[ -n "$resolved_task_id" && "$resolved_issue_number" =~ ^[0-9]+$ ]] || return 0
+
+  payload_json="$(
+    jq -nc \
+      --arg outcome "$resolved_outcome" \
+      --argjson prNumber "${resolved_pr_number:-0}" \
+      --arg resolvedAt "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+      '{
+        outcome:$outcome,
+        prNumber:(if $prNumber > 0 then $prNumber else null end),
+        resolvedAt:$resolvedAt
+      }'
+  )"
+
+  if [[ "$resolved_pr_number" =~ ^[0-9]+$ ]]; then
+    emit_runtime_v2_event \
+      "review.terminal_resolved" \
+      "legacy-v2-review-terminal-${resolved_task_id}-${resolved_pr_number}-${resolved_outcome}" \
+      "legacy.review.terminal_resolved:${resolved_task_id}:${resolved_pr_number}:${resolved_outcome}" \
+      "$payload_json"
+  else
+    emit_runtime_v2_event \
+      "review.terminal_resolved" \
+      "legacy-v2-review-terminal-${resolved_task_id}-${resolved_issue_number}-${resolved_outcome}" \
+      "legacy.review.terminal_resolved:${resolved_task_id}:${resolved_issue_number}:${resolved_outcome}" \
+      "$payload_json"
+  fi
+  reconcile_runtime_v2_primary_context
+  sync_runtime_v2_control_mode
+}
+
+emit_runtime_v2_terminal_issue_resolved() {
+  local resolved_task_id="$1"
+  local resolved_issue_number="$2"
+  local resolved_outcome="$3"
+  local payload_json=""
+
+  [[ -n "$resolved_task_id" && "$resolved_issue_number" =~ ^[0-9]+$ ]] || return 0
+
+  payload_json="$(
+    jq -nc \
+      --arg outcome "$resolved_outcome" \
+      --arg resolvedAt "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+      '{
+        outcome:$outcome,
+        resolvedAt:$resolvedAt
+      }'
+  )"
+
+  emit_runtime_v2_event \
+    "review.terminal_resolved" \
+    "legacy-v2-review-terminal-${resolved_task_id}-${resolved_issue_number}-${resolved_outcome}" \
+    "legacy.review.terminal_resolved:${resolved_task_id}:${resolved_issue_number}:${resolved_outcome}" \
+    "$payload_json"
+  reconcile_runtime_v2_primary_context
+  sync_runtime_v2_control_mode
+}
+
 build_wait_payload() {
   local wait_comment_id="$1"
   local wait_reason="$2"
@@ -452,6 +535,7 @@ clear_waiting_for_terminal_review_pr() {
   [[ -s "$review_task_file" ]] && task_id="$(<"$review_task_file")"
 
   if [[ "$review_pr_state" == "MERGED" || -n "$review_pr_merged_at" ]]; then
+    emit_runtime_v2_terminal_review_resolved "$task_id" "$issue_number" "$review_pr_number" "merged"
     cleanup_review_task_branch_if_merged "$review_branch_name"
     if [[ -n "$task_id" && "$issue_number" =~ ^[0-9]+$ ]]; then
       cleanup_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$task_id" "$issue_number" "review-pr-merged" 2>&1 || true)"
@@ -468,6 +552,7 @@ clear_waiting_for_terminal_review_pr() {
   fi
 
   if [[ "$review_pr_state" == "CLOSED" || -n "$review_pr_closed_at" ]]; then
+    emit_runtime_v2_terminal_review_resolved "$task_id" "$issue_number" "$review_pr_number" "closed"
     if [[ -n "$task_id" && "$issue_number" =~ ^[0-9]+$ ]]; then
       cleanup_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$task_id" "$issue_number" "review-pr-closed" 2>&1 || true)"
       emit_nonempty_lines "$cleanup_out"
@@ -655,6 +740,7 @@ review_branch_name=""
 [[ -s "$review_branch_file" ]] && review_branch_name="$(<"$review_branch_file")"
 
 if [[ "$issue_state" == "CLOSED" ]]; then
+  emit_runtime_v2_terminal_issue_resolved "$task_id" "$issue_number" "issue_closed"
   if is_review_feedback_kind "$kind_label"; then
     cleanup_review_task_branch_if_merged "$review_branch_name"
   fi

@@ -50,9 +50,6 @@ WATCHDOG_IGNORE_DIRTY="${WATCHDOG_IGNORE_DIRTY:-0}"
 
 mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
 
-CONTROL_MODE="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" get --raw 2>/dev/null || printf 'AUTO')"
-CONTROL_REASON="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" get | awk -F= '/^CONTROL_REASON=/{print substr($0, index($0, "=")+1)}' 2>/dev/null || true)"
-
 cleanup_tick_lock() {
   rm -f "$TICK_LOCK_OWNER_FILE" 2>/dev/null || true
   rmdir "$TICK_LOCK_DIR" 2>/dev/null || true
@@ -148,14 +145,6 @@ set_state() {
     log "STATE=$state"
   fi
 }
-
-if [[ "$CONTROL_MODE" != "AUTO" ]]; then
-  [[ -n "$CONTROL_REASON" ]] || CONTROL_REASON="containment mode active"
-  set_state "SAFE_HOLD" "CONTROL_MODE=${CONTROL_MODE};CONTROL_REASON=${CONTROL_REASON}"
-  echo "WATCHDOG_CONTROL_MODE=${CONTROL_MODE}"
-  echo "WATCHDOG_PASSIVE_HOLD=1"
-  exit 0
-fi
 
 read_file_or_default() {
   local file_path="$1"
@@ -575,6 +564,16 @@ if [[ "$terminal_review_rc" -eq 75 ]]; then
   set_state "WAIT_GITHUB_API_UNSTABLE" "$detail"
   echo "WATCHDOG_ACTION=DEFERRED_GITHUB_API"
   echo "WATCHDOG_REASON=TERMINAL_REVIEW_SYNC_DEFERRED"
+  exit 0
+fi
+
+CONTROL_MODE="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" get --raw 2>/dev/null || printf 'AUTO')"
+CONTROL_REASON="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" get | awk -F= '/^CONTROL_REASON=/{print substr($0, index($0, "=")+1)}' 2>/dev/null || true)"
+if [[ "$CONTROL_MODE" != "AUTO" ]]; then
+  [[ -n "$CONTROL_REASON" ]] || CONTROL_REASON="containment mode active"
+  set_state "SAFE_HOLD" "CONTROL_MODE=${CONTROL_MODE};CONTROL_REASON=${CONTROL_REASON}"
+  echo "WATCHDOG_CONTROL_MODE=${CONTROL_MODE}"
+  echo "WATCHDOG_PASSIVE_HOLD=1"
   exit 0
 fi
 

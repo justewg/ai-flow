@@ -35,9 +35,11 @@ fi
 source_json="$(cat "$source_file")"
 issue_title="$(printf '%s' "$source_json" | jq -r '.title // ""')"
 issue_body="$(printf '%s' "$source_json" | jq -r '.body // ""')"
+reply_text="$(printf '%s' "$source_json" | jq -r '.replyText // ""')"
 source_hash="$(printf '%s' "$source_json" | jq -r '.sourceHash // ""')"
-combined_text="$(printf '%s\n%s' "$issue_title" "$issue_body")"
-interpreted_intent="$(task_intake_interpreted_intent "$issue_title" "$issue_body")"
+combined_text="$(printf '%s\n%s\n%s' "$issue_title" "$issue_body" "$reply_text")"
+combined_body="$(printf '%s\n%s' "$issue_body" "$reply_text")"
+interpreted_intent="$(task_intake_interpreted_intent "$issue_title" "$issue_body" "$reply_text")"
 
 target_files=()
 while IFS= read -r line; do
@@ -49,7 +51,7 @@ expected_change_json='[]'
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   printf '%s\n' "$line"
-done < <(task_intake_extract_expected_change_lines "$issue_body" || true) \
+done < <(task_intake_extract_expected_change_lines "$combined_body" || true) \
   | jq -R . | jq -s '.' > /tmp/task_standardize_expected_change.json
 expected_change_json="$(cat /tmp/task_standardize_expected_change.json)"
 rm -f /tmp/task_standardize_expected_change.json
@@ -58,7 +60,7 @@ notes_json='[]'
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   printf '%s\n' "$line"
-done < <(task_intake_extract_notes_lines "$issue_body" || true) \
+done < <(task_intake_extract_notes_lines "$combined_body" || true) \
   | jq -R . | jq -s '.' > /tmp/task_standardize_notes.json
 notes_json="$(cat /tmp/task_standardize_notes.json)"
 rm -f /tmp/task_standardize_notes.json
@@ -67,7 +69,7 @@ check_commands_json='[]'
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   printf '%s\n' "$line"
-done < <(micro_profile_extract_check_commands "$issue_body" || true) \
+done < <(micro_profile_extract_check_commands "$combined_body" || true) \
   | jq -R . | jq -s '.' > /tmp/task_standardize_checks.json
 check_commands_json="$(cat /tmp/task_standardize_checks.json)"
 rm -f /tmp/task_standardize_checks.json

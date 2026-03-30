@@ -18,7 +18,7 @@ codex_resolve_project_config
 project_id="$PROJECT_ID"
 project_number="$PROJECT_NUMBER"
 project_owner="$PROJECT_OWNER"
-project_items_limit="${PROJECT_ITEMS_LIMIT:-200}"
+project_items_limit="${PROJECT_ITEMS_LIMIT:-250}"
 repo="$FLOW_GITHUB_REPO"
 repo_owner="$FLOW_REPO_OWNER"
 flow_base_branch="$FLOW_BASE_BRANCH"
@@ -1091,7 +1091,7 @@ query($projectId: ID!, $itemsFirst: Int!) {
 }
 ' \
       -f projectId="$project_id" \
-      -F itemsFirst=100
+      -F itemsFirst="$project_items_limit"
   )"; then
     return "$?"
   fi
@@ -1296,7 +1296,7 @@ query($projectId: ID!, $itemsFirst: Int!) {
 }
 ' \
       -f projectId="$project_id" \
-      -F itemsFirst=100
+      -F itemsFirst="$project_items_limit"
   )"; then
     return "$?"
   fi
@@ -3201,7 +3201,7 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
 ' \
     -f projectId="$project_id" \
     -F fieldsFirst=100 \
-    -F itemsFirst=100
+    -F itemsFirst="$project_items_limit"
 )"; then
   if graphql_payload_has_auth_error "$project_json"; then
     auth_msg="$(graphql_payload_first_auth_error_message "$project_json")"

@@ -8,6 +8,8 @@ CODEX_DIR="$(codex_export_state_dir)"
 STATE_TMP_DIR="$(codex_resolve_state_tmp_dir "$CODEX_DIR")"
 # shellcheck source=./env/project_issue_cache.sh
 source "${SCRIPT_DIR}/env/project_issue_cache.sh"
+# shellcheck source=./env/graphql_audit.sh
+source "${SCRIPT_DIR}/env/graphql_audit.sh"
 mkdir -p "$STATE_TMP_DIR"
 RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
 TICK_LOCK_DIR="${CODEX_DIR}/daemon_tick.lock"
@@ -19,6 +21,7 @@ project_id="$PROJECT_ID"
 project_number="$PROJECT_NUMBER"
 project_owner="$PROJECT_OWNER"
 project_items_limit="${PROJECT_ITEMS_LIMIT:-250}"
+project_item_list_fallback_enabled_raw="${PROJECT_ITEM_LIST_FALLBACK_ENABLED:-0}"
 repo="$FLOW_GITHUB_REPO"
 repo_owner="$FLOW_REPO_OWNER"
 flow_base_branch="$FLOW_BASE_BRANCH"
@@ -298,7 +301,14 @@ run_gh_retry_capture_project() {
 }
 
 fetch_project_fields_json() {
-  run_gh_retry_capture_project \
+  graphql_audit_capture \
+    "daemon_tick" \
+    "project_fields" \
+    "direct_graphql" \
+    "project_fields" \
+    "cacheable_per_tick" \
+    "fields_first=100" \
+    run_gh_retry_capture_project \
     gh api graphql \
     -f query='
 query($projectId: ID!, $fieldsFirst: Int!) {
@@ -366,7 +376,17 @@ ${item_fragment}
       cmd+=(-f "after=$after_cursor")
     fi
 
-    if ! payload="$(run_gh_retry_capture_project "${cmd[@]}")"; then
+    if ! payload="$(
+      graphql_audit_capture \
+        "daemon_tick" \
+        "project_items_page" \
+        "direct_graphql" \
+        "project_items_page" \
+        "cacheable_short_ttl" \
+        "page_size=${page_size};remaining=${remaining}" \
+        run_gh_retry_capture_project \
+        "${cmd[@]}"
+    )"; then
       printf '%s' "$payload"
       return "$?"
     fi
@@ -399,7 +419,17 @@ run_project_item_list_fallback() {
   local out=""
   local rc=0
 
-  if out="$(run_gh_retry_capture_project gh project item-list "$project_number" --owner "$owner_value" "$@" 2>&1)"; then
+  if out="$(
+    graphql_audit_capture \
+      "daemon_tick" \
+      "project_item_list_fallback" \
+      "indirect_project_cli" \
+      "project_item_list" \
+      "cacheable_short_ttl" \
+      "owner=${owner_value}" \
+      run_gh_retry_capture_project \
+      gh project item-list "$project_number" --owner "$owner_value" "$@"
+  )"; then
     printf '%s' "$out"
     return 0
   fi
@@ -407,7 +437,17 @@ run_project_item_list_fallback() {
   rc=$?
   if [[ "$owner_value" != "@me" ]] && printf '%s' "$out" | grep -Eiq 'unknown owner type'; then
     echo "PROJECT_ITEM_LIST_OWNER_RETRY=@me" >&2
-    if out="$(run_gh_retry_capture_project gh project item-list "$project_number" --owner "@me" "$@" 2>&1)"; then
+    if out="$(
+      graphql_audit_capture \
+        "daemon_tick" \
+        "project_item_list_fallback" \
+        "indirect_project_cli" \
+        "project_item_list" \
+        "cacheable_short_ttl" \
+        "owner=@me" \
+        run_gh_retry_capture_project \
+        gh project item-list "$project_number" --owner "@me" "$@"
+    )"; then
       printf '%s' "$out"
       return 0
     fi
@@ -1508,7 +1548,14 @@ find_project_item_status_by_id() {
   local item_json
 
   if ! item_json="$(
-    run_gh_retry_capture_project \
+    graphql_audit_capture \
+      "daemon_tick" \
+      "project_item_status_by_id" \
+      "direct_graphql" \
+      "project_item_status" \
+      "cacheable_short_ttl" \
+      "item_id=${item_id}" \
+      run_gh_retry_capture_project \
       gh api graphql \
       -f query='
 query($itemId: ID!) {
@@ -3409,7 +3456,21 @@ if (( matched_count > 0 && queue_count == 0 )); then
   exit 0
 fi
 
-  if (( queue_count == 0 )); then
+if (( queue_count == 0 )); then
+  if ! is_truthy_flag "$project_item_list_fallback_enabled_raw"; then
+    graphql_audit_emit \
+      "daemon_tick" \
+      "project_item_list_fallback" \
+      "indirect_project_cli" \
+      "project_item_list" \
+      "cacheable_short_ttl" \
+      "skipped" \
+      "reason=disabled_in_normal_tick"
+    echo "PROJECT_ITEM_LIST_FALLBACK_SKIPPED=1"
+    echo "PROJECT_ITEM_LIST_FALLBACK_REASON=DISABLED_IN_NORMAL_TICK"
+    echo "NO_TASKS_IN_TRIGGER_STATUS=$trigger_status"
+    exit 0
+  fi
   fallback_items_json=""
   if fallback_items_json="$(
     run_project_item_list_fallback \
@@ -3514,7 +3575,6 @@ fi
   echo "FALLBACK_PROJECT_ITEM_LIST_USED=1"
   queue_json="$fallback_queue_json"
   queue_count="$fallback_queue_count"
-fi
 fi
 
 valid_queue_json="$(printf '%s' "$queue_json" | jq -c '[.[] | select(.task_id != "")]')"

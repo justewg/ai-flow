@@ -5,6 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./env/bootstrap.sh
 source "${SCRIPT_DIR}/env/bootstrap.sh"
 CODEX_DIR="$(codex_export_state_dir)"
+RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
+# shellcheck source=./env/graphql_audit.sh
+source "${SCRIPT_DIR}/env/graphql_audit.sh"
 RUNNER_INPUT_DIR="${CODEX_RUNNER_INPUT_DIR:-$(codex_resolve_flow_tmp_dir)/run}"
 
 mkdir -p "${CODEX_DIR}"
@@ -857,7 +860,16 @@ case "$cmd" in
       echo "project_item_view requires issue_number.txt or project_task_id.txt"
       exit 1
     fi
-    project_items_json="$(run_project_gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit 250 --format json)"
+    project_items_json="$(
+      graphql_audit_capture \
+        "run.sh" \
+        "project_item_view" \
+        "indirect_project_cli" \
+        "project_item_list" \
+        "cacheable_short_ttl" \
+        "limit=250" \
+        run_project_gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit 250 --format json
+    )"
     selected_item="$(printf '%s' "$project_items_json" | jq \
       --arg issue_number "$issue_number" \
       --arg task_id "$task_id" '
@@ -889,7 +901,16 @@ case "$cmd" in
       exit 1
     fi
 
-    project_items_json="$(run_project_gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit "$project_item_limit" --format json)"
+    project_items_json="$(
+      graphql_audit_capture \
+        "run.sh" \
+        "project_item_list" \
+        "indirect_project_cli" \
+        "project_item_list" \
+        "cacheable_short_ttl" \
+        "limit=${project_item_limit}" \
+        run_project_gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit "$project_item_limit" --format json
+    )"
     if [[ -f "$project_item_jq_file" ]]; then
       project_item_jq="$(read_required_file "$project_item_jq_file")"
       printf '%s\n' "$project_items_json" | jq "$project_item_jq"

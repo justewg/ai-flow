@@ -7,6 +7,8 @@ source "${SCRIPT_DIR}/env/bootstrap.sh"
 codex_resolve_project_config
 CODEX_DIR="$(codex_export_state_dir)"
 STATE_TMP_DIR="$(codex_resolve_state_tmp_dir "$CODEX_DIR")"
+# shellcheck source=./env/graphql_audit.sh
+source "${SCRIPT_DIR}/env/graphql_audit.sh"
 # shellcheck source=./env/project_issue_cache.sh
 source "${SCRIPT_DIR}/env/project_issue_cache.sh"
 
@@ -54,7 +56,14 @@ run_project_gh() {
 }
 
 fetch_project_fields_only() {
-  run_project_gh api graphql \
+  graphql_audit_capture \
+    "project_set_status" \
+    "project_fields" \
+    "direct_graphql" \
+    "project_fields" \
+    "cacheable_per_tick" \
+    "fields_first=100" \
+    run_project_gh api graphql \
     -f query='
 query($projectId: ID!, $fieldsFirst: Int!) {
   node(id: $projectId) {
@@ -92,7 +101,14 @@ query($projectId: ID!, $fieldsFirst: Int!) {
 }
 
 fetch_project_initial_with_items() {
-  run_project_gh api graphql \
+  graphql_audit_capture \
+    "project_set_status" \
+    "project_initial_items" \
+    "direct_graphql" \
+    "project_items_page" \
+    "cacheable_short_ttl" \
+    "items_first=100" \
+    run_project_gh api graphql \
     -f query='
 query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
   node(id: $projectId) {
@@ -153,7 +169,14 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
 
 fetch_project_items_page() {
   local after_cursor="$1"
-  run_project_gh api graphql \
+  graphql_audit_capture \
+    "project_set_status" \
+    "project_items_page" \
+    "direct_graphql" \
+    "project_items_page" \
+    "cacheable_short_ttl" \
+    "items_first=100" \
+    run_project_gh api graphql \
     -f query='
 query($projectId: ID!, $itemsFirst: Int!, $after: String!) {
   node(id: $projectId) {
@@ -291,7 +314,14 @@ if [[ -z "$flow_field_id" || "$flow_field_id" == "null" ]]; then
   exit 1
 fi
 
-run_project_gh api graphql \
+graphql_audit_capture \
+  "project_set_status" \
+  "update_status_mutation" \
+  "direct_graphql" \
+  "update_project_item_field" \
+  "not_cacheable" \
+  "field=Status" \
+  run_project_gh api graphql \
   -f query='
 mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
   updateProjectV2ItemFieldValue(
@@ -313,7 +343,14 @@ mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
   -f fieldId="$status_field_id" \
   -f optionId="$status_option_id" >/dev/null
 
-run_project_gh api graphql \
+graphql_audit_capture \
+  "project_set_status" \
+  "update_flow_mutation" \
+  "direct_graphql" \
+  "update_project_item_field" \
+  "not_cacheable" \
+  "field=Flow" \
+  run_project_gh api graphql \
   -f query='
 mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
   updateProjectV2ItemFieldValue(

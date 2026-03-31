@@ -1368,6 +1368,16 @@ clear_idle_stale_dirty_gate_waiting_if_any() {
   fi
 }
 
+clear_legacy_waiting_state_files() {
+  : > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
+  : > "${CODEX_DIR}/daemon_waiting_task_id.txt"
+  : > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
+  : > "${CODEX_DIR}/daemon_waiting_kind.txt"
+  : > "${CODEX_DIR}/daemon_waiting_pending_post.txt"
+  : > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
+  : > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
+}
+
 find_project_issue_item_id() {
   local issue_number="$1"
   local project_json
@@ -1476,6 +1486,11 @@ resume_task_from_human_reply() {
     echo "WAIT_REVIEW_FEEDBACK_ISSUE_NUMBER=${resume_issue_number}"
     exit 0
   fi
+
+  # A consumed human reply should immediately reopen the execution path.
+  # Clear any leftover legacy waiting anchor again here so executor_tick
+  # cannot short-circuit back into WAIT_USER_REPLY/WAIT_REVIEW_FEEDBACK.
+  clear_legacy_waiting_state_files
 
   /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
 

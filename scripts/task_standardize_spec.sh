@@ -28,9 +28,7 @@ spec_file="$(task_worktree_standardized_spec_file "$task_id" "$issue_number" "$s
 
 mkdir -p "$(dirname "$spec_file")"
 
-if [[ ! -f "$source_file" ]]; then
-  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_capture_source_definition.sh" "$task_id" "$issue_number" >/dev/null
-fi
+/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_capture_source_definition.sh" "$task_id" "$issue_number" >/dev/null
 
 source_json="$(cat "$source_file")"
 issue_title="$(printf '%s' "$source_json" | jq -r '.title // ""')"

@@ -3576,6 +3576,7 @@ if (( queue_count == 0 )); then
   queue_json="$fallback_queue_json"
   queue_count="$fallback_queue_count"
 fi
+fi
 
 valid_queue_json="$(printf '%s' "$queue_json" | jq -c '[.[] | select(.task_id != "")]')"
 valid_queue_before_filter_count="$(printf '%s' "$valid_queue_json" | jq 'length')"

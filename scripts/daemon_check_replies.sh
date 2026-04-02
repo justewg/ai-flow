@@ -1079,6 +1079,11 @@ emit_runtime_v2_event \
   "$reply_payload"
 reconcile_runtime_v2_primary_context
 
+# The human reply has been consumed and converted into a resume signal.
+# Clear the legacy waiting anchor now so later ticks do not replay the same
+# reply and re-sync runtime_v2 back into waiting_human from stale files.
+clear_waiting_state
+
 ack_signal="AGENT_RESUMED"
 ack_message="Ответ получен, продолжаю работу по задаче."
 if is_review_feedback_kind "$kind_label"; then

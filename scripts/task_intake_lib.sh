@@ -139,15 +139,20 @@ task_intake_interpreted_intent() {
   local reply_text="${3:-}"
   local first_change
 
-  reply_text="$(printf '%s' "$reply_text" | awk '{$1=$1; print}')"
-  if [[ -n "$reply_text" ]]; then
-    printf '%s' "$reply_text"
+  first_change="$(task_intake_extract_expected_change_lines "$reply_text" | head -n1)"
+  if [[ -n "$first_change" ]]; then
+    printf '%s' "$first_change"
     return 0
   fi
 
   first_change="$(task_intake_extract_expected_change_lines "$issue_body" | head -n1)"
   if [[ -n "$first_change" ]]; then
     printf '%s' "$first_change"
+    return 0
+  fi
+
+  if [[ -n "$(micro_profile_trim "$reply_text")" ]]; then
+    printf '%s' "$(micro_profile_trim "$reply_text")"
     return 0
   fi
 
@@ -232,6 +237,11 @@ keyboard
 space button
 пробел
 кнопк
+toolbar
+app bar
+mainactivity
+activity_main.xml
+androidmanifest.xml
 kiosk
 EOF
 }

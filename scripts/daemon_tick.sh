@@ -8,6 +8,8 @@ CODEX_DIR="$(codex_export_state_dir)"
 STATE_TMP_DIR="$(codex_resolve_state_tmp_dir "$CODEX_DIR")"
 # shellcheck source=./env/project_issue_cache.sh
 source "${SCRIPT_DIR}/env/project_issue_cache.sh"
+# shellcheck source=./env/graphql_audit.sh
+source "${SCRIPT_DIR}/env/graphql_audit.sh"
 mkdir -p "$STATE_TMP_DIR"
 RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
 TICK_LOCK_DIR="${CODEX_DIR}/daemon_tick.lock"
@@ -18,7 +20,8 @@ codex_resolve_project_config
 project_id="$PROJECT_ID"
 project_number="$PROJECT_NUMBER"
 project_owner="$PROJECT_OWNER"
-project_items_limit="${PROJECT_ITEMS_LIMIT:-200}"
+project_items_limit="${PROJECT_ITEMS_LIMIT:-250}"
+project_item_list_fallback_enabled_raw="${PROJECT_ITEM_LIST_FALLBACK_ENABLED:-0}"
 repo="$FLOW_GITHUB_REPO"
 repo_owner="$FLOW_REPO_OWNER"
 flow_base_branch="$FLOW_BASE_BRANCH"
@@ -276,7 +279,11 @@ filter_dirty_status_lines() {
 }
 
 collect_dirty_tracked_lines() {
-  git -C "${ROOT_DIR}" status --short --untracked-files=no 2>/dev/null | filter_dirty_status_lines
+  local status_out=""
+  status_out="$(
+    git -C "${ROOT_DIR}" status --short --untracked-files=no 2>/dev/null || true
+  )"
+  printf '%s\n' "$status_out" | filter_dirty_status_lines
 }
 
 project_gh_token="$(resolve_config_value "DAEMON_GH_PROJECT_TOKEN" "")"
@@ -293,13 +300,136 @@ run_gh_retry_capture_project() {
   fi
 }
 
+fetch_project_fields_json() {
+  graphql_audit_capture \
+    "daemon_tick" \
+    "project_fields" \
+    "direct_graphql" \
+    "project_fields" \
+    "cacheable_per_tick" \
+    "fields_first=100" \
+    run_gh_retry_capture_project \
+    gh api graphql \
+    -f query='
+query($projectId: ID!, $fieldsFirst: Int!) {
+  node(id: $projectId) {
+    ... on ProjectV2 {
+      fields(first: $fieldsFirst) {
+        nodes {
+          __typename
+          ... on ProjectV2SingleSelectField {
+            id
+            name
+            options {
+              id
+              name
+            }
+          }
+        }
+      }
+    }
+  }
+}
+' \
+    -f projectId="$project_id" \
+    -F fieldsFirst=100
+}
+
+fetch_project_items_paginated() {
+  local item_fragment="$1"
+  local remaining page_size after_cursor has_next_page page_count
+  local payload combined_nodes
+  local cmd=()
+
+  remaining="$project_items_limit"
+  combined_nodes='[]'
+  after_cursor=""
+
+  while (( remaining > 0 )); do
+    page_size="$remaining"
+    if (( page_size > 100 )); then
+      page_size=100
+    fi
+
+    cmd=(
+      gh api graphql
+      -f "query=query(\$projectId: ID!, \$itemsFirst: Int!, \$after: String) {
+  node(id: \$projectId) {
+    ... on ProjectV2 {
+      items(first: \$itemsFirst, after: \$after) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+${item_fragment}
+        }
+      }
+    }
+  }
+}"
+      -f "projectId=$project_id"
+      -F "itemsFirst=$page_size"
+    )
+
+    if [[ -n "$after_cursor" ]]; then
+      cmd+=(-f "after=$after_cursor")
+    fi
+
+    if ! payload="$(
+      graphql_audit_capture \
+        "daemon_tick" \
+        "project_items_page" \
+        "direct_graphql" \
+        "project_items_page" \
+        "cacheable_short_ttl" \
+        "page_size=${page_size};remaining=${remaining}" \
+        run_gh_retry_capture_project \
+        "${cmd[@]}"
+    )"; then
+      printf '%s' "$payload"
+      return "$?"
+    fi
+
+    combined_nodes="$(
+      printf '%s' "$payload" | jq -c --argjson acc "$combined_nodes" '
+        $acc + (.data.node.items.nodes // [])
+      '
+    )"
+
+    page_count="$(printf '%s' "$payload" | jq '(.data.node.items.nodes // []) | length')"
+    if (( page_count <= 0 )); then
+      break
+    fi
+
+    remaining=$(( remaining - page_count ))
+    has_next_page="$(printf '%s' "$payload" | jq -r '.data.node.items.pageInfo.hasNextPage // false')"
+    after_cursor="$(printf '%s' "$payload" | jq -r '.data.node.items.pageInfo.endCursor // empty')"
+    if [[ "$has_next_page" != "true" || -z "$after_cursor" ]]; then
+      break
+    fi
+  done
+
+  jq -cn --argjson nodes "$combined_nodes" '{data:{node:{items:{nodes:$nodes}}}}'
+}
+
 run_project_item_list_fallback() {
   local owner_value="$1"
   shift
   local out=""
   local rc=0
 
-  if out="$(run_gh_retry_capture_project gh project item-list "$project_number" --owner "$owner_value" "$@" 2>&1)"; then
+  if out="$(
+    graphql_audit_capture \
+      "daemon_tick" \
+      "project_item_list_fallback" \
+      "indirect_project_cli" \
+      "project_item_list" \
+      "cacheable_short_ttl" \
+      "owner=${owner_value}" \
+      run_gh_retry_capture_project \
+      gh project item-list "$project_number" --owner "$owner_value" "$@"
+  )"; then
     printf '%s' "$out"
     return 0
   fi
@@ -307,7 +437,17 @@ run_project_item_list_fallback() {
   rc=$?
   if [[ "$owner_value" != "@me" ]] && printf '%s' "$out" | grep -Eiq 'unknown owner type'; then
     echo "PROJECT_ITEM_LIST_OWNER_RETRY=@me" >&2
-    if out="$(run_gh_retry_capture_project gh project item-list "$project_number" --owner "@me" "$@" 2>&1)"; then
+    if out="$(
+      graphql_audit_capture \
+        "daemon_tick" \
+        "project_item_list_fallback" \
+        "indirect_project_cli" \
+        "project_item_list" \
+        "cacheable_short_ttl" \
+        "owner=@me" \
+        run_gh_retry_capture_project \
+        gh project item-list "$project_number" --owner "@me" "$@"
+    )"; then
       printf '%s' "$out"
       return 0
     fi
@@ -387,6 +527,17 @@ graphql_payload_has_rate_limit() {
         (.type // "" | ascii_downcase) == "rate_limit"
         or (.extensions.code // "" | ascii_downcase) == "graphql_rate_limit"
         or ((.message // "" | ascii_downcase) | test("rate limit"))
+      )
+  ' >/dev/null 2>&1
+}
+
+graphql_payload_has_excessive_pagination() {
+  local payload="$1"
+  printf '%s' "$payload" | jq -e '
+    (.errors // [])
+    | any(
+        (.type // "" | ascii_downcase) == "excessive_pagination"
+        or ((.message // "" | ascii_downcase) | test("exceeds the `first` limit"))
       )
   ' >/dev/null 2>&1
 }
@@ -1056,14 +1207,7 @@ find_first_todo_issue_json() {
   local ignore_labels_csv
   ignore_labels_csv="$(IFS=,; echo "${AUTO_IGNORE_LABELS[*]}")"
   if ! project_json="$(
-    run_gh_retry_capture_project \
-      gh api graphql \
-      -f query='
-query($projectId: ID!, $itemsFirst: Int!) {
-  node(id: $projectId) {
-    ... on ProjectV2 {
-      items(first: $itemsFirst) {
-        nodes {
+    fetch_project_items_paginated '
           id
           content {
             __typename
@@ -1084,14 +1228,7 @@ query($projectId: ID!, $itemsFirst: Int!) {
             __typename
             ... on ProjectV2ItemFieldSingleSelectValue { name }
           }
-        }
-      }
-    }
-  }
-}
-' \
-      -f projectId="$project_id" \
-      -F itemsFirst=100
+'
   )"; then
     return "$?"
   fi
@@ -1271,32 +1408,28 @@ clear_idle_stale_dirty_gate_waiting_if_any() {
   fi
 }
 
+clear_legacy_waiting_state_files() {
+  : > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
+  : > "${CODEX_DIR}/daemon_waiting_task_id.txt"
+  : > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
+  : > "${CODEX_DIR}/daemon_waiting_kind.txt"
+  : > "${CODEX_DIR}/daemon_waiting_pending_post.txt"
+  : > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
+  : > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
+}
+
 find_project_issue_item_id() {
   local issue_number="$1"
   local project_json
 
   if ! project_json="$(
-    run_gh_retry_capture_project \
-      gh api graphql \
-      -f query='
-query($projectId: ID!, $itemsFirst: Int!) {
-  node(id: $projectId) {
-    ... on ProjectV2 {
-      items(first: $itemsFirst) {
-        nodes {
+    fetch_project_items_paginated '
           id
           content {
             __typename
             ... on Issue { number }
           }
-        }
-      }
-    }
-  }
-}
-' \
-      -f projectId="$project_id" \
-      -F itemsFirst=100
+'
   )"; then
     return "$?"
   fi
@@ -1394,6 +1527,11 @@ resume_task_from_human_reply() {
     exit 0
   fi
 
+  # A consumed human reply should immediately reopen the execution path.
+  # Clear any leftover legacy waiting anchor again here so executor_tick
+  # cannot short-circuit back into WAIT_USER_REPLY/WAIT_REVIEW_FEEDBACK.
+  clear_legacy_waiting_state_files
+
   /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
 
   echo "${resume_reason_label}=1"
@@ -1410,7 +1548,14 @@ find_project_item_status_by_id() {
   local item_json
 
   if ! item_json="$(
-    run_gh_retry_capture_project \
+    graphql_audit_capture \
+      "daemon_tick" \
+      "project_item_status_by_id" \
+      "direct_graphql" \
+      "project_item_status" \
+      "cacheable_short_ttl" \
+      "item_id=${item_id}" \
+      run_gh_retry_capture_project \
       gh api graphql \
       -f query='
 query($itemId: ID!) {
@@ -3148,28 +3293,10 @@ if (( cached_queue_count > 0 )); then
   queue_json="$cached_queue_json"
   queue_count="$cached_queue_count"
 else
-if project_json="$(
-  run_gh_retry_capture_project \
-  gh api graphql \
-  -f query='
-query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
-  node(id: $projectId) {
-    ... on ProjectV2 {
-      fields(first: $fieldsFirst) {
-        nodes {
-          __typename
-          ... on ProjectV2SingleSelectField {
-            id
-            name
-            options {
-              id
-              name
-            }
-          }
-        }
-      }
-      items(first: $itemsFirst) {
-        nodes {
+project_fields_json=""
+project_items_json=""
+if project_fields_json="$(fetch_project_fields_json)" && project_items_json="$(
+  fetch_project_items_paginated '
           id
           content {
             __typename
@@ -3193,16 +3320,20 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
             __typename
             ... on ProjectV2ItemFieldSingleSelectValue { name optionId }
           }
+'
+)"; then
+  project_json="$(
+    jq -cn --argjson fields "$project_fields_json" --argjson items "$project_items_json" '
+      {
+        data: {
+          node: {
+            fields: ($fields.data.node.fields // {nodes: []}),
+            items: ($items.data.node.items // {nodes: []})
+          }
         }
       }
-    }
-  }
-}
-' \
-    -f projectId="$project_id" \
-    -F fieldsFirst=100 \
-    -F itemsFirst=100
-)"; then
+    '
+  )"
   if graphql_payload_has_auth_error "$project_json"; then
     auth_msg="$(graphql_payload_first_auth_error_message "$project_json")"
     emit_wait_github_auth "PROJECT_QUERY" "PROJECT_TOKEN" "$auth_msg" "PROJECT_QUERY_GRAPHQL"
@@ -3223,8 +3354,19 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
   gql_stats_on_success
 else
   rc=$?
+  if [[ -n "${project_items_json:-}" ]]; then
+    project_json="$project_items_json"
+  else
+    project_json="${project_fields_json:-}"
+  fi
   if github_output_has_auth_error "$project_json"; then
     emit_wait_github_auth "PROJECT_QUERY" "PROJECT_TOKEN" "$project_json" "PROJECT_QUERY_GRAPHQL"
+    exit 0
+  fi
+  if graphql_payload_has_excessive_pagination "$project_json"; then
+    echo "WAIT_GITHUB_API_UNSTABLE=1"
+    echo "WAIT_GITHUB_STAGE=PROJECT_QUERY"
+    echo "WAIT_GITHUB_STAGE_DETAIL=$(sanitize_for_log "$project_json")"
     exit 0
   fi
   if printf '%s' "$project_json" | grep -Eiq 'api rate limit already exceeded|graphql_rate_limit|rate limit'; then
@@ -3314,7 +3456,21 @@ if (( matched_count > 0 && queue_count == 0 )); then
   exit 0
 fi
 
-  if (( queue_count == 0 )); then
+if (( queue_count == 0 )); then
+  if ! is_truthy_flag "$project_item_list_fallback_enabled_raw"; then
+    graphql_audit_emit \
+      "daemon_tick" \
+      "project_item_list_fallback" \
+      "indirect_project_cli" \
+      "project_item_list" \
+      "cacheable_short_ttl" \
+      "skipped" \
+      "reason=disabled_in_normal_tick"
+    echo "PROJECT_ITEM_LIST_FALLBACK_SKIPPED=1"
+    echo "PROJECT_ITEM_LIST_FALLBACK_REASON=DISABLED_IN_NORMAL_TICK"
+    echo "NO_TASKS_IN_TRIGGER_STATUS=$trigger_status"
+    exit 0
+  fi
   fallback_items_json=""
   if fallback_items_json="$(
     run_project_item_list_fallback \

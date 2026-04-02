@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./env/bootstrap.sh
 source "${SCRIPT_DIR}/env/bootstrap.sh"
 codex_resolve_project_config
+# shellcheck source=./env/graphql_audit.sh
+source "${SCRIPT_DIR}/env/graphql_audit.sh"
 
 # Выбор следующей задачи из GitHub Project:
 # - Статус: Planned
@@ -68,9 +70,27 @@ query($projectId: ID!, $itemsFirst: Int!) {
 '
 
 if [[ -n "$project_token" ]]; then
-  json="$(GH_TOKEN="$project_token" gh api graphql -f query="$query" -F projectId="$project_id" -F itemsFirst=100)"
+  json="$(
+    graphql_audit_capture \
+      "next_task" \
+      "project_scan" \
+      "direct_graphql" \
+      "project_items_page" \
+      "cacheable_short_ttl" \
+      "items_first=100" \
+      env GH_TOKEN="$project_token" gh api graphql -f query="$query" -F projectId="$project_id" -F itemsFirst=100
+  )"
 else
-  json="$(gh api graphql -f query="$query" -F projectId="$project_id" -F itemsFirst=100)"
+  json="$(
+    graphql_audit_capture \
+      "next_task" \
+      "project_scan" \
+      "direct_graphql" \
+      "project_items_page" \
+      "cacheable_short_ttl" \
+      "items_first=100" \
+      gh api graphql -f query="$query" -F projectId="$project_id" -F itemsFirst=100
+  )"
 fi
 
 # jq: фильтруем Planned и сортируем

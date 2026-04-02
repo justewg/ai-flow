@@ -5,6 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./env/bootstrap.sh
 source "${SCRIPT_DIR}/env/bootstrap.sh"
 CODEX_DIR="$(codex_export_state_dir)"
+RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
+# shellcheck source=./env/graphql_audit.sh
+source "${SCRIPT_DIR}/env/graphql_audit.sh"
 RUNNER_INPUT_DIR="${CODEX_RUNNER_INPUT_DIR:-$(codex_resolve_flow_tmp_dir)/run}"
 
 mkdir -p "${CODEX_DIR}"
@@ -325,6 +328,7 @@ load_git_temp_repo_args() {
     GIT_TEMP_BRANCH \
     GIT_TEMP_START_POINT \
     GIT_TEMP_REMOTE \
+    GIT_TEMP_FETCH_REFSPEC \
     GIT_TEMP_MERGE_REF \
     GIT_TEMP_PUSH_REFSPEC \
     GIT_TEMP_COMMIT_MESSAGE \
@@ -380,6 +384,15 @@ run_git_temp_repo() {
   remote="${GIT_TEMP_REMOTE:-origin}"
 
   case "$action" in
+    fetch)
+      refspec="${GIT_TEMP_FETCH_REFSPEC:-}"
+      if [[ -n "$refspec" ]]; then
+        git -C "$repo_root" fetch "$remote" "$refspec"
+      else
+        git -C "$repo_root" fetch "$remote"
+      fi
+      ;;
+
     checkout_branch)
       if [[ -z "$branch" ]]; then
         echo "git_temp_repo checkout_branch requires GIT_TEMP_BRANCH"
@@ -459,7 +472,7 @@ run_git_temp_repo() {
 
     *)
       echo "Unsupported git_temp_repo action: ${action:-<empty>}"
-      echo "Allowed: checkout_branch merge_ref add_paths commit push_branch status rev_parse update_gitlink"
+      echo "Allowed: fetch checkout_branch merge_ref add_paths commit push_branch status rev_parse update_gitlink"
       exit 1
       ;;
   esac
@@ -746,7 +759,7 @@ case "$cmd" in
 
   git_temp_repo)
     if [[ $# -ne 2 ]]; then
-      echo "Usage: .flow/shared/scripts/run.sh git_temp_repo <checkout_branch|merge_ref|add_paths|commit|push_branch|status|rev_parse|update_gitlink>"
+      echo "Usage: .flow/shared/scripts/run.sh git_temp_repo <fetch|checkout_branch|merge_ref|add_paths|commit|push_branch|status|rev_parse|update_gitlink>"
       exit 1
     fi
     run_git_temp_repo "$2"
@@ -847,7 +860,16 @@ case "$cmd" in
       echo "project_item_view requires issue_number.txt or project_task_id.txt"
       exit 1
     fi
-    project_items_json="$(run_project_gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit 250 --format json)"
+    project_items_json="$(
+      graphql_audit_capture \
+        "run.sh" \
+        "project_item_view" \
+        "indirect_project_cli" \
+        "project_item_list" \
+        "cacheable_short_ttl" \
+        "limit=250" \
+        run_project_gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit 250 --format json
+    )"
     selected_item="$(printf '%s' "$project_items_json" | jq \
       --arg issue_number "$issue_number" \
       --arg task_id "$task_id" '
@@ -879,7 +901,16 @@ case "$cmd" in
       exit 1
     fi
 
-    project_items_json="$(run_project_gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit "$project_item_limit" --format json)"
+    project_items_json="$(
+      graphql_audit_capture \
+        "run.sh" \
+        "project_item_list" \
+        "indirect_project_cli" \
+        "project_item_list" \
+        "cacheable_short_ttl" \
+        "limit=${project_item_limit}" \
+        run_project_gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit "$project_item_limit" --format json
+    )"
     if [[ -f "$project_item_jq_file" ]]; then
       project_item_jq="$(read_required_file "$project_item_jq_file")"
       printf '%s\n' "$project_items_json" | jq "$project_item_jq"

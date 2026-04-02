@@ -156,6 +156,21 @@ read_file_or_default() {
   fi
 }
 
+detail_value() {
+  local detail="$1"
+  local key="$2"
+  local line
+  while IFS= read -r line; do
+    line="$(printf '%s' "$line" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+    [[ -z "$line" ]] && continue
+    if [[ "$line" == "${key}="* ]]; then
+      printf '%s' "${line#*=}"
+      return 0
+    fi
+  done < <(printf '%s' "$detail" | tr '|' ';' | tr ';' '\n')
+  printf ''
+}
+
 file_mtime_epoch() {
   local file_path="$1"
   if [[ ! -e "$file_path" ]]; then
@@ -241,6 +256,132 @@ clear_terminal_review_contexts() {
   : > "$REVIEW_PR_FILE"
   : > "$REVIEW_BRANCH_FILE"
   echo "WATCHDOG_TERMINAL_REVIEW_CONTEXTS_CLEARED=1"
+}
+
+clear_active_task_context() {
+  local task_id="$1"
+  local issue_number="$2"
+  local waiting_task waiting_issue review_task review_issue
+
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
+  : > "$ACTIVE_TASK_FILE"
+  : > "$ACTIVE_ITEM_FILE"
+  : > "$ACTIVE_ISSUE_FILE"
+  : > "$PROJECT_TASK_FILE"
+  : > "$CLAIM_EPOCH_FILE"
+
+  waiting_task="$(read_file_or_default "$WAITING_TASK_FILE" "")"
+  waiting_issue="$(read_file_or_default "$WAITING_ISSUE_FILE" "")"
+  if [[ "$waiting_task" == "$task_id" || ( -n "$issue_number" && "$waiting_issue" == "$issue_number" ) ]]; then
+    : > "$WAITING_ISSUE_FILE"
+    : > "$WAITING_TASK_FILE"
+    : > "$WAITING_COMMENT_ID_FILE"
+    : > "$WAITING_KIND_FILE"
+    : > "$WAITING_PENDING_POST_FILE"
+    : > "$WAITING_SINCE_FILE"
+    : > "$WAITING_COMMENT_URL_FILE"
+    echo "WATCHDOG_ACTIVE_TASK_WAITING_CONTEXT_CLEARED=1"
+  fi
+
+  review_task="$(read_file_or_default "$REVIEW_TASK_FILE" "")"
+  review_issue="$(read_file_or_default "$REVIEW_ISSUE_FILE" "")"
+  if [[ "$review_task" == "$task_id" || ( -n "$issue_number" && "$review_issue" == "$issue_number" ) ]]; then
+    : > "$REVIEW_TASK_FILE"
+    : > "$REVIEW_ITEM_FILE"
+    : > "$REVIEW_ISSUE_FILE"
+    : > "$REVIEW_PR_FILE"
+    : > "$REVIEW_BRANCH_FILE"
+    echo "WATCHDOG_ACTIVE_TASK_REVIEW_CONTEXT_CLEARED=1"
+  fi
+}
+
+active_task_matches_human_wait_context() {
+  local task_id="$1"
+  local issue_number="$2"
+  local waiting_task waiting_issue waiting_kind waiting_comment_id
+  local review_task review_issue review_pr
+  local detail_task detail_issue detail_kind detail_comment detail_review_task detail_review_issue
+
+  case "$daemon_state" in
+    WAIT_USER_REPLY)
+      waiting_task="$(read_file_or_default "$WAITING_TASK_FILE" "")"
+      waiting_issue="$(read_file_or_default "$WAITING_ISSUE_FILE" "")"
+      waiting_kind="$(read_file_or_default "$WAITING_KIND_FILE" "")"
+      waiting_comment_id="$(read_file_or_default "$WAITING_COMMENT_ID_FILE" "")"
+      if [[ -z "$waiting_task" ]]; then
+        detail_task="$(detail_value "$daemon_detail" "TASK_ID")"
+        [[ -n "$detail_task" ]] && waiting_task="$detail_task"
+      fi
+      if [[ -z "$waiting_issue" ]]; then
+        detail_issue="$(detail_value "$daemon_detail" "ISSUE_NUMBER")"
+        [[ -n "$detail_issue" ]] && waiting_issue="$detail_issue"
+      fi
+      if [[ -z "$waiting_kind" ]]; then
+        detail_kind="$(detail_value "$daemon_detail" "QUESTION_KIND")"
+        [[ -n "$detail_kind" ]] && waiting_kind="$detail_kind"
+      fi
+      if [[ -z "$waiting_comment_id" ]]; then
+        detail_comment="$(detail_value "$daemon_detail" "QUESTION_COMMENT_ID")"
+        [[ -n "$detail_comment" ]] && waiting_comment_id="$detail_comment"
+      fi
+      if [[ -n "$waiting_kind" && -n "$waiting_comment_id" ]] && {
+        [[ -n "$task_id" && "$waiting_task" == "$task_id" ]] ||
+        [[ -n "$issue_number" && "$waiting_issue" == "$issue_number" ]]
+      }; then
+        echo "WATCHDOG_ACTIVE_TASK_WAIT_CONTEXT=WAIT_USER_REPLY"
+        echo "WATCHDOG_ACTIVE_TASK_WAIT_TASK_ID=${waiting_task:-$task_id}"
+        [[ -n "$waiting_issue" ]] && echo "WATCHDOG_ACTIVE_TASK_WAIT_ISSUE_NUMBER=$waiting_issue"
+        echo "WATCHDOG_ACTIVE_TASK_WAIT_COMMENT_ID=$waiting_comment_id"
+        echo "WATCHDOG_ACTIVE_TASK_WAIT_KIND=$waiting_kind"
+        return 0
+      fi
+      ;;
+    WAIT_REVIEW_FEEDBACK)
+      review_task="$(read_file_or_default "$REVIEW_TASK_FILE" "")"
+      review_issue="$(read_file_or_default "$REVIEW_ISSUE_FILE" "")"
+      review_pr="$(read_file_or_default "$REVIEW_PR_FILE" "")"
+      if [[ -z "$review_task" ]]; then
+        detail_review_task="$(detail_value "$daemon_detail" "WAIT_REVIEW_FEEDBACK_TASK_ID")"
+        [[ -n "$detail_review_task" ]] && review_task="$detail_review_task"
+      fi
+      if [[ -z "$review_issue" ]]; then
+        detail_review_issue="$(detail_value "$daemon_detail" "WAIT_REVIEW_FEEDBACK_ISSUE_NUMBER")"
+        [[ -n "$detail_review_issue" ]] && review_issue="$detail_review_issue"
+      fi
+      if [[ -n "$review_pr" || -n "$review_task" || -n "$review_issue" ]] && {
+        [[ -n "$task_id" && "$review_task" == "$task_id" ]] ||
+        [[ -n "$issue_number" && "$review_issue" == "$issue_number" ]]
+      }; then
+        echo "WATCHDOG_ACTIVE_TASK_WAIT_CONTEXT=WAIT_REVIEW_FEEDBACK"
+        echo "WATCHDOG_ACTIVE_TASK_WAIT_TASK_ID=${review_task:-$task_id}"
+        [[ -n "$review_issue" ]] && echo "WATCHDOG_ACTIVE_TASK_WAIT_ISSUE_NUMBER=$review_issue"
+        [[ -n "$review_pr" ]] && echo "WATCHDOG_ACTIVE_TASK_WAIT_PR_NUMBER=$review_pr"
+        return 0
+      fi
+      ;;
+  esac
+
+  return 1
+}
+
+active_task_issue_closed() {
+  local issue_number="$1"
+  local issue_json state state_reason
+
+  [[ "$issue_number" =~ ^[0-9]+$ ]] || return 1
+
+  if ! issue_json="$("${CODEX_SHARED_SCRIPTS_DIR}/gh_retry.sh" \
+    gh issue view "$issue_number" --repo "$FLOW_GITHUB_REPO" --json state,stateReason 2>/dev/null)"; then
+    return 1
+  fi
+
+  state="$(printf '%s' "$issue_json" | jq -r '.state // ""' 2>/dev/null || true)"
+  [[ "$state" == "CLOSED" ]] || return 1
+
+  state_reason="$(printf '%s' "$issue_json" | jq -r '.stateReason // ""' 2>/dev/null || true)"
+  echo "WATCHDOG_ACTIVE_TASK_CLOSED_ISSUE_NUMBER=$issue_number"
+  [[ -n "$state_reason" && "$state_reason" != "null" ]] && echo "WATCHDOG_ACTIVE_TASK_CLOSED_STATE_REASON=$state_reason"
+  return 0
 }
 
 maybe_finalize_terminal_review_context() {
@@ -596,26 +737,37 @@ elif [[ "$daemon_agent_state" == "INSTALLED_NOT_LOADED" ]]; then
 elif [[ -d "$DAEMON_LOCK_DIR" && $daemon_log_age -gt $daemon_log_stale_threshold ]]; then
   action="FREEZE_EMERGENCY"
   reason="DAEMON_LOG_STALE_WITH_LOCK"
-elif [[ -n "$active_task" ]]; then
-  if [[ "$executor_state" == "RUNNING" && "$executor_pid_alive" != "1" &&
-        ( "$executor_hb_epoch" -eq 0 || "$executor_hb_age_sec" -gt $EXECUTOR_STALE_SEC ) ]]; then
-    action="STOP_EXECUTOR_AND_FREEZE"
-    reason="EXECUTOR_PID_DEAD"
+  elif [[ -n "$active_task" ]]; then
+    if [[ "$executor_state" == "RUNNING" && "$executor_pid_alive" != "1" &&
+          ( "$executor_hb_epoch" -eq 0 || "$executor_hb_age_sec" -gt $EXECUTOR_STALE_SEC ) ]]; then
+      action="STOP_EXECUTOR_AND_FREEZE"
+      reason="EXECUTOR_PID_DEAD"
   elif [[ "$executor_state" == "RUNNING" && "$executor_hb_epoch" -gt 0 && "$executor_hb_age_sec" -gt $EXECUTOR_STALE_SEC ]]; then
     action="STOP_EXECUTOR_AND_FREEZE"
     reason="EXECUTOR_HEARTBEAT_STALE"
-  elif [[ "$daemon_state" == "IDLE_NO_TASKS" ]]; then
-    if (( claim_age_sec >= ACTIVE_TASK_GRACE_SEC )); then
-      action="FREEZE_SAFE"
-      reason="DAEMON_IDLE_WITH_ACTIVE_TASK"
-    fi
-  elif [[ -z "$executor_state" ]]; then
-    if (( claim_age_sec >= ACTIVE_TASK_GRACE_SEC )); then
-      action="FREEZE_SAFE"
-      reason="ACTIVE_TASK_WITHOUT_EXECUTOR_STATE"
+    elif [[ "$daemon_state" == "IDLE_NO_TASKS" ]]; then
+      if (( claim_age_sec >= ACTIVE_TASK_GRACE_SEC )); then
+        action="FREEZE_SAFE"
+        reason="DAEMON_IDLE_WITH_ACTIVE_TASK"
+      fi
+    elif [[ -z "$executor_state" ]]; then
+      if (( claim_age_sec >= ACTIVE_TASK_GRACE_SEC )); then
+        if active_task_matches_human_wait_context "$active_task" "$active_issue"; then
+          :
+        elif active_task_issue_closed "$active_issue"; then
+          clear_active_task_context "$active_task" "$active_issue"
+          echo "WATCHDOG_STALE_ACTIVE_TASK_RELEASED=1"
+          echo "WATCHDOG_STALE_ACTIVE_TASK_ID=$active_task"
+          [[ -n "$active_issue" ]] && echo "WATCHDOG_STALE_ACTIVE_ISSUE_NUMBER=$active_issue"
+          active_task=""
+          active_issue=""
+        else
+          action="FREEZE_SAFE"
+          reason="ACTIVE_TASK_WITHOUT_EXECUTOR_STATE"
+        fi
+      fi
     fi
   fi
-fi
 
 summary="active_task=${active_task:-none};active_issue=${active_issue:-none};daemon_agent_state=${daemon_agent_state};daemon_state=${daemon_state};daemon_state_age=${daemon_state_age_sec}s;executor_state=${executor_state:-none};executor_pid=${executor_pid:-none};executor_pid_alive=${executor_pid_alive};executor_hb_age=${executor_hb_age_sec}s;daemon_log_age=${daemon_log_age}s;daemon_log_stale_threshold=${daemon_log_stale_threshold}s;claim_age=${claim_age_sec}s;claim_grace_threshold=${ACTIVE_TASK_GRACE_SEC}s"
 if [[ "${WATCHDOG_AUTH_DEGRADED:-0}" == "1" ]]; then

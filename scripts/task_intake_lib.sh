@@ -194,7 +194,7 @@ task_intake_extract_file_paths() {
 
 task_intake_small_change_signal() {
   local combined_text="$1"
-  printf '%s' "$combined_text" | tr '[:upper:]' '[:lower:]' | rg -q '\b(alias|readme|docs|documentation|help|label|usage|copy|rename|dispatch|aria-label|alt|role|subtitle|caption)\b'
+  printf '%s' "$combined_text" | tr '[:upper:]' '[:lower:]' | rg -q '(alias|readme|docs|documentation|help|label|usage|copy|rename|dispatch|aria-label|alt|role|subtitle|caption|подпись|кнопк|клавиатур|пробел|иконк|крестик|андроид)'
 }
 
 task_intake_denied_execution_patterns() {
@@ -228,6 +228,15 @@ runtime_v2
 infra
 toolkit
 android
+андроид
+android app
+android-прилож
+android прилож
+клавиатур
+keyboard
+space button
+пробел
+кнопк
 toolbar
 app bar
 mainactivity
@@ -271,20 +280,29 @@ task_intake_profile_decision_json() {
     confidence_label="high"
     confidence_score="0.95"
   else
-    found=""
-    while IFS= read -r term; do
-      [[ -n "$term" ]] || continue
-      if [[ "$combined_downcased" == *"$term"* ]]; then
-        found="$term"
-        break
-      fi
-    done < <(task_intake_standard_profile_terms)
+    if printf '%s' "$combined_downcased" | rg -q '(андроид|android|клавиатур|keyboard|пробел|space button|крестик|кнопк)'; then
+      decision="standard"
+      reason="intake_standard_android_ui"
+      confidence_label="high"
+      confidence_score="0.89"
+    else
+      found=""
+      while IFS= read -r term; do
+        [[ -n "$term" ]] || continue
+        if [[ "$combined_downcased" == *"$term"* ]]; then
+          found="$term"
+          break
+        fi
+      done < <(task_intake_standard_profile_terms)
+    fi
 
     if [[ -n "$found" ]]; then
       decision="standard"
       reason="intake_standard_${found//[^a-z0-9]/_}"
       confidence_label="high"
       confidence_score="0.89"
+    elif [[ "$reason" == "intake_standard_android_ui" ]]; then
+      :
     elif (( target_count == 0 )); then
       decision="human_needed"
       reason="intake_target_files_ambiguous"

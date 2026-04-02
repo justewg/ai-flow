@@ -185,6 +185,12 @@ reason_detail_block() {
   local detail=""
   local target_file=""
   local matched_literal=""
+  local execution_profile_file=""
+  local decision_reason=""
+  local interpreted_intent=""
+  local target_count=""
+  local target_preview=""
+  local detail_lines="0"
 
   case "$reason" in
     profile_breach)
@@ -197,12 +203,44 @@ reason_detail_block() {
       fi
       ;;
     intake_human_needed|intake_blocked)
-      if [[ -f "$(task_worktree_execution_profile_file "$task_id" "$issue_number" "$STATE_DIR" "$PROFILE_NAME")" ]]; then
-        confidence="$(jq -r '.confidence.label // empty' "$(task_worktree_execution_profile_file "$task_id" "$issue_number" "$STATE_DIR" "$PROFILE_NAME")" 2>/dev/null || true)"
+      execution_profile_file="$(task_worktree_execution_profile_file "$task_id" "$issue_number" "$STATE_DIR" "$PROFILE_NAME")"
+      if [[ -f "$execution_profile_file" ]]; then
+        confidence="$(jq -r '.confidence.label // empty' "$execution_profile_file" 2>/dev/null || true)"
+        decision_reason="$(jq -r '.reason // empty' "$execution_profile_file" 2>/dev/null || true)"
+        interpreted_intent="$(jq -r '.interpretedIntent // empty' "$execution_profile_file" 2>/dev/null || true)"
+        target_count="$(jq -r '(.candidateTargetFiles // []) | length' "$execution_profile_file" 2>/dev/null || true)"
+        target_preview="$(
+          jq -r '.candidateTargetFiles // [] | .[:3][]?' "$execution_profile_file" 2>/dev/null || true
+        )"
       fi
-      if [[ -n "$confidence" ]]; then
-        detail="Детали: confidence интерпретации = ${confidence}."
+      detail="Детали:"
+      [[ -n "$decision_reason" ]] && detail="${detail}
+- decision reason: ${decision_reason}"
+      [[ -n "$decision_reason" ]] && detail_lines="1"
+      [[ -n "$confidence" ]] && detail="${detail}
+- confidence интерпретации: ${confidence}"
+      [[ -n "$confidence" ]] && detail_lines="1"
+      [[ -n "$interpreted_intent" ]] && detail="${detail}
+- понятое намерение: ${interpreted_intent}"
+      [[ -n "$interpreted_intent" ]] && detail_lines="1"
+      if [[ -n "$target_count" ]]; then
+        if [[ "$target_count" == "0" ]]; then
+          detail="${detail}
+- candidate target files: none (0)
+- не удалось надёжно привязать задачу к конкретному файлу или компоненту"
+          detail_lines="1"
+        else
+          detail="${detail}
+- candidate target files: ${target_count}"
+          detail_lines="1"
+          while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            detail="${detail}
+  - ${line}"
+          done <<< "$target_preview"
+        fi
       fi
+      [[ "$detail_lines" == "1" ]] || detail=""
       ;;
     already_satisfied)
       if [[ -f "$NOOP_PROBE_FILE" ]]; then

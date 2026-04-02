@@ -35,9 +35,10 @@ fi
 source_json="$(cat "$source_file")"
 issue_title="$(printf '%s' "$source_json" | jq -r '.title // ""')"
 issue_body="$(printf '%s' "$source_json" | jq -r '.body // ""')"
+reply_text="$(printf '%s' "$source_json" | jq -r '.replyText // ""')"
 source_hash="$(printf '%s' "$source_json" | jq -r '.sourceHash // ""')"
-combined_text="$(printf '%s\n%s' "$issue_title" "$issue_body")"
-interpreted_intent="$(task_intake_interpreted_intent "$issue_title" "$issue_body")"
+combined_text="$(printf '%s\n%s\n%s' "$issue_title" "$issue_body" "$reply_text")"
+interpreted_intent="$(task_intake_interpreted_intent "$issue_title" "$issue_body" "$reply_text")"
 
 target_files=()
 while IFS= read -r line; do

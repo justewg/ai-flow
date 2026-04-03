@@ -19,13 +19,13 @@ build_cached_auth_error() {
   jq -nc \
     --arg requestId "$request_id" \
     --arg taskId "$task_id" \
-    --arg module "$module" \
+    --arg moduleName "$module" \
     --arg errorClass "$error_class" \
     --arg errorMessage "$error_message" \
     '{
       requestId:$requestId,
       taskId:$taskId,
-      "module":$module,
+      "module":$moduleName,
       provider:"claude",
       outcome:"error",
       outputText:null,
@@ -166,12 +166,12 @@ main() {
       jq -nc \
         --arg requestId "claude_runner_shell_failure:${module}:${task_id}:${now_epoch}" \
         --arg taskId "$task_id" \
-        --arg module "$module" \
+        --arg moduleName "$module" \
         --arg errorMessage "claude runner exited without JSON payload (rc=${rc})" \
         '{
           requestId:$requestId,
           taskId:$taskId,
-          "module":$module,
+          "module":$moduleName,
           provider:"claude",
           outcome:"error",
           outputText:null,

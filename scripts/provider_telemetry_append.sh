@@ -76,7 +76,7 @@ jq -nc \
   --arg requestId "$request_id" \
   --arg taskId "$task_id" \
   --argjson issueNumber "$issue_number" \
-  --arg module "$module_name" \
+  --arg moduleName "$module_name" \
   --arg requestedProvider "$requested_provider" \
   --arg effectiveProvider "$effective_provider" \
   --arg outcome "$outcome" \
@@ -107,7 +107,7 @@ jq -nc \
     requestId:$requestId,
     taskId:$taskId,
     issueNumber:$issueNumber,
-    "module":$module,
+    "module":$moduleName,
     requestedProvider:$requestedProvider,
     effectiveProvider:$effectiveProvider,
     outcome:$outcome,

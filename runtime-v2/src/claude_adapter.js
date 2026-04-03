@@ -43,7 +43,7 @@ function buildClaudeInvocationPlan(input, config = {}) {
     mode: "provider-json",
     invocation: {
       provider: "claude",
-      transport: "sdk_query",
+      transport: "runner_managed",
       runner: ".flow/shared/tools/providers/claude/run_claude_provider.mjs",
       promptFile,
       responseFile,

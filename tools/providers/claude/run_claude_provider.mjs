@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { query, AbortError } from "@anthropic-ai/claude-agent-sdk";
+import { pathToFileURL } from "node:url";
 
 const require = createRequire(import.meta.url);
 
@@ -16,6 +16,7 @@ function parseArgs(argv) {
     issueNumber: null,
     toolkitRoot: "",
     timeoutMs: 120000,
+    transport: process.env.CLAUDE_PROVIDER_TRANSPORT || "auto",
     pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE || "",
   };
 
@@ -46,6 +47,9 @@ function parseArgs(argv) {
     } else if (token === "--timeout-ms") {
       args.timeoutMs = Number.parseInt(next, 10);
       index += 1;
+    } else if (token === "--transport") {
+      args.transport = next;
+      index += 1;
     } else if (token === "--path-to-claude-code-executable") {
       args.pathToClaudeCodeExecutable = next;
       index += 1;
@@ -59,6 +63,9 @@ function parseArgs(argv) {
   }
   if (!Number.isInteger(args.timeoutMs) || args.timeoutMs <= 0) {
     throw new Error("timeout-ms must be a positive integer");
+  }
+  if (!["auto", "claude_code_sdk", "anthropic_api"].includes(args.transport)) {
+    throw new Error("transport must be one of: auto, claude_code_sdk, anthropic_api");
   }
   return args;
 }
@@ -174,7 +181,17 @@ function tokenUsageFromUsage(usage) {
   return found ? total : null;
 }
 
-function buildErrorResult({ requestId, taskId, moduleName, errorClass, errorMessage, latencyMs, tokenUsage, estimatedCost }) {
+function buildErrorResult({
+  requestId,
+  taskId,
+  moduleName,
+  errorClass,
+  errorMessage,
+  latencyMs,
+  tokenUsage,
+  estimatedCost,
+  meta = {},
+}) {
   return {
     requestId,
     taskId,
@@ -189,7 +206,7 @@ function buildErrorResult({ requestId, taskId, moduleName, errorClass, errorMess
     tokenUsage: Number.isInteger(tokenUsage) && tokenUsage >= 0 ? tokenUsage : null,
     estimatedCost: typeof estimatedCost === "number" && Number.isFinite(estimatedCost) && estimatedCost >= 0 ? estimatedCost : null,
     fallbackFromProvider: null,
-    meta: {},
+    meta,
   };
 }
 
@@ -217,6 +234,22 @@ function classifyClaudeExecutionError(errorLike) {
   return "error_during_execution";
 }
 
+function classifyAnthropicHttpError(statusCode) {
+  if (statusCode === 401) {
+    return "auth_missing";
+  }
+  if (statusCode === 403) {
+    return "auth_forbidden";
+  }
+  if (statusCode === 429) {
+    return "provider_rate_limited";
+  }
+  if (statusCode >= 500) {
+    return "provider_unavailable";
+  }
+  return "error_during_execution";
+}
+
 function classifyClaudeResultSubtype(finalResult) {
   const joinedErrors = Array.isArray(finalResult?.errors) ? finalResult.errors.join("; ") : "";
   const fallbackMessage = `${finalResult?.result || ""}; ${joinedErrors}`.trim();
@@ -232,18 +265,59 @@ function classifyClaudeResultSubtype(finalResult) {
   return classifyClaudeExecutionError(fallbackMessage);
 }
 
-async function runClaude(args) {
-  const request = readJson(args.requestFile);
-  const { normalizeProviderResult, normalizeIntakeInterpretationResponse, normalizeAskHumanResponse } = loadToolkitContracts(
-    args.toolkitRoot,
-  );
+function stripMarkdownJsonFences(text) {
+  const trimmed = String(text || "").trim();
+  if (trimmed.startsWith("```")) {
+    return trimmed.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  }
+  return trimmed;
+}
 
-  const requestId = `${args.module}:${args.taskId}:${new Date().toISOString()}`;
+function extractJsonObjectText(text) {
+  const fenced = stripMarkdownJsonFences(text);
+  if (fenced.startsWith("{") && fenced.endsWith("}")) {
+    return fenced;
+  }
+
+  const firstBrace = fenced.indexOf("{");
+  const lastBrace = fenced.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    return fenced.slice(firstBrace, lastBrace + 1);
+  }
+
+  return fenced;
+}
+
+function normalizeModuleResponse(moduleName, structuredOutput, normalizers) {
+  return moduleName === "intake.interpretation"
+    ? normalizers.normalizeIntakeInterpretationResponse(structuredOutput)
+    : normalizers.normalizeAskHumanResponse(structuredOutput);
+}
+
+function resolveTransport(args) {
+  if (args.transport === "anthropic_api" || args.transport === "claude_code_sdk") {
+    return args.transport;
+  }
+  if (process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY.trim() !== "") {
+    return "anthropic_api";
+  }
+  return "claude_code_sdk";
+}
+
+function buildRunnerMeta(baseMeta = {}, extraMeta = {}) {
+  return {
+    ...baseMeta,
+    ...extraMeta,
+  };
+}
+
+async function runClaudeCodeSdk(args, request, normalizers, requestId) {
+  const { query, AbortError } = await import("@anthropic-ai/claude-agent-sdk");
   const startedAt = Date.now();
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(new Error("claude_provider_timeout")), args.timeoutMs);
-
   let finalResult = null;
+
   try {
     const stream = query({
       prompt: request.promptText,
@@ -272,7 +346,7 @@ async function runClaude(args) {
     clearTimeout(timeoutHandle);
     const latencyMs = Date.now() - startedAt;
     const errorClass = error instanceof AbortError ? "timeout" : classifyClaudeExecutionError(error);
-    return normalizeProviderResult(
+    return normalizers.normalizeProviderResult(
       buildErrorResult({
         requestId,
         taskId: args.taskId,
@@ -280,6 +354,7 @@ async function runClaude(args) {
         errorClass,
         errorMessage: error?.message || String(error),
         latencyMs,
+        meta: buildRunnerMeta({}, { transport: "claude_code_sdk" }),
       }),
     );
   }
@@ -288,7 +363,7 @@ async function runClaude(args) {
   const latencyMs = Date.now() - startedAt;
 
   if (!finalResult) {
-    return normalizeProviderResult(
+    return normalizers.normalizeProviderResult(
       buildErrorResult({
         requestId,
         taskId: args.taskId,
@@ -296,6 +371,7 @@ async function runClaude(args) {
         errorClass: "empty_output",
         errorMessage: "Claude query finished without final result message",
         latencyMs,
+        meta: buildRunnerMeta({}, { transport: "claude_code_sdk" }),
       }),
     );
   }
@@ -305,7 +381,7 @@ async function runClaude(args) {
 
   if (finalResult.subtype !== "success") {
     const errorClass = classifyClaudeResultSubtype(finalResult);
-    return normalizeProviderResult(
+    return normalizers.normalizeProviderResult(
       buildErrorResult({
         requestId,
         taskId: args.taskId,
@@ -315,12 +391,13 @@ async function runClaude(args) {
         latencyMs,
         tokenUsage,
         estimatedCost,
+        meta: buildRunnerMeta({}, { transport: "claude_code_sdk" }),
       }),
     );
   }
 
   if (finalResult.structured_output === undefined || finalResult.structured_output === null) {
-    return normalizeProviderResult(
+    return normalizers.normalizeProviderResult(
       buildErrorResult({
         requestId,
         taskId: args.taskId,
@@ -330,18 +407,16 @@ async function runClaude(args) {
         latencyMs,
         tokenUsage,
         estimatedCost,
+        meta: buildRunnerMeta({}, { transport: "claude_code_sdk" }),
       }),
     );
   }
 
   let normalizedResponse;
   try {
-    normalizedResponse =
-      args.module === "intake.interpretation"
-        ? normalizeIntakeInterpretationResponse(finalResult.structured_output)
-        : normalizeAskHumanResponse(finalResult.structured_output);
+    normalizedResponse = normalizeModuleResponse(args.module, finalResult.structured_output, normalizers);
   } catch (error) {
-    return normalizeProviderResult(
+    return normalizers.normalizeProviderResult(
       buildErrorResult({
         requestId,
         taskId: args.taskId,
@@ -351,12 +426,13 @@ async function runClaude(args) {
         latencyMs,
         tokenUsage,
         estimatedCost,
+        meta: buildRunnerMeta({}, { transport: "claude_code_sdk" }),
       }),
     );
   }
 
   writeJson(args.responseFile, normalizedResponse);
-  return normalizeProviderResult({
+  return normalizers.normalizeProviderResult({
     requestId,
     taskId: args.taskId,
     module: args.module,
@@ -370,32 +446,259 @@ async function runClaude(args) {
     tokenUsage,
     estimatedCost,
     fallbackFromProvider: null,
-    meta: {},
+    meta: buildRunnerMeta({}, { transport: "claude_code_sdk" }),
   });
 }
 
-const args = parseArgs(process.argv);
-runClaude(args)
-  .then((result) => {
-    console.log(JSON.stringify(result, null, 2));
-  })
-  .catch((error) => {
-    const payload = {
-      requestId: `claude_runner_internal:${new Date().toISOString()}`,
-      taskId: args.taskId,
-      module: args.module,
-      provider: "claude",
-      outcome: "error",
-      outputText: null,
-      structuredOutput: {},
-      errorClass: "runner_internal_error",
-      errorMessage: error?.message || String(error),
-      latencyMs: null,
-      tokenUsage: null,
-      estimatedCost: null,
-      fallbackFromProvider: null,
-      meta: {},
+function extractAnthropicText(responseJson) {
+  if (!responseJson || !Array.isArray(responseJson.content)) {
+    return "";
+  }
+  return responseJson.content
+    .filter((block) => block && block.type === "text" && typeof block.text === "string")
+    .map((block) => block.text)
+    .join("\n")
+    .trim();
+}
+
+async function readJsonBody(response) {
+  const rawText = await response.text();
+  try {
+    return {
+      rawText,
+      json: JSON.parse(rawText),
     };
-    console.log(JSON.stringify(payload, null, 2));
-    process.exit(0);
+  } catch (_error) {
+    return {
+      rawText,
+      json: null,
+    };
+  }
+}
+
+async function runAnthropicApi(args, request, normalizers, requestId) {
+  const apiKey = String(process.env.ANTHROPIC_API_KEY || "").trim();
+  const model = String(process.env.CLAUDE_PROVIDER_MODEL || "claude-opus-4-6").trim();
+  const apiUrl = String(process.env.ANTHROPIC_API_URL || "https://api.anthropic.com/v1/messages").trim();
+  const anthropicVersion = String(process.env.ANTHROPIC_VERSION || "2023-06-01").trim();
+  const maxTokensRaw = Number.parseInt(process.env.CLAUDE_PROVIDER_MAX_TOKENS || "1200", 10);
+  const maxTokens = Number.isInteger(maxTokensRaw) && maxTokensRaw > 0 ? maxTokensRaw : 1200;
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(new Error("claude_provider_timeout")), args.timeoutMs);
+  const metaBase = {
+    transport: "anthropic_api",
+    model,
+    apiUrl,
+  };
+
+  if (!apiKey) {
+    clearTimeout(timeoutHandle);
+    return normalizers.normalizeProviderResult(
+      buildErrorResult({
+        requestId,
+        taskId: args.taskId,
+        moduleName: args.module,
+        errorClass: "auth_missing",
+        errorMessage: "ANTHROPIC_API_KEY is not set for anthropic_api transport",
+        latencyMs: Date.now() - startedAt,
+        meta: metaBase,
+      }),
+    );
+  }
+
+  let response;
+  try {
+    response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": anthropicVersion,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens,
+        temperature: 0,
+        system: systemPromptForModule(args.module),
+        messages: [
+          {
+            role: "user",
+            content: request.promptText,
+          },
+        ],
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    clearTimeout(timeoutHandle);
+    const latencyMs = Date.now() - startedAt;
+    const errorClass = error instanceof AbortError ? "timeout" : classifyClaudeExecutionError(error);
+    return normalizers.normalizeProviderResult(
+      buildErrorResult({
+        requestId,
+        taskId: args.taskId,
+        moduleName: args.module,
+        errorClass,
+        errorMessage: error?.message || String(error),
+        latencyMs,
+        meta: metaBase,
+      }),
+    );
+  }
+
+  const latencyMs = Date.now() - startedAt;
+  clearTimeout(timeoutHandle);
+  const { rawText, json } = await readJsonBody(response);
+
+  if (!response.ok) {
+    const errorMessage =
+      json?.error?.message ||
+      json?.message ||
+      rawText ||
+      `Anthropic API request failed with HTTP ${response.status}`;
+    return normalizers.normalizeProviderResult(
+      buildErrorResult({
+        requestId,
+        taskId: args.taskId,
+        moduleName: args.module,
+        errorClass: classifyAnthropicHttpError(response.status),
+        errorMessage,
+        latencyMs,
+        meta: buildRunnerMeta(metaBase, { statusCode: response.status }),
+      }),
+    );
+  }
+
+  if (!json || typeof json !== "object") {
+    return normalizers.normalizeProviderResult(
+      buildErrorResult({
+        requestId,
+        taskId: args.taskId,
+        moduleName: args.module,
+        errorClass: "malformed_json",
+        errorMessage: "Anthropic API returned non-JSON payload",
+        latencyMs,
+        meta: buildRunnerMeta(metaBase, { statusCode: response.status }),
+      }),
+    );
+  }
+
+  const outputText = extractAnthropicText(json);
+  if (!outputText) {
+    return normalizers.normalizeProviderResult(
+      buildErrorResult({
+        requestId,
+        taskId: args.taskId,
+        moduleName: args.module,
+        errorClass: "empty_output",
+        errorMessage: "Anthropic API returned no text content",
+        latencyMs,
+        tokenUsage: tokenUsageFromUsage(json.usage),
+        meta: buildRunnerMeta(metaBase, { statusCode: response.status }),
+      }),
+    );
+  }
+
+  let parsedOutput;
+  try {
+    parsedOutput = JSON.parse(extractJsonObjectText(outputText));
+  } catch (error) {
+    return normalizers.normalizeProviderResult(
+      buildErrorResult({
+        requestId,
+        taskId: args.taskId,
+        moduleName: args.module,
+        errorClass: "schema_invalid_output",
+        errorMessage: `Anthropic API returned non-JSON structured output: ${error?.message || String(error)}`,
+        latencyMs,
+        tokenUsage: tokenUsageFromUsage(json.usage),
+        meta: buildRunnerMeta(metaBase, { statusCode: response.status }),
+      }),
+    );
+  }
+
+  let normalizedResponse;
+  try {
+    normalizedResponse = normalizeModuleResponse(args.module, parsedOutput, normalizers);
+  } catch (error) {
+    return normalizers.normalizeProviderResult(
+      buildErrorResult({
+        requestId,
+        taskId: args.taskId,
+        moduleName: args.module,
+        errorClass: "schema_invalid_output",
+        errorMessage: error?.message || String(error),
+        latencyMs,
+        tokenUsage: tokenUsageFromUsage(json.usage),
+        meta: buildRunnerMeta(metaBase, { statusCode: response.status }),
+      }),
+    );
+  }
+
+  writeJson(args.responseFile, normalizedResponse);
+  return normalizers.normalizeProviderResult({
+    requestId,
+    taskId: args.taskId,
+    module: args.module,
+    provider: "claude",
+    outcome: "success",
+    outputText,
+    structuredOutput: normalizedResponse,
+    errorClass: null,
+    errorMessage: null,
+    latencyMs,
+    tokenUsage: tokenUsageFromUsage(json.usage),
+    estimatedCost: null,
+    fallbackFromProvider: null,
+    meta: buildRunnerMeta(metaBase, { statusCode: response.status }),
   });
+}
+
+async function runClaude(args) {
+  const request = readJson(args.requestFile);
+  const normalizers = loadToolkitContracts(args.toolkitRoot);
+  const requestId = `${args.module}:${args.taskId}:${new Date().toISOString()}`;
+  const transport = resolveTransport(args);
+
+  if (transport === "anthropic_api") {
+    return runAnthropicApi(args, request, normalizers, requestId);
+  }
+
+  return runClaudeCodeSdk(args, request, normalizers, requestId);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const args = parseArgs(process.argv);
+  runClaude(args)
+    .then((result) => {
+      console.log(JSON.stringify(result, null, 2));
+    })
+    .catch((error) => {
+      const payload = {
+        requestId: `claude_runner_internal:${new Date().toISOString()}`,
+        taskId: args.taskId,
+        module: args.module,
+        provider: "claude",
+        outcome: "error",
+        outputText: null,
+        structuredOutput: {},
+        errorClass: "runner_internal_error",
+        errorMessage: error?.message || String(error),
+        latencyMs: null,
+        tokenUsage: null,
+        estimatedCost: null,
+        fallbackFromProvider: null,
+        meta: {},
+      };
+      console.log(JSON.stringify(payload, null, 2));
+      process.exit(0);
+    });
+}
+
+export {
+  classifyAnthropicHttpError,
+  extractJsonObjectText,
+  resolveTransport,
+  stripMarkdownJsonFences,
+};

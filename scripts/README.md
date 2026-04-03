@@ -141,8 +141,18 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/provider_route_resolve.sh --module <module> --task-id <task-id> [--issue-number <n>] [--preferred-provider <provider>]` — вернуть canonical provider route decision для shell-path; deterministic `task_interpret.sh` и `task_ask.sh` уже используют его и пишут live telemetry как `local`.
 - `.flow/shared/scripts/provider_compare_resolve.sh --module <module>` — вернуть canonical compare-mode verdict для controlled `shadow/dry_run` rollout (`disabled|dry_run|shadow|live`, `shadowProvider`, `publishDecision`) из общего routing config.
 - `.flow/shared/scripts/provider_rollout_gate.sh [--module <module>] [--shadow-provider <provider>] [--min-samples <n>]` — посчитать простой readiness summary для будущего live rollout на основе последних compare telemetry records из `provider_telemetry.jsonl`; сам live switch не делает.
-- `.flow/shared/scripts/claude_provider_run.sh ...` — wrapper над живым Claude provider runner; при свежем `auth_missing/auth_forbidden` пишет `<state-dir>/claude_provider_health.json` и в коротком cooldown окне возвращает cached canonical failure вместо лишнего live retry.
+- `.flow/shared/scripts/claude_provider_run.sh ...` — wrapper над живым Claude provider runner; поддерживает dual transport:
+  - `CLAUDE_PROVIDER_TRANSPORT=claude_code_sdk` для `Claude Code`/SDK auth surface
+  - `CLAUDE_PROVIDER_TRANSPORT=anthropic_api` для direct `ANTHROPIC_API_KEY` path
+  - `CLAUDE_PROVIDER_TRANSPORT=auto` по умолчанию: если есть `ANTHROPIC_API_KEY`, выбирается `anthropic_api`, иначе `claude_code_sdk`
+  - при свежем `auth_missing/auth_forbidden` пишет `<state-dir>/claude_provider_health.json` и в коротком cooldown окне возвращает cached canonical failure вместо лишнего live retry.
 - `.flow/shared/scripts/claude_provider_probe.sh` — минимальный live health-check для Claude shadow-provider: выполняет узкий canonical probe через `claude_provider_run.sh`, обновляет `claude_provider_health.json` и возвращает обычный canonical `ProviderResult`.
+- Для `anthropic_api` transport runner использует:
+  - `ANTHROPIC_API_KEY`
+  - optional `CLAUDE_PROVIDER_MODEL` (default `claude-opus-4-6`)
+  - optional `ANTHROPIC_API_URL` (default `https://api.anthropic.com/v1/messages`)
+  - optional `ANTHROPIC_VERSION` (default `2023-06-01`)
+  - optional `CLAUDE_PROVIDER_MAX_TOKENS` (default `1200`)
 - Compare mode включается через `AI_FLOW_PROVIDER_ROUTING_JSON`, например:
   - `{"compare":{"intake.interpretation":{"mode":"dry_run","shadowProvider":"claude","publishDecision":false},"intake.ask_human":{"mode":"dry_run","shadowProvider":"claude","publishDecision":false}}}`
 - При включённом compare mode task-worktree сохраняет раздельные artifacts:

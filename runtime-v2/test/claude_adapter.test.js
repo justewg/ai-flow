@@ -28,6 +28,7 @@ test("buildClaudeInvocationPlan returns canonical provider-json envelope", () =>
   assert.equal(plan.provider, "claude");
   assert.equal(plan.mode, "provider-json");
   assert.equal(plan.invocation.provider, "claude");
+  assert.equal(plan.invocation.transport, "runner_managed");
   assert.equal(plan.invocation.promptFile, "/tmp/prompt.txt");
   assert.equal(plan.invocation.responseFile, "/tmp/response.json");
   assert.equal(plan.invocation.taskRepo, "/tmp/repo");

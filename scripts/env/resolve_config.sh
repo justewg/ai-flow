@@ -29,9 +29,19 @@ codex_discover_root_dir_from_pwd() {
 }
 
 codex_resolve_root_dir() {
+  if [[ -n "${ROOT_DIR:-}" ]]; then
+    printf '%s' "$ROOT_DIR"
+    return 0
+  fi
+
+  if [[ -n "${CODEX_ROOT_DIR:-}" ]]; then
+    printf '%s' "$CODEX_ROOT_DIR"
+    return 0
+  fi
+
   local discovered_root_dir
   discovered_root_dir="$(codex_discover_root_dir_from_pwd 2>/dev/null || true)"
-  printf '%s' "${ROOT_DIR:-${CODEX_ROOT_DIR:-${discovered_root_dir:-$CODEX_CONFIG_ROOT_DIR}}}"
+  printf '%s' "${discovered_root_dir:-$CODEX_CONFIG_ROOT_DIR}"
 }
 
 codex_resolve_bootstrap_value() {

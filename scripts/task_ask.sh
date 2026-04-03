@@ -845,7 +845,7 @@ if [[ "$ask_compare_mode" != "disabled" && "$ask_shadow_provider" == "claude" ]]
     ask_shadow_result_json="$(jq -nc \
       --arg taskId "$task_id" \
       --arg module "intake.ask_human" \
-      '{requestId:("claude_runner_shell_failure:" + (now|tostring)),taskId:$taskId,module:$module,provider:"claude",outcome:"error",errorClass:"runner_shell_failure",errorMessage:"claude_provider_run.sh failed"}')"
+      '{requestId:("claude_runner_shell_failure:" + (now|tostring)),taskId:$taskId,"module":$module,provider:"claude",outcome:"error",errorClass:"runner_shell_failure",errorMessage:"claude_provider_run.sh failed"}')"
   fi
 
   if [[ "$(printf '%s' "$ask_shadow_result_json" | jq -r '.outcome')" != "success" || ! -f "$ask_claude_response_file" ]]; then

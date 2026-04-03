@@ -114,6 +114,86 @@ task_worktree_intake_profile_file() {
   printf '%s/intake_profile.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
 }
 
+task_worktree_intake_interpretation_request_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/intake_interpretation_request.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_intake_interpretation_response_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/intake_interpretation_response.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_intake_interpretation_local_response_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/intake_interpretation_response.local.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_intake_interpretation_claude_response_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/intake_interpretation_response.claude.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_intake_interpretation_compare_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/intake_interpretation_compare.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_ask_human_request_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/intake_ask_human_request.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_ask_human_response_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/intake_ask_human_response.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_ask_human_local_response_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/intake_ask_human_response.local.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_ask_human_claude_response_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/intake_ask_human_response.claude.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
+task_worktree_ask_human_compare_file() {
+  local task_id="$1"
+  local issue_number="$2"
+  local state_dir="${3:-}"
+  local profile="${4:-${PROJECT_PROFILE:-default}}"
+  printf '%s/intake_ask_human_compare.json' "$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile")"
+}
+
 task_worktree_context_cache_file() {
   local task_id="$1"
   local issue_number="$2"

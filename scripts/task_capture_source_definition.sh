@@ -20,13 +20,30 @@ REPO="${GITHUB_REPO:-justewg/planka}"
 state_dir="$(codex_resolve_state_dir)"
 profile_name="$(codex_resolve_project_profile_name 2>/dev/null || printf '%s' "${PROJECT_PROFILE:-default}")"
 source_file="$(task_worktree_source_definition_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
+existing_source_json=""
 
 mkdir -p "$(dirname "$source_file")"
+
+if [[ -f "$source_file" ]]; then
+  existing_source_json="$(cat "$source_file" 2>/dev/null || true)"
+fi
 
 issue_json="$(task_intake_issue_json "$issue_number" "$REPO" 2>/dev/null || jq -nc --arg n "$issue_number" '{title:"", body:"", number:$n}')"
 issue_title="$(task_intake_issue_title "$issue_json")"
 issue_body="$(task_intake_issue_body "$issue_json")"
 reply_text="$(task_intake_reply_text "$task_id")"
+
+if [[ -n "$existing_source_json" ]]; then
+  if [[ -z "$(printf '%s' "$issue_title" | tr -d '[:space:]')" ]]; then
+    issue_title="$(printf '%s' "$existing_source_json" | jq -r '.title // ""' 2>/dev/null || true)"
+  fi
+  if [[ -z "$(printf '%s' "$issue_body" | tr -d '[:space:]')" ]]; then
+    issue_body="$(printf '%s' "$existing_source_json" | jq -r '.body // ""' 2>/dev/null || true)"
+  fi
+  if [[ -z "$(printf '%s' "$reply_text" | tr -d '[:space:]')" ]]; then
+    reply_text="$(printf '%s' "$existing_source_json" | jq -r '.replyText // ""' 2>/dev/null || true)"
+  fi
+fi
 
 if [[ -n "${TASK_INTAKE_SOURCE_TITLE:-}" ]]; then
   issue_title="${TASK_INTAKE_SOURCE_TITLE}"

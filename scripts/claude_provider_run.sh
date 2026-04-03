@@ -126,10 +126,11 @@ clear_provider_health() {
 }
 
 main() {
-  local state_dir health_file now_epoch cached_json tmp_output rc payload_json task_id module
+  local state_dir health_file now_epoch cached_json tmp_output rc payload_json task_id module runner_home
   state_dir="$(codex_resolve_state_dir)"
   health_file="${state_dir}/claude_provider_health.json"
   now_epoch="$(date +%s)"
+  runner_home="${AI_FLOW_RUNTIME_HOME:-${HOME:-}}"
 
   task_id=""
   module=""
@@ -151,7 +152,7 @@ main() {
 
   tmp_output="$(mktemp "${TMPDIR:-/tmp}/claude-provider-run.XXXXXX.json")"
   rc=0
-  if ! "$NODE_BIN" "$CLAUDE_RUNNER" \
+  if ! HOME="$runner_home" "$NODE_BIN" "$CLAUDE_RUNNER" \
     --toolkit-root "$TOOLKIT_ROOT" \
     "$@" >"$tmp_output"; then
     rc=$?

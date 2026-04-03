@@ -145,6 +145,7 @@ Linux-hosted bootstrap launchers:
   - `CLAUDE_PROVIDER_TRANSPORT=claude_code_sdk` для `Claude Code`/SDK auth surface
   - `CLAUDE_PROVIDER_TRANSPORT=anthropic_api` для direct `ANTHROPIC_API_KEY` path
   - `CLAUDE_PROVIDER_TRANSPORT=auto` по умолчанию: если есть `ANTHROPIC_API_KEY`, выбирается `anthropic_api`, иначе `claude_code_sdk`
+  - optional `AI_FLOW_RUNTIME_HOME=/var/lib/ai-flow/runtime-home`: wrapper подставляет этот путь как `HOME` только для дочернего Claude runner-процесса; интерактивный shell пользователя и `~` трогать не нужно
   - при свежем `auth_missing/auth_forbidden` пишет `<state-dir>/claude_provider_health.json` и в коротком cooldown окне возвращает cached canonical failure вместо лишнего live retry.
 - `.flow/shared/scripts/claude_provider_probe.sh` — минимальный live health-check для Claude shadow-provider: выполняет узкий canonical probe через `claude_provider_run.sh`, обновляет `claude_provider_health.json` и возвращает обычный canonical `ProviderResult`.
 - Для `anthropic_api` transport runner использует:

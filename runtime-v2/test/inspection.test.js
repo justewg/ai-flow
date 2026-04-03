@@ -43,6 +43,13 @@ test("buildInspectionSummary returns operator-grade runtime summary", async () =
   fs.writeFileSync(path.join(legacyStateDir, "flow_control_mode.txt"), "SAFE\n", "utf8");
   fs.writeFileSync(path.join(legacyStateDir, "flow_control_reason.txt"), "manual hold\n", "utf8");
   fs.writeFileSync(path.join(legacyStateDir, "flow_control_changed_at.txt"), "2026-03-28T18:01:00Z\n", "utf8");
+  fs.writeFileSync(path.join(legacyStateDir, "watchdog_anomaly_class.txt"), "execution_stall\n", "utf8");
+  fs.writeFileSync(path.join(legacyStateDir, "watchdog_anomaly_scope.txt"), "task\n", "utf8");
+  fs.writeFileSync(path.join(legacyStateDir, "watchdog_anomaly_reason.txt"), "CLAIM_STUCK_WITHOUT_EXECUTOR\n", "utf8");
+  fs.writeFileSync(path.join(legacyStateDir, "watchdog_anomaly_action.txt"), "FREEZE_SAFE\n", "utf8");
+  fs.writeFileSync(path.join(legacyStateDir, "watchdog_anomaly_summary.txt"), "claim active too long\n", "utf8");
+  fs.writeFileSync(path.join(legacyStateDir, "watchdog_anomaly_since_epoch.txt"), "1743184920\n", "utf8");
+  fs.writeFileSync(path.join(legacyStateDir, "watchdog_anomaly_since_utc.txt"), "2026-03-28T18:02:00Z\n", "utf8");
   fs.writeFileSync(
     path.join(legacyStateDir, "incident_ledger.jsonl"),
     `${JSON.stringify({ ts: "2026-03-28T18:02:00Z", type: "watchdog_supervisor", mode: "SAFE", message: "runtime paused" })}\n`,
@@ -67,6 +74,36 @@ test("buildInspectionSummary returns operator-grade runtime summary", async () =
     }, null, 2)}\n`,
     "utf8",
   );
+  fs.writeFileSync(
+    path.join(legacyStateDir, "provider_telemetry.jsonl"),
+    [
+      JSON.stringify({
+        ts: "2026-03-28T18:04:00Z",
+        requestId: "req-1",
+        taskId: "PL-103",
+        module: "intake.interpretation",
+        requestedProvider: "auto",
+        effectiveProvider: "claude",
+        outcome: "success",
+        fallbackUsed: false,
+        latencyMs: 820,
+      }),
+      JSON.stringify({
+        ts: "2026-03-28T18:05:00Z",
+        requestId: "req-2",
+        taskId: "PL-103",
+        module: "intake.ask_human",
+        requestedProvider: "claude",
+        effectiveProvider: "codex",
+        outcome: "fallback",
+        fallbackUsed: true,
+        fallbackFromProvider: "claude",
+        errorClass: "provider_timeout",
+        latencyMs: 1400,
+      }),
+    ].join("\n") + "\n",
+    "utf8",
+  );
 
   const summary = await buildInspectionSummary({
     store,
@@ -77,6 +114,8 @@ test("buildInspectionSummary returns operator-grade runtime summary", async () =
 
   assert.equal(summary.controlMode.current, "SAFE");
   assert.equal(summary.controlMode.derived, "SAFE");
+  assert.equal(summary.watchdog.anomaly.reason, "CLAIM_STUCK_WITHOUT_EXECUTOR");
+  assert.equal(summary.watchdog.anomaly.action, "FREEZE_SAFE");
   assert.equal(summary.tasks.total, 1);
   assert.equal(summary.tasks.byPhase.reviewing, 1);
   assert.equal(summary.tasks.byBudgetState.paused_budget, 1);
@@ -85,4 +124,8 @@ test("buildInspectionSummary returns operator-grade runtime summary", async () =
   assert.equal(summary.incidents.count, 1);
   assert.equal(summary.executions.ledgerCount, 1);
   assert.equal(summary.executions.summary.taskCount, 1);
+  assert.equal(summary.providerTelemetry.count, 2);
+  assert.equal(summary.providerTelemetry.summary.byProvider.claude, 1);
+  assert.equal(summary.providerTelemetry.summary.byProvider.codex, 1);
+  assert.equal(summary.providerTelemetry.summary.fallbackCount, 1);
 });

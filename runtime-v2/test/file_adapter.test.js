@@ -48,3 +48,27 @@ test("legacy shadow projection maps waiting task into v2 waiting_human state", a
   assert.equal(projection.budgetState, "paused_budget");
   assert.equal(projection.lockState, "frozen");
 });
+
+test("legacy shadow projection maps active task without executor into claimed state", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "aiflow-v2-legacy-claim-"));
+  fs.writeFileSync(path.join(stateDir, "daemon_active_task.txt"), "PL-096\n");
+  fs.writeFileSync(path.join(stateDir, "daemon_active_item_id.txt"), "PVTI_096\n");
+  fs.writeFileSync(path.join(stateDir, "daemon_active_issue_number.txt"), "518\n");
+  fs.writeFileSync(path.join(stateDir, "daemon_active_claim_state.txt"), "claimed\n");
+  fs.writeFileSync(path.join(stateDir, "daemon_active_claimed_at.txt"), "2026-04-02T10:00:00Z\n");
+
+  const { snapshot, taskIds } = collectLegacyShadowSnapshot(stateDir);
+  assert.deepEqual(taskIds, ["PL-096"]);
+
+  const projection = inferTaskStateFromLegacy("PL-096", snapshot);
+  assert.equal(projection.phase, "claimed");
+  assert.equal(projection.reason, "legacy claimed task");
+  assert.deepEqual(projection.meta, {
+    claim: {
+      itemId: "PVTI_096",
+      issueNumber: 518,
+      claimedAt: "2026-04-02T10:00:00Z",
+      source: "legacy_shadow_sync_v2",
+    },
+  });
+});

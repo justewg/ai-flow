@@ -69,6 +69,40 @@ test("primary contexts derive active and review slices from task states", async 
   assert.equal(contexts.waiting[0].pendingPost, false);
 });
 
+test("primary contexts expose claimed task as active with claim metadata", async () => {
+  const store = createAiFlowV2StateStore({
+    adapter: createMemoryAdapter(),
+  });
+  await store.init();
+
+  await store.putTask({ id: "PL-101-CLAIMED", title: "claimed", repo: "justewg/planka", issueNumber: 805 });
+  await store.putTaskState({
+    taskId: "PL-101-CLAIMED",
+    phase: "claimed",
+    reason: "task claimed",
+    ownerMode: "human",
+    updatedAt: "2026-03-28T19:34:00.000Z",
+    meta: {
+      claim: {
+        itemId: "PVTI_claim_805",
+        issueNumber: 805,
+        status: "In Progress",
+        flow: "In Progress",
+        claimedAt: "2026-03-28T19:34:00.000Z",
+      },
+    },
+  });
+
+  const contexts = await derivePrimaryContexts(store);
+  assert.equal(contexts.active.length, 1);
+  assert.equal(contexts.active[0].taskId, "PL-101-CLAIMED");
+  assert.equal(contexts.active[0].issueNumber, 805);
+  assert.equal(contexts.active[0].itemId, "PVTI_claim_805");
+  assert.equal(contexts.active[0].claimState, "claimed");
+  assert.equal(contexts.active[0].claimedAt, "2026-03-28T19:34:00.000Z");
+  assert.equal(contexts.active[0].activeExecutionId, null);
+});
+
 test("primary contexts expose review feedback anchor metadata", async () => {
   const store = createAiFlowV2StateStore({
     adapter: createMemoryAdapter(),

@@ -23,12 +23,16 @@ async function derivePrimaryContexts(store) {
   const taskById = new Map(tasks.map((task) => [task.id, task]));
 
   const active = sortByUpdatedAtDescending(taskStates)
-    .filter((taskState) => taskState.phase === "executing")
+    .filter((taskState) => taskState.phase === "claimed" || taskState.phase === "executing")
     .map((taskState) => {
       const task = taskById.get(taskState.taskId) || null;
+      const claim = taskState.meta && taskState.meta.claim ? taskState.meta.claim : {};
       return {
         taskId: taskState.taskId,
         issueNumber: task && Number.isInteger(task.issueNumber) ? task.issueNumber : null,
+        itemId: claim.itemId || null,
+        claimState: taskState.phase === "claimed" ? "claimed" : "executing",
+        claimedAt: claim.claimedAt || null,
         activeExecutionId: taskState.activeExecutionId || null,
         updatedAt: taskState.updatedAt || null,
       };

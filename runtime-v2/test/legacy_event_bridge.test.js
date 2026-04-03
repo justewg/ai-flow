@@ -198,6 +198,63 @@ test("legacy event bridge updates execution lifecycle through applyEvent", async
   assert.equal(bundle.taskState.activeExecutionId, null);
 });
 
+test("legacy event bridge persists claim bootstrap before execution starts", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "aiflow-v2-event-claim-"));
+  const store = createAiFlowV2StateStore({
+    adapter: createMemoryAdapter(),
+  });
+  await store.init();
+
+  const claimed = await applyLegacyEventBridge(store, {
+    legacyStateDir: stateDir,
+    repo: "justewg/planka",
+    taskId: "PL-097-CLAIM",
+    issueNumber: "705",
+    eventType: "task.claimed",
+    eventId: "evt-claim-1",
+    dedupKey: "legacy.claim:PL-097-CLAIM:PVTI_705",
+    payload: {
+      itemId: "PVTI_705",
+      issueNumber: 705,
+      status: "In Progress",
+      flow: "In Progress",
+      claimedAt: "2026-03-28T20:05:00.000Z",
+    },
+  });
+  assert.equal(claimed.status, "applied");
+
+  let bundle = await store.getTaskBundle("PL-097-CLAIM");
+  assert.equal(bundle.taskState.phase, "claimed");
+  assert.equal(bundle.taskState.activeExecutionId, null);
+  assert.deepEqual(bundle.taskState.meta.claim, {
+    itemId: "PVTI_705",
+    issueNumber: 705,
+    status: "In Progress",
+    flow: "In Progress",
+    claimedAt: "2026-03-28T20:05:00.000Z",
+    source: "runtime_v2_event_bridge",
+  });
+
+  const started = await applyLegacyEventBridge(store, {
+    legacyStateDir: stateDir,
+    repo: "justewg/planka",
+    taskId: "PL-097-CLAIM",
+    issueNumber: "705",
+    eventType: "execution.started",
+    eventId: "evt-claim-exec-1",
+    dedupKey: "legacy.exec.start:PL-097-CLAIM:exec-1",
+    payload: {
+      executionId: "exec-1",
+    },
+  });
+  assert.equal(started.status, "applied");
+
+  bundle = await store.getTaskBundle("PL-097-CLAIM");
+  assert.equal(bundle.taskState.phase, "executing");
+  assert.equal(bundle.taskState.activeExecutionId, "exec-1");
+  assert.equal(bundle.taskState.meta.claim.itemId, "PVTI_705");
+});
+
 test("review feedback wait request updates review anchor without leaving reviewing phase", async () => {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "aiflow-v2-event-review-feedback-"));
   const store = createAiFlowV2StateStore({

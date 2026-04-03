@@ -246,6 +246,33 @@ kiosk
 EOF
 }
 
+task_intake_manual_or_dependency_signal() {
+  local combined_text="$1"
+  printf '%s' "$combined_text" | tr '[:upper:]' '[:lower:]' | rg -q \
+    '(execution-mode:[[:space:]]*manual|manual-only|manual only|requires physical access|требует физический доступ|depends-on:|depends on|auto-queue-when-unblocked:[[:space:]]*false)'
+}
+
+task_intake_structured_spec_signal() {
+  local combined_text="$1"
+  local downcased
+  downcased="$(printf '%s' "$combined_text" | tr '[:upper:]' '[:lower:]')"
+  if printf '%s' "$downcased" | rg -q '##[[:space:]]*(context|task|scope|expected|problem|requirements|acceptance|evidence|dependencies|flow meta|контекст|задач|что должно получиться|требования|критерии|критерий|dependencies|scope|expected outcome)'; then
+    return 0
+  fi
+  if [[ "$(printf '%s' "$combined_text" | grep -c '^- ' || true)" -ge 4 ]]; then
+    return 0
+  fi
+  return 1
+}
+
+task_intake_docs_scoped_micro_signal() {
+  local target_files_json="$1"
+  local markdown_count non_markdown_count
+  markdown_count="$(printf '%s' "$target_files_json" | jq '[.[] | select(test("\\.md$|README\\.md$"))] | length')"
+  non_markdown_count="$(printf '%s' "$target_files_json" | jq '[.[] | select((test("\\.md$|README\\.md$") | not) and . != ".flow/shared")] | length')"
+  [[ "$markdown_count" -ge 1 && "$non_markdown_count" -eq 0 ]]
+}
+
 task_intake_profile_decision_json() {
   local combined_text="$1"
   local target_count="$2"
@@ -260,10 +287,14 @@ task_intake_profile_decision_json() {
   local combined_downcased
   local term
   local found=""
+  local android_ui_signal="false"
 
   combined_downcased="$(printf '%s' "$combined_text" | tr '[:upper:]' '[:lower:]')"
   if task_intake_small_change_signal "$combined_text"; then
     small_change="true"
+  fi
+  if printf '%s' "$combined_downcased" | rg -q '(андроид|android|клавиатур|keyboard|пробел|space button|крестик|кнопк)'; then
+    android_ui_signal="true"
   fi
 
   while IFS= read -r term; do
@@ -279,12 +310,27 @@ task_intake_profile_decision_json() {
     reason="intake_blocked_${found//[^a-z0-9]/_}"
     confidence_label="high"
     confidence_score="0.95"
+  elif task_intake_manual_or_dependency_signal "$combined_text"; then
+    decision="blocked"
+    reason="intake_blocked_manual_or_dependency"
+    confidence_label="high"
+    confidence_score="0.94"
   else
-    if printf '%s' "$combined_downcased" | rg -q '(андроид|android|клавиатур|keyboard|пробел|space button|крестик|кнопк)'; then
+    if [[ "$android_ui_signal" == "true" && "$small_change" == "true" ]] && (( target_count <= 2 )); then
+      decision="micro"
+      reason="intake_micro_android_ui_small_change"
+      confidence_label="high"
+      confidence_score="0.91"
+    elif [[ "$android_ui_signal" == "true" ]]; then
       decision="standard"
       reason="intake_standard_android_ui"
       confidence_label="high"
       confidence_score="0.89"
+    elif [[ "$small_change" == "true" ]] && task_intake_docs_scoped_micro_signal "$target_files_json"; then
+      decision="micro"
+      reason="intake_docs_scoped_change"
+      confidence_label="high"
+      confidence_score="0.9"
     else
       found=""
       while IFS= read -r term; do
@@ -301,13 +347,22 @@ task_intake_profile_decision_json() {
       reason="intake_standard_${found//[^a-z0-9]/_}"
       confidence_label="high"
       confidence_score="0.89"
+    elif [[ "$decision" == "micro" ]]; then
+      :
     elif [[ "$reason" == "intake_standard_android_ui" ]]; then
       :
     elif (( target_count == 0 )); then
-      decision="human_needed"
-      reason="intake_target_files_ambiguous"
-      confidence_label="low"
-      confidence_score="0.31"
+      if task_intake_structured_spec_signal "$combined_text"; then
+        decision="standard"
+        reason="intake_structured_spec_without_targets"
+        confidence_label="medium"
+        confidence_score="0.68"
+      else
+        decision="human_needed"
+        reason="intake_target_files_ambiguous"
+        confidence_label="low"
+        confidence_score="0.31"
+      fi
     elif (( target_count > 2 )); then
       decision="standard"
       reason="intake_target_count_${target_count}"

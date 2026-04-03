@@ -121,6 +121,39 @@ async function applyEvent(store, eventInput) {
   };
 
   switch (event.eventType) {
+    case "task.claimed": {
+      const itemId = event.payload.itemId;
+      if (!itemId) {
+        throw new ValidationError("task.claimed requires payload.itemId");
+      }
+      if (taskState.activeExecutionId) {
+        return blocked("active_execution_exists", { event, taskState });
+      }
+      const meaning = transitionHash({
+        eventType: event.eventType,
+        itemId,
+        issueNumber: event.payload.issueNumber || null,
+        status: event.payload.status || null,
+        flow: event.payload.flow || null,
+      });
+      if (taskState.phase === "claimed" && taskState.lastMeaningfulTransitionHash === meaning) {
+        return noop("claim_already_applied", { event, taskState });
+      }
+      nextState.phase = "claimed";
+      nextState.reason = event.payload.reason || "task claimed";
+      nextState.activeExecutionId = null;
+      nextState.meta.claim = {
+        itemId,
+        issueNumber: Number.isInteger(event.payload.issueNumber) ? event.payload.issueNumber : null,
+        status: event.payload.status || null,
+        flow: event.payload.flow || null,
+        claimedAt: event.payload.claimedAt || nowIso(),
+        source: event.payload.source || event.source || null,
+      };
+      nextState.lastMeaningfulTransitionHash = meaning;
+      break;
+    }
+
     case "execution.started": {
       const executionId = event.payload.executionId;
       if (!executionId) {

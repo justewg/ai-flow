@@ -23,7 +23,10 @@ function collectLegacyShadowSnapshot(legacyStateDir) {
     controlMode: readText(statePath(legacyStateDir, "flow_control_mode.txt")) || "AUTO",
     controlReason: readText(statePath(legacyStateDir, "flow_control_reason.txt")),
     daemonActiveTask: readText(statePath(legacyStateDir, "daemon_active_task.txt")),
+    daemonActiveItemId: readText(statePath(legacyStateDir, "daemon_active_item_id.txt")),
     daemonActiveIssueNumber: readText(statePath(legacyStateDir, "daemon_active_issue_number.txt")),
+    daemonActiveClaimState: readText(statePath(legacyStateDir, "daemon_active_claim_state.txt")),
+    daemonActiveClaimedAt: readText(statePath(legacyStateDir, "daemon_active_claimed_at.txt")),
     daemonWaitingTaskId: readText(statePath(legacyStateDir, "daemon_waiting_task_id.txt")),
     daemonWaitingIssueNumber: readText(statePath(legacyStateDir, "daemon_waiting_issue_number.txt")),
     daemonWaitingCommentId: readText(statePath(legacyStateDir, "daemon_waiting_question_comment_id.txt")),
@@ -75,6 +78,7 @@ function inferTaskStateFromLegacy(taskId, snapshot) {
   let activeExecutionId = null;
   let canonicalReviewPrNumber = null;
   let canonicalWaitCommentId = null;
+  let meta = {};
 
   if (snapshot.daemonWaitingTaskId === taskId) {
     phase = "waiting_human";
@@ -95,8 +99,23 @@ function inferTaskStateFromLegacy(taskId, snapshot) {
     reason = "legacy executor running";
     activeExecutionId = `legacy-v2-exec-${taskId}`;
   } else if (snapshot.daemonActiveTask === taskId) {
-    phase = "executing";
-    reason = "legacy active task";
+    phase = "claimed";
+    reason = "legacy claimed task";
+    meta = {
+      claim: {
+        itemId: snapshot.daemonActiveItemId || null,
+        issueNumber: (() => {
+          const parsed = Number.parseInt(snapshot.daemonActiveIssueNumber || "", 10);
+          return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+        })(),
+        claimedAt: snapshot.daemonActiveClaimedAt || null,
+        source: "legacy_shadow_sync_v2",
+      },
+    };
+    if ((snapshot.daemonActiveClaimState || "").trim() === "executing") {
+      phase = "executing";
+      reason = "legacy active execution";
+    }
   }
 
   let budgetState = "normal";
@@ -118,6 +137,7 @@ function inferTaskStateFromLegacy(taskId, snapshot) {
     canonicalWaitCommentId,
     budgetState,
     lockState,
+    meta,
   };
 }
 
@@ -248,6 +268,7 @@ async function syncLegacyShadowSnapshot(store, legacyStateDir, options = {}) {
       lockState: strongestLockState(existingTaskState && existingTaskState.lockState, taskStateProjection.lockState),
       reason: `${taskStateProjection.reason}${snapshot.controlReason ? ` (${snapshot.controlReason})` : ""}`,
       meta: {
+        ...(taskStateProjection.meta || {}),
         source: "legacy_shadow_sync_v2",
       },
     });

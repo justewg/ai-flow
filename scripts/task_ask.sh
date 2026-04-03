@@ -34,11 +34,19 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./env/bootstrap.sh
 source "${SCRIPT_DIR}/env/bootstrap.sh"
+source "${SCRIPT_DIR}/task_worktree_lib.sh"
 CODEX_DIR="$(codex_export_state_dir)"
 STATE_TMP_DIR="$(codex_resolve_state_tmp_dir "$CODEX_DIR")"
 mkdir -p "$STATE_TMP_DIR"
 RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
 REPO="${GITHUB_REPO:-justewg/planka}"
+telemetry_started_at_ms="$(($(date +%s) * 1000))"
+STATE_DIR="$(codex_resolve_state_dir)"
+PROFILE_NAME="$(codex_resolve_project_profile_name 2>/dev/null || printf '%s' "${PROJECT_PROFILE:-default}")"
+provider_route_json=""
+provider_request_id=""
+provider_telemetry_recorded="0"
+ask_compare_json=""
 
 mkdir -p "$CODEX_DIR"
 
@@ -93,6 +101,110 @@ reconcile_runtime_v2_primary_context() {
     done <<< "$reconcile_out"
   fi
 }
+
+resolve_provider_route_json() {
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/provider_route_resolve.sh" \
+    --module "intake.ask_human" \
+    --task-id "$task_id" \
+    --issue-number "$issue_number" \
+    --preferred-provider "local"
+}
+
+resolve_provider_compare_json() {
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/provider_compare_resolve.sh" --module "intake.ask_human"
+}
+
+write_shadow_error_artifact() {
+  local output_file="$1"
+  local provider_result_json="$2"
+  jq -nc \
+    --argjson providerResult "$provider_result_json" \
+    '{
+      _shadowProviderError: {
+        requestId: ($providerResult.requestId // null),
+        provider: ($providerResult.provider // "claude"),
+        outcome: ($providerResult.outcome // "error"),
+        errorClass: ($providerResult.errorClass // "shadow_provider_error"),
+        errorMessage: ($providerResult.errorMessage // null),
+        latencyMs: ($providerResult.latencyMs // null),
+        tokenUsage: ($providerResult.tokenUsage // null),
+        estimatedCost: ($providerResult.estimatedCost // null)
+      }
+    }' > "$output_file"
+}
+
+append_provider_telemetry() {
+  local route_json="$1"
+  local outcome="$2"
+  local request_id="$3"
+  local error_class="${4:-}"
+  local error_message="${5:-}"
+  local latency_ms
+  latency_ms="$(( $(date +%s) * 1000 - telemetry_started_at_ms ))"
+
+  PROVIDER_TELEMETRY_LATENCY_MS="$latency_ms" \
+  PROVIDER_TELEMETRY_DECISION_REASON="$(printf '%s' "$route_json" | jq -r '.decisionReason // ""')" \
+  PROVIDER_TELEMETRY_TIMEOUT_MS="$(printf '%s' "$route_json" | jq -r '.timeoutMs // empty')" \
+  PROVIDER_TELEMETRY_BUDGET_KEY="$(printf '%s' "$route_json" | jq -r '.budgetKey // ""')" \
+  PROVIDER_TELEMETRY_ERROR_MESSAGE="$error_message" \
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/provider_telemetry_append.sh" \
+      "$task_id" \
+      "$issue_number" \
+      "intake.ask_human" \
+      "$(printf '%s' "$route_json" | jq -r '.requestedProvider')" \
+      "$(printf '%s' "$route_json" | jq -r '.effectiveProvider')" \
+      "$outcome" \
+      "$request_id" \
+      "$error_class" >/dev/null
+  provider_telemetry_recorded="1"
+}
+
+append_shadow_compare_telemetry() {
+  local compare_json="$1"
+  local provider_result_json="$2"
+  local compare_artifact_json="$3"
+  local schema_valid_primary
+  local schema_valid_shadow
+
+  schema_valid_primary="$(printf '%s' "$compare_artifact_json" | jq -r 'if .schemaValidPrimary == null then empty else .schemaValidPrimary end')"
+  schema_valid_shadow="$(printf '%s' "$compare_artifact_json" | jq -r 'if .schemaValidShadow == null then empty else .schemaValidShadow end')"
+
+  PROVIDER_TELEMETRY_LATENCY_MS="$(printf '%s' "$provider_result_json" | jq -r '.latencyMs // empty')" \
+  PROVIDER_TELEMETRY_TOKEN_USAGE="$(printf '%s' "$provider_result_json" | jq -r '.tokenUsage // empty')" \
+  PROVIDER_TELEMETRY_ESTIMATED_COST="$(printf '%s' "$provider_result_json" | jq -r '.estimatedCost // empty')" \
+  PROVIDER_TELEMETRY_COMPARE_MODE="$(printf '%s' "$compare_json" | jq -r '.mode // ""')" \
+  PROVIDER_TELEMETRY_PRIMARY_PROVIDER="local" \
+  PROVIDER_TELEMETRY_SHADOW_PROVIDER="$(printf '%s' "$compare_json" | jq -r '.shadowProvider // "claude"')" \
+  PROVIDER_TELEMETRY_SCHEMA_VALID_PRIMARY="$schema_valid_primary" \
+  PROVIDER_TELEMETRY_SCHEMA_VALID_SHADOW="$schema_valid_shadow" \
+  PROVIDER_TELEMETRY_COMPARE_SUMMARY="$(printf '%s' "$compare_artifact_json" | jq -r '.compareSummary // ""')" \
+  PROVIDER_TELEMETRY_PUBLISH_DECISION=0 \
+  PROVIDER_TELEMETRY_DECISION_REASON="claude_shadow_compare" \
+  PROVIDER_TELEMETRY_TIMEOUT_MS="$(printf '%s' "$compare_json" | jq -r '.timeoutMs // empty')" \
+  PROVIDER_TELEMETRY_ERROR_MESSAGE="$(printf '%s' "$provider_result_json" | jq -r '.errorMessage // ""')" \
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/provider_telemetry_append.sh" \
+      "$task_id" \
+      "$issue_number" \
+      "intake.ask_human" \
+      "$(printf '%s' "$compare_json" | jq -r '.shadowProvider // "claude"')" \
+      "$(printf '%s' "$compare_json" | jq -r '.shadowProvider // "claude"')" \
+      "$(printf '%s' "$provider_result_json" | jq -r '.outcome')" \
+      "$(printf '%s' "$provider_result_json" | jq -r '.requestId')" \
+      "$(printf '%s' "$provider_result_json" | jq -r '.errorClass // empty')" >/dev/null || true
+}
+
+record_unhandled_provider_error() {
+  local rc="$1"
+  [[ "$provider_telemetry_recorded" == "1" ]] && return 0
+  [[ -n "$provider_route_json" ]] || return 0
+  [[ -n "$provider_request_id" ]] || return 0
+  set +e
+  append_provider_telemetry "$provider_route_json" "error" "$provider_request_id" "task_ask_failed"
+  set -e
+  return "$rc"
+}
+
+trap 'rc=$?; if [[ "$rc" -ne 0 ]]; then record_unhandled_provider_error "$rc"; fi; exit "$rc"' EXIT
 
 build_wait_payload() {
   local wait_comment_id="$1"
@@ -679,15 +791,93 @@ if [[ -z "$issue_number" ]]; then
 fi
 
 now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+provider_route_json="$(resolve_provider_route_json)"
+provider_request_id="ask-human:${task_id}:$(date -u '+%Y%m%dT%H%M%SZ')"
 
 comment_message_text="$message_text"
 if [[ "$kind_label" == "QUESTION" || "$kind_label" == "BLOCKER" ]]; then
   comment_message_text="$(render_question_message "$message_text" "$kind_label")"
   if [[ "$comment_message_text" == "__TASK_ASK_REJECTED_MALFORMED_BLOCKER__" ]]; then
+    append_provider_telemetry "$provider_route_json" "error" "$provider_request_id" "malformed_blocker_prompt" "task_ask rejected malformed blocker prompt"
+    trap - EXIT
     echo "TASK_ASK_REJECTED_MALFORMED_BLOCKER=1"
     echo "TASK_ASK_REJECTED_KIND=${kind_label}"
     exit 42
   fi
+fi
+
+ask_request_file="$(task_worktree_ask_human_request_file "$task_id" "$issue_number" "$STATE_DIR" "$PROFILE_NAME")"
+ask_response_file="$(task_worktree_ask_human_response_file "$task_id" "$issue_number" "$STATE_DIR" "$PROFILE_NAME")"
+ask_local_response_file="$(task_worktree_ask_human_local_response_file "$task_id" "$issue_number" "$STATE_DIR" "$PROFILE_NAME")"
+ask_claude_response_file="$(task_worktree_ask_human_claude_response_file "$task_id" "$issue_number" "$STATE_DIR" "$PROFILE_NAME")"
+ask_compare_file="$(task_worktree_ask_human_compare_file "$task_id" "$issue_number" "$STATE_DIR" "$PROFILE_NAME")"
+mkdir -p "$(dirname "$ask_request_file")"
+ask_message_file="$(mktemp "${STATE_TMP_DIR}/ask_message.XXXXXX")"
+printf '%s' "$comment_message_text" > "$ask_message_file"
+/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/intake_contract_artifact.sh" \
+  ask-request \
+  --task-id "$task_id" \
+  --issue-number "$issue_number" \
+  --kind "$kind_label" \
+  --message-file "$ask_message_file" > "$ask_request_file"
+/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/intake_contract_artifact.sh" \
+  ask-response \
+  --kind "$kind_label" \
+  --message-file "$ask_message_file" > "$ask_response_file"
+rm -f "$ask_message_file"
+
+ask_compare_json="$(resolve_provider_compare_json)"
+ask_compare_mode="$(printf '%s' "$ask_compare_json" | jq -r '.mode // "disabled"')"
+ask_shadow_provider="$(printf '%s' "$ask_compare_json" | jq -r '.shadowProvider // ""')"
+if [[ "$ask_compare_mode" != "disabled" && "$ask_shadow_provider" == "claude" ]]; then
+  cp "$ask_response_file" "$ask_local_response_file"
+  if ask_shadow_result_json="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/claude_provider_run.sh" \
+      --module "intake.ask_human" \
+      --request-file "$ask_request_file" \
+      --response-file "$ask_claude_response_file" \
+      --task-repo "$ROOT_DIR" \
+      --task-id "$task_id" \
+      --issue-number "$issue_number"
+  )"; then
+    :
+  else
+    ask_shadow_result_json="$(jq -nc \
+      --arg taskId "$task_id" \
+      --arg module "intake.ask_human" \
+      '{requestId:("claude_runner_shell_failure:" + (now|tostring)),taskId:$taskId,module:$module,provider:"claude",outcome:"error",errorClass:"runner_shell_failure",errorMessage:"claude_provider_run.sh failed"}')"
+  fi
+
+  if [[ "$(printf '%s' "$ask_shadow_result_json" | jq -r '.outcome')" != "success" || ! -f "$ask_claude_response_file" ]]; then
+    write_shadow_error_artifact "$ask_claude_response_file" "$ask_shadow_result_json"
+  fi
+
+  ask_compare_artifact_json="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/intake_compare_artifact.sh" \
+      ask-human \
+      --primary-file "$ask_local_response_file" \
+      --shadow-file "$ask_claude_response_file" \
+      --compare-mode "$ask_compare_mode" \
+      --primary-provider "local" \
+      --shadow-provider "$ask_shadow_provider"
+  )"
+  printf '%s\n' "$ask_compare_artifact_json" > "$ask_compare_file"
+  append_shadow_compare_telemetry "$ask_compare_json" "$ask_shadow_result_json" "$ask_compare_artifact_json"
+fi
+
+if [[ "${TASK_ASK_COMPARE_ONLY:-0}" == "1" ]]; then
+  append_provider_telemetry "$provider_route_json" "success" "$provider_request_id"
+  trap - EXIT
+  echo "TASK_ASK_COMPARE_ONLY=1"
+  echo "TASK_ID=$task_id"
+  echo "ISSUE_NUMBER=$issue_number"
+  echo "QUESTION_KIND=$kind_label"
+  echo "ASK_HUMAN_REQUEST_FILE=${ask_request_file}"
+  echo "ASK_HUMAN_RESPONSE_FILE=${ask_response_file}"
+  echo "ASK_HUMAN_LOCAL_RESPONSE_FILE=${ask_local_response_file}"
+  echo "ASK_HUMAN_CLAUDE_RESPONSE_FILE=${ask_claude_response_file}"
+  echo "ASK_HUMAN_COMPARE_FILE=${ask_compare_file}"
+  exit 0
 fi
 
 comment_body="$(cat <<EOF_COMMENT
@@ -705,6 +895,8 @@ EOF_COMMENT
 )"
 
 if comment_json="$(post_issue_comment "$issue_number" "$comment_body")"; then
+  append_provider_telemetry "$provider_route_json" "success" "$provider_request_id"
+  trap - EXIT
   question_comment_id="$(printf '%s' "$comment_json" | jq -r '.id')"
   question_comment_url="$(printf '%s' "$comment_json" | jq -r '.html_url')"
   : > "$pending_post_file"
@@ -729,11 +921,18 @@ if comment_json="$(post_issue_comment "$issue_number" "$comment_body")"; then
   echo "QUESTION_COMMENT_ID=$question_comment_id"
   echo "QUESTION_COMMENT_URL=$question_comment_url"
   echo "WAITING_FOR_USER_REPLY=1"
+  echo "ASK_HUMAN_REQUEST_FILE=${ask_request_file}"
+  echo "ASK_HUMAN_RESPONSE_FILE=${ask_response_file}"
+  echo "ASK_HUMAN_LOCAL_RESPONSE_FILE=${ask_local_response_file}"
+  echo "ASK_HUMAN_CLAUDE_RESPONSE_FILE=${ask_claude_response_file}"
+  echo "ASK_HUMAN_COMPARE_FILE=${ask_compare_file}"
   exit 0
 fi
 
 rc=$?
 if [[ "$rc" -ne 75 ]]; then
+  append_provider_telemetry "$provider_route_json" "error" "$provider_request_id" "issue_comment_post_failed" "task_ask failed to post issue comment"
+  trap - EXIT
   exit "$rc"
 fi
 
@@ -763,6 +962,9 @@ while IFS= read -r line; do
   echo "$line"
 done <<< "$enqueue_out"
 
+append_provider_telemetry "$provider_route_json" "success" "$provider_request_id"
+trap - EXIT
+
 printf '%s\n' "1" > "$pending_post_file"
 request_executor_stop
 
@@ -784,3 +986,8 @@ echo "ISSUE_NUMBER=$issue_number"
 echo "QUESTION_KIND=$kind_label"
 echo "WAIT_GITHUB_API_UNSTABLE=1"
 echo "WAITING_FOR_USER_REPLY_PENDING_POST=1"
+echo "ASK_HUMAN_REQUEST_FILE=${ask_request_file}"
+echo "ASK_HUMAN_RESPONSE_FILE=${ask_response_file}"
+echo "ASK_HUMAN_LOCAL_RESPONSE_FILE=${ask_local_response_file}"
+echo "ASK_HUMAN_CLAUDE_RESPONSE_FILE=${ask_claude_response_file}"
+echo "ASK_HUMAN_COMPARE_FILE=${ask_compare_file}"

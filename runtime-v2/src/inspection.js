@@ -5,6 +5,7 @@ const path = require("path");
 
 const { derivePrimaryContexts } = require("./primary_context");
 const { deriveGlobalControlMode } = require("./control_policy");
+const { summarizeProviderTelemetry } = require("./provider_telemetry");
 
 function readJson(filePath, fallback) {
   if (!fs.existsSync(filePath)) {
@@ -86,6 +87,9 @@ async function buildInspectionSummary({ store, legacyStateDir, storeDir, maxRece
   const incidentLedger = readJsonLines(path.join(legacyStateDir, "incident_ledger.jsonl"));
   const executionLedger = readJsonLines(path.join(legacyStateDir, "execution_ledger.jsonl"));
   const executionSummary = readJson(path.join(legacyStateDir, "execution_summary.json"), {});
+  const providerTelemetryLedger = readJsonLines(path.join(legacyStateDir, "provider_telemetry.jsonl"));
+  const watchdogAnomalyEpochRaw = readText(path.join(legacyStateDir, "watchdog_anomaly_since_epoch.txt"));
+  const watchdogAnomalyEpoch = /^\d+$/.test(watchdogAnomalyEpochRaw) ? Number(watchdogAnomalyEpochRaw) : 0;
 
   return {
     generatedAt: new Date().toISOString(),
@@ -99,6 +103,17 @@ async function buildInspectionSummary({ store, legacyStateDir, storeDir, maxRece
       derived: derivedMode.mode,
       derivedReason: derivedMode.reason,
       derivedTaskId: derivedMode.taskId || null,
+    },
+    watchdog: {
+      anomaly: {
+        class: readText(path.join(legacyStateDir, "watchdog_anomaly_class.txt")) || "",
+        scope: readText(path.join(legacyStateDir, "watchdog_anomaly_scope.txt")) || "",
+        reason: readText(path.join(legacyStateDir, "watchdog_anomaly_reason.txt")) || "",
+        action: readText(path.join(legacyStateDir, "watchdog_anomaly_action.txt")) || "",
+        summary: readText(path.join(legacyStateDir, "watchdog_anomaly_summary.txt")) || "",
+        sinceEpoch: watchdogAnomalyEpoch,
+        sinceUtc: readText(path.join(legacyStateDir, "watchdog_anomaly_since_utc.txt")) || "",
+      },
     },
     tasks: {
       total: taskStates.length,
@@ -136,6 +151,11 @@ async function buildInspectionSummary({ store, legacyStateDir, storeDir, maxRece
       ledgerCount: executionLedger.length,
       recent: executionLedger.slice(-maxRecent).reverse(),
       summary: summarizeExecutionSummary(executionSummary),
+    },
+    providerTelemetry: {
+      count: providerTelemetryLedger.length,
+      recent: providerTelemetryLedger.slice(-maxRecent).reverse(),
+      summary: summarizeProviderTelemetry(providerTelemetryLedger),
     },
   };
 }

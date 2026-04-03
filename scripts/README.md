@@ -130,13 +130,32 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh runtime_v2_primary_context` — выводит selected `active/review` contexts, derivable из `runtime-v2` store.
 - `.flow/shared/scripts/run.sh runtime_v2_reconcile_primary_context` — проецирует selected `runtime-v2` primary contexts обратно в legacy `daemon_active_*` / `daemon_review_*` файлы.
 - `.flow/shared/scripts/run.sh runtime_v2_snapshot [task-id]` — показывает snapshot отдельного `v2` shadow contour.
-- `.flow/shared/scripts/run.sh runtime_v2_inspect` — показывает operator-grade summary по `runtime-v2`: control mode, task counts, primary contexts, incidents и execution summary.
+- `.flow/shared/scripts/run.sh runtime_v2_inspect` — показывает operator-grade summary по `runtime-v2`: control mode, task counts, primary contexts, incidents, execution summary, structured `watchdog.anomaly` и aggregate `providerTelemetry` (если ledger уже пишется).
 - `.flow/shared/scripts/run.sh runtime_v2_status` — alias для `runtime_v2_inspect` с тем же operator-grade summary по `runtime-v2`.
 - `.flow/shared/scripts/run.sh runtime_v2_validate_rollout [task-id] [issue-number]` — прогоняет локальный `dry_run/shadow` validation harness и пишет отчёт в `<state-dir>/runtime_v2_validation_report.json`.
 - `.flow/shared/scripts/run.sh runtime_v2_single_task_loop [task-id] [issue-number] [pr-number]` — прогоняет controlled local `single_task` loop и пишет отчёт в `<state-dir>/runtime_v2_single_task_loop_report.json`.
 - `.flow/shared/scripts/run.sh runtime_v2_clear` — очищает только `v2` shadow store, не трогая legacy state.
 - `.flow/shared/scripts/run.sh log_summary [--hours N|--from ISO|--to ISO]` — агрегированный отчет по логам daemon/watchdog/runtime/graphql за период (без аргументов берёт весь доступный диапазон логов).
-- `.flow/shared/scripts/run.sh status_snapshot` — нормализованный JSON snapshot состояния автоматики (daemon/watchdog/executor/очереди/blockers).
+- `.flow/shared/scripts/run.sh status_snapshot` — нормализованный JSON snapshot состояния автоматики (daemon/watchdog/executor/очереди/blockers), включая `watchdog.anomaly`, active claim semantics, краткую `provider_telemetry` summary и `claude_provider_health` для shadow-provider auth/runtime surface.
+- `.flow/shared/scripts/provider_telemetry_append.sh <task-id> <issue-number> <module> <requested-provider> <effective-provider> <outcome> <request-id> [error-class]` — append canonical provider telemetry record в `<state-dir>/provider_telemetry.jsonl`; текущий Codex execution path уже пишет туда live telemetry.
+- `.flow/shared/scripts/provider_route_resolve.sh --module <module> --task-id <task-id> [--issue-number <n>] [--preferred-provider <provider>]` — вернуть canonical provider route decision для shell-path; deterministic `task_interpret.sh` и `task_ask.sh` уже используют его и пишут live telemetry как `local`.
+- `.flow/shared/scripts/provider_compare_resolve.sh --module <module>` — вернуть canonical compare-mode verdict для controlled `shadow/dry_run` rollout (`disabled|dry_run|shadow|live`, `shadowProvider`, `publishDecision`) из общего routing config.
+- `.flow/shared/scripts/provider_rollout_gate.sh [--module <module>] [--shadow-provider <provider>] [--min-samples <n>]` — посчитать простой readiness summary для будущего live rollout на основе последних compare telemetry records из `provider_telemetry.jsonl`; сам live switch не делает.
+- `.flow/shared/scripts/claude_provider_run.sh ...` — wrapper над живым Claude provider runner; при свежем `auth_missing/auth_forbidden` пишет `<state-dir>/claude_provider_health.json` и в коротком cooldown окне возвращает cached canonical failure вместо лишнего live retry.
+- `.flow/shared/scripts/claude_provider_probe.sh` — минимальный live health-check для Claude shadow-provider: выполняет узкий canonical probe через `claude_provider_run.sh`, обновляет `claude_provider_health.json` и возвращает обычный canonical `ProviderResult`.
+- Compare mode включается через `AI_FLOW_PROVIDER_ROUTING_JSON`, например:
+  - `{"compare":{"intake.interpretation":{"mode":"dry_run","shadowProvider":"claude","publishDecision":false},"intake.ask_human":{"mode":"dry_run","shadowProvider":"claude","publishDecision":false}}}`
+- При включённом compare mode task-worktree сохраняет раздельные artifacts:
+  - `intake_interpretation_response.local.json`
+  - `intake_interpretation_response.claude.json`
+  - `intake_interpretation_compare.json`
+  - `intake_ask_human_response.local.json`
+  - `intake_ask_human_response.claude.json`
+  - `intake_ask_human_compare.json`
+- `runtime-v2/src/claude_adapter.js` — canonical `Claude` invocation scaffold для будущих `intake/review` modules; live rollout пока не включён, но route/telemetry contract уже совпадает с `codex_adapter`.
+- `.flow/shared/scripts/claude_invocation_plan.sh --prompt-file <path> --response-file <path> --module <module> [...]` — shell wrapper над `Claude` adapter scaffold; пока используется как canonical planning surface, не как live provider rollout.
+- `.flow/shared/scripts/intake_contract_artifact.sh <mode> ...` — строит canonical `request/response` artifacts для `intake.interpretation` и `intake.ask_human`; `task_standardize_spec.sh` и `task_ask.sh` уже публикуют эти JSON в task worktree.
+- `.flow/shared/scripts/intake_compare_artifact.sh <interpretation|ask-human> ...` — строит canonical compare artifact между primary/local output и shadow provider output для controlled `Claude` dry-run.
 - `.flow/shared/scripts/run.sh next_task` — показать следующую задачу со статусом `Planned` (приоритет P0→P1→P2, затем по номеру `PL-xxx`).
 - `.flow/shared/scripts/run.sh app_deps_mermaid [output-file]` — построить Mermaid DAG зависимостей APP-issues из `Flow Meta` (`Depends-On/Blocks`) и записать markdown-файл (по умолчанию `docs/app-issues-dependency-diagram.md`).
 - `.flow/shared/scripts/run.sh backlog_seed_apply` — применить runtime-план создания backlog-задач из `<state-dir>/backlog_seed_plan.json` (по умолчанию 1 задача за запуск).
@@ -697,6 +716,7 @@ Rollback нового профиля:
   - собирает единый JSON snapshot по локальным state-файлам (`daemon/watchdog/executor/queues/rate-limit/backlog-seed`)
   - для `executor` использует fallback из `watchdog_state_detail`, поэтому в idle видно `state=IDLE`, даже если `executor_*` файлы очищены
   - нормализует `overall_status` и `action_required` (например, `WAIT_DIRTY_WORKTREE + BLOCKING_TODO=0` трактуется как non-blocking warning)
+  - публикует `watchdog.anomaly`, active claim (`task/issue/claim_state/claimed_at/claim_age_sec`) и краткий `provider_telemetry` aggregate из `<state-dir>/provider_telemetry.jsonl`
 - `ops_bot_service.js`
 - HTTP сервис с endpoint-ами: `GET /health`, `GET /ops/status`, `GET /ops/status.json`
 - `GET /health` теперь также показывает `env_audit_ready`, `env_audit_status`, `env_audit_summary` для локального project env

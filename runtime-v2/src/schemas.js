@@ -6,6 +6,7 @@ const TASK_STATE_PHASES = new Set([
   "new",
   "planned",
   "ready",
+  "claimed",
   "executing",
   "waiting_human",
   "reviewing",

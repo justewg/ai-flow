@@ -127,6 +127,48 @@ count_pending_outbox() {
   find "$outbox_dir" -maxdepth 1 -type f -name '*.json' -size +0c 2>/dev/null | wc -l | tr -d ' '
 }
 
+provider_telemetry_summary_json() {
+  local ledger_file="${CODEX_DIR}/provider_telemetry.jsonl"
+  if [[ ! -f "$ledger_file" ]]; then
+    printf '%s' '{"count":0,"fallbackCount":0,"misrouteCount":0,"lastTs":"","byProvider":{},"byOutcome":{},"byModule":{}}'
+    return 0
+  fi
+  jq -s '
+    def count_by(key):
+      reduce .[] as $item ({}; .[$item[key]] = ((.[$item[key]] // 0) + 1));
+    {
+      count: length,
+      fallbackCount: map(select(.fallbackUsed == true)) | length,
+      misrouteCount: map(select(.misroute == true)) | length,
+      lastTs: ((map(.ts // "") | sort | reverse | .[0]) // ""),
+      byProvider: (count_by("effectiveProvider")),
+      byOutcome: (count_by("outcome")),
+      byModule: (count_by("module"))
+    }
+  ' "$ledger_file" 2>/dev/null || printf '%s' '{"count":0,"fallbackCount":0,"misrouteCount":0,"lastTs":"","byProvider":{},"byOutcome":{},"byModule":{}}'
+}
+
+claude_provider_health_summary_json() {
+  local health_file="${CODEX_DIR}/claude_provider_health.json"
+  if [[ ! -f "$health_file" ]]; then
+    printf '%s' '{"present":false,"status":"","lastErrorClass":"","lastErrorMessage":"","lastFailureAt":"","lastFailureAgeSec":0,"cooldownSec":0,"lastSuccessAt":"","lastSuccessAgeSec":0}'
+    return 0
+  fi
+  jq -c \
+    --argjson now_epoch "$now_epoch" \
+    '{
+      present:true,
+      status:(.lastStatus // ""),
+      lastErrorClass:(.lastErrorClass // ""),
+      lastErrorMessage:(.lastErrorMessage // ""),
+      lastFailureAt:(.lastFailureAt // ""),
+      lastFailureAgeSec: (if ((.lastFailureEpoch // 0) > 0 and $now_epoch >= (.lastFailureEpoch // 0)) then ($now_epoch - (.lastFailureEpoch // 0)) else 0 end),
+      cooldownSec:(.cooldownSec // 0),
+      lastSuccessAt:(.lastSuccessAt // ""),
+      lastSuccessAgeSec: (if ((.lastSuccessEpoch // 0) > 0 and $now_epoch >= (.lastSuccessEpoch // 0)) then ($now_epoch - (.lastSuccessEpoch // 0)) else 0 end)
+    }' "$health_file" 2>/dev/null || printf '%s' '{"present":true,"status":"invalid","lastErrorClass":"","lastErrorMessage":"invalid_health_file","lastFailureAt":"","lastFailureAgeSec":0,"cooldownSec":0,"lastSuccessAt":"","lastSuccessAgeSec":0}'
+}
+
 runtime_queue_pending() {
   local queue_file="${CODEX_DIR}/project_status_runtime_queue.json"
   if [[ ! -f "$queue_file" ]]; then
@@ -174,6 +216,13 @@ watchdog_state_file="${CODEX_DIR}/watchdog_state.txt"
 watchdog_detail_file="${CODEX_DIR}/watchdog_state_detail.txt"
 watchdog_action_file="${CODEX_DIR}/watchdog_last_action.txt"
 watchdog_action_epoch_file="${CODEX_DIR}/watchdog_last_action_epoch.txt"
+watchdog_anomaly_class_file="${CODEX_DIR}/watchdog_anomaly_class.txt"
+watchdog_anomaly_scope_file="${CODEX_DIR}/watchdog_anomaly_scope.txt"
+watchdog_anomaly_reason_file="${CODEX_DIR}/watchdog_anomaly_reason.txt"
+watchdog_anomaly_action_file="${CODEX_DIR}/watchdog_anomaly_action.txt"
+watchdog_anomaly_summary_file="${CODEX_DIR}/watchdog_anomaly_summary.txt"
+watchdog_anomaly_epoch_file="${CODEX_DIR}/watchdog_anomaly_since_epoch.txt"
+watchdog_anomaly_utc_file="${CODEX_DIR}/watchdog_anomaly_since_utc.txt"
 
 executor_state_file="${CODEX_DIR}/executor_state.txt"
 executor_pid_file="${CODEX_DIR}/executor_pid.txt"
@@ -189,6 +238,10 @@ rate_last_limit_file="${CODEX_DIR}/graphql_rate_last_limit_utc.txt"
 daemon_log_file="${CODEX_DIR}/daemon.log"
 daemon_log_file="${RUNTIME_LOG_DIR}/daemon.log"
 watchdog_log_file="${RUNTIME_LOG_DIR}/watchdog.log"
+active_task_file="${CODEX_DIR}/daemon_active_task.txt"
+active_issue_file="${CODEX_DIR}/daemon_active_issue_number.txt"
+active_claim_state_file="${CODEX_DIR}/daemon_active_claim_state.txt"
+active_claimed_at_file="${CODEX_DIR}/daemon_active_claimed_at.txt"
 
 daemon_state="$(read_file_or_default "$daemon_state_file" "UNKNOWN")"
 daemon_detail="$(read_file_or_default "$daemon_detail_file" "")"
@@ -196,6 +249,13 @@ watchdog_state="$(read_file_or_default "$watchdog_state_file" "UNKNOWN")"
 watchdog_detail="$(read_file_or_default "$watchdog_detail_file" "")"
 watchdog_last_action="$(read_file_or_default "$watchdog_action_file" "")"
 watchdog_last_action_epoch="$(read_int_file_or_default "$watchdog_action_epoch_file" "0")"
+watchdog_anomaly_class="$(read_file_or_default "$watchdog_anomaly_class_file" "")"
+watchdog_anomaly_scope="$(read_file_or_default "$watchdog_anomaly_scope_file" "")"
+watchdog_anomaly_reason="$(read_file_or_default "$watchdog_anomaly_reason_file" "")"
+watchdog_anomaly_action="$(read_file_or_default "$watchdog_anomaly_action_file" "")"
+watchdog_anomaly_summary="$(read_file_or_default "$watchdog_anomaly_summary_file" "")"
+watchdog_anomaly_epoch="$(read_int_file_or_default "$watchdog_anomaly_epoch_file" "0")"
+watchdog_anomaly_utc="$(read_file_or_default "$watchdog_anomaly_utc_file" "")"
 
 executor_state="$(read_file_or_default "$executor_state_file" "")"
 executor_pid="$(read_file_or_default "$executor_pid_file" "")"
@@ -250,6 +310,12 @@ dirty_tracked_files="$(detail_value "$daemon_detail" "WAIT_DIRTY_WORKTREE_TRACKE
 open_pr_count="$(detail_value "$daemon_detail" "WAIT_OPEN_PR_COUNT")"
 dependencies_blockers="$(detail_value "$daemon_detail" "WAIT_DEPENDENCIES_BLOCKERS")"
 active_task_id="$(detail_value "$daemon_detail" "WAIT_ACTIVE_TASK_ID")"
+if [[ -z "$active_task_id" ]]; then
+  active_task_id="$(read_file_or_default "$active_task_file" "")"
+fi
+active_issue_number="$(read_file_or_default "$active_issue_file" "")"
+active_claim_state="$(read_file_or_default "$active_claim_state_file" "")"
+active_claimed_at="$(read_file_or_default "$active_claimed_at_file" "")"
 auth_degraded="$(detail_value "$daemon_detail" "AUTH_DEGRADED")"
 github_rate_limit_stage="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_LIMIT_STAGE")"
 github_rate_limit_msg="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_LIMIT_MSG")"
@@ -257,6 +323,11 @@ github_rate_limit_remaining="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_L
 github_rate_limit_reset_epoch="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_LIMIT_RESET_EPOCH")"
 github_rate_limit_reset_at="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_LIMIT_RESET_AT")"
 github_rate_limit_reset_human="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_LIMIT_RESET_IN_HUMAN")"
+github_rate_limit_call="$(detail_value "$daemon_detail" "WAIT_GITHUB_RATE_LIMIT_CALL")"
+github_auth_stage="$(detail_value "$daemon_detail" "WAIT_GITHUB_AUTH_STAGE")"
+github_auth_msg="$(detail_value "$daemon_detail" "WAIT_GITHUB_AUTH_MSG")"
+github_auth_source="$(detail_value "$daemon_detail" "WAIT_GITHUB_AUTH_SOURCE")"
+github_auth_call="$(detail_value "$daemon_detail" "WAIT_GITHUB_AUTH_CALL")"
 
 [[ -z "$github_status" ]] && github_status="UNKNOWN"
 [[ -z "$telegram_status" ]] && telegram_status="SKIPPED"
@@ -281,13 +352,31 @@ backlog_plan_present="false"
 if [[ -f "${CODEX_DIR}/backlog_seed_plan.json" ]]; then
   backlog_plan_present="true"
 fi
+runtime_v2_json="$(/bin/bash "${SCRIPT_DIR}/runtime_v2_inspect.sh" --compact 2>/dev/null || printf '{}')"
+if [[ -z "$runtime_v2_json" ]]; then
+  runtime_v2_json='{}'
+fi
+provider_telemetry_json="$(provider_telemetry_summary_json)"
+if [[ -z "$provider_telemetry_json" ]]; then
+  provider_telemetry_json='{"count":0,"fallbackCount":0,"misrouteCount":0,"lastTs":"","byProvider":{},"byOutcome":{},"byModule":{}}'
+fi
+claude_provider_health_json="$(claude_provider_health_summary_json)"
+if [[ -z "$claude_provider_health_json" ]]; then
+  claude_provider_health_json='{"present":false,"status":"","lastErrorClass":"","lastErrorMessage":"","lastFailureAt":"","lastFailureAgeSec":0,"cooldownSec":0,"lastSuccessAt":"","lastSuccessAgeSec":0}'
+fi
 
 daemon_state_age_sec="$(age_from_epoch "$(file_mtime_epoch "$daemon_state_file")")"
 daemon_log_age_sec="$(age_from_epoch "$(file_mtime_epoch "$daemon_log_file")")"
 watchdog_state_age_sec="$(age_from_epoch "$(file_mtime_epoch "$watchdog_state_file")")"
 watchdog_log_age_sec="$(age_from_epoch "$(file_mtime_epoch "$watchdog_log_file")")"
 watchdog_last_action_age_sec="$(age_from_epoch "$watchdog_last_action_epoch")"
+watchdog_anomaly_age_sec="$(age_from_epoch "$watchdog_anomaly_epoch")"
 executor_heartbeat_age_sec="$(age_from_epoch "$executor_hb_epoch")"
+active_claim_age_sec="0"
+if [[ -n "$active_claimed_at" ]]; then
+  active_claimed_epoch="$(date -j -f '%Y-%m-%dT%H:%M:%SZ' "$active_claimed_at" '+%s' 2>/dev/null || date -d "$active_claimed_at" '+%s' 2>/dev/null || printf '0')"
+  active_claim_age_sec="$(age_from_epoch "$active_claimed_epoch")"
+fi
 
 overall_status="HEALTHY"
 action_required="none"
@@ -311,6 +400,11 @@ case "$daemon_state" in
     if [[ -n "$github_rate_limit_reset_human" && "$github_rate_limit_reset_human" != "0s" ]]; then
       headline="GitHub GraphQL rate limit; reset in ${github_rate_limit_reset_human}"
     fi
+    ;;
+  WAIT_GITHUB_AUTH)
+    overall_status="DEGRADED"
+    action_required="fix_github_auth"
+    headline="GitHub project credential rejected; daemon is waiting for config fix"
     ;;
   WAIT_GITHUB_OFFLINE|WAIT_AUTH_SERVICE)
     overall_status="DEGRADED"
@@ -430,6 +524,12 @@ jq -n \
   --arg watchdog_state "$watchdog_state" \
   --arg watchdog_detail "$watchdog_detail" \
   --arg watchdog_last_action "$watchdog_last_action" \
+  --arg watchdog_anomaly_class "$watchdog_anomaly_class" \
+  --arg watchdog_anomaly_scope "$watchdog_anomaly_scope" \
+  --arg watchdog_anomaly_reason "$watchdog_anomaly_reason" \
+  --arg watchdog_anomaly_action "$watchdog_anomaly_action" \
+  --arg watchdog_anomaly_summary "$watchdog_anomaly_summary" \
+  --arg watchdog_anomaly_utc "$watchdog_anomaly_utc" \
   --arg executor_state "$executor_state" \
   --arg executor_pid "$executor_pid" \
   --arg executor_hb_utc "$executor_hb_utc" \
@@ -442,11 +542,19 @@ jq -n \
   --arg open_pr_count "$open_pr_count" \
   --arg dependencies_blockers "$dependencies_blockers" \
   --arg active_task_id "$active_task_id" \
+  --arg active_issue_number "$active_issue_number" \
+  --arg active_claim_state "$active_claim_state" \
+  --arg active_claimed_at "$active_claimed_at" \
   --arg github_rate_limit_stage "$github_rate_limit_stage" \
   --arg github_rate_limit_msg "$github_rate_limit_msg" \
+  --arg github_rate_limit_call "$github_rate_limit_call" \
   --arg github_rate_limit_remaining "$github_rate_limit_remaining" \
   --arg github_rate_limit_reset_at "$github_rate_limit_reset_at" \
   --arg github_rate_limit_reset_human "$github_rate_limit_reset_human" \
+  --arg github_auth_stage "$github_auth_stage" \
+  --arg github_auth_msg "$github_auth_msg" \
+  --arg github_auth_source "$github_auth_source" \
+  --arg github_auth_call "$github_auth_call" \
   --arg rate_window_state "$rate_window_state" \
   --arg rate_window_start_utc "$rate_window_start_utc" \
   --arg rate_last_success_utc "$rate_last_success_utc" \
@@ -457,7 +565,9 @@ jq -n \
   --argjson watchdog_state_age_sec "$watchdog_state_age_sec" \
   --argjson watchdog_log_age_sec "$watchdog_log_age_sec" \
   --argjson watchdog_last_action_age_sec "$watchdog_last_action_age_sec" \
+  --argjson watchdog_anomaly_age_sec "$watchdog_anomaly_age_sec" \
   --argjson executor_heartbeat_age_sec "$executor_heartbeat_age_sec" \
+  --argjson active_claim_age_sec "$active_claim_age_sec" \
   --argjson outbox_pending "$outbox_pending" \
   --argjson runtime_pending "$runtime_pending" \
   --argjson rate_window_requests "$rate_window_requests" \
@@ -465,6 +575,9 @@ jq -n \
   --argjson backlog_remaining "$backlog_remaining" \
   --argjson executor_pid_alive "$executor_pid_alive" \
   --argjson backlog_plan_present "$backlog_plan_present" \
+  --argjson provider_telemetry "$provider_telemetry_json" \
+  --argjson claude_provider_health "$claude_provider_health_json" \
+  --argjson runtime_v2 "$runtime_v2_json" \
   '{
     generated_at: $generated_at,
     project: {
@@ -496,7 +609,16 @@ jq -n \
       state_age_sec: $watchdog_state_age_sec,
       log_age_sec: $watchdog_log_age_sec,
       last_action: $watchdog_last_action,
-      last_action_age_sec: $watchdog_last_action_age_sec
+      last_action_age_sec: $watchdog_last_action_age_sec,
+      anomaly: {
+        class: $watchdog_anomaly_class,
+        scope: $watchdog_anomaly_scope,
+        reason: $watchdog_anomaly_reason,
+        action: $watchdog_anomaly_action,
+        summary: $watchdog_anomaly_summary,
+        since_utc: $watchdog_anomaly_utc,
+        age_sec: $watchdog_anomaly_age_sec
+      }
     },
     executor: {
       state: $executor_state,
@@ -519,10 +641,17 @@ jq -n \
         blockers: $dependencies_blockers
       },
       open_pr_count: ($open_pr_count | tonumber? // 0),
-      active_task_id: $active_task_id
+      active_task: {
+        task_id: $active_task_id,
+        issue_number: $active_issue_number,
+        claim_state: $active_claim_state,
+        claimed_at_utc: $active_claimed_at,
+        claim_age_sec: $active_claim_age_sec
+      }
     },
     rate_limit: {
       wait_stage: $github_rate_limit_stage,
+      wait_call: $github_rate_limit_call,
       wait_message: $github_rate_limit_msg,
       wait_remaining: ($github_rate_limit_remaining | tonumber? // 0),
       wait_reset_at_utc: $github_rate_limit_reset_at,
@@ -534,9 +663,18 @@ jq -n \
       last_success_utc: $rate_last_success_utc,
       last_limit_utc: $rate_last_limit_utc
     },
+    github_auth: {
+      wait_stage: $github_auth_stage,
+      wait_source: $github_auth_source,
+      wait_call: $github_auth_call,
+      wait_message: $github_auth_msg
+    },
     backlog_seed: {
       plan_present: $backlog_plan_present,
       remaining: $backlog_remaining,
       next_code: $backlog_next_code
-    }
+    },
+    provider_telemetry: $provider_telemetry,
+    claude_provider_health: $claude_provider_health,
+    runtime_v2: $runtime_v2
   }'

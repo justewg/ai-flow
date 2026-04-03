@@ -1,0 +1,14 @@
+{
+  "name": "@justewg/ai-flow-runtime-v2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "AI Flow v2 state-store bootstrap",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "mongodb": "^6.17.0"
+  }
+}

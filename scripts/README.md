@@ -41,6 +41,8 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh pr_edit`
 - `.flow/shared/scripts/run.sh pr_merge`
 - `.flow/shared/scripts/run.sh commit_push`
+- `.flow/shared/scripts/run.sh git_temp_repo <fetch|checkout_branch|merge_ref|add_paths|commit|push_branch|status|rev_parse>`
+- `.flow/shared/scripts/run.sh git_temp_repo <fetch|checkout_branch|merge_ref|add_paths|commit|push_branch|status|rev_parse|update_gitlink>`
 - `.flow/shared/scripts/run.sh git_ls_remote_heads`
 - `.flow/shared/scripts/run.sh git_delete_branch`
 - `.flow/shared/scripts/run.sh project_add_task`
@@ -54,6 +56,13 @@ Linux-hosted bootstrap launchers:
 - `.flow/shared/scripts/run.sh log_tail_all`
 - `.flow/shared/scripts/run.sh host_bootstrap`
 - `.flow/shared/scripts/run.sh docker_bootstrap`
+- `.flow/shared/scripts/run.sh android_builder <config|up|down|shell|run|exec> [command...]`
+  - standalone Android/Java builder в отдельном Docker image/service
+  - монтирует текущий repo в `/workspace`
+  - держит JDK 17 и Android SDK вне host runtime и вне основного Codex/runtime container
+  - кэш Gradle хранит в `<AI_FLOW_ROOT_DIR>/services/android-builder/<project>/home`
+  - канонический пример:
+    `./.flow/shared/scripts/run.sh android_builder run bash -lc 'cd app/planka_quick_test_app && ./gradlew --no-daemon testDebugUnitTest assembleDebug'`
 - `.flow/shared/scripts/run.sh remote_agent_access_bootstrap`
 - `.flow/shared/scripts/run.sh remote_agent_v2_bootstrap`
 - `.flow/shared/scripts/run.sh env_audit`
@@ -82,9 +91,71 @@ Linux-hosted bootstrap launchers:
     - читает optional `project_item_jq.txt` и применяет jq filter уже внутри wrapper;
     - нужен для project list/view sync без прямого `gh project item-list ... --limit ... --jq ...`.
     - при необходимости локальный `jq` накладывается уже на stdout этой команды, а не на прямой `gh project item-list ...`.
+- Для типовых временных git-checkout/worktree операций использовать fixed-input entrypoint:
+  - `.flow/shared/scripts/run.sh git_temp_repo <action>`
+  - читает один стабильный файл `${CODEX_DIR}/git_temp_repo.env`
+  - обязательный параметр:
+    - `GIT_TEMP_REPO_ROOT=/tmp/planka-578`
+  - поддерживаемые actions и их параметры:
+    - `fetch`
+      - optional `GIT_TEMP_REMOTE=origin`
+      - optional `GIT_TEMP_FETCH_REFSPEC=origin/development`
+    - `checkout_branch`
+      - `GIT_TEMP_BRANCH=feature-branch`
+      - optional `GIT_TEMP_START_POINT=origin/development`
+    - `merge_ref`
+      - `GIT_TEMP_MERGE_REF=origin/development`
+    - `add_paths`
+      - newline-delimited `GIT_TEMP_PATHS`, например `$'.flow/shared\nREADME.md'`
+    - `commit`
+      - `GIT_TEMP_COMMIT_MESSAGE='chore: bump toolkit'`
+      - optional `GIT_TEMP_ALLOW_EMPTY=1`
+    - `push_branch`
+      - `GIT_TEMP_BRANCH=feature-branch` или `GIT_TEMP_PUSH_REFSPEC=HEAD:feature-branch`
+      - optional `GIT_TEMP_REMOTE=origin`
+      - optional `GIT_TEMP_SET_UPSTREAM=1`
+      - optional `GIT_TEMP_FORCE_WITH_LEASE=1`
+    - `status`
+      - без дополнительных параметров
+    - `rev_parse`
+      - optional `GIT_TEMP_REV=HEAD`
+    - `update_gitlink`
+      - `GIT_TEMP_GITLINK_PATH=.flow/shared`
+      - `GIT_TEMP_GITLINK_SHA=<toolkit-commit-sha>`
+  - это wrapper для случаев, где раньше приходилось звать raw команды вида `git -C /tmp/... push -u origin ...`
 - `.flow/shared/scripts/run.sh project_status_runtime <enqueue|apply|list|clear> ...` — runtime-очередь отложенных обновлений `Project Status/Flow`.
+- `.flow/shared/scripts/run.sh runtime_v2_shadow_sync` — materialize-ит отдельный `v2` shadow state из текущего legacy runtime в `<state-dir>/runtime_v2/store`.
+- `.flow/shared/scripts/run.sh runtime_v2_gate <task-id> <issue-number> <gate-name> [profile]` — читает `runtime-v2` rollout/budget/stale verdict для legacy expensive/recovery path без full cutover.
+- `.flow/shared/scripts/run.sh runtime_v2_apply_event <task-id> <issue-number> <event-type> <event-id> <dedup-key> [payload-json]` — best-effort bridge selected legacy lifecycle transitions в `runtime-v2 applyEvent()`.
+- `.flow/shared/scripts/run.sh runtime_v2_primary_context` — выводит selected `active/review` contexts, derivable из `runtime-v2` store.
+- `.flow/shared/scripts/run.sh runtime_v2_reconcile_primary_context` — проецирует selected `runtime-v2` primary contexts обратно в legacy `daemon_active_*` / `daemon_review_*` файлы.
+- `.flow/shared/scripts/run.sh runtime_v2_snapshot [task-id]` — показывает snapshot отдельного `v2` shadow contour.
+- `.flow/shared/scripts/run.sh runtime_v2_inspect` — показывает operator-grade summary по `runtime-v2`: control mode, task counts, primary contexts, incidents, execution summary, structured `watchdog.anomaly` и aggregate `providerTelemetry` (если ledger уже пишется).
+- `.flow/shared/scripts/run.sh runtime_v2_status` — alias для `runtime_v2_inspect` с тем же operator-grade summary по `runtime-v2`.
+- `.flow/shared/scripts/run.sh runtime_v2_validate_rollout [task-id] [issue-number]` — прогоняет локальный `dry_run/shadow` validation harness и пишет отчёт в `<state-dir>/runtime_v2_validation_report.json`.
+- `.flow/shared/scripts/run.sh runtime_v2_single_task_loop [task-id] [issue-number] [pr-number]` — прогоняет controlled local `single_task` loop и пишет отчёт в `<state-dir>/runtime_v2_single_task_loop_report.json`.
+- `.flow/shared/scripts/run.sh runtime_v2_clear` — очищает только `v2` shadow store, не трогая legacy state.
 - `.flow/shared/scripts/run.sh log_summary [--hours N|--from ISO|--to ISO]` — агрегированный отчет по логам daemon/watchdog/runtime/graphql за период (без аргументов берёт весь доступный диапазон логов).
-- `.flow/shared/scripts/run.sh status_snapshot` — нормализованный JSON snapshot состояния автоматики (daemon/watchdog/executor/очереди/blockers).
+- `.flow/shared/scripts/run.sh status_snapshot` — нормализованный JSON snapshot состояния автоматики (daemon/watchdog/executor/очереди/blockers), включая `watchdog.anomaly`, active claim semantics, краткую `provider_telemetry` summary и `claude_provider_health` для shadow-provider auth/runtime surface.
+- `.flow/shared/scripts/provider_telemetry_append.sh <task-id> <issue-number> <module> <requested-provider> <effective-provider> <outcome> <request-id> [error-class]` — append canonical provider telemetry record в `<state-dir>/provider_telemetry.jsonl`; текущий Codex execution path уже пишет туда live telemetry.
+- `.flow/shared/scripts/provider_route_resolve.sh --module <module> --task-id <task-id> [--issue-number <n>] [--preferred-provider <provider>]` — вернуть canonical provider route decision для shell-path; deterministic `task_interpret.sh` и `task_ask.sh` уже используют его и пишут live telemetry как `local`.
+- `.flow/shared/scripts/provider_compare_resolve.sh --module <module>` — вернуть canonical compare-mode verdict для controlled `shadow/dry_run` rollout (`disabled|dry_run|shadow|live`, `shadowProvider`, `publishDecision`) из общего routing config.
+- `.flow/shared/scripts/provider_rollout_gate.sh [--module <module>] [--shadow-provider <provider>] [--min-samples <n>]` — посчитать простой readiness summary для будущего live rollout на основе последних compare telemetry records из `provider_telemetry.jsonl`; сам live switch не делает.
+- `.flow/shared/scripts/claude_provider_run.sh ...` — wrapper над живым Claude provider runner; при свежем `auth_missing/auth_forbidden` пишет `<state-dir>/claude_provider_health.json` и в коротком cooldown окне возвращает cached canonical failure вместо лишнего live retry.
+- `.flow/shared/scripts/claude_provider_probe.sh` — минимальный live health-check для Claude shadow-provider: выполняет узкий canonical probe через `claude_provider_run.sh`, обновляет `claude_provider_health.json` и возвращает обычный canonical `ProviderResult`.
+- Compare mode включается через `AI_FLOW_PROVIDER_ROUTING_JSON`, например:
+  - `{"compare":{"intake.interpretation":{"mode":"dry_run","shadowProvider":"claude","publishDecision":false},"intake.ask_human":{"mode":"dry_run","shadowProvider":"claude","publishDecision":false}}}`
+- При включённом compare mode task-worktree сохраняет раздельные artifacts:
+  - `intake_interpretation_response.local.json`
+  - `intake_interpretation_response.claude.json`
+  - `intake_interpretation_compare.json`
+  - `intake_ask_human_response.local.json`
+  - `intake_ask_human_response.claude.json`
+  - `intake_ask_human_compare.json`
+- `runtime-v2/src/claude_adapter.js` — canonical `Claude` invocation scaffold для будущих `intake/review` modules; live rollout пока не включён, но route/telemetry contract уже совпадает с `codex_adapter`.
+- `.flow/shared/scripts/claude_invocation_plan.sh --prompt-file <path> --response-file <path> --module <module> [...]` — shell wrapper над `Claude` adapter scaffold; пока используется как canonical planning surface, не как live provider rollout.
+- `.flow/shared/scripts/intake_contract_artifact.sh <mode> ...` — строит canonical `request/response` artifacts для `intake.interpretation` и `intake.ask_human`; `task_standardize_spec.sh` и `task_ask.sh` уже публикуют эти JSON в task worktree.
+- `.flow/shared/scripts/intake_compare_artifact.sh <interpretation|ask-human> ...` — строит canonical compare artifact между primary/local output и shadow provider output для controlled `Claude` dry-run.
 - `.flow/shared/scripts/run.sh next_task` — показать следующую задачу со статусом `Planned` (приоритет P0→P1→P2, затем по номеру `PL-xxx`).
 - `.flow/shared/scripts/run.sh app_deps_mermaid [output-file]` — построить Mermaid DAG зависимостей APP-issues из `Flow Meta` (`Depends-On/Blocks`) и записать markdown-файл (по умолчанию `docs/app-issues-dependency-diagram.md`).
 - `.flow/shared/scripts/run.sh backlog_seed_apply` — применить runtime-план создания backlog-задач из `<state-dir>/backlog_seed_plan.json` (по умолчанию 1 задача за запуск).
@@ -367,18 +438,18 @@ Rollback нового профиля:
 ## Команды
 - `dev_commit_push.sh "message" <path...>`
   - `git add` + `git commit` + `git push origin <current-branch>`
-  - `task_finalize` при необходимости вызывает его с явным override для task-ветки, а финальный PR все равно остается `development -> main`
+  - `task_finalize` при необходимости вызывает его с явным override для task-ветки; для task-ветки review PR публикуется как `task/<id> -> development`, а release PR `development -> main` живет отдельно
   - для agent-коммитов использует отдельную identity (env): `CODEX_GIT_AUTHOR_NAME`, `CODEX_GIT_AUTHOR_EMAIL`, `CODEX_GIT_COMMITTER_NAME`, `CODEX_GIT_COMMITTER_EMAIL`
 - `sync_branches.sh`
   - `fetch/pull/merge/push` для выравнивания `main` и `development` после merge PR
   - если `main` уже включен в `development`, merge пропускается
   - при merge-конфликте возвращает `BRANCH_SYNC_CONFLICT=1` (код 78)
 - `pr_list_open.sh`
-  - список открытых PR `development -> main`
+  - список открытых PR для `FLOW_PR_HEAD_BRANCH -> FLOW_PR_BASE_BRANCH` (или `FLOW_HEAD_BRANCH -> FLOW_BASE_BRANCH`, если override не задан)
 - `pr_view.sh <pr-number>`
   - просмотр PR в фиксированном JSON-формате
 - `pr_create.sh <title-file> <body-file>`
-  - создание PR `development -> main`
+  - создание PR для `FLOW_PR_HEAD_BRANCH -> FLOW_PR_BASE_BRANCH` (или для flow default branch pair без override)
 - `pr_edit.sh <pr-number> <title-file> <body-file>`
   - обновление title/body PR
 - `project_set_status.sh <task-id|project-item-id> <status-name> [flow-name]`
@@ -418,6 +489,8 @@ Rollback нового профиля:
   - печатает стандартный двойной хвост `daemon.log + executor.log`
 - `.flow/shared/scripts/run.sh log_tail_all`
   - печатает стандартный хвост `daemon.log + watchdog.log + executor.log`
+- `.flow/shared/scripts/run.sh log_follow <daemon|watchdog|executor|d|w|e> [lines]`
+  - делает `tail -f` по одному runtime-логу; второй аргумент опционален, по умолчанию `50`
 - `.flow/shared/scripts/run.sh runtime_clear_active`
   - очищает active runtime-context daemon без прямых `truncate`
 - `.flow/shared/scripts/run.sh runtime_clear_waiting`
@@ -446,7 +519,7 @@ Rollback нового профиля:
   - при создании/линковке dirty-gate issue сразу переводит ее карточку в `Status/Flow=In Progress`
   - при рабочем ответе (`REWORK`) переводит карточку dirty-gate issue в `Status/Flow=In Progress`
   - при dirty-worktree больше не “глушит” обслуживание активного контекста: если есть `daemon_active_task`/waiting/review, тик продолжает `daemon_check_replies` и `executor_tick`; при этом новые claim остаются заблокированы (`WAIT_DIRTY_WORKTREE_SKIP_NEW_CLAIM=1`)
-  - `COMMIT` запускает полный dirty-gate flow: auto-commit tracked-файлов (`dev_commit_push.sh`) -> PR `development -> main` -> merge PR -> закрытие dirty-gate issue
+  - `COMMIT` запускает отдельный dirty-gate recovery flow для tracked-файлов в `development`; он не определяет PR topology обычных task-задач
   - если финальный `project_set_status(Done)` для dirty-gate не прошел, daemon фиксирует pending-finalize и ретраит завершение автоматически на следующих тиках (без нового user-reply)
   - по успешному завершению пишет `WAIT_DIRTY_WORKTREE_COMMIT_FLOW_DONE=1` и снимает dirty-gate state
   - auto-`COMMIT` выполняется только из ветки `development` (иначе пишет `WAIT_DIRTY_WORKTREE_COMMIT_BLOCKED_BRANCH=...`)
@@ -465,13 +538,13 @@ Rollback нового профиля:
   - для активной задачи вызывает `executor_tick.sh`, который запускает/мониторит headless executor (`codex exec`)
   - перед критичными GitHub-операциями делает preflight (`github_health_check.sh`)
   - сетевые вызовы к GitHub выполняет через `gh_retry.sh`, чтобы кратковременные DNS/API-сбои не роняли flow
-  - если активной задачи нет, проверяет открытые PR `development -> main` и при наличии ждет merge/close
+  - если активной/review задачи нет, открытые release PR не должны сами по себе блокировать claim новой задачи
   - не-Project проверки (`issues/labels/comments/open PR`) выполняет через REST (`gh api repos/...`); GraphQL оставлен для Project v2
   - читает Project через GraphQL (без нестабильного `gh project item-list`)
   - в hybrid mode для Project-операций использует `DAEMON_GH_PROJECT_TOKEN`/`CODEX_GH_PROJECT_TOKEN` (если задан), сохраняя App token для `Issue/PR`
   - при исчерпании GraphQL rate limit пишет `WAIT_GITHUB_RATE_LIMIT=1` + детали (`..._STAGE`, `..._MSG`) и не берет новую задачу
   - ведет статистику окон между rate-limit событиями в `<state-dir>/graphql_rate_stats.log` (`requests`, `duration_sec`, `start_utc`, `end_utc`)
-  - берет задачу только из `Status=Todo`
+  - берет задачу по `Status=Todo`; `Flow` не участвует в claim-gate, потому что при ручном движении карточки на доске пользователь обычно меняет только `Status`
   - issue с label из `AUTO_IGNORE_LABELS` (по умолчанию `auto:ignore`) исключаются из auto-claim очереди
   - `AUTO_IGNORE_LABELS` учитывается и в dirty-gate: такие `Todo`-задачи не считаются блокирующими для создания `DIRTY-GATE`
   - dirty-gate использует один скан `find_first_todo_issue_json` на тик (общий кэш между `maybe_process_dirty_gate_reply` и `maybe_handle_dirty_worktree_gate`)
@@ -557,8 +630,8 @@ Rollback нового профиля:
 - `task_finalize.sh`
   - читает `commit_message.txt`, `stage_paths.txt`, `project_task_id.txt` (или `daemon_active_task.txt`)
   - выполняет commit/push в текущую task-ветку
-  - если текущая ветка не `development`, подтягивает в неё актуальный `development`, затем fast-forward вливает task-ветку обратно в `development`
-  - создает PR `development -> main` или обновляет существующий
+  - если текущая ветка не `development`, подтягивает в неё актуальный `development` и публикует отдельный review PR `task/<id> -> development`
+  - если текущая ветка уже `development`, работает в прямом release-path `development -> main`
   - переводит задачу в `Status=Review`, `Flow=In Review` (можно переопределить через `FINAL_STATUS` и `FINAL_FLOW`)
   - если апдейт статуса временно недоступен, откладывает его в runtime-очередь без остановки финализации
   - публикует `CODEX_SIGNAL: AGENT_IN_REVIEW` и включает waiting-контекст `REVIEW_FEEDBACK` для комментариев в Issue
@@ -643,6 +716,7 @@ Rollback нового профиля:
   - собирает единый JSON snapshot по локальным state-файлам (`daemon/watchdog/executor/queues/rate-limit/backlog-seed`)
   - для `executor` использует fallback из `watchdog_state_detail`, поэтому в idle видно `state=IDLE`, даже если `executor_*` файлы очищены
   - нормализует `overall_status` и `action_required` (например, `WAIT_DIRTY_WORKTREE + BLOCKING_TODO=0` трактуется как non-blocking warning)
+  - публикует `watchdog.anomaly`, active claim (`task/issue/claim_state/claimed_at/claim_age_sec`) и краткий `provider_telemetry` aggregate из `<state-dir>/provider_telemetry.jsonl`
 - `ops_bot_service.js`
 - HTTP сервис с endpoint-ами: `GET /health`, `GET /ops/status`, `GET /ops/status.json`
 - `GET /health` теперь также показывает `env_audit_ready`, `env_audit_status`, `env_audit_summary` для локального project env

@@ -34,11 +34,19 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./env/bootstrap.sh
 source "${SCRIPT_DIR}/env/bootstrap.sh"
+source "${SCRIPT_DIR}/task_worktree_lib.sh"
 CODEX_DIR="$(codex_export_state_dir)"
 STATE_TMP_DIR="$(codex_resolve_state_tmp_dir "$CODEX_DIR")"
 mkdir -p "$STATE_TMP_DIR"
 RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
 REPO="${GITHUB_REPO:-justewg/planka}"
+telemetry_started_at_ms="$(($(date +%s) * 1000))"
+STATE_DIR="$(codex_resolve_state_dir)"
+PROFILE_NAME="$(codex_resolve_project_profile_name 2>/dev/null || printf '%s' "${PROJECT_PROFILE:-default}")"
+provider_route_json=""
+provider_request_id=""
+provider_telemetry_recorded="0"
+ask_compare_json=""
 
 mkdir -p "$CODEX_DIR"
 
@@ -46,6 +54,233 @@ active_task_file="${CODEX_DIR}/daemon_active_task.txt"
 project_task_file="${CODEX_DIR}/project_task_id.txt"
 active_issue_file="${CODEX_DIR}/daemon_active_issue_number.txt"
 pending_post_file="${CODEX_DIR}/daemon_waiting_pending_post.txt"
+executor_pid_file="${CODEX_DIR}/executor_pid.txt"
+executor_heartbeat_pid_file="${CODEX_DIR}/executor_heartbeat_pid.txt"
+executor_detach_file="${CODEX_DIR}/executor_detach_requested.txt"
+executor_state_file="${CODEX_DIR}/executor_state.txt"
+executor_review_handoff_reason_file="${CODEX_DIR}/executor_review_handoff_reason.txt"
+
+emit_runtime_v2_event() {
+  local event_type="$1"
+  local event_id="$2"
+  local dedup_key="$3"
+  local payload_json="${4:-{}}"
+  local event_out rc
+
+  if event_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_apply_event.sh" \
+      "$task_id" "$issue_number" "$event_type" "$event_id" "$dedup_key" "$payload_json" 2>&1
+  )"; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_EVENT: $line"
+    done <<< "$event_out"
+  else
+    rc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_EVENT_ERROR(rc=$rc): $line"
+    done <<< "$event_out"
+  fi
+}
+
+reconcile_runtime_v2_primary_context() {
+  local reconcile_out rc
+  if reconcile_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_reconcile_primary_context.sh" 2>&1
+  )"; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_RECONCILE: $line"
+    done <<< "$reconcile_out"
+  else
+    rc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_RECONCILE_ERROR(rc=$rc): $line"
+    done <<< "$reconcile_out"
+  fi
+}
+
+resolve_provider_route_json() {
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/provider_route_resolve.sh" \
+    --module "intake.ask_human" \
+    --task-id "$task_id" \
+    --issue-number "$issue_number" \
+    --preferred-provider "local"
+}
+
+resolve_provider_compare_json() {
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/provider_compare_resolve.sh" --module "intake.ask_human"
+}
+
+write_shadow_error_artifact() {
+  local output_file="$1"
+  local provider_result_json="$2"
+  jq -nc \
+    --argjson providerResult "$provider_result_json" \
+    '{
+      _shadowProviderError: {
+        requestId: ($providerResult.requestId // null),
+        provider: ($providerResult.provider // "claude"),
+        outcome: ($providerResult.outcome // "error"),
+        errorClass: ($providerResult.errorClass // "shadow_provider_error"),
+        errorMessage: ($providerResult.errorMessage // null),
+        latencyMs: ($providerResult.latencyMs // null),
+        tokenUsage: ($providerResult.tokenUsage // null),
+        estimatedCost: ($providerResult.estimatedCost // null)
+      }
+    }' > "$output_file"
+}
+
+append_provider_telemetry() {
+  local route_json="$1"
+  local outcome="$2"
+  local request_id="$3"
+  local error_class="${4:-}"
+  local error_message="${5:-}"
+  local latency_ms
+  latency_ms="$(( $(date +%s) * 1000 - telemetry_started_at_ms ))"
+
+  PROVIDER_TELEMETRY_LATENCY_MS="$latency_ms" \
+  PROVIDER_TELEMETRY_DECISION_REASON="$(printf '%s' "$route_json" | jq -r '.decisionReason // ""')" \
+  PROVIDER_TELEMETRY_TIMEOUT_MS="$(printf '%s' "$route_json" | jq -r '.timeoutMs // empty')" \
+  PROVIDER_TELEMETRY_BUDGET_KEY="$(printf '%s' "$route_json" | jq -r '.budgetKey // ""')" \
+  PROVIDER_TELEMETRY_ERROR_MESSAGE="$error_message" \
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/provider_telemetry_append.sh" \
+      "$task_id" \
+      "$issue_number" \
+      "intake.ask_human" \
+      "$(printf '%s' "$route_json" | jq -r '.requestedProvider')" \
+      "$(printf '%s' "$route_json" | jq -r '.effectiveProvider')" \
+      "$outcome" \
+      "$request_id" \
+      "$error_class" >/dev/null
+  provider_telemetry_recorded="1"
+}
+
+append_shadow_compare_telemetry() {
+  local compare_json="$1"
+  local provider_result_json="$2"
+  local compare_artifact_json="$3"
+  local schema_valid_primary
+  local schema_valid_shadow
+
+  schema_valid_primary="$(printf '%s' "$compare_artifact_json" | jq -r 'if .schemaValidPrimary == null then empty else .schemaValidPrimary end')"
+  schema_valid_shadow="$(printf '%s' "$compare_artifact_json" | jq -r 'if .schemaValidShadow == null then empty else .schemaValidShadow end')"
+
+  PROVIDER_TELEMETRY_LATENCY_MS="$(printf '%s' "$provider_result_json" | jq -r '.latencyMs // empty')" \
+  PROVIDER_TELEMETRY_TOKEN_USAGE="$(printf '%s' "$provider_result_json" | jq -r '.tokenUsage // empty')" \
+  PROVIDER_TELEMETRY_ESTIMATED_COST="$(printf '%s' "$provider_result_json" | jq -r '.estimatedCost // empty')" \
+  PROVIDER_TELEMETRY_COMPARE_MODE="$(printf '%s' "$compare_json" | jq -r '.mode // ""')" \
+  PROVIDER_TELEMETRY_PRIMARY_PROVIDER="local" \
+  PROVIDER_TELEMETRY_SHADOW_PROVIDER="$(printf '%s' "$compare_json" | jq -r '.shadowProvider // "claude"')" \
+  PROVIDER_TELEMETRY_SCHEMA_VALID_PRIMARY="$schema_valid_primary" \
+  PROVIDER_TELEMETRY_SCHEMA_VALID_SHADOW="$schema_valid_shadow" \
+  PROVIDER_TELEMETRY_COMPARE_SUMMARY="$(printf '%s' "$compare_artifact_json" | jq -r '.compareSummary // ""')" \
+  PROVIDER_TELEMETRY_PUBLISH_DECISION=0 \
+  PROVIDER_TELEMETRY_DECISION_REASON="claude_shadow_compare" \
+  PROVIDER_TELEMETRY_TIMEOUT_MS="$(printf '%s' "$compare_json" | jq -r '.timeoutMs // empty')" \
+  PROVIDER_TELEMETRY_ERROR_MESSAGE="$(printf '%s' "$provider_result_json" | jq -r '.errorMessage // ""')" \
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/provider_telemetry_append.sh" \
+      "$task_id" \
+      "$issue_number" \
+      "intake.ask_human" \
+      "$(printf '%s' "$compare_json" | jq -r '.shadowProvider // "claude"')" \
+      "$(printf '%s' "$compare_json" | jq -r '.shadowProvider // "claude"')" \
+      "$(printf '%s' "$provider_result_json" | jq -r '.outcome')" \
+      "$(printf '%s' "$provider_result_json" | jq -r '.requestId')" \
+      "$(printf '%s' "$provider_result_json" | jq -r '.errorClass // empty')" >/dev/null || true
+}
+
+record_unhandled_provider_error() {
+  local rc="$1"
+  [[ "$provider_telemetry_recorded" == "1" ]] && return 0
+  [[ -n "$provider_route_json" ]] || return 0
+  [[ -n "$provider_request_id" ]] || return 0
+  set +e
+  append_provider_telemetry "$provider_route_json" "error" "$provider_request_id" "task_ask_failed"
+  set -e
+  return "$rc"
+}
+
+trap 'rc=$?; if [[ "$rc" -ne 0 ]]; then record_unhandled_provider_error "$rc"; fi; exit "$rc"' EXIT
+
+build_wait_payload() {
+  local wait_comment_id="$1"
+  local wait_reason="$2"
+  local wait_kind="$3"
+  local comment_url="$4"
+  local pending_post="$5"
+  local waiting_since="$6"
+
+  jq -nc \
+    --arg waitCommentId "$wait_comment_id" \
+    --arg reason "$wait_reason" \
+    --arg kind "$wait_kind" \
+    --arg commentUrl "$comment_url" \
+    --arg waitingSince "$waiting_since" \
+    --argjson pendingPost "$pending_post" \
+    '{
+      waitCommentId:$waitCommentId,
+      reason:$reason,
+      kind:$kind,
+      commentUrl:$commentUrl,
+      waitingSince:$waitingSince,
+      pendingPost:$pendingPost
+    }'
+}
+
+trim_line() {
+  printf '%s' "$1" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g'
+}
+
+extract_structured_field() {
+  local field_name="$1"
+  local text="$2"
+  printf '%s\n' "$text" \
+    | sed 's/\r$//' \
+    | awk -F= -v key="$field_name" '$1 == key { sub(/^[^=]*=/, "", $0); print; exit }'
+}
+
+contains_user_prompt_keywords() {
+  local text
+  text="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  printf '%s' "$text" \
+    | grep -Eiq '\b(продолжай|продолжить|финализируй|финализировать|подтверди|выбери|как действовать|нужен ответ|ответь|какой|какая|какое|какие|что|нужно ли|можно ли|should|what|which|how|need your answer)\b'
+}
+
+is_malformed_question_candidate() {
+  local value
+  value="$(trim_line "$1")"
+
+  [[ -z "$value" ]] && return 0
+
+  if printf '%s' "$value" | grep -Eiq '^(null[[:space:]]*->[[:space:]]*".*\?"|\?\?[[:space:]]+.+|[0-9]{4}-[0-9]{2}-[0-9]{2}t[0-9:.+-]+.*\|.*event=|diff --git|index [0-9a-f]+\.\.[0-9a-f]+|@@|[+-]{3}[[:space:]]|override fun |versionname[[:space:]]*=|/bin/(ba|z)sh|[A-Za-z0-9_./-]+[[:space:]]*->[[:space:]]*".*")$'; then
+    return 0
+  fi
+
+  return 1
+}
+
+is_actionable_user_prompt_candidate() {
+  local value
+  value="$(trim_line "$1")"
+
+  if [[ -z "$value" ]] || is_malformed_question_candidate "$value"; then
+    return 1
+  fi
+
+  if contains_user_prompt_keywords "$value"; then
+    return 0
+  fi
+
+  if [[ "$value" == *"?"* ]] && printf '%s' "$value" | grep -Eq '[[:alpha:]]'; then
+    return 0
+  fi
+
+  return 1
+}
 
 extract_question_line() {
   local text="$1"
@@ -299,16 +534,28 @@ infer_executor_question() {
   if [[ -s "${CODEX_DIR}/executor_last_message.txt" ]]; then
     src_text="$(<"${CODEX_DIR}/executor_last_message.txt")"
     candidate="$(extract_question_line "$src_text")"
+    if [[ -n "$candidate" ]] && ! is_actionable_user_prompt_candidate "$candidate"; then
+      candidate=""
+    fi
     if [[ -z "$candidate" ]]; then
       candidate="$(extract_decision_line "$src_text")"
+      if [[ -n "$candidate" ]] && ! is_actionable_user_prompt_candidate "$candidate"; then
+        candidate=""
+      fi
     fi
   fi
 
   if [[ -z "$candidate" && -f "${RUNTIME_LOG_DIR}/executor.log" ]]; then
     src_text="$(tail -n 400 "${RUNTIME_LOG_DIR}/executor.log" 2>/dev/null || true)"
     candidate="$(extract_question_line "$src_text")"
+    if [[ -n "$candidate" ]] && ! is_actionable_user_prompt_candidate "$candidate"; then
+      candidate=""
+    fi
     if [[ -z "$candidate" ]]; then
       candidate="$(extract_decision_line "$src_text")"
+      if [[ -n "$candidate" ]] && ! is_actionable_user_prompt_candidate "$candidate"; then
+        candidate=""
+      fi
     fi
   fi
 
@@ -340,6 +587,7 @@ infer_executor_remark() {
 render_question_message() {
   local text="$1"
   local kind="$2"
+  local structured_q=""
   local explicit_q=""
   local explicit_decision=""
   local inferred_q=""
@@ -350,20 +598,39 @@ render_question_message() {
   local smart_options=""
   local recommended_option=""
 
-  explicit_q="$(extract_question_line "$text")"
-  explicit_decision="$(extract_decision_line "$text")"
+  structured_q="$(extract_structured_field "ASK_QUESTION" "$text")"
+  if [[ -n "$structured_q" ]] && ! is_actionable_user_prompt_candidate "$structured_q"; then
+    structured_q=""
+  fi
 
-  if [[ -n "$explicit_q" ]]; then
+  explicit_q="$(extract_question_line "$text")"
+  if [[ -n "$explicit_q" ]] && ! is_actionable_user_prompt_candidate "$explicit_q"; then
+    explicit_q=""
+  fi
+
+  explicit_decision="$(extract_decision_line "$text")"
+  if [[ -n "$explicit_decision" ]] && ! is_actionable_user_prompt_candidate "$explicit_decision"; then
+    explicit_decision=""
+  fi
+
+  if [[ -n "$structured_q" ]]; then
+    selected_q="$structured_q"
+  elif [[ -n "$explicit_q" ]]; then
     selected_q="$explicit_q"
   elif [[ -n "$explicit_decision" ]]; then
     selected_q="$explicit_decision"
   fi
 
-  if [[ -z "$selected_q" ]]; then
+  if [[ -z "$selected_q" && "$kind" != "BLOCKER" ]]; then
     inferred_q="$(infer_executor_question)"
     if [[ -n "$inferred_q" ]]; then
       selected_q="$inferred_q"
     fi
+  fi
+
+  if [[ -z "$selected_q" && "$kind" == "BLOCKER" ]]; then
+    printf '%s' "__TASK_ASK_REJECTED_MALFORMED_BLOCKER__"
+    return 0
   fi
 
   if [[ -z "$selected_q" ]]; then
@@ -444,6 +711,38 @@ post_issue_comment() {
   fi
 }
 
+kill_pid_gracefully() {
+  local pid="$1"
+  [[ -z "$pid" || ! "$pid" =~ ^[0-9]+$ ]] && return 0
+  if ! kill -0 "$pid" 2>/dev/null; then
+    return 0
+  fi
+  kill "$pid" 2>/dev/null || true
+  sleep 1
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -9 "$pid" 2>/dev/null || true
+  fi
+}
+
+request_executor_stop() {
+  local pid=""
+  local heartbeat_pid=""
+  pid="$(cat "$executor_pid_file" 2>/dev/null || true)"
+  heartbeat_pid="$(cat "$executor_heartbeat_pid_file" 2>/dev/null || true)"
+
+  # Drop RUNNING immediately so watchdog does not freeze on a deliberate wait handoff.
+  printf '%s\n' "REVIEW_NEEDED" > "$executor_state_file"
+  printf '%s\n' "waiting_user_reply" > "$executor_review_handoff_reason_file"
+  printf '%s\n' "stop-requested" > "$executor_detach_file"
+  kill_pid_gracefully "$heartbeat_pid"
+  kill_pid_gracefully "$pid"
+
+  if [[ "$pid" =~ ^[0-9]+$ ]]; then
+    echo "EXECUTOR_STOP_REQUESTED=1"
+    echo "EXECUTOR_STOP_PID=$pid"
+  fi
+}
+
 task_id=""
 if [[ -s "$active_task_file" ]]; then
   task_id="$(<"$active_task_file")"
@@ -492,10 +791,93 @@ if [[ -z "$issue_number" ]]; then
 fi
 
 now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+provider_route_json="$(resolve_provider_route_json)"
+provider_request_id="ask-human:${task_id}:$(date -u '+%Y%m%dT%H%M%SZ')"
 
 comment_message_text="$message_text"
 if [[ "$kind_label" == "QUESTION" || "$kind_label" == "BLOCKER" ]]; then
   comment_message_text="$(render_question_message "$message_text" "$kind_label")"
+  if [[ "$comment_message_text" == "__TASK_ASK_REJECTED_MALFORMED_BLOCKER__" ]]; then
+    append_provider_telemetry "$provider_route_json" "error" "$provider_request_id" "malformed_blocker_prompt" "task_ask rejected malformed blocker prompt"
+    trap - EXIT
+    echo "TASK_ASK_REJECTED_MALFORMED_BLOCKER=1"
+    echo "TASK_ASK_REJECTED_KIND=${kind_label}"
+    exit 42
+  fi
+fi
+
+ask_request_file="$(task_worktree_ask_human_request_file "$task_id" "$issue_number" "$STATE_DIR" "$PROFILE_NAME")"
+ask_response_file="$(task_worktree_ask_human_response_file "$task_id" "$issue_number" "$STATE_DIR" "$PROFILE_NAME")"
+ask_local_response_file="$(task_worktree_ask_human_local_response_file "$task_id" "$issue_number" "$STATE_DIR" "$PROFILE_NAME")"
+ask_claude_response_file="$(task_worktree_ask_human_claude_response_file "$task_id" "$issue_number" "$STATE_DIR" "$PROFILE_NAME")"
+ask_compare_file="$(task_worktree_ask_human_compare_file "$task_id" "$issue_number" "$STATE_DIR" "$PROFILE_NAME")"
+mkdir -p "$(dirname "$ask_request_file")"
+ask_message_file="$(mktemp "${STATE_TMP_DIR}/ask_message.XXXXXX")"
+printf '%s' "$comment_message_text" > "$ask_message_file"
+/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/intake_contract_artifact.sh" \
+  ask-request \
+  --task-id "$task_id" \
+  --issue-number "$issue_number" \
+  --kind "$kind_label" \
+  --message-file "$ask_message_file" > "$ask_request_file"
+/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/intake_contract_artifact.sh" \
+  ask-response \
+  --kind "$kind_label" \
+  --message-file "$ask_message_file" > "$ask_response_file"
+rm -f "$ask_message_file"
+
+ask_compare_json="$(resolve_provider_compare_json)"
+ask_compare_mode="$(printf '%s' "$ask_compare_json" | jq -r '.mode // "disabled"')"
+ask_shadow_provider="$(printf '%s' "$ask_compare_json" | jq -r '.shadowProvider // ""')"
+if [[ "$ask_compare_mode" != "disabled" && "$ask_shadow_provider" == "claude" ]]; then
+  cp "$ask_response_file" "$ask_local_response_file"
+  if ask_shadow_result_json="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/claude_provider_run.sh" \
+      --module "intake.ask_human" \
+      --request-file "$ask_request_file" \
+      --response-file "$ask_claude_response_file" \
+      --task-repo "$ROOT_DIR" \
+      --task-id "$task_id" \
+      --issue-number "$issue_number"
+  )"; then
+    :
+  else
+    ask_shadow_result_json="$(jq -nc \
+      --arg taskId "$task_id" \
+      --arg module "intake.ask_human" \
+      '{requestId:("claude_runner_shell_failure:" + (now|tostring)),taskId:$taskId,module:$module,provider:"claude",outcome:"error",errorClass:"runner_shell_failure",errorMessage:"claude_provider_run.sh failed"}')"
+  fi
+
+  if [[ "$(printf '%s' "$ask_shadow_result_json" | jq -r '.outcome')" != "success" || ! -f "$ask_claude_response_file" ]]; then
+    write_shadow_error_artifact "$ask_claude_response_file" "$ask_shadow_result_json"
+  fi
+
+  ask_compare_artifact_json="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/intake_compare_artifact.sh" \
+      ask-human \
+      --primary-file "$ask_local_response_file" \
+      --shadow-file "$ask_claude_response_file" \
+      --compare-mode "$ask_compare_mode" \
+      --primary-provider "local" \
+      --shadow-provider "$ask_shadow_provider"
+  )"
+  printf '%s\n' "$ask_compare_artifact_json" > "$ask_compare_file"
+  append_shadow_compare_telemetry "$ask_compare_json" "$ask_shadow_result_json" "$ask_compare_artifact_json"
+fi
+
+if [[ "${TASK_ASK_COMPARE_ONLY:-0}" == "1" ]]; then
+  append_provider_telemetry "$provider_route_json" "success" "$provider_request_id"
+  trap - EXIT
+  echo "TASK_ASK_COMPARE_ONLY=1"
+  echo "TASK_ID=$task_id"
+  echo "ISSUE_NUMBER=$issue_number"
+  echo "QUESTION_KIND=$kind_label"
+  echo "ASK_HUMAN_REQUEST_FILE=${ask_request_file}"
+  echo "ASK_HUMAN_RESPONSE_FILE=${ask_response_file}"
+  echo "ASK_HUMAN_LOCAL_RESPONSE_FILE=${ask_local_response_file}"
+  echo "ASK_HUMAN_CLAUDE_RESPONSE_FILE=${ask_claude_response_file}"
+  echo "ASK_HUMAN_COMPARE_FILE=${ask_compare_file}"
+  exit 0
 fi
 
 comment_body="$(cat <<EOF_COMMENT
@@ -513,16 +895,24 @@ EOF_COMMENT
 )"
 
 if comment_json="$(post_issue_comment "$issue_number" "$comment_body")"; then
+  append_provider_telemetry "$provider_route_json" "success" "$provider_request_id"
+  trap - EXIT
   question_comment_id="$(printf '%s' "$comment_json" | jq -r '.id')"
   question_comment_url="$(printf '%s' "$comment_json" | jq -r '.html_url')"
-
-  printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
-  printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_waiting_task_id.txt"
-  printf '%s\n' "$question_comment_id" > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
-  printf '%s\n' "$kind_label" > "${CODEX_DIR}/daemon_waiting_kind.txt"
-  printf '%s\n' "$now_utc" > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
-  printf '%s\n' "$question_comment_url" > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
   : > "$pending_post_file"
+  request_executor_stop
+
+  wait_reason="waiting human reply"
+  if [[ "$kind_label" == "BLOCKER" ]]; then
+    wait_reason="waiting human unblock"
+  fi
+  wait_payload="$(build_wait_payload "$question_comment_id" "$wait_reason" "$kind_label" "$question_comment_url" false "$now_utc")"
+  emit_runtime_v2_event \
+    "human.wait_requested" \
+    "legacy-v2-wait-${task_id}-${question_comment_id}" \
+    "legacy.human.wait_requested:${task_id}:${question_comment_id}" \
+    "$wait_payload"
+  reconcile_runtime_v2_primary_context
 
   echo "QUESTION_POSTED=1"
   echo "TASK_ID=$task_id"
@@ -531,11 +921,18 @@ if comment_json="$(post_issue_comment "$issue_number" "$comment_body")"; then
   echo "QUESTION_COMMENT_ID=$question_comment_id"
   echo "QUESTION_COMMENT_URL=$question_comment_url"
   echo "WAITING_FOR_USER_REPLY=1"
+  echo "ASK_HUMAN_REQUEST_FILE=${ask_request_file}"
+  echo "ASK_HUMAN_RESPONSE_FILE=${ask_response_file}"
+  echo "ASK_HUMAN_LOCAL_RESPONSE_FILE=${ask_local_response_file}"
+  echo "ASK_HUMAN_CLAUDE_RESPONSE_FILE=${ask_claude_response_file}"
+  echo "ASK_HUMAN_COMPARE_FILE=${ask_compare_file}"
   exit 0
 fi
 
 rc=$?
 if [[ "$rc" -ne 75 ]]; then
+  append_provider_telemetry "$provider_route_json" "error" "$provider_request_id" "issue_comment_post_failed" "task_ask failed to post issue comment"
+  trap - EXIT
   exit "$rc"
 fi
 
@@ -565,13 +962,23 @@ while IFS= read -r line; do
   echo "$line"
 done <<< "$enqueue_out"
 
-printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
-printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_waiting_task_id.txt"
-printf '%s\n' "-1" > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
-printf '%s\n' "$kind_label" > "${CODEX_DIR}/daemon_waiting_kind.txt"
-printf '%s\n' "$now_utc" > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
-: > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
+append_provider_telemetry "$provider_route_json" "success" "$provider_request_id"
+trap - EXIT
+
 printf '%s\n' "1" > "$pending_post_file"
+request_executor_stop
+
+wait_reason="waiting human reply"
+if [[ "$kind_label" == "BLOCKER" ]]; then
+  wait_reason="waiting human unblock"
+fi
+wait_payload="$(build_wait_payload "-1" "$wait_reason" "$kind_label" "" true "$now_utc")"
+emit_runtime_v2_event \
+  "human.wait_requested" \
+  "legacy-v2-wait-${task_id}-pending-${now_utc}" \
+  "legacy.human.wait_requested:${task_id}:pending" \
+  "$wait_payload"
+reconcile_runtime_v2_primary_context
 
 echo "QUESTION_QUEUED_OUTBOX=1"
 echo "TASK_ID=$task_id"
@@ -579,3 +986,8 @@ echo "ISSUE_NUMBER=$issue_number"
 echo "QUESTION_KIND=$kind_label"
 echo "WAIT_GITHUB_API_UNSTABLE=1"
 echo "WAITING_FOR_USER_REPLY_PENDING_POST=1"
+echo "ASK_HUMAN_REQUEST_FILE=${ask_request_file}"
+echo "ASK_HUMAN_RESPONSE_FILE=${ask_response_file}"
+echo "ASK_HUMAN_LOCAL_RESPONSE_FILE=${ask_local_response_file}"
+echo "ASK_HUMAN_CLAUDE_RESPONSE_FILE=${ask_claude_response_file}"
+echo "ASK_HUMAN_COMPARE_FILE=${ask_compare_file}"

@@ -25,7 +25,7 @@ build_cached_auth_error() {
     '{
       requestId:$requestId,
       taskId:$taskId,
-      module:$module,
+      "module":$module,
       provider:"claude",
       outcome:"error",
       outputText:null,
@@ -171,7 +171,7 @@ main() {
         '{
           requestId:$requestId,
           taskId:$taskId,
-          module:$module,
+          "module":$module,
           provider:"claude",
           outcome:"error",
           outputText:null,

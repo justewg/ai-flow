@@ -107,7 +107,7 @@ jq -nc \
     requestId:$requestId,
     taskId:$taskId,
     issueNumber:$issueNumber,
-    module:$module,
+    "module":$module,
     requestedProvider:$requestedProvider,
     effectiveProvider:$effectiveProvider,
     outcome:$outcome,

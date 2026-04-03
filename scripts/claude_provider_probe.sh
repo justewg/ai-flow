@@ -16,7 +16,7 @@ trap cleanup EXIT
 
 jq -nc \
   '{
-    module:"intake.interpretation",
+    "module":"intake.interpretation",
     input:{
       taskId:"CLAUDE-PROBE",
       issueNumber:0,

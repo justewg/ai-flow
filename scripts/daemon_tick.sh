@@ -8,6 +8,8 @@ CODEX_DIR="$(codex_export_state_dir)"
 STATE_TMP_DIR="$(codex_resolve_state_tmp_dir "$CODEX_DIR")"
 # shellcheck source=./env/project_issue_cache.sh
 source "${SCRIPT_DIR}/env/project_issue_cache.sh"
+# shellcheck source=./env/graphql_audit.sh
+source "${SCRIPT_DIR}/env/graphql_audit.sh"
 mkdir -p "$STATE_TMP_DIR"
 RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
 TICK_LOCK_DIR="${CODEX_DIR}/daemon_tick.lock"
@@ -18,7 +20,8 @@ codex_resolve_project_config
 project_id="$PROJECT_ID"
 project_number="$PROJECT_NUMBER"
 project_owner="$PROJECT_OWNER"
-project_items_limit="${PROJECT_ITEMS_LIMIT:-200}"
+project_items_limit="${PROJECT_ITEMS_LIMIT:-250}"
+project_item_list_fallback_enabled_raw="${PROJECT_ITEM_LIST_FALLBACK_ENABLED:-0}"
 repo="$FLOW_GITHUB_REPO"
 repo_owner="$FLOW_REPO_OWNER"
 flow_base_branch="$FLOW_BASE_BRANCH"
@@ -59,6 +62,15 @@ claim_epoch_file="${CODEX_DIR}/daemon_last_claim_epoch.txt"
 project_issue_cache_max_age_sec="${PROJECT_ISSUE_CACHE_MAX_AGE_SEC:-1800}"
 
 mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
+
+control_mode="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" get --raw 2>/dev/null || printf 'AUTO')"
+if [[ "$control_mode" != "AUTO" ]]; then
+  control_reason="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" get | awk -F= '/^CONTROL_REASON=/{print substr($0, index($0, "=")+1)}' 2>/dev/null || true)"
+  echo "CONTROL_MODE=${control_mode}"
+  [[ -n "$control_reason" ]] && echo "CONTROL_REASON=${control_reason}"
+  echo "DAEMON_EXPENSIVE_WORK_BLOCKED=1"
+  exit 0
+fi
 
 cleanup_tick_lock() {
   rm -f "$TICK_LOCK_OWNER_FILE" 2>/dev/null || true
@@ -107,6 +119,21 @@ emit_lines() {
     [[ -z "$line" ]] && continue
     echo "$line"
   done <<< "$text"
+}
+
+reconcile_runtime_v2_primary_contexts() {
+  local reconcile_out reconcile_rc
+  if reconcile_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_reconcile_primary_context.sh" 2>&1
+  )"; then
+    emit_lines "$reconcile_out"
+    return 0
+  fi
+  reconcile_rc=$?
+  emit_lines "$reconcile_out"
+  echo "RUNTIME_V2_PRIMARY_RECONCILE_ERROR=1"
+  echo "RUNTIME_V2_PRIMARY_RECONCILE_RC=${reconcile_rc}"
+  return 0
 }
 
 push_remote_status_if_needed() {
@@ -252,7 +279,11 @@ filter_dirty_status_lines() {
 }
 
 collect_dirty_tracked_lines() {
-  git -C "${ROOT_DIR}" status --short --untracked-files=no 2>/dev/null | filter_dirty_status_lines
+  local status_out=""
+  status_out="$(
+    git -C "${ROOT_DIR}" status --short --untracked-files=no 2>/dev/null || true
+  )"
+  printf '%s\n' "$status_out" | filter_dirty_status_lines
 }
 
 project_gh_token="$(resolve_config_value "DAEMON_GH_PROJECT_TOKEN" "")"
@@ -269,13 +300,136 @@ run_gh_retry_capture_project() {
   fi
 }
 
+fetch_project_fields_json() {
+  graphql_audit_capture \
+    "daemon_tick" \
+    "project_fields" \
+    "direct_graphql" \
+    "project_fields" \
+    "cacheable_per_tick" \
+    "fields_first=100" \
+    run_gh_retry_capture_project \
+    gh api graphql \
+    -f query='
+query($projectId: ID!, $fieldsFirst: Int!) {
+  node(id: $projectId) {
+    ... on ProjectV2 {
+      fields(first: $fieldsFirst) {
+        nodes {
+          __typename
+          ... on ProjectV2SingleSelectField {
+            id
+            name
+            options {
+              id
+              name
+            }
+          }
+        }
+      }
+    }
+  }
+}
+' \
+    -f projectId="$project_id" \
+    -F fieldsFirst=100
+}
+
+fetch_project_items_paginated() {
+  local item_fragment="$1"
+  local remaining page_size after_cursor has_next_page page_count
+  local payload combined_nodes
+  local cmd=()
+
+  remaining="$project_items_limit"
+  combined_nodes='[]'
+  after_cursor=""
+
+  while (( remaining > 0 )); do
+    page_size="$remaining"
+    if (( page_size > 100 )); then
+      page_size=100
+    fi
+
+    cmd=(
+      gh api graphql
+      -f "query=query(\$projectId: ID!, \$itemsFirst: Int!, \$after: String) {
+  node(id: \$projectId) {
+    ... on ProjectV2 {
+      items(first: \$itemsFirst, after: \$after) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+${item_fragment}
+        }
+      }
+    }
+  }
+}"
+      -f "projectId=$project_id"
+      -F "itemsFirst=$page_size"
+    )
+
+    if [[ -n "$after_cursor" ]]; then
+      cmd+=(-f "after=$after_cursor")
+    fi
+
+    if ! payload="$(
+      graphql_audit_capture \
+        "daemon_tick" \
+        "project_items_page" \
+        "direct_graphql" \
+        "project_items_page" \
+        "cacheable_short_ttl" \
+        "page_size=${page_size};remaining=${remaining}" \
+        run_gh_retry_capture_project \
+        "${cmd[@]}"
+    )"; then
+      printf '%s' "$payload"
+      return "$?"
+    fi
+
+    combined_nodes="$(
+      printf '%s' "$payload" | jq -c --argjson acc "$combined_nodes" '
+        $acc + (.data.node.items.nodes // [])
+      '
+    )"
+
+    page_count="$(printf '%s' "$payload" | jq '(.data.node.items.nodes // []) | length')"
+    if (( page_count <= 0 )); then
+      break
+    fi
+
+    remaining=$(( remaining - page_count ))
+    has_next_page="$(printf '%s' "$payload" | jq -r '.data.node.items.pageInfo.hasNextPage // false')"
+    after_cursor="$(printf '%s' "$payload" | jq -r '.data.node.items.pageInfo.endCursor // empty')"
+    if [[ "$has_next_page" != "true" || -z "$after_cursor" ]]; then
+      break
+    fi
+  done
+
+  jq -cn --argjson nodes "$combined_nodes" '{data:{node:{items:{nodes:$nodes}}}}'
+}
+
 run_project_item_list_fallback() {
   local owner_value="$1"
   shift
   local out=""
   local rc=0
 
-  if out="$(run_gh_retry_capture_project gh project item-list "$project_number" --owner "$owner_value" "$@" 2>&1)"; then
+  if out="$(
+    graphql_audit_capture \
+      "daemon_tick" \
+      "project_item_list_fallback" \
+      "indirect_project_cli" \
+      "project_item_list" \
+      "cacheable_short_ttl" \
+      "owner=${owner_value}" \
+      run_gh_retry_capture_project \
+      gh project item-list "$project_number" --owner "$owner_value" "$@"
+  )"; then
     printf '%s' "$out"
     return 0
   fi
@@ -283,7 +437,17 @@ run_project_item_list_fallback() {
   rc=$?
   if [[ "$owner_value" != "@me" ]] && printf '%s' "$out" | grep -Eiq 'unknown owner type'; then
     echo "PROJECT_ITEM_LIST_OWNER_RETRY=@me" >&2
-    if out="$(run_gh_retry_capture_project gh project item-list "$project_number" --owner "@me" "$@" 2>&1)"; then
+    if out="$(
+      graphql_audit_capture \
+        "daemon_tick" \
+        "project_item_list_fallback" \
+        "indirect_project_cli" \
+        "project_item_list" \
+        "cacheable_short_ttl" \
+        "owner=@me" \
+        run_gh_retry_capture_project \
+        gh project item-list "$project_number" --owner "@me" "$@"
+    )"; then
       printf '%s' "$out"
       return 0
     fi
@@ -295,8 +459,10 @@ run_project_item_list_fallback() {
 }
 
 list_open_flow_prs_json() {
+  local base_branch="${1:-$flow_base_branch}"
+  local head_branch="${2:-$flow_head_branch}"
   run_gh_retry_capture \
-    gh api "repos/${repo}/pulls?state=open&base=${flow_base_branch}&head=${repo_owner}:${flow_head_branch}&per_page=100"
+    gh api "repos/${repo}/pulls?state=open&base=${base_branch}&head=${repo_owner}:${head_branch}&per_page=100"
 }
 
 read_file_or_default() {
@@ -326,6 +492,28 @@ sanitize_for_log() {
   printf '%s' "$value" | tr '\n' ' ' | tr '\t' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//'
 }
 
+emit_wait_github_auth() {
+  local stage="$1"
+  local source="$2"
+  local message="${3:-}"
+  local call_name="${4:-}"
+  echo "WAIT_GITHUB_AUTH=1"
+  echo "WAIT_GITHUB_AUTH_STAGE=$stage"
+  echo "WAIT_GITHUB_AUTH_SOURCE=$source"
+  [[ -n "$call_name" ]] && echo "WAIT_GITHUB_AUTH_CALL=$call_name"
+  [[ -n "$message" ]] && echo "WAIT_GITHUB_AUTH_MSG=$(sanitize_for_log "$message")"
+}
+
+emit_wait_github_rate_limit() {
+  local stage="$1"
+  local message="${2:-}"
+  local call_name="${3:-}"
+  echo "WAIT_GITHUB_RATE_LIMIT=1"
+  echo "WAIT_GITHUB_RATE_LIMIT_STAGE=$stage"
+  [[ -n "$call_name" ]] && echo "WAIT_GITHUB_RATE_LIMIT_CALL=$call_name"
+  [[ -n "$message" ]] && echo "WAIT_GITHUB_RATE_LIMIT_MSG=$(sanitize_for_log "$message")"
+}
+
 json_payload_is_valid() {
   local payload="$1"
   printf '%s' "$payload" | jq -e . >/dev/null 2>&1
@@ -341,6 +529,72 @@ graphql_payload_has_rate_limit() {
         or ((.message // "" | ascii_downcase) | test("rate limit"))
       )
   ' >/dev/null 2>&1
+}
+
+graphql_payload_has_excessive_pagination() {
+  local payload="$1"
+  printf '%s' "$payload" | jq -e '
+    (.errors // [])
+    | any(
+        (.type // "" | ascii_downcase) == "excessive_pagination"
+        or ((.message // "" | ascii_downcase) | test("exceeds the `first` limit"))
+      )
+  ' >/dev/null 2>&1
+}
+
+github_output_has_auth_error() {
+  local payload="$1"
+  printf '%s' "$payload" | grep -Eiq \
+    'bad credentials|http 401|status[^[:alnum:]]*401|requires authentication|resource not accessible by personal access token|invalid token|unauthorized'
+}
+
+graphql_payload_has_auth_error() {
+  local payload="$1"
+  printf '%s' "$payload" | jq -e '
+    (
+      ((.message // "") | ascii_downcase) | test("bad credentials|requires authentication|resource not accessible by personal access token|invalid token|unauthorized")
+    )
+    or ((.status // "" | tostring) == "401")
+    or (
+      (.errors // [])
+      | any(
+          ((.type // "" | ascii_downcase) | test("forbidden|unauthorized|authentication"))
+          or ((.extensions.code // "" | ascii_downcase) | test("forbidden|unauthorized|authentication"))
+          or ((.message // "" | ascii_downcase) | test("bad credentials|requires authentication|resource not accessible by personal access token|invalid token|unauthorized"))
+        )
+    )
+  ' >/dev/null 2>&1
+}
+
+graphql_payload_first_auth_error_message() {
+  local payload="$1"
+  local message
+  message="$(
+    printf '%s' "$payload" | jq -r '
+      (
+        if ((.message // "") | length) > 0 then
+          .message
+        else
+          (
+            (.errors // [])
+            | map(
+                select(
+                  ((.type // "" | ascii_downcase) | test("forbidden|unauthorized|authentication"))
+                  or ((.extensions.code // "" | ascii_downcase) | test("forbidden|unauthorized|authentication"))
+                  or ((.message // "" | ascii_downcase) | test("bad credentials|requires authentication|resource not accessible by personal access token|invalid token|unauthorized"))
+                )
+                | .message
+              )
+            | .[0]
+          )
+        end
+      ) // ""
+    ' 2>/dev/null || true
+  )"
+  if [[ -z "$message" ]]; then
+    message="GitHub credential rejected"
+  fi
+  sanitize_for_log "$message"
 }
 
 graphql_payload_first_rate_limit_message() {
@@ -831,6 +1085,11 @@ is_review_feedback_kind() {
   [[ "$(printf '%s' "$kind" | tr '[:lower:]' '[:upper:]')" == "REVIEW_FEEDBACK" ]]
 }
 
+is_blocker_kind() {
+  local kind="$1"
+  [[ "$(printf '%s' "$kind" | tr '[:lower:]' '[:upper:]')" == "BLOCKER" ]]
+}
+
 extract_kv() {
   local text="$1"
   local key="$2"
@@ -851,19 +1110,104 @@ is_truthy_flag() {
   esac
 }
 
+LAST_RUNTIME_V2_GATE_REASON=""
+
+runtime_v2_gate_handoff_reason() {
+  case "$1" in
+    max_executions_per_task)
+      printf '%s' "runtime_gate_max_executions_per_task"
+      ;;
+    max_token_usage_per_task)
+      printf '%s' "runtime_gate_max_token_usage_per_task"
+      ;;
+    max_estimated_cost_per_task)
+      printf '%s' "runtime_gate_max_estimated_cost_per_task"
+      ;;
+    *)
+      printf '%s' "runtime_gate_blocked"
+      ;;
+  esac
+}
+
+prepare_task_context_for_review_handoff() {
+  local handoff_task_id="$1"
+  local handoff_issue_number="$2"
+  local handoff_status_target="${3:-}"
+
+  printf '%s\n' "$handoff_task_id" > "${CODEX_DIR}/daemon_active_task.txt"
+  if [[ "$handoff_status_target" == PVTI_* ]]; then
+    printf '%s\n' "$handoff_status_target" > "${CODEX_DIR}/daemon_active_item_id.txt"
+  else
+    : > "${CODEX_DIR}/daemon_active_item_id.txt"
+  fi
+  printf '%s\n' "$handoff_issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
+  printf '%s\n' "$handoff_task_id" > "${CODEX_DIR}/project_task_id.txt"
+}
+
+invoke_task_review_handoff() {
+  local handoff_task_id="$1"
+  local handoff_issue_number="$2"
+  local handoff_status_target="$3"
+  local handoff_reason="$4"
+  local handoff_out handoff_rc
+
+  prepare_task_context_for_review_handoff "$handoff_task_id" "$handoff_issue_number" "$handoff_status_target"
+  if handoff_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_review_handoff.sh" "$handoff_task_id" "$handoff_issue_number" "$handoff_reason" 2>&1)"; then
+    emit_lines "$handoff_out"
+    return 0
+  fi
+  handoff_rc=$?
+  emit_lines "$handoff_out"
+  echo "TASK_REVIEW_HANDOFF_ERROR=1"
+  echo "TASK_REVIEW_HANDOFF_RC=${handoff_rc}"
+  echo "TASK_REVIEW_HANDOFF_REASON=${handoff_reason}"
+  return "$handoff_rc"
+}
+
+run_runtime_v2_gate() {
+  local gate_task_id="$1"
+  local gate_issue_number="$2"
+  local gate_name="$3"
+  local gate_profile="$4"
+  local gate_out gate_rc gate_status gate_reason
+
+  if gate_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_gate.sh" \
+      "$gate_task_id" "$gate_issue_number" "$gate_name" "$gate_profile" 2>&1
+  )"; then
+    emit_lines "$gate_out"
+  else
+    gate_rc=$?
+    emit_lines "$gate_out"
+    echo "WAIT_RUNTIME_V2_GATE_ERROR=1"
+    echo "WAIT_RUNTIME_V2_GATE_NAME=$gate_name"
+    echo "WAIT_RUNTIME_V2_GATE_PROFILE=$gate_profile"
+    echo "WAIT_RUNTIME_V2_GATE_TASK_ID=$gate_task_id"
+    echo "WAIT_RUNTIME_V2_GATE_RC=$gate_rc"
+    return 2
+  fi
+
+  gate_status="$(printf '%s\n' "$gate_out" | sed -n 's/^RUNTIME_V2_GATE_STATUS=//p' | tail -n1)"
+  gate_reason="$(printf '%s\n' "$gate_out" | sed -n 's/^RUNTIME_V2_GATE_REASON=//p' | tail -n1)"
+  LAST_RUNTIME_V2_GATE_REASON="$gate_reason"
+  if [[ "$gate_status" == "blocked" ]]; then
+    echo "WAIT_RUNTIME_V2_GATE=1"
+    echo "WAIT_RUNTIME_V2_GATE_NAME=$gate_name"
+    echo "WAIT_RUNTIME_V2_GATE_PROFILE=$gate_profile"
+    echo "WAIT_RUNTIME_V2_GATE_TASK_ID=$gate_task_id"
+    [[ -n "$gate_reason" ]] && echo "WAIT_RUNTIME_V2_GATE_REASON=$gate_reason"
+    return 1
+  fi
+
+  return 0
+}
+
 find_first_todo_issue_json() {
   local project_json
   local ignore_labels_csv
   ignore_labels_csv="$(IFS=,; echo "${AUTO_IGNORE_LABELS[*]}")"
   if ! project_json="$(
-    run_gh_retry_capture_project \
-      gh api graphql \
-      -f query='
-query($projectId: ID!, $itemsFirst: Int!) {
-  node(id: $projectId) {
-    ... on ProjectV2 {
-      items(first: $itemsFirst) {
-        nodes {
+    fetch_project_items_paginated '
           id
           content {
             __typename
@@ -884,14 +1228,7 @@ query($projectId: ID!, $itemsFirst: Int!) {
             __typename
             ... on ProjectV2ItemFieldSingleSelectValue { name }
           }
-        }
-      }
-    }
-  }
-}
-' \
-      -f projectId="$project_id" \
-      -F itemsFirst=100
+'
   )"; then
     return "$?"
   fi
@@ -1071,32 +1408,28 @@ clear_idle_stale_dirty_gate_waiting_if_any() {
   fi
 }
 
+clear_legacy_waiting_state_files() {
+  : > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
+  : > "${CODEX_DIR}/daemon_waiting_task_id.txt"
+  : > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
+  : > "${CODEX_DIR}/daemon_waiting_kind.txt"
+  : > "${CODEX_DIR}/daemon_waiting_pending_post.txt"
+  : > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
+  : > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
+}
+
 find_project_issue_item_id() {
   local issue_number="$1"
   local project_json
 
   if ! project_json="$(
-    run_gh_retry_capture_project \
-      gh api graphql \
-      -f query='
-query($projectId: ID!, $itemsFirst: Int!) {
-  node(id: $projectId) {
-    ... on ProjectV2 {
-      items(first: $itemsFirst) {
-        nodes {
+    fetch_project_items_paginated '
           id
           content {
             __typename
             ... on Issue { number }
           }
-        }
-      }
-    }
-  }
-}
-' \
-      -f projectId="$project_id" \
-      -F itemsFirst=100
+'
   )"; then
     return "$?"
   fi
@@ -1109,12 +1442,120 @@ query($projectId: ID!, $itemsFirst: Int!) {
   ' | head -n1
 }
 
+resume_task_from_human_reply() {
+  local resume_task_id="$1"
+  local resume_issue_number="$2"
+  local resume_status_target="$3"
+  local resume_gate_name="$4"
+  local resume_reason_label="$5"
+  local resume_reason_prefix="$6"
+  local materialize_out status_out exec_out rc handoff_out handoff_rc
+
+  [[ -n "$resume_task_id" && -n "$resume_issue_number" ]] || return 0
+
+  if run_runtime_v2_gate "$resume_task_id" "$resume_issue_number" "$resume_gate_name" "daemon_claim"; then
+    :
+  else
+    rc=$?
+    if [[ "$rc" -eq 1 ]]; then
+      if invoke_task_review_handoff \
+        "$resume_task_id" \
+        "$resume_issue_number" \
+        "$resume_status_target" \
+        "$(runtime_v2_gate_handoff_reason "$LAST_RUNTIME_V2_GATE_REASON")"; then
+        echo "WAIT_REVIEW_FEEDBACK=1"
+        echo "WAIT_REVIEW_FEEDBACK_TASK_ID=${resume_task_id}"
+        echo "WAIT_REVIEW_FEEDBACK_ISSUE_NUMBER=${resume_issue_number}"
+      fi
+    fi
+    exit 0
+  fi
+
+  if status_out="$("${CODEX_SHARED_SCRIPTS_DIR}/project_set_status.sh" "$resume_status_target" "$target_status" "$target_flow" 2>&1)"; then
+    emit_lines "$status_out"
+  else
+    rc=$?
+    emit_lines "$status_out"
+    if is_github_network_error "$status_out" || [[ "$rc" -eq 75 ]]; then
+      if invoke_task_review_handoff \
+        "$resume_task_id" \
+        "$resume_issue_number" \
+        "$resume_status_target" \
+        "github_api_unavailable"; then
+        echo "WAIT_REVIEW_FEEDBACK=1"
+        echo "WAIT_REVIEW_FEEDBACK_TASK_ID=${resume_task_id}"
+        echo "WAIT_REVIEW_FEEDBACK_ISSUE_NUMBER=${resume_issue_number}"
+      else
+        echo "WAIT_GITHUB_API_UNSTABLE=1"
+        echo "WAIT_GITHUB_STAGE=${resume_reason_prefix}_STATUS_UPDATE"
+        enqueue_project_status_runtime "$resume_status_target" "$target_status" "$target_flow" "$resume_gate_name" || true
+        echo "${resume_reason_prefix}_STATUS_DEFERRED=1"
+      fi
+      exit 0
+    fi
+    exit "$rc"
+  fi
+
+  if materialize_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$resume_task_id" "$resume_issue_number" 2>&1)"; then
+    emit_lines "$materialize_out"
+  else
+    rc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "TASK_WORKTREE_MATERIALIZE_ERROR(rc=$rc): $line"
+    done <<<"$materialize_out"
+
+    printf '%s\n' "$resume_task_id" > "${CODEX_DIR}/daemon_active_task.txt"
+    if [[ "$resume_status_target" == PVTI_* ]]; then
+      printf '%s\n' "$resume_status_target" > "${CODEX_DIR}/daemon_active_item_id.txt"
+    fi
+    printf '%s\n' "$resume_issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
+    printf '%s\n' "$resume_task_id" > "${CODEX_DIR}/project_task_id.txt"
+
+    if handoff_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_review_handoff.sh" "$resume_task_id" "$resume_issue_number" "materialize_failed" 2>&1)"; then
+      emit_lines "$handoff_out"
+      echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF=1"
+    else
+      handoff_rc=$?
+      emit_lines "$handoff_out"
+      echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF_ERROR=1"
+      echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF_RC=${handoff_rc}"
+    fi
+    echo "WAIT_REVIEW_FEEDBACK=1"
+    echo "WAIT_REVIEW_FEEDBACK_TASK_ID=${resume_task_id}"
+    echo "WAIT_REVIEW_FEEDBACK_ISSUE_NUMBER=${resume_issue_number}"
+    exit 0
+  fi
+
+  # A consumed human reply should immediately reopen the execution path.
+  # Clear any leftover legacy waiting anchor again here so executor_tick
+  # cannot short-circuit back into WAIT_USER_REPLY/WAIT_REVIEW_FEEDBACK.
+  clear_legacy_waiting_state_files
+
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
+
+  echo "${resume_reason_label}=1"
+  echo "${resume_reason_label}_TASK_ID=${resume_task_id}"
+  echo "${resume_reason_label}_ISSUE_NUMBER=${resume_issue_number}"
+
+  exec_out="$("${CODEX_SHARED_SCRIPTS_DIR}/executor_tick.sh" "$resume_task_id" "$resume_issue_number" 2>&1)"
+  emit_lines "$exec_out"
+  exit 0
+}
+
 find_project_item_status_by_id() {
   local item_id="$1"
   local item_json
 
   if ! item_json="$(
-    run_gh_retry_capture_project \
+    graphql_audit_capture \
+      "daemon_tick" \
+      "project_item_status_by_id" \
+      "direct_graphql" \
+      "project_item_status" \
+      "cacheable_short_ttl" \
+      "item_id=${item_id}" \
+      run_gh_retry_capture_project \
       gh api graphql \
       -f query='
 query($itemId: ID!) {
@@ -1223,6 +1664,7 @@ maybe_release_active_task_on_status_mismatch() {
   local executor_state_file="${CODEX_DIR}/executor_state.txt"
   local executor_pid_file="${CODEX_DIR}/executor_pid.txt"
   local executor_state="" executor_pid="" executor_alive="0"
+  local cleanup_out=""
 
   [[ -s "$active_task_file" ]] || return 0
   active_task="$(<"$active_task_file")"
@@ -1245,7 +1687,7 @@ maybe_release_active_task_on_status_mismatch() {
       echo "ACTIVE_TASK_RELEASED_AUTO_IGNORE_LABEL=1"
       echo "ACTIVE_TASK_RELEASED_TASK_ID=${active_task}"
       echo "ACTIVE_TASK_RELEASED_ISSUE_NUMBER=${active_issue_number}"
-      "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
+      /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
       : > "$active_task_file"
       : > "$active_item_file"
       : > "$active_issue_file"
@@ -1273,6 +1715,10 @@ maybe_release_active_task_on_status_mismatch() {
         : > "$review_pr_file"
         : > "$review_branch_file"
         echo "ACTIVE_TASK_RELEASED_REVIEW_CONTEXT_CLEARED=1"
+      fi
+      if [[ "$active_issue_number" =~ ^[0-9]+$ ]]; then
+        cleanup_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$active_task" "$active_issue_number" "auto-ignore-release" 2>&1 || true)"
+        emit_lines "$cleanup_out"
       fi
       return 0
     fi
@@ -1333,11 +1779,15 @@ maybe_release_active_task_on_status_mismatch() {
     echo "ACTIVE_TASK_RELEASED_REASON=STATUS_EMPTY_OR_ITEM_MISSING"
     echo "ACTIVE_TASK_RELEASED_TASK_ID=${active_task}"
     echo "ACTIVE_TASK_EXPECTED_STATUS=${target_status}"
-    "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
     : > "$active_task_file"
     : > "$active_item_file"
     : > "$active_issue_file"
     : > "${CODEX_DIR}/project_task_id.txt"
+    if [[ "$active_issue_number" =~ ^[0-9]+$ ]]; then
+      cleanup_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$active_task" "$active_issue_number" "status-empty-or-missing" 2>&1 || true)"
+      emit_lines "$cleanup_out"
+    fi
     return 0
   fi
 
@@ -1385,11 +1835,15 @@ maybe_release_active_task_on_status_mismatch() {
   echo "ACTIVE_TASK_RELEASED_TASK_ID=${active_task}"
   echo "ACTIVE_TASK_RELEASED_STATUS=${status_name}"
   echo "ACTIVE_TASK_EXPECTED_STATUS=${target_status}"
-  "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
   : > "$active_task_file"
   : > "$active_item_file"
   : > "$active_issue_file"
   : > "${CODEX_DIR}/project_task_id.txt"
+  if [[ "$active_issue_number" =~ ^[0-9]+$ ]]; then
+    cleanup_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$active_task" "$active_issue_number" "status-mismatch" 2>&1 || true)"
+    emit_lines "$cleanup_out"
+  fi
 
   # Если уже был выставлен waiting/review по этой же задаче, очищаем контекст,
   # чтобы daemon ушел в idle и мог взять следующую карточку.
@@ -2535,6 +2989,8 @@ else
 fi
 
 # Сначала пытаемся доставить отложенные действия в GitHub (outbox).
+reconcile_runtime_v2_primary_contexts
+
 outbox_out="$("${CODEX_SHARED_SCRIPTS_DIR}/github_outbox.sh" flush 2>&1 || true)"
 if [[ -n "$outbox_out" ]]; then
   while IFS= read -r line; do
@@ -2561,7 +3017,29 @@ if [[ -n "$runtime_status_out" ]]; then
   done <<< "$runtime_status_out"
 fi
 
-reply_probe_out="$("${CODEX_SHARED_SCRIPTS_DIR}/daemon_check_replies.sh" 2>&1)"
+reply_probe_active_task_present="0"
+if [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]]; then
+  reply_probe_active_task_present="1"
+fi
+
+if reply_probe_out="$("${CODEX_SHARED_SCRIPTS_DIR}/daemon_check_replies.sh" 2>&1)"; then
+  :
+else
+  rc=$?
+  emit_lines "$reply_probe_out"
+  if [[ "$reply_probe_active_task_present" == "1" ]]; then
+    echo "DAEMON_CHECK_REPLIES_NONFATAL=1"
+    echo "DAEMON_CHECK_REPLIES_RC=${rc}"
+    echo "DAEMON_CHECK_REPLIES_REASON=ACTIVE_TASK_PRESENT"
+    reply_probe_out=""
+  elif [[ "$rc" -eq 75 ]]; then
+    echo "WAIT_GITHUB_API_UNSTABLE=1"
+    echo "WAIT_GITHUB_STAGE=CHECK_REPLIES"
+    exit 0
+  else
+    exit "$rc"
+  fi
+fi
 while IFS= read -r line; do
   [[ -z "$line" || "$line" == "NO_WAITING_USER_REPLY=1" ]] && continue
   echo "$line"
@@ -2597,19 +3075,17 @@ if printf '%s' "$reply_probe_out" | grep -q '^WAIT_USER_REPLY=1'; then
 fi
 if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
   reply_kind="$(extract_kv "$reply_probe_out" "REPLY_KIND")"
+  reply_mode="$(printf '%s' "$(extract_kv "$reply_probe_out" "REPLY_MODE")" | tr '[:lower:]' '[:upper:]')"
+  if [[ "$reply_mode" == "QUESTION" ]]; then
+    exit 0
+  fi
+
   if is_review_feedback_kind "$reply_kind"; then
     review_task_id="$(extract_kv "$reply_probe_out" "TASK_ID")"
     review_issue_number="$(extract_kv "$reply_probe_out" "ISSUE_NUMBER")"
     review_item_id=""
-    review_task_file_value=""
-    if [[ -s "$review_task_file" ]]; then
-      review_task_file_value="$(<"$review_task_file")"
-    fi
     if [[ -s "$review_item_file" ]]; then
       review_item_id="$(<"$review_item_file")"
-    fi
-    if [[ -n "$review_task_file_value" && "$review_task_file_value" != "$review_task_id" ]]; then
-      review_item_id=""
     fi
 
     if [[ -z "$review_task_id" || -z "$review_issue_number" ]]; then
@@ -2624,43 +3100,43 @@ if printf '%s' "$reply_probe_out" | grep -q '^USER_REPLY_RECEIVED=1'; then
       status_target="$review_item_id"
     fi
 
-    if status_out="$("${CODEX_SHARED_SCRIPTS_DIR}/project_set_status.sh" "$status_target" "$target_status" "$target_flow" 2>&1)"; then
-      emit_lines "$status_out"
-    else
-      rc=$?
-      emit_lines "$status_out"
-      if is_github_network_error "$status_out" || [[ "$rc" -eq 75 ]]; then
-        echo "WAIT_GITHUB_API_UNSTABLE=1"
-        echo "WAIT_GITHUB_STAGE=REVIEW_RESUME_STATUS_UPDATE"
-        enqueue_project_status_runtime "$status_target" "$target_status" "$target_flow" "review-feedback-resume" || true
-        echo "REVIEW_FEEDBACK_STATUS_DEFERRED=1"
-      else
-        exit "$rc"
-      fi
+    resume_task_from_human_reply \
+      "$review_task_id" \
+      "$review_issue_number" \
+      "$status_target" \
+      "review_feedback_resume" \
+      "REVIEW_FEEDBACK_RESUMED" \
+      "REVIEW_RESUME"
+  fi
+
+  if is_blocker_kind "$reply_kind"; then
+    blocker_task_id="$(extract_kv "$reply_probe_out" "TASK_ID")"
+    blocker_issue_number="$(extract_kv "$reply_probe_out" "ISSUE_NUMBER")"
+
+    if [[ -z "$blocker_task_id" || -z "$blocker_issue_number" ]]; then
+      echo "BLOCKED_BLOCKER_CONTEXT=1"
+      echo "BLOCKER_TASK_ID=${blocker_task_id}"
+      echo "BLOCKER_ISSUE_NUMBER=${blocker_issue_number}"
+      exit 0
     fi
 
-    printf '%s\n' "$review_task_id" > "${CODEX_DIR}/daemon_active_task.txt"
-    if [[ -n "$review_item_id" ]]; then
-      printf '%s\n' "$review_item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"
-    else
-      : > "${CODEX_DIR}/daemon_active_item_id.txt"
+    if [[ "$blocker_task_id" == DIRTY-GATE-ISSUE-* ]]; then
+      exit 0
     fi
-    printf '%s\n' "$review_issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
-    printf '%s\n' "$review_task_id" > "${CODEX_DIR}/project_task_id.txt"
-    "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
 
-    : > "$review_task_file"
-    : > "$review_item_file"
-    : > "$review_issue_file"
-    : > "$review_pr_file"
-    : > "$review_branch_file"
+    blocker_item_id="$(project_issue_cache_get_field "$blocker_task_id" "item_id")"
+    status_target="$blocker_task_id"
+    if [[ -n "$blocker_item_id" ]]; then
+      status_target="$blocker_item_id"
+    fi
 
-    echo "REVIEW_FEEDBACK_RESUMED=1"
-    echo "REVIEW_FEEDBACK_TASK_ID=$review_task_id"
-    echo "REVIEW_FEEDBACK_ISSUE_NUMBER=$review_issue_number"
-
-    exec_out="$("${CODEX_SHARED_SCRIPTS_DIR}/executor_tick.sh" "$review_task_id" "$review_issue_number" 2>&1)"
-    emit_lines "$exec_out"
+    resume_task_from_human_reply \
+      "$blocker_task_id" \
+      "$blocker_issue_number" \
+      "$status_target" \
+      "blocker_resume" \
+      "BLOCKER_RESUMED" \
+      "BLOCKER_RESUME"
     exit 0
   fi
 fi
@@ -2719,34 +3195,59 @@ else
   exit "$rc"
 fi
 
+open_pr_base="$flow_base_branch"
+open_pr_head="$flow_head_branch"
+active_issue_number_for_review=""
+active_task_for_review=""
+active_item_for_review=""
+review_branch_for_open_pr=""
+review_task_for_open_pr=""
+review_pr_context_present="0"
+[[ -s "${CODEX_DIR}/daemon_active_issue_number.txt" ]] && active_issue_number_for_review="$(<"${CODEX_DIR}/daemon_active_issue_number.txt")"
+[[ -s "${CODEX_DIR}/daemon_active_task.txt" ]] && active_task_for_review="$(<"${CODEX_DIR}/daemon_active_task.txt")"
+[[ -s "${CODEX_DIR}/daemon_active_item_id.txt" ]] && active_item_for_review="$(<"${CODEX_DIR}/daemon_active_item_id.txt")"
+[[ -s "$review_branch_file" ]] && review_branch_for_open_pr="$(<"$review_branch_file")"
+[[ -s "$review_task_file" ]] && review_task_for_open_pr="$(<"$review_task_file")"
+if [[ -n "$review_branch_for_open_pr" ]]; then
+  open_pr_base="$flow_head_branch"
+  open_pr_head="$review_branch_for_open_pr"
+  review_pr_context_present="1"
+elif [[ -n "$review_task_for_open_pr" || -s "$review_pr_file" ]]; then
+  review_pr_context_present="1"
+fi
+
 open_prs_json=""
 if open_prs_json="$(
-  list_open_flow_prs_json
+  list_open_flow_prs_json "$open_pr_base" "$open_pr_head" 2>&1
 )"; then
   :
 else
   rc=$?
+  if github_output_has_auth_error "$open_prs_json"; then
+    emit_wait_github_auth "OPEN_PR_CHECK" "APP_TOKEN" "$open_prs_json" "OPEN_PR_LIST"
+    exit 0
+  fi
+  if printf '%s' "$open_prs_json" | grep -Eiq 'api rate limit already exceeded|graphql_rate_limit|rate limit'; then
+    emit_wait_github_rate_limit "OPEN_PR_CHECK" "$open_prs_json" "OPEN_PR_LIST"
+    emit_wait_github_rate_limit_probe
+    exit 0
+  fi
   if [[ "$rc" -eq 75 ]]; then
     echo "WAIT_GITHUB_API_UNSTABLE=1"
     echo "WAIT_GITHUB_STAGE=OPEN_PR_CHECK"
     exit 0
   fi
+  printf '%s\n' "$open_prs_json" >&2
   exit "$rc"
 fi
 
 echo "FLOW_OPEN_PR_CHECK=1"
 echo "FLOW_OPEN_PR_CHECK_REPO=${repo}"
-echo "FLOW_OPEN_PR_CHECK_BASE=${flow_base_branch}"
-echo "FLOW_OPEN_PR_CHECK_HEAD=${flow_head_branch}"
+echo "FLOW_OPEN_PR_CHECK_BASE=${open_pr_base}"
+echo "FLOW_OPEN_PR_CHECK_HEAD=${open_pr_head}"
 open_pr_count="$(printf '%s' "$open_prs_json" | jq 'length')"
 if (( open_pr_count > 0 )); then
   if (( open_pr_count == 1 )) && [[ ! -s "$review_pr_file" ]]; then
-    active_issue_number_for_review=""
-    active_task_for_review=""
-    active_item_for_review=""
-    [[ -s "${CODEX_DIR}/daemon_active_issue_number.txt" ]] && active_issue_number_for_review="$(<"${CODEX_DIR}/daemon_active_issue_number.txt")"
-    [[ -s "${CODEX_DIR}/daemon_active_task.txt" ]] && active_task_for_review="$(<"${CODEX_DIR}/daemon_active_task.txt")"
-    [[ -s "${CODEX_DIR}/daemon_active_item_id.txt" ]] && active_item_for_review="$(<"${CODEX_DIR}/daemon_active_item_id.txt")"
     if [[ -n "$active_issue_number_for_review" || -n "$active_task_for_review" ]]; then
       open_pr_number_for_review="$(printf '%s' "$open_prs_json" | jq -r '.[0].number // empty')"
       open_pr_url_for_review="$(printf '%s' "$open_prs_json" | jq -r '.[0].html_url // .[0].url // empty')"
@@ -2756,6 +3257,7 @@ if (( open_pr_count > 0 )); then
           --task-id "$active_task_for_review" \
           --issue-number "$active_issue_number_for_review" \
           --item-id "$active_item_for_review" \
+          --branch "$review_branch_for_open_pr" \
           --pr-number "$open_pr_number_for_review" \
           --pr-url "$open_pr_url_for_review" \
           --pr-title "$open_pr_title_for_review" 2>&1
@@ -2769,9 +3271,13 @@ if (( open_pr_count > 0 )); then
       echo "REVIEW_CONTEXT_RECOVER_AUTO_RC=${recover_rc}"
     fi
   fi
-  echo "WAIT_OPEN_PR_COUNT=$open_pr_count"
-  printf '%s' "$open_prs_json" | jq -r '.[] | "OPEN_PR=#\(.number) \(.title // "") \(.html_url // "")"'
-  exit 0
+  if [[ "$review_pr_context_present" == "1" || -n "$active_issue_number_for_review" || -n "$active_task_for_review" ]]; then
+    echo "WAIT_OPEN_PR_COUNT=$open_pr_count"
+    printf '%s' "$open_prs_json" | jq -r '.[] | "OPEN_PR=#\(.number) \(.title // "") \(.html_url // "")"'
+    exit 0
+  fi
+  echo "OPEN_PR_COUNT_IGNORED=$open_pr_count"
+  printf '%s' "$open_prs_json" | jq -r '.[] | "OPEN_PR_IGNORED=#\(.number) \(.title // "") \(.html_url // "")"'
 fi
 
 project_json=""
@@ -2787,28 +3293,10 @@ if (( cached_queue_count > 0 )); then
   queue_json="$cached_queue_json"
   queue_count="$cached_queue_count"
 else
-if project_json="$(
-  run_gh_retry_capture_project \
-  gh api graphql \
-  -f query='
-query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
-  node(id: $projectId) {
-    ... on ProjectV2 {
-      fields(first: $fieldsFirst) {
-        nodes {
-          __typename
-          ... on ProjectV2SingleSelectField {
-            id
-            name
-            options {
-              id
-              name
-            }
-          }
-        }
-      }
-      items(first: $itemsFirst) {
-        nodes {
+project_fields_json=""
+project_items_json=""
+if project_fields_json="$(fetch_project_fields_json)" && project_items_json="$(
+  fetch_project_items_paginated '
           id
           content {
             __typename
@@ -2832,23 +3320,30 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
             __typename
             ... on ProjectV2ItemFieldSingleSelectValue { name optionId }
           }
+'
+)"; then
+  project_json="$(
+    jq -cn --argjson fields "$project_fields_json" --argjson items "$project_items_json" '
+      {
+        data: {
+          node: {
+            fields: ($fields.data.node.fields // {nodes: []}),
+            items: ($items.data.node.items // {nodes: []})
+          }
         }
       }
-    }
-  }
-}
-' \
-    -f projectId="$project_id" \
-    -F fieldsFirst=100 \
-    -F itemsFirst=100
-)"; then
+    '
+  )"
+  if graphql_payload_has_auth_error "$project_json"; then
+    auth_msg="$(graphql_payload_first_auth_error_message "$project_json")"
+    emit_wait_github_auth "PROJECT_QUERY" "PROJECT_TOKEN" "$auth_msg" "PROJECT_QUERY_GRAPHQL"
+    exit 0
+  fi
   if graphql_payload_has_rate_limit "$project_json"; then
     rate_msg="$(graphql_payload_first_rate_limit_message "$project_json")"
     stats_payload="$(gql_stats_on_limit "PROJECT_QUERY" "$rate_msg")"
     IFS='|' read -r stats_requests stats_duration stats_start_utc stats_end_utc <<< "$stats_payload"
-    echo "WAIT_GITHUB_RATE_LIMIT=1"
-    echo "WAIT_GITHUB_RATE_LIMIT_STAGE=PROJECT_QUERY"
-    echo "WAIT_GITHUB_RATE_LIMIT_MSG=$rate_msg"
+    emit_wait_github_rate_limit "PROJECT_QUERY" "$rate_msg" "PROJECT_QUERY_GRAPHQL"
     emit_wait_github_rate_limit_probe
     echo "GQL_STATS_WINDOW_REQUESTS=$stats_requests"
     echo "GQL_STATS_WINDOW_DURATION_SEC=$stats_duration"
@@ -2859,11 +3354,39 @@ query($projectId: ID!, $fieldsFirst: Int!, $itemsFirst: Int!) {
   gql_stats_on_success
 else
   rc=$?
+  if [[ -n "${project_items_json:-}" ]]; then
+    project_json="$project_items_json"
+  else
+    project_json="${project_fields_json:-}"
+  fi
+  if github_output_has_auth_error "$project_json"; then
+    emit_wait_github_auth "PROJECT_QUERY" "PROJECT_TOKEN" "$project_json" "PROJECT_QUERY_GRAPHQL"
+    exit 0
+  fi
+  if graphql_payload_has_excessive_pagination "$project_json"; then
+    echo "WAIT_GITHUB_API_UNSTABLE=1"
+    echo "WAIT_GITHUB_STAGE=PROJECT_QUERY"
+    echo "WAIT_GITHUB_STAGE_DETAIL=$(sanitize_for_log "$project_json")"
+    exit 0
+  fi
+  if printf '%s' "$project_json" | grep -Eiq 'api rate limit already exceeded|graphql_rate_limit|rate limit'; then
+    rate_msg="$(sanitize_for_log "$project_json")"
+    stats_payload="$(gql_stats_on_limit "PROJECT_QUERY" "$rate_msg")"
+    IFS='|' read -r stats_requests stats_duration stats_start_utc stats_end_utc <<< "$stats_payload"
+    emit_wait_github_rate_limit "PROJECT_QUERY" "$rate_msg" "PROJECT_QUERY_GRAPHQL"
+    emit_wait_github_rate_limit_probe
+    echo "GQL_STATS_WINDOW_REQUESTS=$stats_requests"
+    echo "GQL_STATS_WINDOW_DURATION_SEC=$stats_duration"
+    [[ -n "$stats_start_utc" ]] && echo "GQL_STATS_WINDOW_START_UTC=$stats_start_utc"
+    [[ -n "$stats_end_utc" ]] && echo "GQL_STATS_WINDOW_END_UTC=$stats_end_utc"
+    exit 0
+  fi
   if [[ "$rc" -eq 75 ]]; then
     echo "WAIT_GITHUB_API_UNSTABLE=1"
     echo "WAIT_GITHUB_STAGE=PROJECT_QUERY"
     exit 0
   fi
+  printf '%s\n' "$project_json" >&2
   exit "$rc"
 fi
 
@@ -2899,6 +3422,7 @@ matched_json="$(
           status_name: (.status.name // ""),
           status_option_id: (.status.optionId // ""),
           flow: (.flow.name // ""),
+          flow_option_id: (.flow.optionId // ""),
           priority: (.priority.name // "")
         }
       | select(
@@ -2932,7 +3456,21 @@ if (( matched_count > 0 && queue_count == 0 )); then
   exit 0
 fi
 
-  if (( queue_count == 0 )); then
+if (( queue_count == 0 )); then
+  if ! is_truthy_flag "$project_item_list_fallback_enabled_raw"; then
+    graphql_audit_emit \
+      "daemon_tick" \
+      "project_item_list_fallback" \
+      "indirect_project_cli" \
+      "project_item_list" \
+      "cacheable_short_ttl" \
+      "skipped" \
+      "reason=disabled_in_normal_tick"
+    echo "PROJECT_ITEM_LIST_FALLBACK_SKIPPED=1"
+    echo "PROJECT_ITEM_LIST_FALLBACK_REASON=DISABLED_IN_NORMAL_TICK"
+    echo "NO_TASKS_IN_TRIGGER_STATUS=$trigger_status"
+    exit 0
+  fi
   fallback_items_json=""
   if fallback_items_json="$(
     run_project_item_list_fallback \
@@ -2953,10 +3491,13 @@ fi
 
     if ! json_payload_is_valid "$fallback_items_json"; then
     if printf '%s' "$fallback_items_json" | grep -Eiq 'api rate limit already exceeded|graphql_rate_limit|rate limit'; then
-      echo "WAIT_GITHUB_RATE_LIMIT=1"
-      echo "WAIT_GITHUB_RATE_LIMIT_STAGE=PROJECT_ITEM_LIST_FALLBACK"
-      echo "WAIT_GITHUB_RATE_LIMIT_MSG=$(sanitize_for_log "$fallback_items_json")"
+      emit_wait_github_rate_limit "PROJECT_ITEM_LIST_FALLBACK" "$fallback_items_json" "PROJECT_ITEM_LIST"
       emit_wait_github_rate_limit_probe
+      exit 0
+    fi
+
+    if github_output_has_auth_error "$fallback_items_json"; then
+      emit_wait_github_auth "PROJECT_ITEM_LIST_FALLBACK" "PROJECT_TOKEN" "$fallback_items_json" "PROJECT_ITEM_LIST"
       exit 0
     fi
 
@@ -3063,7 +3604,7 @@ fi
 
 if (( valid_queue_count == 0 )); then
   if (( valid_queue_before_filter_count > 0 )); then
-    echo "NO_CLAIMABLE_TASKS_AFTER_FILTER=1"
+  echo "NO_CLAIMABLE_TASKS_AFTER_FILTER=1"
   fi
   exit 0
 fi
@@ -3078,6 +3619,7 @@ item_id="$(printf '%s' "$valid_queue_json" | jq -r '.[0].item_id')"
 issue_number="$(printf '%s' "$valid_queue_json" | jq -r '.[0].issue_number')"
 task_id="$(printf '%s' "$valid_queue_json" | jq -r '.[0].task_id')"
 title="$(printf '%s' "$valid_queue_json" | jq -r '.[0].title')"
+source_flow="$(printf '%s' "$valid_queue_json" | jq -r '.[0].flow // ""')"
 
 if [[ -z "$task_id" || "$task_id" == "null" ]]; then
   echo "Task in trigger status has no resolvable task id"
@@ -3221,8 +3763,14 @@ if (( skip_sync_branches == 0 )); then
     rc=$?
     emit_lines "$sync_out"
     if is_github_network_error "$sync_out"; then
-      echo "WAIT_GITHUB_API_UNSTABLE=1"
-      echo "WAIT_GITHUB_STAGE=SYNC_BRANCHES"
+      if invoke_task_review_handoff "$task_id" "$issue_number" "$item_id" "github_api_unavailable"; then
+        echo "WAIT_REVIEW_FEEDBACK=1"
+        echo "WAIT_REVIEW_FEEDBACK_TASK_ID=${task_id}"
+        echo "WAIT_REVIEW_FEEDBACK_ISSUE_NUMBER=${issue_number}"
+      else
+        echo "WAIT_GITHUB_API_UNSTABLE=1"
+        echo "WAIT_GITHUB_STAGE=SYNC_BRANCHES"
+      fi
       exit 0
     fi
     if [[ "$rc" -eq 78 ]] ||
@@ -3236,16 +3784,40 @@ if (( skip_sync_branches == 0 )); then
   emit_lines "$sync_out"
 fi
 
+if run_runtime_v2_gate "$task_id" "$issue_number" "daemon_claim" "daemon_claim"; then
+  :
+else
+  rc=$?
+  if [[ "$rc" -eq 1 ]]; then
+    if invoke_task_review_handoff \
+      "$task_id" \
+      "$issue_number" \
+      "$item_id" \
+      "$(runtime_v2_gate_handoff_reason "$LAST_RUNTIME_V2_GATE_REASON")"; then
+      echo "WAIT_REVIEW_FEEDBACK=1"
+      echo "WAIT_REVIEW_FEEDBACK_TASK_ID=${task_id}"
+      echo "WAIT_REVIEW_FEEDBACK_ISSUE_NUMBER=${issue_number}"
+    fi
+  fi
+  exit 0
+fi
+
 if status_out="$("${CODEX_SHARED_SCRIPTS_DIR}/project_set_status.sh" "$item_id" "$target_status" "$target_flow" 2>&1)"; then
   emit_lines "$status_out"
 else
   rc=$?
   emit_lines "$status_out"
   if is_github_network_error "$status_out" || [[ "$rc" -eq 75 ]]; then
-    echo "WAIT_GITHUB_API_UNSTABLE=1"
-    echo "WAIT_GITHUB_STAGE=PROJECT_STATUS_UPDATE"
-    enqueue_project_status_runtime "$item_id" "$target_status" "$target_flow" "claim-task:${task_id}" || true
-    echo "PROJECT_STATUS_UPDATE_DEFERRED=1"
+    if invoke_task_review_handoff "$task_id" "$issue_number" "$item_id" "github_api_unavailable"; then
+      echo "WAIT_REVIEW_FEEDBACK=1"
+      echo "WAIT_REVIEW_FEEDBACK_TASK_ID=${task_id}"
+      echo "WAIT_REVIEW_FEEDBACK_ISSUE_NUMBER=${issue_number}"
+    else
+      echo "WAIT_GITHUB_API_UNSTABLE=1"
+      echo "WAIT_GITHUB_STAGE=PROJECT_STATUS_UPDATE"
+      enqueue_project_status_runtime "$item_id" "$target_status" "$target_flow" "claim-task:${task_id}" || true
+      echo "PROJECT_STATUS_UPDATE_DEFERRED=1"
+    fi
   else
     exit "$rc"
   fi
@@ -3258,12 +3830,42 @@ rm -f "${CODEX_DIR}/daemon_dependency_blocked_signature.txt"
 : > "$review_pr_file"
 : > "$review_branch_file"
 
+if materialize_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "$task_id" "$issue_number" "$title" 2>&1)"; then
+  emit_lines "$materialize_out"
+else
+  rc=$?
+  emit_lines "$materialize_out"
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "TASK_WORKTREE_MATERIALIZE_ERROR(rc=$rc): $line"
+  done <<<"$materialize_out"
+
+  printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_active_task.txt"
+  printf '%s\n' "$item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"
+  printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
+  printf '%s\n' "$task_id" > "${CODEX_DIR}/project_task_id.txt"
+
+  if handoff_out="$("${CODEX_SHARED_SCRIPTS_DIR}/task_review_handoff.sh" "$task_id" "$issue_number" "materialize_failed" 2>&1)"; then
+    emit_lines "$handoff_out"
+    echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF=1"
+  else
+    handoff_rc=$?
+    emit_lines "$handoff_out"
+    echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF_ERROR=1"
+    echo "TASK_WORKTREE_MATERIALIZE_REVIEW_HANDOFF_RC=${handoff_rc}"
+  fi
+  echo "WAIT_REVIEW_FEEDBACK=1"
+  echo "WAIT_REVIEW_FEEDBACK_TASK_ID=${task_id}"
+  echo "WAIT_REVIEW_FEEDBACK_ISSUE_NUMBER=${issue_number}"
+  exit 0
+fi
+
 printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_active_task.txt"
 printf '%s\n' "$item_id" > "${CODEX_DIR}/daemon_active_item_id.txt"
 printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_active_issue_number.txt"
 printf '%s\n' "$task_id" > "${CODEX_DIR}/project_task_id.txt"
 project_issue_cache_upsert "$task_id" "$item_id" "$issue_number" "$title" "$target_status" "$target_flow" "daemon_claim"
-"${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
+/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
 date -u '+%Y-%m-%dT%H:%M:%SZ' > "${CODEX_DIR}/daemon_last_claim_utc.txt"
 date +%s > "$claim_epoch_file"
 

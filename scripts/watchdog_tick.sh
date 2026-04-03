@@ -19,6 +19,23 @@ LAST_ACTION_FILE="${CODEX_DIR}/watchdog_last_action.txt"
 LAST_ACTION_EPOCH_FILE="${CODEX_DIR}/watchdog_last_action_epoch.txt"
 DAEMON_LOG_FILE="${RUNTIME_LOG_DIR}/daemon.log"
 DAEMON_LOCK_DIR="${CODEX_DIR}/daemon.lock"
+ACTIVE_TASK_FILE="${CODEX_DIR}/daemon_active_task.txt"
+ACTIVE_ITEM_FILE="${CODEX_DIR}/daemon_active_item_id.txt"
+ACTIVE_ISSUE_FILE="${CODEX_DIR}/daemon_active_issue_number.txt"
+WAITING_ISSUE_FILE="${CODEX_DIR}/daemon_waiting_issue_number.txt"
+WAITING_TASK_FILE="${CODEX_DIR}/daemon_waiting_task_id.txt"
+WAITING_COMMENT_ID_FILE="${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
+WAITING_KIND_FILE="${CODEX_DIR}/daemon_waiting_kind.txt"
+WAITING_PENDING_POST_FILE="${CODEX_DIR}/daemon_waiting_pending_post.txt"
+WAITING_SINCE_FILE="${CODEX_DIR}/daemon_waiting_since_utc.txt"
+WAITING_COMMENT_URL_FILE="${CODEX_DIR}/daemon_waiting_comment_url.txt"
+REVIEW_TASK_FILE="${CODEX_DIR}/daemon_review_task_id.txt"
+REVIEW_ITEM_FILE="${CODEX_DIR}/daemon_review_item_id.txt"
+REVIEW_ISSUE_FILE="${CODEX_DIR}/daemon_review_issue_number.txt"
+REVIEW_PR_FILE="${CODEX_DIR}/daemon_review_pr_number.txt"
+REVIEW_BRANCH_FILE="${CODEX_DIR}/daemon_review_branch_name.txt"
+PROJECT_TASK_FILE="${CODEX_DIR}/project_task_id.txt"
+CLAIM_EPOCH_FILE="${CODEX_DIR}/daemon_last_claim_epoch.txt"
 
 DAEMON_LABEL="${WATCHDOG_DAEMON_LABEL:-$DEFAULT_DAEMON_LABEL}"
 DAEMON_INTERVAL="${WATCHDOG_DAEMON_INTERVAL_SEC:-45}"
@@ -29,6 +46,7 @@ DAEMON_LOG_STALE_SEC="${WATCHDOG_DAEMON_LOG_STALE_SEC:-180}"
 DAEMON_RATE_LIMIT_MAX_SLEEP_SEC="${DAEMON_RATE_LIMIT_MAX_SLEEP_SEC:-360}"
 DAEMON_LOG_STALE_RATE_LIMIT_SEC="${WATCHDOG_DAEMON_LOG_STALE_RATE_LIMIT_SEC:-0}"
 BRANCH_SYNC_NOTIFY_SEC="${WATCHDOG_BRANCH_SYNC_NOTIFY_SEC:-300}"
+WATCHDOG_IGNORE_DIRTY="${WATCHDOG_IGNORE_DIRTY:-0}"
 
 mkdir -p "$CODEX_DIR" "$RUNTIME_LOG_DIR"
 
@@ -138,6 +156,21 @@ read_file_or_default() {
   fi
 }
 
+detail_value() {
+  local detail="$1"
+  local key="$2"
+  local line
+  while IFS= read -r line; do
+    line="$(printf '%s' "$line" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+    [[ -z "$line" ]] && continue
+    if [[ "$line" == "${key}="* ]]; then
+      printf '%s' "${line#*=}"
+      return 0
+    fi
+  done < <(printf '%s' "$detail" | tr '|' ';' | tr ';' '\n')
+  printf ''
+}
+
 file_mtime_epoch() {
   local file_path="$1"
   if [[ ! -e "$file_path" ]]; then
@@ -164,6 +197,269 @@ emit_lines() {
   done <<< "$text"
 }
 
+is_github_network_error() {
+  local text="$1"
+  printf '%s' "$text" | grep -Eiq \
+    'error connecting to api\.github\.com|could not resolve host: api\.github\.com|could not resolve host: github\.com|could not resolve hostname github\.com|temporary failure in name resolution|connection timed out|operation timed out|tls handshake timeout|failed to connect|api rate limit already exceeded|graphql_rate_limit|rate limit'
+}
+
+enqueue_project_status_runtime() {
+  local target="$1"
+  local status_name="$2"
+  local flow_name="$3"
+  local reason="$4"
+  local runtime_out runtime_rc
+  if runtime_out="$("${CODEX_SHARED_SCRIPTS_DIR}/project_status_runtime.sh" enqueue "$target" "$status_name" "$flow_name" "$reason" 2>&1)"; then
+    emit_lines "$runtime_out"
+    return 0
+  fi
+  runtime_rc=$?
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    echo "WATCHDOG_PROJECT_STATUS_RUNTIME_ENQUEUE_ERROR(rc=${runtime_rc}): $line"
+  done <<< "$runtime_out"
+  return "$runtime_rc"
+}
+
+clear_terminal_review_contexts() {
+  local issue_number="$1"
+  local task_id="$2"
+  local active_task active_issue
+
+  active_task="$(read_file_or_default "$ACTIVE_TASK_FILE" "")"
+  active_issue="$(read_file_or_default "$ACTIVE_ISSUE_FILE" "")"
+
+  if [[ -n "$task_id" || -n "$issue_number" ]]; then
+    if [[ "$active_task" == "$task_id" || ( -n "$issue_number" && "$active_issue" == "$issue_number" ) ]]; then
+      "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
+      : > "$ACTIVE_TASK_FILE"
+      : > "$ACTIVE_ITEM_FILE"
+      : > "$ACTIVE_ISSUE_FILE"
+      : > "$PROJECT_TASK_FILE"
+      : > "$CLAIM_EPOCH_FILE"
+      echo "WATCHDOG_TERMINAL_REVIEW_ACTIVE_CLEARED=1"
+      [[ -n "$task_id" ]] && echo "WATCHDOG_TERMINAL_REVIEW_TASK_ID=${task_id}"
+      [[ -n "$issue_number" ]] && echo "WATCHDOG_TERMINAL_REVIEW_ISSUE_NUMBER=${issue_number}"
+    fi
+  fi
+
+  : > "$WAITING_ISSUE_FILE"
+  : > "$WAITING_TASK_FILE"
+  : > "$WAITING_COMMENT_ID_FILE"
+  : > "$WAITING_KIND_FILE"
+  : > "$WAITING_PENDING_POST_FILE"
+  : > "$WAITING_SINCE_FILE"
+  : > "$WAITING_COMMENT_URL_FILE"
+  : > "$REVIEW_TASK_FILE"
+  : > "$REVIEW_ITEM_FILE"
+  : > "$REVIEW_ISSUE_FILE"
+  : > "$REVIEW_PR_FILE"
+  : > "$REVIEW_BRANCH_FILE"
+  echo "WATCHDOG_TERMINAL_REVIEW_CONTEXTS_CLEARED=1"
+}
+
+clear_active_task_context() {
+  local task_id="$1"
+  local issue_number="$2"
+  local waiting_task waiting_issue review_task review_issue
+
+  /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null || true
+  : > "$ACTIVE_TASK_FILE"
+  : > "$ACTIVE_ITEM_FILE"
+  : > "$ACTIVE_ISSUE_FILE"
+  : > "$PROJECT_TASK_FILE"
+  : > "$CLAIM_EPOCH_FILE"
+
+  waiting_task="$(read_file_or_default "$WAITING_TASK_FILE" "")"
+  waiting_issue="$(read_file_or_default "$WAITING_ISSUE_FILE" "")"
+  if [[ "$waiting_task" == "$task_id" || ( -n "$issue_number" && "$waiting_issue" == "$issue_number" ) ]]; then
+    : > "$WAITING_ISSUE_FILE"
+    : > "$WAITING_TASK_FILE"
+    : > "$WAITING_COMMENT_ID_FILE"
+    : > "$WAITING_KIND_FILE"
+    : > "$WAITING_PENDING_POST_FILE"
+    : > "$WAITING_SINCE_FILE"
+    : > "$WAITING_COMMENT_URL_FILE"
+    echo "WATCHDOG_ACTIVE_TASK_WAITING_CONTEXT_CLEARED=1"
+  fi
+
+  review_task="$(read_file_or_default "$REVIEW_TASK_FILE" "")"
+  review_issue="$(read_file_or_default "$REVIEW_ISSUE_FILE" "")"
+  if [[ "$review_task" == "$task_id" || ( -n "$issue_number" && "$review_issue" == "$issue_number" ) ]]; then
+    : > "$REVIEW_TASK_FILE"
+    : > "$REVIEW_ITEM_FILE"
+    : > "$REVIEW_ISSUE_FILE"
+    : > "$REVIEW_PR_FILE"
+    : > "$REVIEW_BRANCH_FILE"
+    echo "WATCHDOG_ACTIVE_TASK_REVIEW_CONTEXT_CLEARED=1"
+  fi
+}
+
+active_task_matches_human_wait_context() {
+  local task_id="$1"
+  local issue_number="$2"
+  local waiting_task waiting_issue waiting_kind waiting_comment_id
+  local review_task review_issue review_pr
+  local detail_task detail_issue detail_kind detail_comment detail_review_task detail_review_issue
+
+  case "$daemon_state" in
+    WAIT_USER_REPLY)
+      waiting_task="$(read_file_or_default "$WAITING_TASK_FILE" "")"
+      waiting_issue="$(read_file_or_default "$WAITING_ISSUE_FILE" "")"
+      waiting_kind="$(read_file_or_default "$WAITING_KIND_FILE" "")"
+      waiting_comment_id="$(read_file_or_default "$WAITING_COMMENT_ID_FILE" "")"
+      if [[ -z "$waiting_task" ]]; then
+        detail_task="$(detail_value "$daemon_detail" "TASK_ID")"
+        [[ -n "$detail_task" ]] && waiting_task="$detail_task"
+      fi
+      if [[ -z "$waiting_issue" ]]; then
+        detail_issue="$(detail_value "$daemon_detail" "ISSUE_NUMBER")"
+        [[ -n "$detail_issue" ]] && waiting_issue="$detail_issue"
+      fi
+      if [[ -z "$waiting_kind" ]]; then
+        detail_kind="$(detail_value "$daemon_detail" "QUESTION_KIND")"
+        [[ -n "$detail_kind" ]] && waiting_kind="$detail_kind"
+      fi
+      if [[ -z "$waiting_comment_id" ]]; then
+        detail_comment="$(detail_value "$daemon_detail" "QUESTION_COMMENT_ID")"
+        [[ -n "$detail_comment" ]] && waiting_comment_id="$detail_comment"
+      fi
+      if [[ -n "$waiting_kind" && -n "$waiting_comment_id" ]] && {
+        [[ -n "$task_id" && "$waiting_task" == "$task_id" ]] ||
+        [[ -n "$issue_number" && "$waiting_issue" == "$issue_number" ]]
+      }; then
+        echo "WATCHDOG_ACTIVE_TASK_WAIT_CONTEXT=WAIT_USER_REPLY"
+        echo "WATCHDOG_ACTIVE_TASK_WAIT_TASK_ID=${waiting_task:-$task_id}"
+        [[ -n "$waiting_issue" ]] && echo "WATCHDOG_ACTIVE_TASK_WAIT_ISSUE_NUMBER=$waiting_issue"
+        echo "WATCHDOG_ACTIVE_TASK_WAIT_COMMENT_ID=$waiting_comment_id"
+        echo "WATCHDOG_ACTIVE_TASK_WAIT_KIND=$waiting_kind"
+        return 0
+      fi
+      ;;
+    WAIT_REVIEW_FEEDBACK)
+      review_task="$(read_file_or_default "$REVIEW_TASK_FILE" "")"
+      review_issue="$(read_file_or_default "$REVIEW_ISSUE_FILE" "")"
+      review_pr="$(read_file_or_default "$REVIEW_PR_FILE" "")"
+      if [[ -z "$review_task" ]]; then
+        detail_review_task="$(detail_value "$daemon_detail" "WAIT_REVIEW_FEEDBACK_TASK_ID")"
+        [[ -n "$detail_review_task" ]] && review_task="$detail_review_task"
+      fi
+      if [[ -z "$review_issue" ]]; then
+        detail_review_issue="$(detail_value "$daemon_detail" "WAIT_REVIEW_FEEDBACK_ISSUE_NUMBER")"
+        [[ -n "$detail_review_issue" ]] && review_issue="$detail_review_issue"
+      fi
+      if [[ -n "$review_pr" || -n "$review_task" || -n "$review_issue" ]] && {
+        [[ -n "$task_id" && "$review_task" == "$task_id" ]] ||
+        [[ -n "$issue_number" && "$review_issue" == "$issue_number" ]]
+      }; then
+        echo "WATCHDOG_ACTIVE_TASK_WAIT_CONTEXT=WAIT_REVIEW_FEEDBACK"
+        echo "WATCHDOG_ACTIVE_TASK_WAIT_TASK_ID=${review_task:-$task_id}"
+        [[ -n "$review_issue" ]] && echo "WATCHDOG_ACTIVE_TASK_WAIT_ISSUE_NUMBER=$review_issue"
+        [[ -n "$review_pr" ]] && echo "WATCHDOG_ACTIVE_TASK_WAIT_PR_NUMBER=$review_pr"
+        return 0
+      fi
+      ;;
+  esac
+
+  return 1
+}
+
+active_task_issue_closed() {
+  local issue_number="$1"
+  local issue_json state state_reason
+
+  [[ "$issue_number" =~ ^[0-9]+$ ]] || return 1
+
+  if ! issue_json="$("${CODEX_SHARED_SCRIPTS_DIR}/gh_retry.sh" \
+    gh issue view "$issue_number" --repo "$FLOW_GITHUB_REPO" --json state,stateReason 2>/dev/null)"; then
+    return 1
+  fi
+
+  state="$(printf '%s' "$issue_json" | jq -r '.state // ""' 2>/dev/null || true)"
+  [[ "$state" == "CLOSED" ]] || return 1
+
+  state_reason="$(printf '%s' "$issue_json" | jq -r '.stateReason // ""' 2>/dev/null || true)"
+  echo "WATCHDOG_ACTIVE_TASK_CLOSED_ISSUE_NUMBER=$issue_number"
+  [[ -n "$state_reason" && "$state_reason" != "null" ]] && echo "WATCHDOG_ACTIVE_TASK_CLOSED_STATE_REASON=$state_reason"
+  return 0
+}
+
+maybe_finalize_terminal_review_context() {
+  local pre_review_task pre_review_issue reply_probe_out rc stale_reason stale_issue_number
+  local stale_status_target stale_status_out stale_status_rc
+
+  if [[ ! -s "$REVIEW_PR_FILE" && ! -s "$REVIEW_TASK_FILE" && ! -s "$WAITING_KIND_FILE" ]]; then
+    return 0
+  fi
+
+  pre_review_task="$(read_file_or_default "$REVIEW_TASK_FILE" "")"
+  pre_review_issue="$(read_file_or_default "$REVIEW_ISSUE_FILE" "")"
+
+  if reply_probe_out="$("${CODEX_SHARED_SCRIPTS_DIR}/daemon_check_replies.sh" 2>&1)"; then
+    :
+  else
+    rc=$?
+    emit_lines "$reply_probe_out"
+    [[ "$rc" -eq 75 ]] && return 75
+    return 0
+  fi
+
+  while IFS= read -r line; do
+    [[ -z "$line" || "$line" == "NO_WAITING_USER_REPLY=1" ]] && continue
+    echo "$line"
+  done <<< "$reply_probe_out"
+
+  stale_reason="$(printf '%s\n' "$reply_probe_out" | sed -n 's/^STALE_WAITING_CONTEXT_CLEARED=//p' | tail -n1)"
+  stale_issue_number="$(printf '%s\n' "$reply_probe_out" | sed -n 's/^STALE_WAITING_ISSUE_NUMBER=//p' | tail -n1)"
+
+  if [[ "$stale_reason" != "REVIEW_PR_MERGED" && "$stale_reason" != "ISSUE_CLOSED" ]]; then
+    return 0
+  fi
+
+  if [[ "$stale_issue_number" =~ ^[0-9]+$ ]]; then
+    stale_status_target="ISSUE-${stale_issue_number}"
+    if stale_status_out="$("${CODEX_SHARED_SCRIPTS_DIR}/project_set_status.sh" "$stale_status_target" "Done" "Done" 2>&1)"; then
+      emit_lines "$stale_status_out"
+      echo "WATCHDOG_TERMINAL_REVIEW_DONE_SYNCED=1"
+      echo "WATCHDOG_TERMINAL_REVIEW_DONE_TARGET=${stale_status_target}"
+    else
+      stale_status_rc=$?
+      emit_lines "$stale_status_out"
+      if is_github_network_error "$stale_status_out" || [[ "$stale_status_rc" -eq 75 ]]; then
+        echo "WAIT_GITHUB_API_UNSTABLE=1"
+        echo "WAIT_GITHUB_STAGE=WATCHDOG_TERMINAL_REVIEW_DONE_STATUS_UPDATE"
+        enqueue_project_status_runtime "$stale_status_target" "Done" "Done" "watchdog-terminal-review:${stale_reason}" || true
+        echo "WATCHDOG_TERMINAL_REVIEW_DONE_DEFERRED=1"
+      else
+        while IFS= read -r line; do
+          [[ -z "$line" ]] && continue
+          echo "WATCHDOG_TERMINAL_REVIEW_DONE_WARN: $line"
+        done <<< "$stale_status_out"
+      fi
+    fi
+  fi
+
+  clear_terminal_review_contexts "${stale_issue_number:-$pre_review_issue}" "$pre_review_task"
+  echo "WATCHDOG_TERMINAL_REVIEW_RESOLVED=1"
+  echo "WATCHDOG_TERMINAL_REVIEW_REASON=${stale_reason}"
+  return 0
+}
+
+reconcile_runtime_v2_primary_contexts() {
+  local reconcile_out reconcile_rc
+  if reconcile_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_reconcile_primary_context.sh" 2>&1
+  )"; then
+    emit_lines "$reconcile_out"
+    return 0
+  fi
+  reconcile_rc=$?
+  emit_lines "$reconcile_out"
+  echo "WATCHDOG_RUNTIME_V2_PRIMARY_RECONCILE_ERROR=1"
+  echo "WATCHDOG_RUNTIME_V2_PRIMARY_RECONCILE_RC=${reconcile_rc}"
+  return 0
+}
+
 is_pid_alive() {
   local pid="$1"
   [[ "$pid" =~ ^[0-9]+$ ]] || return 1
@@ -179,6 +475,20 @@ daemon_loop_running() {
 
 dirty_runtime_mode() {
   codex_resolve_config_value "FLOW_HOST_RUNTIME_MODE" ""
+}
+
+is_truthy() {
+  local raw_value="${1:-}"
+  local value
+  value="$(printf '%s' "$raw_value" | tr '[:upper:]' '[:lower:]')"
+  case "$value" in
+    1|true|yes|on)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 dirty_path_ignored() {
@@ -212,7 +522,11 @@ filter_dirty_status_lines() {
 }
 
 collect_dirty_tracked_lines() {
-  git -C "${ROOT_DIR}" status --short --untracked-files=no 2>/dev/null | filter_dirty_status_lines
+  local status_out=""
+  status_out="$(
+    git -C "${ROOT_DIR}" status --short --untracked-files=no 2>/dev/null || true
+  )"
+  printf '%s\n' "$status_out" | filter_dirty_status_lines
 }
 
 html_escape() {
@@ -288,9 +602,9 @@ EOF
   rm -f "$msg_file"
 }
 
-run_soft_tick() {
+run_supervisor_stop_executor() {
   local out rc
-  if out="$("${CODEX_SHARED_SCRIPTS_DIR}/daemon_tick.sh" 2>&1)"; then
+  if out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" 2>&1)"; then
     emit_lines "$out"
     return 0
   fi
@@ -299,73 +613,30 @@ run_soft_tick() {
   return "$rc"
 }
 
-run_medium_recovery() {
-  local rc=0
-  local out
-
-  if out="$("${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" 2>&1)"; then
+run_supervisor_set_mode() {
+  local mode="$1"
+  local reason="$2"
+  local out rc
+  if out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" set "$mode" "$reason" 2>&1)"; then
     emit_lines "$out"
   else
     rc=$?
     emit_lines "$out"
+    return "$rc"
   fi
 
-  if out="$("${CODEX_SHARED_SCRIPTS_DIR}/daemon_tick.sh" 2>&1)"; then
+  if out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/incident_append.sh" "watchdog_supervisor" "$reason" 2>&1)"; then
     emit_lines "$out"
-  else
-    local tick_rc=$?
-    emit_lines "$out"
-    if [[ "$rc" -eq 0 ]]; then
-      rc="$tick_rc"
-    fi
+    return 0
   fi
-
-  return "$rc"
-}
-
-run_hard_recovery() {
-  local rc=0
-  local out
-
-  if [[ -d "$DAEMON_LOCK_DIR" ]] && ! daemon_loop_running; then
-    rm -rf "$DAEMON_LOCK_DIR"
-    log "STALE_DAEMON_LOCK_REMOVED=1"
-    echo "STALE_DAEMON_LOCK_REMOVED=1"
-  fi
-
-  if out="$("${CODEX_SHARED_SCRIPTS_DIR}/daemon_uninstall.sh" "$DAEMON_LABEL" 2>&1)"; then
-    emit_lines "$out"
-  else
-    rc=$?
-    emit_lines "$out"
-  fi
-
-  if out="$("${CODEX_SHARED_SCRIPTS_DIR}/daemon_install.sh" "$DAEMON_LABEL" "$DAEMON_INTERVAL" 2>&1)"; then
-    emit_lines "$out"
-  else
-    local install_rc=$?
-    emit_lines "$out"
-    if [[ "$rc" -eq 0 ]]; then
-      rc="$install_rc"
-    fi
-  fi
-
-  if out="$("${CODEX_SHARED_SCRIPTS_DIR}/daemon_status.sh" "$DAEMON_LABEL" 2>&1)"; then
-    emit_lines "$out"
-  else
-    local status_rc=$?
-    emit_lines "$out"
-    if [[ "$rc" -eq 0 ]]; then
-      rc="$status_rc"
-    fi
-  fi
-
+  rc=$?
+  emit_lines "$out"
   return "$rc"
 }
 
 now_epoch="$(date +%s)"
 
-if [[ -n "$(collect_dirty_tracked_lines)" ]]; then
+if ! is_truthy "$WATCHDOG_IGNORE_DIRTY" && [[ -n "$(collect_dirty_tracked_lines)" ]]; then
   detail="WATCHDOG_PAUSED_DIRTY_WORKTREE=1"
   set_state "PAUSED_DIRTY_WORKTREE" "$detail"
   echo "$detail"
@@ -374,6 +645,8 @@ if [[ -n "$(collect_dirty_tracked_lines)" ]]; then
   echo "WATCHDOG_OK=1"
   exit 0
 fi
+
+reconcile_runtime_v2_primary_contexts
 
 active_task="$(read_file_or_default "${CODEX_DIR}/daemon_active_task.txt" "")"
 active_issue="$(read_file_or_default "${CODEX_DIR}/daemon_active_issue_number.txt" "")"
@@ -415,6 +688,11 @@ if is_pid_alive "$executor_pid"; then
   executor_pid_alive="1"
 fi
 
+executor_hb_age_sec=-1
+if (( executor_hb_epoch > 0 && now_epoch >= executor_hb_epoch )); then
+  executor_hb_age_sec=$(( now_epoch - executor_hb_epoch ))
+fi
+
 claim_epoch="$(read_file_or_default "${CODEX_DIR}/daemon_last_claim_epoch.txt" "0")"
 claim_epoch="$(parse_uint_or_default "$claim_epoch" "0")"
 claim_age_sec=0
@@ -422,37 +700,76 @@ if (( claim_epoch > 0 && now_epoch >= claim_epoch )); then
   claim_age_sec=$(( now_epoch - claim_epoch ))
 fi
 
+terminal_review_rc=0
+if ! maybe_finalize_terminal_review_context; then
+  terminal_review_rc=$?
+fi
+if [[ "$terminal_review_rc" -eq 75 ]]; then
+  detail="terminal_review_sync_deferred=1; ${summary:-review-sync-pending}"
+  set_state "WAIT_GITHUB_API_UNSTABLE" "$detail"
+  echo "WATCHDOG_ACTION=DEFERRED_GITHUB_API"
+  echo "WATCHDOG_REASON=TERMINAL_REVIEW_SYNC_DEFERRED"
+  exit 0
+fi
+
+CONTROL_MODE="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" get --raw 2>/dev/null || printf 'AUTO')"
+CONTROL_REASON="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" get | awk -F= '/^CONTROL_REASON=/{print substr($0, index($0, "=")+1)}' 2>/dev/null || true)"
+if [[ "$CONTROL_MODE" != "AUTO" ]]; then
+  [[ -n "$CONTROL_REASON" ]] || CONTROL_REASON="containment mode active"
+  set_state "SAFE_HOLD" "CONTROL_MODE=${CONTROL_MODE};CONTROL_REASON=${CONTROL_REASON}"
+  echo "WATCHDOG_CONTROL_MODE=${CONTROL_MODE}"
+  echo "WATCHDOG_PASSIVE_HOLD=1"
+  exit 0
+fi
+
+active_task="$(read_file_or_default "$ACTIVE_TASK_FILE" "")"
+active_issue="$(read_file_or_default "$ACTIVE_ISSUE_FILE" "")"
+
 action="NONE"
 reason=""
 
 if [[ "$daemon_agent_state" == "NOT_INSTALLED" ]]; then
-  action="HARD_RESTART_DAEMON"
+  action="FREEZE_EMERGENCY"
   reason="DAEMON_NOT_INSTALLED"
 elif [[ "$daemon_agent_state" == "INSTALLED_NOT_LOADED" ]]; then
-  action="HARD_RESTART_DAEMON"
+  action="FREEZE_EMERGENCY"
   reason="DAEMON_NOT_LOADED"
 elif [[ -d "$DAEMON_LOCK_DIR" && $daemon_log_age -gt $daemon_log_stale_threshold ]]; then
-  action="HARD_RESTART_DAEMON"
+  action="FREEZE_EMERGENCY"
   reason="DAEMON_LOG_STALE_WITH_LOCK"
-elif [[ -n "$active_task" ]]; then
-  if [[ "$executor_state" == "RUNNING" && "$executor_pid_alive" != "1" ]]; then
-    action="MEDIUM_RESET_EXECUTOR"
-    reason="EXECUTOR_PID_DEAD"
-  elif [[ "$executor_state" == "RUNNING" && "$executor_hb_epoch" -gt 0 && $(( now_epoch - executor_hb_epoch )) -gt $EXECUTOR_STALE_SEC ]]; then
-    action="MEDIUM_RESET_EXECUTOR"
+  elif [[ -n "$active_task" ]]; then
+    if [[ "$executor_state" == "RUNNING" && "$executor_pid_alive" != "1" &&
+          ( "$executor_hb_epoch" -eq 0 || "$executor_hb_age_sec" -gt $EXECUTOR_STALE_SEC ) ]]; then
+      action="STOP_EXECUTOR_AND_FREEZE"
+      reason="EXECUTOR_PID_DEAD"
+  elif [[ "$executor_state" == "RUNNING" && "$executor_hb_epoch" -gt 0 && "$executor_hb_age_sec" -gt $EXECUTOR_STALE_SEC ]]; then
+    action="STOP_EXECUTOR_AND_FREEZE"
     reason="EXECUTOR_HEARTBEAT_STALE"
-  elif [[ "$daemon_state" == "IDLE_NO_TASKS" ]]; then
-    action="SOFT_DAEMON_TICK"
-    reason="DAEMON_IDLE_WITH_ACTIVE_TASK"
-  elif [[ -z "$executor_state" ]]; then
-    if (( claim_age_sec >= ACTIVE_TASK_GRACE_SEC )); then
-      action="SOFT_DAEMON_TICK"
-      reason="ACTIVE_TASK_WITHOUT_EXECUTOR_STATE"
+    elif [[ "$daemon_state" == "IDLE_NO_TASKS" ]]; then
+      if (( claim_age_sec >= ACTIVE_TASK_GRACE_SEC )); then
+        action="FREEZE_SAFE"
+        reason="DAEMON_IDLE_WITH_ACTIVE_TASK"
+      fi
+    elif [[ -z "$executor_state" ]]; then
+      if (( claim_age_sec >= ACTIVE_TASK_GRACE_SEC )); then
+        if active_task_matches_human_wait_context "$active_task" "$active_issue"; then
+          :
+        elif active_task_issue_closed "$active_issue"; then
+          clear_active_task_context "$active_task" "$active_issue"
+          echo "WATCHDOG_STALE_ACTIVE_TASK_RELEASED=1"
+          echo "WATCHDOG_STALE_ACTIVE_TASK_ID=$active_task"
+          [[ -n "$active_issue" ]] && echo "WATCHDOG_STALE_ACTIVE_ISSUE_NUMBER=$active_issue"
+          active_task=""
+          active_issue=""
+        else
+          action="FREEZE_SAFE"
+          reason="ACTIVE_TASK_WITHOUT_EXECUTOR_STATE"
+        fi
+      fi
     fi
   fi
-fi
 
-summary="active_task=${active_task:-none};active_issue=${active_issue:-none};daemon_agent_state=${daemon_agent_state};daemon_state=${daemon_state};daemon_state_age=${daemon_state_age_sec}s;executor_state=${executor_state:-none};executor_pid=${executor_pid:-none};executor_pid_alive=${executor_pid_alive};daemon_log_age=${daemon_log_age}s;daemon_log_stale_threshold=${daemon_log_stale_threshold}s;claim_age=${claim_age_sec}s;claim_grace_threshold=${ACTIVE_TASK_GRACE_SEC}s"
+summary="active_task=${active_task:-none};active_issue=${active_issue:-none};daemon_agent_state=${daemon_agent_state};daemon_state=${daemon_state};daemon_state_age=${daemon_state_age_sec}s;executor_state=${executor_state:-none};executor_pid=${executor_pid:-none};executor_pid_alive=${executor_pid_alive};executor_hb_age=${executor_hb_age_sec}s;daemon_log_age=${daemon_log_age}s;daemon_log_stale_threshold=${daemon_log_stale_threshold}s;claim_age=${claim_age_sec}s;claim_grace_threshold=${ACTIVE_TASK_GRACE_SEC}s"
 if [[ "${WATCHDOG_AUTH_DEGRADED:-0}" == "1" ]]; then
   auth_detail="${WATCHDOG_AUTH_LAST_DETAIL:-AUTH_UNAVAILABLE}"
   auth_fallback_reason="${WATCHDOG_AUTH_FALLBACK_REASON:-DISABLED}"
@@ -464,7 +781,7 @@ log "WATCHDOG_SUMMARY=${summary}"
 if [[ "$action" == "NONE" ]]; then
   if [[ "$daemon_state" == "WAIT_BRANCH_SYNC" ]]; then
     if (( daemon_state_age_sec >= BRANCH_SYNC_NOTIFY_SEC )); then
-      action="NOTIFY_BRANCH_SYNC_BLOCKED"
+      action="ALERT_BRANCH_SYNC"
       reason="BRANCH_SYNC_REQUIRED"
     else
       set_state "BLOCKED_BRANCH_SYNC" "$summary"
@@ -496,25 +813,28 @@ if (( since_last < COOLDOWN_SEC )); then
 fi
 
 detail="action=${action};reason=${reason};${summary}"
-set_state "RECOVERY_ACTION_PENDING" "$detail"
+set_state "SUPERVISOR_ACTION_PENDING" "$detail"
 echo "WATCHDOG_ACTION=${action}"
 echo "WATCHDOG_REASON=${reason}"
 notify_action "$action" "$reason" "$summary"
 
 action_rc=0
-if [[ "$action" == "SOFT_DAEMON_TICK" ]]; then
-  if ! run_soft_tick; then
+if [[ "$action" == "FREEZE_SAFE" ]]; then
+  if ! run_supervisor_set_mode "SAFE" "watchdog supervisor: ${reason}; ${summary}"; then
     action_rc=$?
   fi
-elif [[ "$action" == "MEDIUM_RESET_EXECUTOR" ]]; then
-  if ! run_medium_recovery; then
+elif [[ "$action" == "FREEZE_EMERGENCY" ]]; then
+  if ! run_supervisor_set_mode "EMERGENCY_STOP" "watchdog supervisor: ${reason}; ${summary}"; then
     action_rc=$?
   fi
-elif [[ "$action" == "HARD_RESTART_DAEMON" ]]; then
-  if ! run_hard_recovery; then
+elif [[ "$action" == "STOP_EXECUTOR_AND_FREEZE" ]]; then
+  if ! run_supervisor_stop_executor; then
     action_rc=$?
   fi
-elif [[ "$action" == "NOTIFY_BRANCH_SYNC_BLOCKED" ]]; then
+  if ! run_supervisor_set_mode "SAFE" "watchdog supervisor: ${reason}; ${summary}"; then
+    [[ "$action_rc" -eq 0 ]] && action_rc=$?
+  fi
+elif [[ "$action" == "ALERT_BRANCH_SYNC" ]]; then
   :
 fi
 
@@ -522,12 +842,12 @@ printf '%s\n' "$action" > "$LAST_ACTION_FILE"
 printf '%s\n' "$now_epoch" > "$LAST_ACTION_EPOCH_FILE"
 
 if [[ "$action_rc" -eq 0 ]]; then
-  set_state "RECOVERY_ACTION_APPLIED" "action=${action};reason=${reason}"
+  set_state "SUPERVISOR_ACTION_APPLIED" "action=${action};reason=${reason}"
   echo "WATCHDOG_ACTION_RESULT=OK"
   exit 0
 fi
 
-set_state "RECOVERY_ACTION_FAILED" "action=${action};reason=${reason};rc=${action_rc}"
+set_state "SUPERVISOR_ACTION_FAILED" "action=${action};reason=${reason};rc=${action_rc}"
 echo "WATCHDOG_ACTION_RESULT=FAILED"
 echo "WATCHDOG_ACTION_RC=${action_rc}"
 exit 0

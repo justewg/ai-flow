@@ -19,6 +19,178 @@ kind_file="${CODEX_DIR}/daemon_waiting_kind.txt"
 pending_post_file="${CODEX_DIR}/daemon_waiting_pending_post.txt"
 waiting_since_file="${CODEX_DIR}/daemon_waiting_since_utc.txt"
 waiting_comment_url_file="${CODEX_DIR}/daemon_waiting_comment_url.txt"
+
+emit_runtime_v2_event() {
+  local event_type="$1"
+  local event_id="$2"
+  local dedup_key="$3"
+  local payload_json="${4:-{}}"
+  local event_out rc
+
+  if event_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_apply_event.sh" \
+      "$task_id" "$issue_number" "$event_type" "$event_id" "$dedup_key" "$payload_json" 2>&1
+  )"; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_EVENT: $line"
+    done <<< "$event_out"
+  else
+    rc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_EVENT_ERROR(rc=$rc): $line"
+    done <<< "$event_out"
+  fi
+}
+
+reconcile_runtime_v2_primary_context() {
+  local reconcile_out rc
+  if reconcile_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_reconcile_primary_context.sh" 2>&1
+  )"; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_RECONCILE: $line"
+    done <<< "$reconcile_out"
+  else
+    rc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_RECONCILE_ERROR(rc=$rc): $line"
+    done <<< "$reconcile_out"
+  fi
+}
+
+sync_runtime_v2_control_mode() {
+  local sync_out rc
+  if sync_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_sync_control_mode.sh" 2>&1
+  )"; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_CONTROL_SYNC: $line"
+    done <<< "$sync_out"
+  else
+    rc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_CONTROL_SYNC_ERROR(rc=$rc): $line"
+    done <<< "$sync_out"
+  fi
+}
+
+emit_runtime_v2_terminal_review_resolved() {
+  local resolved_task_id="$1"
+  local resolved_issue_number="$2"
+  local resolved_pr_number="$3"
+  local resolved_outcome="$4"
+  local payload_json=""
+
+  [[ -n "$resolved_task_id" && "$resolved_issue_number" =~ ^[0-9]+$ ]] || return 0
+
+  payload_json="$(
+    jq -nc \
+      --arg outcome "$resolved_outcome" \
+      --argjson prNumber "${resolved_pr_number:-0}" \
+      --arg resolvedAt "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+      '{
+        outcome:$outcome,
+        prNumber:(if $prNumber > 0 then $prNumber else null end),
+        resolvedAt:$resolvedAt
+      }'
+  )"
+
+  if [[ "$resolved_pr_number" =~ ^[0-9]+$ ]]; then
+    emit_runtime_v2_event \
+      "review.terminal_resolved" \
+      "legacy-v2-review-terminal-${resolved_task_id}-${resolved_pr_number}-${resolved_outcome}" \
+      "legacy.review.terminal_resolved:${resolved_task_id}:${resolved_pr_number}:${resolved_outcome}" \
+      "$payload_json"
+  else
+    emit_runtime_v2_event \
+      "review.terminal_resolved" \
+      "legacy-v2-review-terminal-${resolved_task_id}-${resolved_issue_number}-${resolved_outcome}" \
+      "legacy.review.terminal_resolved:${resolved_task_id}:${resolved_issue_number}:${resolved_outcome}" \
+      "$payload_json"
+  fi
+  reconcile_runtime_v2_primary_context
+  sync_runtime_v2_control_mode
+}
+
+emit_runtime_v2_terminal_issue_resolved() {
+  local resolved_task_id="$1"
+  local resolved_issue_number="$2"
+  local resolved_outcome="$3"
+  local payload_json=""
+
+  [[ -n "$resolved_task_id" && "$resolved_issue_number" =~ ^[0-9]+$ ]] || return 0
+
+  payload_json="$(
+    jq -nc \
+      --arg outcome "$resolved_outcome" \
+      --arg resolvedAt "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+      '{
+        outcome:$outcome,
+        resolvedAt:$resolvedAt
+      }'
+  )"
+
+  emit_runtime_v2_event \
+    "review.terminal_resolved" \
+    "legacy-v2-review-terminal-${resolved_task_id}-${resolved_issue_number}-${resolved_outcome}" \
+    "legacy.review.terminal_resolved:${resolved_task_id}:${resolved_issue_number}:${resolved_outcome}" \
+    "$payload_json"
+  reconcile_runtime_v2_primary_context
+  sync_runtime_v2_control_mode
+}
+
+build_wait_payload() {
+  local wait_comment_id="$1"
+  local wait_reason="$2"
+  local wait_kind="$3"
+  local comment_url="$4"
+  local pending_post="$5"
+  local waiting_since="$6"
+
+  jq -nc \
+    --arg waitCommentId "$wait_comment_id" \
+    --arg reason "$wait_reason" \
+    --arg kind "$wait_kind" \
+    --arg commentUrl "$comment_url" \
+    --arg waitingSince "$waiting_since" \
+    --argjson pendingPost "$pending_post" \
+    '{
+      waitCommentId:$waitCommentId,
+      reason:$reason,
+      kind:$kind,
+      commentUrl:$commentUrl,
+      waitingSince:$waitingSince,
+      pendingPost:$pendingPost
+    }'
+}
+
+build_review_feedback_payload() {
+  local wait_comment_id="$1"
+  local comment_url="$2"
+  local pending_post="$3"
+  local waiting_since="$4"
+  local wait_reason="$5"
+
+  jq -nc \
+    --arg waitCommentId "$wait_comment_id" \
+    --arg commentUrl "$comment_url" \
+    --arg waitingSince "$waiting_since" \
+    --arg reason "$wait_reason" \
+    --argjson pendingPost "$pending_post" \
+    '{
+      waitCommentId:$waitCommentId,
+      commentUrl:$commentUrl,
+      waitingSince:$waitingSince,
+      reason:$reason,
+      pendingPost:$pendingPost
+    }'
+}
 review_task_file="${CODEX_DIR}/daemon_review_task_id.txt"
 review_item_file="${CODEX_DIR}/daemon_review_item_id.txt"
 review_issue_file="${CODEX_DIR}/daemon_review_issue_number.txt"
@@ -302,6 +474,14 @@ has_waiting_context_artifacts() {
     [[ -s "$waiting_comment_url_file" ]]
 }
 
+has_review_context_artifacts() {
+  [[ -s "$review_task_file" ]] ||
+    [[ -s "$review_item_file" ]] ||
+    [[ -s "$review_issue_file" ]] ||
+    [[ -s "$review_pr_file" ]] ||
+    [[ -s "$review_branch_file" ]]
+}
+
 clear_waiting_state() {
   : > "$issue_file"
   : > "$task_file"
@@ -330,8 +510,6 @@ emit_nonempty_lines() {
 
 cleanup_review_task_branch_if_merged() {
   local task_branch="$1"
-  local current_branch fetch_out delete_out local_out
-  local remote_branch_present="0"
 
   [[ -n "$task_branch" ]] || return 0
 
@@ -340,78 +518,8 @@ cleanup_review_task_branch_if_merged() {
     echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
     return 0
   fi
-
-  if fetch_out="$(git -C "${ROOT_DIR}" fetch origin "$HEAD_BRANCH" "$task_branch" 2>&1)"; then
-    emit_nonempty_lines "$fetch_out"
-  else
-    emit_nonempty_lines "$fetch_out"
-    if printf '%s' "$fetch_out" | grep -Eiq 'couldn.t find remote ref|remote ref does not exist|fatal: couldn.t find remote ref'; then
-      echo "REVIEW_TASK_BRANCH_REMOTE_ABSENT=1"
-      echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-    else
-      echo "REVIEW_TASK_BRANCH_FETCH_FAILED=1"
-      echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-      return 0
-    fi
-  fi
-
-  if git -C "${ROOT_DIR}" rev-parse --verify --quiet "refs/remotes/origin/${task_branch}" >/dev/null; then
-    remote_branch_present="1"
-  fi
-
-  if [[ "$remote_branch_present" == "1" ]]; then
-    if ! git -C "${ROOT_DIR}" merge-base --is-ancestor "origin/${task_branch}" "origin/${HEAD_BRANCH}" >/dev/null 2>&1; then
-      echo "REVIEW_TASK_BRANCH_DELETE_SKIPPED=NOT_MERGED_IN_HEAD"
-      echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-      return 0
-    fi
-
-    if delete_out="$(git -C "${ROOT_DIR}" push origin --delete "$task_branch" 2>&1)"; then
-      emit_nonempty_lines "$delete_out"
-      echo "REVIEW_TASK_BRANCH_REMOTE_DELETED=1"
-      echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-    else
-      emit_nonempty_lines "$delete_out"
-      if printf '%s' "$delete_out" | grep -Eiq 'remote ref does not exist|remote ref not found'; then
-        echo "REVIEW_TASK_BRANCH_REMOTE_ABSENT=1"
-        echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-      else
-        echo "REVIEW_TASK_BRANCH_REMOTE_DELETE_FAILED=1"
-        echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-        return 0
-      fi
-    fi
-  else
-    echo "REVIEW_TASK_BRANCH_REMOTE_ABSENT=1"
-    echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-  fi
-
-  current_branch="$(git -C "${ROOT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
-  if [[ "$current_branch" == "$task_branch" ]]; then
-    if local_out="$(git -C "${ROOT_DIR}" checkout "$HEAD_BRANCH" 2>&1)"; then
-      emit_nonempty_lines "$local_out"
-    else
-      emit_nonempty_lines "$local_out"
-      echo "REVIEW_TASK_BRANCH_LOCAL_DELETE_SKIPPED=CURRENT_BRANCH_CHECKOUT_FAILED"
-      echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-      return 0
-    fi
-  fi
-
-  if git -C "${ROOT_DIR}" rev-parse --verify --quiet "refs/heads/${task_branch}" >/dev/null; then
-    if local_out="$(git -C "${ROOT_DIR}" branch -D "$task_branch" 2>&1)"; then
-      emit_nonempty_lines "$local_out"
-      echo "REVIEW_TASK_BRANCH_LOCAL_DELETED=1"
-      echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-    else
-      emit_nonempty_lines "$local_out"
-      echo "REVIEW_TASK_BRANCH_LOCAL_DELETE_FAILED=1"
-      echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-    fi
-  else
-    echo "REVIEW_TASK_BRANCH_LOCAL_ABSENT=1"
-    echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
-  fi
+  echo "REVIEW_TASK_BRANCH_CLEANUP_DEFERRED=1"
+  echo "REVIEW_TASK_BRANCH_NAME=${task_branch}"
 }
 
 clear_waiting_for_terminal_review_pr() {
@@ -422,9 +530,17 @@ clear_waiting_for_terminal_review_pr() {
   local review_pr_state="$5"
   local review_pr_merged_at="$6"
   local review_pr_closed_at="$7"
+  local task_id=""
+
+  [[ -s "$review_task_file" ]] && task_id="$(<"$review_task_file")"
 
   if [[ "$review_pr_state" == "MERGED" || -n "$review_pr_merged_at" ]]; then
+    emit_runtime_v2_terminal_review_resolved "$task_id" "$issue_number" "$review_pr_number" "merged"
     cleanup_review_task_branch_if_merged "$review_branch_name"
+    if [[ -n "$task_id" && "$issue_number" =~ ^[0-9]+$ ]]; then
+      cleanup_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$task_id" "$issue_number" "review-pr-merged" 2>&1 || true)"
+      emit_nonempty_lines "$cleanup_out"
+    fi
     clear_waiting_state
     clear_review_context
     echo "STALE_WAITING_CONTEXT_CLEARED=REVIEW_PR_MERGED"
@@ -436,6 +552,11 @@ clear_waiting_for_terminal_review_pr() {
   fi
 
   if [[ "$review_pr_state" == "CLOSED" || -n "$review_pr_closed_at" ]]; then
+    emit_runtime_v2_terminal_review_resolved "$task_id" "$issue_number" "$review_pr_number" "closed"
+    if [[ -n "$task_id" && "$issue_number" =~ ^[0-9]+$ ]]; then
+      cleanup_out="$(/bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "$task_id" "$issue_number" "review-pr-closed" 2>&1 || true)"
+      emit_nonempty_lines "$cleanup_out"
+    fi
     clear_waiting_state
     clear_review_context
     echo "STALE_WAITING_CONTEXT_CLEARED=REVIEW_PR_CLOSED"
@@ -445,6 +566,62 @@ clear_waiting_for_terminal_review_pr() {
     echo "NO_WAITING_USER_REPLY=1"
     exit 0
   fi
+}
+
+probe_terminal_review_pr_from_review_context() {
+  local review_pr_number=""
+  local review_issue_number=""
+  local review_branch_name=""
+  local review_pr_json=""
+  local review_pr_state=""
+  local review_pr_merged_at=""
+  local review_pr_closed_at=""
+  local rc=0
+
+  [[ -s "$review_pr_file" ]] && review_pr_number="$(<"$review_pr_file")"
+  [[ -s "$review_issue_file" ]] && review_issue_number="$(<"$review_issue_file")"
+  [[ -s "$review_branch_file" ]] && review_branch_name="$(<"$review_branch_file")"
+
+  if ! [[ "$review_pr_number" =~ ^[0-9]+$ && "$review_issue_number" =~ ^[0-9]+$ ]]; then
+    return 1
+  fi
+
+  if ! review_pr_json="$(
+    "${CODEX_SHARED_SCRIPTS_DIR}/gh_retry.sh" \
+      gh api "repos/${REPO}/pulls/${review_pr_number}" \
+        --jq '{state: (.state // ""), mergedAt: (.merged_at // ""), closedAt: (.closed_at // "")}'
+  )"; then
+    rc=$?
+    if [[ "$rc" -eq 75 ]]; then
+      echo "WAIT_GITHUB_API_UNSTABLE=1"
+      echo "WAITING_FOR_REVIEW_CONTEXT_ONLY=1"
+      echo "WAITING_REVIEW_PR_NUMBER=$review_pr_number"
+      return 0
+    fi
+    clear_review_context
+    echo "STALE_WAITING_CONTEXT_CLEARED=REVIEW_PR_LOOKUP_FAILED"
+    echo "STALE_WAITING_ISSUE_NUMBER=$review_issue_number"
+    echo "STALE_WAITING_PR_NUMBER=$review_pr_number"
+    echo "NO_WAITING_USER_REPLY=1"
+    exit 0
+  fi
+
+  review_pr_state="$(printf '%s' "$review_pr_json" | jq -r '.state // ""' | tr '[:lower:]' '[:upper:]')"
+  review_pr_merged_at="$(printf '%s' "$review_pr_json" | jq -r '.mergedAt // ""')"
+  review_pr_closed_at="$(printf '%s' "$review_pr_json" | jq -r '.closedAt // ""')"
+
+  clear_waiting_for_terminal_review_pr \
+    "$review_issue_number" \
+    "REVIEW_FEEDBACK" \
+    "$review_branch_name" \
+    "$review_pr_number" \
+    "$review_pr_state" \
+    "$review_pr_merged_at" \
+    "$review_pr_closed_at"
+
+  echo "WAITING_FOR_REVIEW_CONTEXT_ONLY=1"
+  echo "WAITING_REVIEW_PR_NUMBER=$review_pr_number"
+  return 0
 }
 
 clear_stale_waiting_context() {
@@ -499,6 +676,9 @@ recover_anchor_comment_id() {
 }
 
 if [[ ! -s "$issue_file" || ! -s "$question_id_file" ]]; then
+  if has_review_context_artifacts; then
+    probe_terminal_review_pr_from_review_context
+  fi
   if has_waiting_context_artifacts; then
     clear_waiting_state
     echo "STALE_WAITING_CONTEXT_CLEARED=MISSING_WAITING_MARKERS"
@@ -560,6 +740,7 @@ review_branch_name=""
 [[ -s "$review_branch_file" ]] && review_branch_name="$(<"$review_branch_file")"
 
 if [[ "$issue_state" == "CLOSED" ]]; then
+  emit_runtime_v2_terminal_issue_resolved "$task_id" "$issue_number" "issue_closed"
   if is_review_feedback_kind "$kind_label"; then
     cleanup_review_task_branch_if_merged "$review_branch_name"
   fi
@@ -836,6 +1017,27 @@ if [[ "$reply_mode" == "QUESTION" ]]; then
     echo "ANSWER_POSTED=1"
   fi
 
+  if is_review_feedback_kind "$kind_label"; then
+    review_wait_payload="$(build_review_feedback_payload "$reply_id" "$reply_url" false "$now_utc" "awaiting review feedback clarification")"
+    emit_runtime_v2_event \
+      "review.feedback_wait_requested" \
+      "legacy-v2-review-wait-${task_id}-${reply_id}" \
+      "legacy.review.feedback_wait_requested:${task_id}:${reply_id}" \
+      "$review_wait_payload"
+  else
+    wait_reason="waiting human reply"
+    if is_blocker_kind "$kind_label"; then
+      wait_reason="waiting human unblock"
+    fi
+    wait_payload="$(build_wait_payload "$reply_id" "$wait_reason" "$kind_label" "$reply_url" false "$now_utc")"
+    emit_runtime_v2_event \
+      "human.wait_requested" \
+      "legacy-v2-wait-${task_id}-${reply_id}" \
+      "legacy.human.wait_requested:${task_id}:${reply_id}" \
+      "$wait_payload"
+  fi
+  reconcile_runtime_v2_primary_context
+
   emit_wait_state "$task_id" "$issue_number" "$reply_id" "$kind_label"
   if is_review_feedback_kind "$kind_label"; then
     echo "REVIEW_FEEDBACK_RECEIVED=1"
@@ -863,6 +1065,23 @@ printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_user_reply_task_id.txt"
 printf '%s\n' "$issue_number" > "${CODEX_DIR}/daemon_user_reply_issue_number.txt"
 printf '%s\n' "$now_utc" > "${CODEX_DIR}/daemon_user_reply_at_utc.txt"
 
+reply_payload="$(
+  jq -nc \
+    --arg responseType "$kind_label" \
+    --arg replyCommentId "$reply_id" \
+    --arg replyMode "$reply_mode" \
+    '{responseType:$responseType, replyCommentId:$replyCommentId, replyMode:$replyMode}'
+)"
+emit_runtime_v2_event \
+  "human.response_received" \
+  "legacy-v2-reply-${task_id}-${reply_id}" \
+  "legacy.human.response_received:${task_id}:${reply_id}" \
+  "$reply_payload"
+reconcile_runtime_v2_primary_context
+
+# The human reply has been consumed and converted into a resume signal.
+# Clear the legacy waiting anchor now so later ticks do not replay the same
+# reply and re-sync runtime_v2 back into waiting_human from stale files.
 clear_waiting_state
 
 ack_signal="AGENT_RESUMED"

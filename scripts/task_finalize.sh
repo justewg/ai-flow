@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./env/bootstrap.sh
 source "${SCRIPT_DIR}/env/bootstrap.sh"
+# shellcheck source=./task_worktree_lib.sh
+source "${SCRIPT_DIR}/task_worktree_lib.sh"
 CODEX_DIR="$(codex_export_state_dir)"
 STATE_TMP_DIR="$(codex_resolve_state_tmp_dir "$CODEX_DIR")"
 mkdir -p "$STATE_TMP_DIR"
@@ -13,6 +15,9 @@ BASE_BRANCH="$FLOW_BASE_BRANCH"
 HEAD_BRANCH="$FLOW_HEAD_BRANCH"
 FINAL_STATUS="${FINAL_STATUS:-Review}"
 FINAL_FLOW="${FINAL_FLOW:-In Review}"
+TASK_ROOT_DIR="${ROOT_DIR}"
+PR_BASE_BRANCH="${FLOW_PR_BASE_BRANCH:-$BASE_BRANCH}"
+PR_HEAD_BRANCH="${FLOW_PR_HEAD_BRANCH:-$HEAD_BRANCH}"
 
 commit_file="${CODEX_DIR}/commit_message.txt"
 stage_file="${CODEX_DIR}/stage_paths.txt"
@@ -29,6 +34,7 @@ title_file="${CODEX_DIR}/pr_title.txt"
 body_file="${CODEX_DIR}/pr_body.txt"
 pr_number_file="${CODEX_DIR}/pr_number.txt"
 executor_prompt_file="${CODEX_DIR}/executor_prompt.txt"
+executor_detach_file="${CODEX_DIR}/executor_detach_requested.txt"
 
 read_if_present() {
   local file_path="$1"
@@ -56,11 +62,53 @@ require_nonempty_file() {
   printf '%s' "$value"
 }
 
+emit_runtime_v2_event() {
+  local event_type="$1"
+  local event_id="$2"
+  local dedup_key="$3"
+  local payload_json="${4:-{}}"
+  local event_out rc
+
+  if event_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_apply_event.sh" \
+      "$task_id" "${review_issue_number:-0}" "$event_type" "$event_id" "$dedup_key" "$payload_json" 2>&1
+  )"; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_EVENT: $line"
+    done <<< "$event_out"
+  else
+    rc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_EVENT_ERROR(rc=$rc): $line"
+    done <<< "$event_out"
+  fi
+}
+
+reconcile_runtime_v2_primary_context() {
+  local reconcile_out rc
+  if reconcile_out="$(
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_reconcile_primary_context.sh" 2>&1
+  )"; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_RECONCILE: $line"
+    done <<< "$reconcile_out"
+  else
+    rc=$?
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "RUNTIME_V2_RECONCILE_ERROR(rc=$rc): $line"
+    done <<< "$reconcile_out"
+  fi
+}
+
 build_default_pr_title() {
   local task_id="$1"
   local commit_message="$2"
   local cleaned
-  cleaned="$(printf '%s' "$commit_message" | sed -E 's/^PL-[0-9]{3}:[[:space:]]*/ /')"
+  cleaned="$(printf '%s' "$commit_message" | sed -E 's/^(PL-[0-9]{3}([A-Za-z0-9-]+)?|ISSUE-[0-9]+([A-Za-z0-9-]+)?):[[:space:]]*/ /')"
   cleaned="$(printf '%s' "$cleaned" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
   if [[ -z "$cleaned" ]]; then
     cleaned="Рабочая дельта по задаче ${task_id}"
@@ -118,7 +166,7 @@ ensure_final_review_signal() {
 extract_task_id_from_message() {
   local commit_message="$1"
   local task_id
-  task_id="$(printf '%s' "$commit_message" | grep -Eo 'PL-[0-9]{3}' | head -n1 || true)"
+  task_id="$(printf '%s' "$commit_message" | grep -Eo '(PL-[0-9]{3}([A-Za-z0-9-]+)?|ISSUE-[0-9]+([A-Za-z0-9-]+)?)' | head -n1 || true)"
   printf '%s' "$task_id"
 }
 
@@ -128,8 +176,10 @@ extract_pr_number_from_url() {
 }
 
 smoke_check_branch_mismatch() {
+  local repo_root="$1"
+  local expected_branch="$2"
   local current_branch
-  current_branch="$(git -C "${ROOT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  current_branch="$(git -C "${repo_root}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
   if [[ -z "$current_branch" || "$current_branch" == "HEAD" ]]; then
     echo "FLOW_SMOKE_BRANCH_UNRESOLVED=1"
     echo "FLOW_SMOKE_STAGE=TASK_FINALIZE_PRE_COMMIT"
@@ -139,6 +189,14 @@ smoke_check_branch_mismatch() {
     echo "FLOW_SMOKE_BRANCH_INVALID=1"
     echo "FLOW_SMOKE_INVALID_BRANCH_ROLE=BASE_BRANCH"
     echo "FLOW_SMOKE_BASE_BRANCH=${BASE_BRANCH}"
+    echo "FLOW_SMOKE_CURRENT_BRANCH=${current_branch}"
+    echo "FLOW_SMOKE_STAGE=TASK_FINALIZE_PRE_COMMIT"
+    return 1
+  fi
+  if [[ -n "$expected_branch" && "$current_branch" != "$expected_branch" ]]; then
+    echo "FLOW_SMOKE_BRANCH_INVALID=1"
+    echo "FLOW_SMOKE_INVALID_BRANCH_ROLE=EXPECTED_TASK_BRANCH"
+    echo "FLOW_SMOKE_EXPECTED_BRANCH=${expected_branch}"
     echo "FLOW_SMOKE_CURRENT_BRANCH=${current_branch}"
     echo "FLOW_SMOKE_STAGE=TASK_FINALIZE_PRE_COMMIT"
     return 1
@@ -166,6 +224,29 @@ mark_pr_ready_if_draft() {
   else
     echo "PR_READY_FOR_REVIEW=false"
   fi
+}
+
+find_existing_in_review_comment() {
+  local issue_number="$1"
+  local task_id="$2"
+  local pr_number="$3"
+  local comments_json=""
+
+  comments_json="$(
+    "${CODEX_SHARED_SCRIPTS_DIR}/gh_retry.sh" \
+      gh api "repos/${REPO}/issues/${issue_number}/comments?per_page=100"
+  )"
+
+  printf '%s' "$comments_json" |
+    jq -r \
+      --arg task "$task_id" \
+      --arg pr "$pr_number" '
+        [ .[]
+          | select(((.body // "") | test("(?m)^CODEX_SIGNAL: AGENT_IN_REVIEW$")))
+          | select(((.body // "") | test("(?m)^CODEX_TASK: " + $task + "$")))
+          | select(((.body // "") | test("(?m)^CODEX_PR_NUMBER: " + $pr + "$")))
+        ] | last | [.id // "", .html_url // ""] | @tsv
+      '
 }
 
 find_issue_number_for_task() {
@@ -214,6 +295,21 @@ post_in_review_issue_comment() {
   fi
   if [[ -z "$issue_number" ]]; then
     echo "FINAL_ISSUE_COMMENT_SKIPPED=ISSUE_NOT_FOUND"
+    return 0
+  fi
+
+  local existing_comment_tsv=""
+  local existing_comment_id=""
+  local existing_comment_url=""
+  if existing_comment_tsv="$(find_existing_in_review_comment "$issue_number" "$task_id" "$pr_number" 2>/dev/null || true)"; then
+    existing_comment_id="$(printf '%s' "$existing_comment_tsv" | cut -f1)"
+    existing_comment_url="$(printf '%s' "$existing_comment_tsv" | cut -f2)"
+  fi
+  if [[ -n "$existing_comment_id" ]]; then
+    echo "FINAL_ISSUE_COMMENT_REUSED=1"
+    echo "FINAL_ISSUE_NUMBER=$issue_number"
+    echo "FINAL_ISSUE_COMMENT_ID=$existing_comment_id"
+    echo "FINAL_ISSUE_COMMENT_URL=$existing_comment_url"
     return 0
   fi
 
@@ -314,26 +410,109 @@ emit_nonempty_lines() {
   done <<< "$text"
 }
 
-run_commit_push_for_branch() {
-  local branch="$1"
-  shift
-  FLOW_HEAD_BRANCH="$branch" "${CODEX_SHARED_SCRIPTS_DIR}/dev_commit_push.sh" "$@"
+REUSED_REVIEW_PR_NUMBER=""
+REUSED_REVIEW_PR_URL=""
+REUSED_REVIEW_PR_BRANCH=""
+
+try_reuse_existing_review_pr() {
+  local review_branch=""
+  local review_pr_number=""
+  local open_prs_json=""
+  local open_pr_count=""
+
+  review_branch="$(read_if_present "$review_branch_file" || true)"
+  review_pr_number="$(read_if_present "$review_pr_file" || true)"
+
+  if [[ -z "$review_branch" || "$review_branch" == "$HEAD_BRANCH" ]]; then
+    return 1
+  fi
+
+  if open_prs_json="$(
+    gh pr list \
+      --repo "$REPO" \
+      --state open \
+      --base "$HEAD_BRANCH" \
+      --head "$review_branch" \
+      --json number,url \
+      --jq '.'
+  )"; then
+    :
+  else
+    local rc=$?
+    echo "TASK_FINALIZE_REUSE_LOOKUP_FAILED=1"
+    return "$rc"
+  fi
+
+  open_pr_count="$(printf '%s' "$open_prs_json" | jq 'length')"
+  if (( open_pr_count != 1 )); then
+    return 1
+  fi
+
+  REUSED_REVIEW_PR_NUMBER="$(printf '%s' "$open_prs_json" | jq -r '.[0].number // empty')"
+  REUSED_REVIEW_PR_URL="$(printf '%s' "$open_prs_json" | jq -r '.[0].url // empty')"
+  REUSED_REVIEW_PR_BRANCH="$review_branch"
+
+  if [[ -z "$REUSED_REVIEW_PR_NUMBER" || -z "$REUSED_REVIEW_PR_URL" ]]; then
+    return 1
+  fi
+
+  echo "TASK_FINALIZE_REUSE_OPEN_REVIEW_PR=1"
+  echo "TASK_FINALIZE_REUSE_BRANCH=${REUSED_REVIEW_PR_BRANCH}"
+  if [[ -n "$review_pr_number" && "$review_pr_number" != "$REUSED_REVIEW_PR_NUMBER" ]]; then
+    echo "TASK_FINALIZE_REUSE_REPLACED_STALE_REVIEW_PR=${review_pr_number}"
+  fi
+  return 0
 }
 
-prepare_head_branch_for_pr() {
+request_executor_stop_after_finalize() {
+  printf '%s\n' "task-finalize-stop" > "$executor_detach_file"
+  (
+    sleep 2
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null 2>&1 || true
+  ) >/dev/null 2>&1 &
+  echo "FINALIZE_EXECUTOR_STOP_REQUESTED=1"
+}
+
+run_commit_push_for_branch() {
+  local repo_root="$1"
+  local branch="$2"
+  shift 2
+  ROOT_DIR="$repo_root" FLOW_HEAD_BRANCH="$branch" "${CODEX_SHARED_SCRIPTS_DIR}/dev_commit_push.sh" "$@"
+}
+
+PR_TARGET_BASE_BRANCH=""
+PR_TARGET_HEAD_BRANCH=""
+PR_TARGET_MODE=""
+
+resolve_pr_target_branches() {
+  local task_branch="$1"
+  local head_branch="$2"
+  local base_branch="$3"
+
+  if [[ "$task_branch" == "$head_branch" ]]; then
+    PR_TARGET_MODE="DIRECT_HEAD_BRANCH"
+    PR_TARGET_HEAD_BRANCH="$head_branch"
+    PR_TARGET_BASE_BRANCH="$base_branch"
+  else
+    PR_TARGET_MODE="TASK_BRANCH_REVIEW"
+    PR_TARGET_HEAD_BRANCH="$task_branch"
+    PR_TARGET_BASE_BRANCH="$head_branch"
+  fi
+
+  echo "FLOW_TASK_BRANCH=${task_branch}"
+  echo "FLOW_TASK_BRANCH_MODE=${PR_TARGET_MODE}"
+  echo "FLOW_PR_HEAD_BRANCH=${PR_TARGET_HEAD_BRANCH}"
+  echo "FLOW_PR_BASE_BRANCH=${PR_TARGET_BASE_BRANCH}"
+}
+
+prepare_pr_source_branch() {
   local task_branch="$1"
   local head_branch="$2"
   local out rc
 
-  echo "FLOW_TASK_BRANCH=${task_branch}"
-  echo "FLOW_PR_HEAD_BRANCH=${head_branch}"
-
   if [[ "$task_branch" == "$head_branch" ]]; then
-    echo "FLOW_TASK_BRANCH_MODE=DIRECT_HEAD_BRANCH"
     return 0
   fi
-
-  echo "FLOW_TASK_BRANCH_MODE=FEATURE_BRANCH"
 
   if out="$(git -C "${ROOT_DIR}" fetch origin "$head_branch" "$task_branch" 2>&1)"; then
     emit_nonempty_lines "$out"
@@ -365,46 +544,6 @@ prepare_head_branch_for_pr() {
     return "$rc"
   fi
 
-  if out="$(git -C "${ROOT_DIR}" checkout "$head_branch" 2>&1)"; then
-    emit_nonempty_lines "$out"
-  else
-    rc=$?
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_CHECKOUT_FAILED=1"
-    return "$rc"
-  fi
-
-  if out="$(git -C "${ROOT_DIR}" pull --ff-only origin "$head_branch" 2>&1)"; then
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_SYNCED=1"
-  else
-    rc=$?
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_SYNCED=0"
-    return "$rc"
-  fi
-
-  if out="$(git -C "${ROOT_DIR}" merge --ff-only "$task_branch" 2>&1)"; then
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_FAST_FORWARDED=1"
-  else
-    rc=$?
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_FAST_FORWARDED=0"
-    echo "FLOW_PR_HEAD_FAST_FORWARD_FAILED=1"
-    return "$rc"
-  fi
-
-  if out="$(git -C "${ROOT_DIR}" push origin "$head_branch" 2>&1)"; then
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_PUSHED=1"
-  else
-    rc=$?
-    emit_nonempty_lines "$out"
-    echo "FLOW_PR_HEAD_PUSHED=0"
-    return "$rc"
-  fi
-
   return 0
 }
 
@@ -424,8 +563,8 @@ is_path_within_narrative() {
 
 collect_tracked_diff_paths() {
   {
-    git -C "${ROOT_DIR}" diff --name-only --ignore-submodules -- || true
-    git -C "${ROOT_DIR}" diff --cached --name-only --ignore-submodules -- || true
+    git -C "${TASK_ROOT_DIR}" diff --name-only --ignore-submodules -- || true
+    git -C "${TASK_ROOT_DIR}" diff --cached --name-only --ignore-submodules -- || true
   } | awk 'NF' | sort -u
 }
 
@@ -600,8 +739,15 @@ if [[ -z "$task_id" ]]; then
   task_id="$(extract_task_id_from_message "$commit_message")"
 fi
 if [[ -z "$task_id" ]]; then
-  echo "Cannot detect task id. Set ${task_file} or include PL-xxx in commit message."
+  echo "Cannot detect task id. Set ${task_file} or include a task id like ISSUE-123 or PL-123 in commit message."
   exit 1
+fi
+
+if [[ -n "$active_issue_number" ]]; then
+  maybe_task_root="$(task_worktree_repo_dir "$task_id" "$active_issue_number")"
+  if [[ -d "$maybe_task_root/.git" ]]; then
+    TASK_ROOT_DIR="$maybe_task_root"
+  fi
 fi
 
 pr_title="$(read_if_present "$title_file" || true)"
@@ -628,36 +774,68 @@ trap 'rm -f "$tmp_title" "$tmp_body"' EXIT
 printf '%s\n' "$pr_title" > "$tmp_title"
 printf '%s\n' "$pr_body" > "$tmp_body"
 
-if ! smoke_check_branch_mismatch; then
-  exit 1
-fi
-
-task_branch="$(git -C "${ROOT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+task_branch="$(git -C "${TASK_ROOT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 if [[ -z "$task_branch" || "$task_branch" == "HEAD" ]]; then
   echo "Cannot determine task branch for finalize."
   exit 1
 fi
 
-run_commit_push_for_branch "$task_branch" "$commit_message" "${stage_paths[@]}"
-prepare_head_branch_for_pr "$task_branch" "$HEAD_BRANCH"
+if ! smoke_check_branch_mismatch "$TASK_ROOT_DIR" "$task_branch"; then
+  exit 1
+fi
+
+if [[ "$task_branch" == "$HEAD_BRANCH" ]]; then
+  if reuse_out="$(try_reuse_existing_review_pr 2>&1)"; then
+    emit_nonempty_lines "$reuse_out"
+    pr_number="$REUSED_REVIEW_PR_NUMBER"
+    pr_url="$REUSED_REVIEW_PR_URL"
+    echo "TASK_FINALIZE_IDEMPOTENT_REUSE=1"
+    echo "PR_ACTION=REUSED"
+    echo "PR_NUMBER=$pr_number"
+    echo "PR_URL=$pr_url"
+    request_executor_stop_after_finalize
+    echo "FINALIZED_TASK_ID=$task_id"
+    echo "FINALIZED_STATUS=$FINAL_STATUS"
+    echo "FINALIZED_FLOW=$FINAL_FLOW"
+    exit 0
+  else
+    reuse_rc=$?
+    emit_nonempty_lines "$reuse_out"
+    echo "TASK_FINALIZE_DIRECT_HEAD_BLOCKED=1"
+    echo "TASK_FINALIZE_CURRENT_BRANCH=${task_branch}"
+    echo "TASK_FINALIZE_EXPECTED_REVIEW_BRANCH=$(read_if_present "$review_branch_file" || true)"
+    if [[ "$reuse_rc" -ne 1 ]]; then
+      exit "$reuse_rc"
+    fi
+    exit 1
+  fi
+fi
+
+run_commit_push_for_branch "$TASK_ROOT_DIR" "$task_branch" "$commit_message" "${stage_paths[@]}"
+resolve_pr_target_branches "$task_branch" "$HEAD_BRANCH" "$BASE_BRANCH"
+prepare_pr_source_branch "$task_branch" "$HEAD_BRANCH"
 
 echo "FLOW_OPEN_PR_CHECK=1"
 echo "FLOW_OPEN_PR_CHECK_REPO=$REPO"
-echo "FLOW_OPEN_PR_CHECK_BASE=$BASE_BRANCH"
-echo "FLOW_OPEN_PR_CHECK_HEAD=$HEAD_BRANCH"
+echo "FLOW_OPEN_PR_CHECK_BASE=$PR_TARGET_BASE_BRANCH"
+echo "FLOW_OPEN_PR_CHECK_HEAD=$PR_TARGET_HEAD_BRANCH"
 open_prs_json="$(
   gh pr list \
     --repo "$REPO" \
     --state open \
-    --base "$BASE_BRANCH" \
-    --head "$HEAD_BRANCH" \
+    --base "$PR_TARGET_BASE_BRANCH" \
+    --head "$PR_TARGET_HEAD_BRANCH" \
     --json number,title,url \
     --jq '.'
 )"
 open_pr_count="$(printf '%s' "$open_prs_json" | jq 'length')"
 
 if (( open_pr_count == 0 )); then
-  create_out="$("${CODEX_SHARED_SCRIPTS_DIR}/pr_create.sh" "$tmp_title" "$tmp_body")"
+  create_out="$(
+    FLOW_PR_BASE_BRANCH="$PR_TARGET_BASE_BRANCH" \
+      FLOW_PR_HEAD_BRANCH="$PR_TARGET_HEAD_BRANCH" \
+      "${CODEX_SHARED_SCRIPTS_DIR}/pr_create.sh" "$tmp_title" "$tmp_body"
+    )"
   pr_url="$(printf '%s' "$create_out" | tail -n1)"
   pr_number="$(extract_pr_number_from_url "$pr_url")"
   if [[ -z "$pr_number" || "$pr_number" == "$pr_url" ]]; then
@@ -675,7 +853,7 @@ elif (( open_pr_count == 1 )); then
   echo "PR_NUMBER=$pr_number"
   echo "PR_URL=$pr_url"
 else
-  echo "More than one open PR ${HEAD_BRANCH}->${BASE_BRANCH}. Manual resolve required."
+  echo "More than one open PR ${PR_TARGET_HEAD_BRANCH}->${PR_TARGET_BASE_BRANCH}. Manual resolve required."
   printf '%s\n' "$open_prs_json"
   exit 1
 fi
@@ -756,31 +934,6 @@ fi
 
 # После перевода в Review включаем канал review-feedback через комментарии Issue.
 if [[ -n "$review_issue_number" ]]; then
-  printf '%s\n' "$task_id" > "$review_task_file"
-  printf '%s\n' "$review_issue_number" > "$review_issue_file"
-  printf '%s\n' "$pr_number" > "$review_pr_file"
-  printf '%s\n' "$task_branch" > "$review_branch_file"
-  if [[ -n "$active_item_id" ]]; then
-    printf '%s\n' "$active_item_id" > "$review_item_file"
-  else
-    : > "$review_item_file"
-  fi
-
-  printf '%s\n' "$review_issue_number" > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
-  printf '%s\n' "$task_id" > "${CODEX_DIR}/daemon_waiting_task_id.txt"
-  printf '%s\n' "REVIEW_FEEDBACK" > "${CODEX_DIR}/daemon_waiting_kind.txt"
-  if [[ -n "$review_comment_id" ]]; then
-    printf '%s\n' "$review_comment_id" > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
-  else
-    printf '0\n' > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
-  fi
-  if [[ -n "$review_comment_url" ]]; then
-    printf '%s\n' "$review_comment_url" > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
-  else
-    : > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
-  fi
-  printf '%s\n' "$review_pending_post" > "${CODEX_DIR}/daemon_waiting_pending_post.txt"
-  date -u '+%Y-%m-%dT%H:%M:%SZ' > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
   if [[ -n "$review_comment_id" ]]; then
     echo "REVIEW_FEEDBACK_WAIT_ENABLED=1"
     echo "REVIEW_FEEDBACK_ANCHOR_COMMENT_ID=$review_comment_id"
@@ -791,19 +944,31 @@ if [[ -n "$review_issue_number" ]]; then
   if [[ "$review_pending_post" == "1" ]]; then
     echo "REVIEW_FEEDBACK_ANCHOR_PENDING_OUTBOX=1"
   fi
+
+  review_payload="$(
+    jq -nc \
+      --argjson prNumber "$pr_number" \
+      --arg waitCommentId "${review_comment_id:-}" \
+      --arg commentUrl "${review_comment_url:-}" \
+      --arg waitingSince "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+      --argjson pendingPost "${review_pending_post:-0}" \
+      '{prNumber:$prNumber}
+       + (if ($waitCommentId | length) > 0 then {waitCommentId:$waitCommentId} else {} end)
+       + (if ($commentUrl | length) > 0 then {commentUrl:$commentUrl} else {} end)
+       + {waitingSince:$waitingSince, pendingPost:$pendingPost}'
+  )"
+  emit_runtime_v2_event \
+    "review.finalized" \
+    "legacy-v2-review-${task_id}-${pr_number}" \
+    "legacy.review.finalized:${task_id}:${pr_number}" \
+    "$review_payload"
+  reconcile_runtime_v2_primary_context
 else
   : > "$review_task_file"
   : > "$review_item_file"
   : > "$review_issue_file"
   : > "$review_pr_file"
   : > "$review_branch_file"
-  : > "${CODEX_DIR}/daemon_waiting_issue_number.txt"
-  : > "${CODEX_DIR}/daemon_waiting_task_id.txt"
-  : > "${CODEX_DIR}/daemon_waiting_question_comment_id.txt"
-  : > "${CODEX_DIR}/daemon_waiting_kind.txt"
-  : > "${CODEX_DIR}/daemon_waiting_since_utc.txt"
-  : > "${CODEX_DIR}/daemon_waiting_comment_url.txt"
-  : > "${CODEX_DIR}/daemon_waiting_pending_post.txt"
 fi
 
 : > "$commit_file"
@@ -813,12 +978,7 @@ fi
 : > "$active_task_file"
 : > "$active_item_file"
 : > "$active_issue_file"
-executor_owner_pid=""
-if [[ -s "${CODEX_DIR}/executor_pid.txt" ]]; then
-  executor_owner_pid="$(<"${CODEX_DIR}/executor_pid.txt")"
-fi
-EXECUTOR_RESET_PRESERVE_CURRENT=1 EXECUTOR_RESET_PRESERVE_PID="$executor_owner_pid" \
-  "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh" >/dev/null
+request_executor_stop_after_finalize
 
 echo "FINALIZED_TASK_ID=$task_id"
 echo "FINALIZED_STATUS=$FINAL_STATUS"

@@ -5,6 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./env/bootstrap.sh
 source "${SCRIPT_DIR}/env/bootstrap.sh"
 CODEX_DIR="$(codex_export_state_dir)"
+RUNTIME_LOG_DIR="$(codex_resolve_flow_runtime_log_dir)"
+# shellcheck source=./env/graphql_audit.sh
+source "${SCRIPT_DIR}/env/graphql_audit.sh"
 RUNNER_INPUT_DIR="${CODEX_RUNNER_INPUT_DIR:-$(codex_resolve_flow_tmp_dir)/run}"
 
 mkdir -p "${CODEX_DIR}"
@@ -32,6 +35,8 @@ Commands:
   pr_create
   pr_edit
   pr_merge
+  git_in
+  git_temp_repo
   commit_push
   git_ls_remote_heads
   git_delete_branch
@@ -41,6 +46,32 @@ Commands:
   project_item_view
   project_set_status
   project_status_runtime
+  control_mode
+  incident_append
+  execution_summary
+  runtime_v2_apply_event
+  runtime_v2_gate
+  runtime_v2_primary_context
+  runtime_v2_reconcile_primary_context
+  runtime_v2_shadow_sync
+  runtime_v2_snapshot
+  runtime_v2_inspect
+  runtime_v2_status
+  runtime_v2_validate_rollout
+  runtime_v2_single_task_loop
+  runtime_v2_clear
+  task_capture_source_definition
+  task_standardize_spec
+  task_interpret
+  micro_task_classifier
+  context_builder
+  canonical_diff
+  metadata_builder
+  llm_call_telemetry
+  micro_profile_guard
+  micro_prepare_guard_bin
+  micro_finalize
+  micro_local_canary
   log_summary
   log_tail_executor
   log_tail_daemon_executor
@@ -52,6 +83,7 @@ Commands:
   bootstrap_repo
   host_bootstrap
   docker_bootstrap
+  android_builder
   remote_agent_access_bootstrap
   remote_agent_v2_bootstrap
   onboarding_audit
@@ -77,6 +109,8 @@ Commands:
   watchdog_uninstall
   watchdog_status
   executor_reset
+  task_worktree_materialize
+  task_worktree_cleanup
   runtime_clear_active
   runtime_clear_waiting
   runtime_clear_review
@@ -239,6 +273,209 @@ run_project_gh() {
   else
     gh "$@"
   fi
+}
+
+ensure_git_in_repo_root() {
+  local repo_root="$1"
+  if [[ -z "$repo_root" ]]; then
+    echo "git_in requires <repo-root> as the first argument"
+    exit 1
+  fi
+  if [[ ! -d "$repo_root" ]]; then
+    echo "git_in repo root not found: $repo_root"
+    exit 1
+  fi
+  if [[ ! -e "$repo_root/.git" ]]; then
+    echo "git_in target is not a git checkout/worktree: $repo_root"
+    exit 1
+  fi
+}
+
+git_temp_repo_args_file() {
+  if [[ -n "${CODEX_GIT_TEMP_REPO_ARGS_FILE:-}" ]]; then
+    printf '%s\n' "${CODEX_GIT_TEMP_REPO_ARGS_FILE}"
+    return 0
+  fi
+  printf '%s\n' "${ROOT_DIR}/.tmp/git_temp_repo.env"
+}
+
+read_multiline_value_into_array() {
+  local raw_value="$1"
+  local array_name="$2"
+  local line escaped_line
+  eval "$array_name=()"
+  if [[ -z "$raw_value" ]]; then
+    return 0
+  fi
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "$line" ]] && continue
+    escaped_line="${line//\\/\\\\}"
+    escaped_line="${escaped_line//\"/\\\"}"
+    eval "$array_name+=(\"$escaped_line\")"
+  done <<< "$raw_value"
+}
+
+load_git_temp_repo_args() {
+  local args_file
+  args_file="$(git_temp_repo_args_file)"
+  if [[ ! -f "$args_file" ]]; then
+    echo "Missing file: $args_file"
+    exit 1
+  fi
+
+  unset \
+    GIT_TEMP_REPO_ROOT \
+    GIT_TEMP_BRANCH \
+    GIT_TEMP_START_POINT \
+    GIT_TEMP_REMOTE \
+    GIT_TEMP_FETCH_REFSPEC \
+    GIT_TEMP_MERGE_REF \
+    GIT_TEMP_PUSH_REFSPEC \
+    GIT_TEMP_COMMIT_MESSAGE \
+    GIT_TEMP_PATHS \
+    GIT_TEMP_REV \
+    GIT_TEMP_GITLINK_PATH \
+    GIT_TEMP_GITLINK_SHA \
+    GIT_TEMP_SET_UPSTREAM \
+    GIT_TEMP_FORCE_WITH_LEASE \
+    GIT_TEMP_ALLOW_EMPTY
+
+  # shellcheck disable=SC1090
+  source "$args_file"
+
+  if [[ -z "${GIT_TEMP_REPO_ROOT:-}" ]]; then
+    echo "git_temp_repo requires GIT_TEMP_REPO_ROOT in ${args_file}"
+    exit 1
+  fi
+
+  ensure_git_in_repo_root "$GIT_TEMP_REPO_ROOT"
+}
+
+run_git_in() {
+  local repo_root="${1:-}"
+  local git_subcommand="${2:-}"
+  shift 2 || true
+
+  ensure_git_in_repo_root "$repo_root"
+
+  case "$git_subcommand" in
+    fetch|merge|checkout|add|commit|push|status|rev-parse|log|show|diff|branch|submodule)
+      ;;
+    *)
+      echo "Unsupported git_in subcommand: ${git_subcommand:-<empty>}"
+      echo "Allowed: fetch merge checkout add commit push status rev-parse log show diff branch submodule"
+      exit 1
+      ;;
+  esac
+
+  git -C "$repo_root" "$git_subcommand" "$@"
+}
+
+run_git_temp_repo() {
+  local action="${1:-}"
+  local repo_root branch remote start_point merge_ref refspec commit_message rev
+  local gitlink_path gitlink_sha
+  local pathspecs=()
+  local push_args=()
+  load_git_temp_repo_args
+
+  repo_root="$GIT_TEMP_REPO_ROOT"
+  branch="${GIT_TEMP_BRANCH:-}"
+  remote="${GIT_TEMP_REMOTE:-origin}"
+
+  case "$action" in
+    fetch)
+      refspec="${GIT_TEMP_FETCH_REFSPEC:-}"
+      if [[ -n "$refspec" ]]; then
+        git -C "$repo_root" fetch "$remote" "$refspec"
+      else
+        git -C "$repo_root" fetch "$remote"
+      fi
+      ;;
+
+    checkout_branch)
+      if [[ -z "$branch" ]]; then
+        echo "git_temp_repo checkout_branch requires GIT_TEMP_BRANCH"
+        exit 1
+      fi
+      start_point="${GIT_TEMP_START_POINT:-HEAD}"
+      git -C "$repo_root" checkout -B "$branch" "$start_point"
+      ;;
+
+    merge_ref)
+      merge_ref="${GIT_TEMP_MERGE_REF:-}"
+      if [[ -z "$merge_ref" ]]; then
+        echo "git_temp_repo merge_ref requires GIT_TEMP_MERGE_REF"
+        exit 1
+      fi
+      git -C "$repo_root" merge --no-edit "$merge_ref"
+      ;;
+
+    add_paths)
+      read_multiline_value_into_array "${GIT_TEMP_PATHS:-}" pathspecs
+      if [[ ${#pathspecs[@]} -eq 0 ]]; then
+        echo "git_temp_repo add_paths requires newline-delimited GIT_TEMP_PATHS"
+        exit 1
+      fi
+      git -C "$repo_root" add -- "${pathspecs[@]}"
+      ;;
+
+    commit)
+      commit_message="${GIT_TEMP_COMMIT_MESSAGE:-}"
+      if [[ -z "$commit_message" ]]; then
+        echo "git_temp_repo commit requires GIT_TEMP_COMMIT_MESSAGE"
+        exit 1
+      fi
+      if is_truthy "${GIT_TEMP_ALLOW_EMPTY:-0}"; then
+        git -C "$repo_root" commit --allow-empty -m "$commit_message"
+      else
+        git -C "$repo_root" commit -m "$commit_message"
+      fi
+      ;;
+
+    push_branch)
+      refspec="${GIT_TEMP_PUSH_REFSPEC:-}"
+      if [[ -z "$refspec" ]]; then
+        if [[ -z "$branch" ]]; then
+          echo "git_temp_repo push_branch requires GIT_TEMP_BRANCH or GIT_TEMP_PUSH_REFSPEC"
+          exit 1
+        fi
+        refspec="$branch"
+      fi
+      if is_truthy "${GIT_TEMP_SET_UPSTREAM:-1}"; then
+        push_args+=(-u)
+      fi
+      if is_truthy "${GIT_TEMP_FORCE_WITH_LEASE:-0}"; then
+        push_args+=(--force-with-lease)
+      fi
+      git -C "$repo_root" push "${push_args[@]}" "$remote" "$refspec"
+      ;;
+
+    status)
+      git -C "$repo_root" status --short --branch
+      ;;
+
+    rev_parse)
+      rev="${GIT_TEMP_REV:-HEAD}"
+      git -C "$repo_root" rev-parse "$rev"
+      ;;
+
+    update_gitlink)
+      gitlink_path="${GIT_TEMP_GITLINK_PATH:-}"
+      gitlink_sha="${GIT_TEMP_GITLINK_SHA:-}"
+      if [[ -z "$gitlink_path" || -z "$gitlink_sha" ]]; then
+        echo "git_temp_repo update_gitlink requires GIT_TEMP_GITLINK_PATH and GIT_TEMP_GITLINK_SHA"
+        exit 1
+      fi
+      git -C "$repo_root" update-index --cacheinfo "160000,${gitlink_sha},${gitlink_path}"
+      ;;
+
+    *)
+      echo "Unsupported git_temp_repo action: ${action:-<empty>}"
+      echo "Allowed: fetch checkout_branch merge_ref add_paths commit push_branch status rev_parse update_gitlink"
+      exit 1
+      ;;
+  esac
 }
 
 tail_runtime_log() {
@@ -493,7 +730,39 @@ case "$cmd" in
     if is_truthy "${pr_delete_branch_raw:-0}"; then
       pr_merge_cmd+=(--delete-branch)
     fi
-    "${pr_merge_cmd[@]}"
+    if pr_merge_out="$("${pr_merge_cmd[@]}" 2>&1)"; then
+      printf '%s\n' "$pr_merge_out"
+    else
+      pr_merge_rc=$?
+      if printf '%s' "$pr_merge_out" | grep -Eiq 'GraphQL: API rate limit|API rate limit already exceeded'; then
+        pr_merge_api_method="merge"
+        case "${pr_merge_method:-merge}" in
+          ""|merge) pr_merge_api_method="merge" ;;
+          squash) pr_merge_api_method="squash" ;;
+          rebase) pr_merge_api_method="rebase" ;;
+        esac
+        gh api -X PUT "repos/${repo}/pulls/${pr_number}/merge" -f merge_method="$pr_merge_api_method"
+      else
+        printf '%s\n' "$pr_merge_out" >&2
+        exit "$pr_merge_rc"
+      fi
+    fi
+    ;;
+
+  git_in)
+    if [[ $# -lt 2 ]]; then
+      echo "Usage: .flow/shared/scripts/run.sh git_in <repo-root> <git-subcommand> [args...]"
+      exit 1
+    fi
+    run_git_in "$@"
+    ;;
+
+  git_temp_repo)
+    if [[ $# -ne 2 ]]; then
+      echo "Usage: .flow/shared/scripts/run.sh git_temp_repo <fetch|checkout_branch|merge_ref|add_paths|commit|push_branch|status|rev_parse|update_gitlink>"
+      exit 1
+    fi
+    run_git_temp_repo "$2"
     ;;
 
   commit_push)
@@ -591,7 +860,16 @@ case "$cmd" in
       echo "project_item_view requires issue_number.txt or project_task_id.txt"
       exit 1
     fi
-    project_items_json="$(run_project_gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit 250 --format json)"
+    project_items_json="$(
+      graphql_audit_capture \
+        "run.sh" \
+        "project_item_view" \
+        "indirect_project_cli" \
+        "project_item_list" \
+        "cacheable_short_ttl" \
+        "limit=250" \
+        run_project_gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit 250 --format json
+    )"
     selected_item="$(printf '%s' "$project_items_json" | jq \
       --arg issue_number "$issue_number" \
       --arg task_id "$task_id" '
@@ -623,7 +901,16 @@ case "$cmd" in
       exit 1
     fi
 
-    project_items_json="$(run_project_gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit "$project_item_limit" --format json)"
+    project_items_json="$(
+      graphql_audit_capture \
+        "run.sh" \
+        "project_item_list" \
+        "indirect_project_cli" \
+        "project_item_list" \
+        "cacheable_short_ttl" \
+        "limit=${project_item_limit}" \
+        run_project_gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit "$project_item_limit" --format json
+    )"
     if [[ -f "$project_item_jq_file" ]]; then
       project_item_jq="$(read_required_file "$project_item_jq_file")"
       printf '%s\n' "$project_items_json" | jq "$project_item_jq"
@@ -651,6 +938,136 @@ case "$cmd" in
     fi
     shift 1
     "${CODEX_SHARED_SCRIPTS_DIR}/project_status_runtime.sh" "$@"
+    ;;
+
+  control_mode)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/containment_mode.sh" "$@"
+    ;;
+
+  incident_append)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/incident_append.sh" "$@"
+    ;;
+
+  execution_summary)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/execution_summary.sh" "$@"
+    ;;
+
+  runtime_v2_apply_event)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_apply_event.sh" "$@"
+    ;;
+
+  runtime_v2_gate)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_gate.sh" "$@"
+    ;;
+
+  runtime_v2_primary_context)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_primary_context.sh" "$@"
+    ;;
+
+  runtime_v2_reconcile_primary_context)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_reconcile_primary_context.sh" "$@"
+    ;;
+
+  runtime_v2_shadow_sync)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_shadow_sync.sh" "$@"
+    ;;
+
+  runtime_v2_snapshot)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_snapshot.sh" "$@"
+    ;;
+
+  runtime_v2_inspect|runtime_v2_status)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_inspect.sh" "$@"
+    ;;
+
+  runtime_v2_validate_rollout)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_validate_rollout.sh" "$@"
+    ;;
+
+  runtime_v2_single_task_loop)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_single_task_loop.sh" "$@"
+    ;;
+
+  runtime_v2_clear)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/runtime_v2_clear.sh" "$@"
+    ;;
+
+  task_capture_source_definition)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_capture_source_definition.sh" "$@"
+    ;;
+
+  task_standardize_spec)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_standardize_spec.sh" "$@"
+    ;;
+
+  task_interpret)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_interpret.sh" "$@"
+    ;;
+
+  task_noop_probe)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_noop_probe.sh" "$@"
+    ;;
+
+  micro_task_classifier)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_task_classifier.sh" "$@"
+    ;;
+
+  context_builder)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/context_builder.sh" "$@"
+    ;;
+
+  canonical_diff)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/canonical_diff.sh" "$@"
+    ;;
+
+  metadata_builder)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/metadata_builder.sh" "$@"
+    ;;
+
+  llm_call_telemetry)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/llm_call_telemetry.sh" "$@"
+    ;;
+
+  micro_profile_guard)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_profile_guard.sh" "$@"
+    ;;
+
+  micro_prepare_guard_bin)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_prepare_guard_bin.sh" "$@"
+    ;;
+
+  micro_finalize)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_finalize.sh" "$@"
+    ;;
+
+  micro_local_canary)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/micro_local_canary.sh" "$@"
     ;;
 
   log_summary)
@@ -711,6 +1128,11 @@ case "$cmd" in
   docker_bootstrap)
     shift 1
     "${CODEX_SHARED_SCRIPTS_DIR}/docker_bootstrap.sh" "$@"
+    ;;
+
+  android_builder)
+    shift 1
+    "${CODEX_SHARED_SCRIPTS_DIR}/android_builder.sh" "$@"
     ;;
 
   remote_agent_access_bootstrap)
@@ -862,13 +1284,32 @@ case "$cmd" in
     ;;
 
   executor_reset)
-    "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh"
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/executor_reset.sh"
+    ;;
+
+  task_worktree_materialize)
+    if [[ $# -lt 3 || $# -gt 4 ]]; then
+      echo "Usage: .flow/shared/scripts/run.sh task_worktree_materialize <task-id> <issue-number> [title]"
+      exit 1
+    fi
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_materialize.sh" "${@:2}"
+    ;;
+
+  task_worktree_cleanup)
+    if [[ $# -lt 3 || $# -gt 4 ]]; then
+      echo "Usage: .flow/shared/scripts/run.sh task_worktree_cleanup <task-id> <issue-number> [reason]"
+      exit 1
+    fi
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_worktree_cleanup.sh" "${@:2}"
     ;;
 
   runtime_clear_active)
     clear_runtime_state_file "daemon_active_task.txt"
     clear_runtime_state_file "daemon_active_item_id.txt"
     clear_runtime_state_file "daemon_active_issue_number.txt"
+    clear_runtime_state_file "daemon_active_task_key.txt"
+    clear_runtime_state_file "daemon_active_worktree_path.txt"
+    clear_runtime_state_file "daemon_active_task_branch.txt"
     ;;
 
   runtime_clear_waiting)
@@ -919,6 +1360,14 @@ case "$cmd" in
       exit 1
     fi
     "${CODEX_SHARED_SCRIPTS_DIR}/task_ask.sh" "$2" "$3"
+    ;;
+
+  task_review_handoff)
+    if [[ $# -lt 3 || $# -gt 4 ]]; then
+      echo "Usage: .flow/shared/scripts/run.sh task_review_handoff <task-id> <issue-number> [reason]"
+      exit 1
+    fi
+    "${CODEX_SHARED_SCRIPTS_DIR}/task_review_handoff.sh" "${@:2}"
     ;;
 
   daemon_check_replies)

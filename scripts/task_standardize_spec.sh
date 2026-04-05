@@ -163,6 +163,13 @@ while IFS= read -r line; do
   target_files+=("$line")
 done < <(micro_profile_extract_target_files "$combined_text" "$task_repo" || true)
 
+if (( ${#target_files[@]} == 0 )); then
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    target_files+=("$line")
+  done < <(task_intake_android_fallback_target_files "$combined_text" "$task_repo" | awk '!seen[$0]++' || true)
+fi
+
 expected_change_json='[]'
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue

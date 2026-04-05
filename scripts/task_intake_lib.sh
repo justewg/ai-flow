@@ -273,6 +273,38 @@ task_intake_docs_scoped_micro_signal() {
   [[ "$markdown_count" -ge 1 && "$non_markdown_count" -eq 0 ]]
 }
 
+task_intake_android_fallback_target_files() {
+  local combined_text="${1:-}"
+  local root_dir="${2:-$ROOT_DIR}"
+  local combined_downcased
+  local keyboard_signal="false"
+
+  combined_downcased="$(printf '%s' "$combined_text" | tr '[:upper:]' '[:lower:]')"
+  if ! printf '%s' "$combined_downcased" | rg -q '(андроид|android|клавиатур|keyboard|пробел|space|kiosk|lock task|device owner)'; then
+    return 0
+  fi
+
+  if printf '%s' "$combined_downcased" | rg -q '(клавиатур|keyboard|пробел|space)'; then
+    keyboard_signal="true"
+    [[ -f "${root_dir}/app/planka_quick_test_app/app/src/main/assets/index.html" ]] \
+      && printf '%s\n' 'app/planka_quick_test_app/app/src/main/assets/index.html'
+    [[ -f "${root_dir}/app/planka_quick_test_app/app/src/main/assets/ui-shell-config.default.json" ]] \
+      && printf '%s\n' 'app/planka_quick_test_app/app/src/main/assets/ui-shell-config.default.json'
+  fi
+
+  if printf '%s' "$combined_downcased" | rg -q '(mainactivity|activity|киоск|kiosk|lock task|device owner|manifest)'; then
+    [[ -f "${root_dir}/app/planka_quick_test_app/app/src/main/java/com/planka/quicktest/MainActivity.kt" ]] \
+      && printf '%s\n' 'app/planka_quick_test_app/app/src/main/java/com/planka/quicktest/MainActivity.kt'
+    [[ -f "${root_dir}/app/planka_quick_test_app/app/src/main/AndroidManifest.xml" ]] \
+      && printf '%s\n' 'app/planka_quick_test_app/app/src/main/AndroidManifest.xml'
+  fi
+
+  if [[ "$keyboard_signal" != "true" ]] && printf '%s' "$combined_downcased" | rg -q '(подпись|label|кнопк|button|строк|string|текст)'; then
+    [[ -f "${root_dir}/app/planka_quick_test_app/app/src/main/res/values/strings.xml" ]] \
+      && printf '%s\n' 'app/planka_quick_test_app/app/src/main/res/values/strings.xml'
+  fi
+}
+
 task_intake_profile_decision_json() {
   local combined_text="$1"
   local target_count="$2"

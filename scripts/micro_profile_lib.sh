@@ -327,10 +327,17 @@ micro_profile_file_context_json() {
     raw_ranges+=("$range")
   done < <(micro_profile_extract_excerpt_ranges "$file_path" "$issue_text" "$max_lines" || true)
 
-  while IFS= read -r range; do
-    [[ -n "$range" ]] || continue
-    merged_ranges+=("$range")
-  done < <(micro_profile_merge_excerpt_ranges "$total_lines" "${raw_ranges[@]}")
+  if (( ${#raw_ranges[@]} == 0 )); then
+    while IFS= read -r range; do
+      [[ -n "$range" ]] || continue
+      merged_ranges+=("$range")
+    done < <(micro_profile_merge_excerpt_ranges "$total_lines")
+  else
+    while IFS= read -r range; do
+      [[ -n "$range" ]] || continue
+      merged_ranges+=("$range")
+    done < <(micro_profile_merge_excerpt_ranges "$total_lines" "${raw_ranges[@]}")
+  fi
 
   if (( ${#merged_ranges[@]} == 0 )); then
     merged_ranges=("1:$(( total_lines > max_lines ? max_lines : total_lines ))")

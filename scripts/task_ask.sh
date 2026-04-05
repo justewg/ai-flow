@@ -628,11 +628,6 @@ render_question_message() {
     fi
   fi
 
-  if [[ -z "$selected_q" && "$kind" == "BLOCKER" ]]; then
-    printf '%s' "__TASK_ASK_REJECTED_MALFORMED_BLOCKER__"
-    return 0
-  fi
-
   if [[ -z "$selected_q" ]]; then
     fallback_q="$(extract_context_line "$text")"
     if [[ -z "$fallback_q" ]]; then
@@ -642,6 +637,9 @@ render_question_message() {
   fi
 
   selected_q="$(normalize_executor_question "$selected_q")"
+  if [[ -z "$selected_q" && "$kind" == "BLOCKER" ]]; then
+    selected_q="Как действовать дальше?"
+  fi
   if is_generic_executor_question "$selected_q"; then
     selected_q="Выбери следующий шаг для executor."
   fi

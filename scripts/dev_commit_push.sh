@@ -82,10 +82,10 @@ if [[ -z "$push_branch" ]]; then
   exit 1
 fi
 
-git add -f "$@"
+git -C "${ROOT_DIR}" add -f "$@"
 GIT_AUTHOR_NAME="$author_name" \
 GIT_AUTHOR_EMAIL="$author_email" \
 GIT_COMMITTER_NAME="$committer_name" \
 GIT_COMMITTER_EMAIL="$committer_email" \
-git commit -m "$message"
-git push origin "$push_branch"
+git -C "${ROOT_DIR}" commit -m "$message"
+git -C "${ROOT_DIR}" push origin "$push_branch"

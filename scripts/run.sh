@@ -63,6 +63,7 @@ Commands:
   task_capture_source_definition
   task_standardize_spec
   task_interpret
+  provider_corpus_run
   micro_task_classifier
   context_builder
   canonical_diff
@@ -1018,6 +1019,11 @@ case "$cmd" in
   task_interpret)
     shift 1
     /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/task_interpret.sh" "$@"
+    ;;
+
+  provider_corpus_run)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/provider_corpus_run.sh" "$@"
     ;;
 
   task_noop_probe)

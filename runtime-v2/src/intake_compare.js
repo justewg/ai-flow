@@ -22,6 +22,54 @@ function normalizeStringArray(value) {
     .sort();
 }
 
+function isSubset(left, right) {
+  const rightSet = new Set(right);
+  return left.every((item) => rightSet.has(item));
+}
+
+function targetFilesDrift(primaryDecision, shadowDecision, primaryFiles, shadowFiles) {
+  if (primaryDecision === null || shadowDecision === null) {
+    return {
+      kind: null,
+      tolerated: false,
+    };
+  }
+  if (JSON.stringify(primaryFiles) === JSON.stringify(shadowFiles)) {
+    return {
+      kind: "match",
+      tolerated: true,
+    };
+  }
+  if (primaryDecision !== shadowDecision) {
+    return {
+      kind: "profile_mismatch",
+      tolerated: false,
+    };
+  }
+  if (primaryDecision === "blocked") {
+    return {
+      kind: "blocked_scope_drift",
+      tolerated: true,
+    };
+  }
+  if (isSubset(shadowFiles, primaryFiles)) {
+    return {
+      kind: "shadow_subset",
+      tolerated: true,
+    };
+  }
+  if (isSubset(primaryFiles, shadowFiles)) {
+    return {
+      kind: "shadow_superset",
+      tolerated: true,
+    };
+  }
+  return {
+    kind: "different_files",
+    tolerated: false,
+  };
+}
+
 function hasExplanationText(text) {
   if (typeof text !== "string") {
     return false;
@@ -47,6 +95,7 @@ function compareInterpretationResults(primary, shadow, options = {}) {
   const profileMatch = primaryDecision !== null && shadowDecision !== null ? primaryDecision === shadowDecision : null;
   const targetFilesMatch =
     primaryDecision !== null && shadowDecision !== null ? JSON.stringify(primaryFiles) === JSON.stringify(shadowFiles) : null;
+  const targetFilesDriftInfo = targetFilesDrift(primaryDecision, shadowDecision, primaryFiles, shadowFiles);
   const humanNeededMatch =
     primaryDecision !== null && shadowDecision !== null
       ? (primaryDecision === "human_needed") === (shadowDecision === "human_needed")
@@ -61,6 +110,8 @@ function compareInterpretationResults(primary, shadow, options = {}) {
     schemaValidShadow,
     profileMatch,
     targetFilesMatch,
+    targetFilesDriftKind: targetFilesDriftInfo.kind,
+    targetFilesDriftTolerated: targetFilesMatch === false ? targetFilesDriftInfo.tolerated : targetFilesMatch === true,
     humanNeededMatch,
     confidenceDelta:
       primaryConfidence !== null && shadowConfidence !== null ? Number((shadowConfidence - primaryConfidence).toFixed(6)) : null,
@@ -73,6 +124,8 @@ function compareInterpretationResults(primary, shadow, options = {}) {
         ? "interpretation_match"
         : profileMatch === false
           ? "interpretation_profile_mismatch"
+          : targetFilesMatch === false && targetFilesDriftInfo.tolerated
+            ? "interpretation_target_files_tolerated"
           : targetFilesMatch === false
             ? "interpretation_target_files_mismatch"
             : "interpretation_inconclusive",

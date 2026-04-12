@@ -24,6 +24,12 @@ test("buildIntakeInterpretationRequest returns canonical request payload", () =>
   assert.equal(request.module, "intake.interpretation");
   assert.equal(request.input.taskId, "ISSUE-622");
   assert.match(request.promptText, /Candidate target files/);
+  assert.match(request.promptText, /Do not classify Android kiosk/);
+  assert.match(request.promptText, /web-shell UI by default/);
+  assert.match(request.promptText, /prefer micro/);
+  assert.match(request.promptText, /choose blocked/);
+  assert.match(request.promptText, /\.flow\/shared/);
+  assert.match(request.promptText, /Do not include \.gitmodules/);
 });
 
 test("normalizeIntakeInterpretationResponse returns canonical response payload", () => {

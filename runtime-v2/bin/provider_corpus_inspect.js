@@ -131,7 +131,18 @@ function taskIdFromPath(filePath) {
 function inspectCorpus(args) {
   const stateDir = path.resolve(args.stateDir);
   const taskRoot = path.join(stateDir, "task-worktrees");
-  const compareFiles = findFiles(taskRoot, "intake_interpretation_compare.json");
+  const summary = readJson(path.join(stateDir, "provider_corpus_summary.json"));
+  const gate = readJson(path.join(stateDir, "provider_corpus_gate.json"));
+  const corpusTaskIds = Array.isArray(summary?.issues)
+    ? new Set(summary.issues.map((issueNumber) => `ISSUE-${issueNumber}`))
+    : null;
+  const compareFiles = findFiles(taskRoot, "intake_interpretation_compare.json").filter((compareFile) => {
+    if (!corpusTaskIds) {
+      return true;
+    }
+    const taskId = taskIdFromPath(compareFile);
+    return taskId ? corpusTaskIds.has(taskId) : true;
+  });
   const telemetry = latestTelemetryByTask(
     readJsonl(path.join(stateDir, "provider_telemetry.jsonl")),
     args.module,
@@ -191,9 +202,6 @@ function inspectCorpus(args) {
     const rightIssue = right.issueNumber ?? Number.MAX_SAFE_INTEGER;
     return leftIssue - rightIssue || String(left.taskId).localeCompare(String(right.taskId));
   });
-
-  const summary = readJson(path.join(stateDir, "provider_corpus_summary.json"));
-  const gate = readJson(path.join(stateDir, "provider_corpus_gate.json"));
 
   return {
     stateDir,

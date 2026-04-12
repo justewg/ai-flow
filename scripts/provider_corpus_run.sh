@@ -171,6 +171,34 @@ if [[ -n "$ask_message_file" ]]; then
 fi
 if [[ -n "$ask_fixtures_file" ]]; then
   [[ -r "$ask_fixtures_file" ]] || { echo "Ask fixtures file is not readable: $ask_fixtures_file" >&2; exit 1; }
+  fixtures_validation_json="$(
+    jq -c -s '
+      [ .[] | if type == "array" then .[] else . end ] as $items
+      | {
+          count: ($items | length),
+          invalidCount: ([
+            $items[]
+            | select(
+                (type != "object")
+                or (((.issueNumber // "") | tostring) == "" and ((.taskId // "") | tostring) == "")
+                or ((.message // null) | type != "string")
+                or (((.kind // "question") | tostring | ascii_downcase) as $kind | ($kind != "question" and $kind != "blocker"))
+              )
+          ] | length)
+        }
+    ' "$ask_fixtures_file"
+  )" || {
+    echo "Ask fixtures file is not valid JSON/JSONL: $ask_fixtures_file" >&2
+    exit 1
+  }
+  fixtures_count="$(printf '%s' "$fixtures_validation_json" | jq -r '.count')"
+  fixtures_invalid_count="$(printf '%s' "$fixtures_validation_json" | jq -r '.invalidCount')"
+  if (( fixtures_count == 0 || fixtures_invalid_count > 0 )); then
+    echo "Ask fixtures file has invalid records: $ask_fixtures_file" >&2
+    echo "ASK_FIXTURES_COUNT=${fixtures_count}" >&2
+    echo "ASK_FIXTURES_INVALID_COUNT=${fixtures_invalid_count}" >&2
+    exit 1
+  fi
 fi
 
 if [[ -z "$state_dir" ]]; then

@@ -212,6 +212,10 @@ FLOW_HEAD_BRANCH=development
 FLOW_AUTOMATION_RUNTIME_ROLE=authoritative
 FLOW_AUTHORITATIVE_RUNTIME_ID=
 
+# Optional preflight mode. Use provider-only on hosts that should exercise API
+# provider surfaces without being a Codex CLI executor host yet.
+# FLOW_PREFLIGHT_PROFILE=provider-only
+
 # PROJECT_NUMBER и PROJECT_OWNER возьми из URL Project v2 в GitHub UI:
 #   https://github.com/users/<owner>/projects/<number>
 #   https://github.com/orgs/<owner>/projects/<number>

@@ -123,6 +123,68 @@ test("evaluateProviderRolloutGate does not block on tolerated target-file drift"
   assert.deepEqual(summary.blockingReasons, []);
 });
 
+test("evaluateProviderRolloutGate does not block on conservative profile drift", () => {
+  const summary = evaluateProviderRolloutGate(
+    [
+      {
+        ts: "2026-04-03T00:00:00Z",
+        requestId: "1",
+        taskId: "ISSUE-1",
+        module: "intake.interpretation",
+        requestedProvider: "claude",
+        effectiveProvider: "claude",
+        outcome: "success",
+        compareMode: "dry_run",
+        primaryProvider: "local",
+        shadowProvider: "claude",
+        schemaValidShadow: true,
+        profileMatch: false,
+        profileDriftKind: "conservative_shadow",
+        profileDriftTolerated: true,
+        targetFilesMatch: true,
+        humanNeededMatch: true,
+      },
+    ],
+    { module: "intake.interpretation", minSamples: 1 },
+  );
+
+  assert.equal(summary.ready, true);
+  assert.equal(summary.profileMismatchCount, 1);
+  assert.equal(summary.unsafeProfileMismatchCount, 0);
+  assert.deepEqual(summary.blockingReasons, []);
+});
+
+test("evaluateProviderRolloutGate blocks on aggressive profile drift", () => {
+  const summary = evaluateProviderRolloutGate(
+    [
+      {
+        ts: "2026-04-03T00:00:00Z",
+        requestId: "1",
+        taskId: "ISSUE-1",
+        module: "intake.interpretation",
+        requestedProvider: "claude",
+        effectiveProvider: "claude",
+        outcome: "success",
+        compareMode: "dry_run",
+        primaryProvider: "local",
+        shadowProvider: "claude",
+        schemaValidShadow: true,
+        profileMatch: false,
+        profileDriftKind: "aggressive_shadow",
+        profileDriftTolerated: false,
+        targetFilesMatch: true,
+        humanNeededMatch: true,
+      },
+    ],
+    { module: "intake.interpretation", minSamples: 1 },
+  );
+
+  assert.equal(summary.ready, false);
+  assert.equal(summary.profileMismatchCount, 1);
+  assert.equal(summary.unsafeProfileMismatchCount, 1);
+  assert.match(summary.blockingReasons.join(","), /unsafe_profile_mismatch_rate/);
+});
+
 test("evaluateProviderRolloutGate blocks on unsafe target-file drift", () => {
   const summary = evaluateProviderRolloutGate(
     [

@@ -299,6 +299,17 @@ task_intake_android_fallback_target_files() {
       && printf '%s\n' 'app/planka_quick_test_app/app/src/main/AndroidManifest.xml'
   fi
 
+  if printf '%s' "$combined_downcased" | rg -q '(versionname|version name|versioncode|version code|версии сборки|верси[яю][[:space:]]+сборк)'; then
+    [[ -f "${root_dir}/app/planka_quick_test_app/app/build.gradle.kts" ]] \
+      && printf '%s\n' 'app/planka_quick_test_app/app/build.gradle.kts'
+    [[ -f "${root_dir}/app/planka_quick_test_app/app/src/main/java/com/planka/quicktest/MainActivity.kt" ]] \
+      && printf '%s\n' 'app/planka_quick_test_app/app/src/main/java/com/planka/quicktest/MainActivity.kt'
+    [[ -f "${root_dir}/app/planka_quick_test_app/app/src/main/assets/index.html" ]] \
+      && printf '%s\n' 'app/planka_quick_test_app/app/src/main/assets/index.html'
+    [[ -f "${root_dir}/app/planka_quick_test_app/app/src/main/AndroidManifest.xml" ]] \
+      && printf '%s\n' 'app/planka_quick_test_app/app/src/main/AndroidManifest.xml'
+  fi
+
   if [[ "$keyboard_signal" != "true" ]] && printf '%s' "$combined_downcased" | rg -q '(подпись|label|кнопк|button|строк|string|текст)'; then
     [[ -f "${root_dir}/app/planka_quick_test_app/app/src/main/res/values/strings.xml" ]] \
       && printf '%s\n' 'app/planka_quick_test_app/app/src/main/res/values/strings.xml'

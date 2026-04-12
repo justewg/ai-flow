@@ -166,6 +166,16 @@ corpus_issue_filter_json="$(
 if [[ "$rerun_transient_failed" == "1" ]]; then
   telemetry_file_for_filter="${state_dir}/provider_telemetry.jsonl"
   if [[ -f "$telemetry_file_for_filter" ]]; then
+    existing_corpus_records_count="$(
+      jq -c --argjson issues "$corpus_issue_filter_json" '
+        select(.taskId as $taskId | $issues | index($taskId))
+      ' "$telemetry_file_for_filter" | jq -s 'length'
+    )"
+    if (( existing_corpus_records_count == 0 )); then
+      printf 'PROVIDER_CORPUS_RERUN_NO_MATCHING_RECORDS=1\n' >&2
+      printf 'PROVIDER_CORPUS_RERUN_ERROR=no previous telemetry records for requested issues in state dir\n' >&2
+      exit 2
+    fi
     run_issues=()
     while IFS= read -r issue_number; do
       [[ -n "$issue_number" ]] || continue
@@ -183,7 +193,9 @@ if [[ "$rerun_transient_failed" == "1" ]]; then
         '
     )
   else
-    run_issues=()
+    printf 'PROVIDER_CORPUS_RERUN_NO_TELEMETRY=1\n' >&2
+    printf 'PROVIDER_CORPUS_RERUN_ERROR=no provider_telemetry.jsonl in state dir\n' >&2
+    exit 2
   fi
 fi
 

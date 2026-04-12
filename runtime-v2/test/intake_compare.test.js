@@ -71,6 +71,48 @@ test("compareInterpretationResults marks blocked target expansion as tolerated",
   assert.equal(compare.compareSummary, "interpretation_target_files_tolerated");
 });
 
+test("compareInterpretationResults marks conservative shadow profile drift as tolerated", () => {
+  const compare = compareInterpretationResults(
+    {
+      decision: "micro",
+      candidateTargetFiles: ["MainActivity.kt", "index.html"],
+      confidence: { score: 0.91 },
+    },
+    {
+      decision: "standard",
+      candidateTargetFiles: ["MainActivity.kt", "index.html"],
+      confidence: { score: 0.92 },
+    },
+    { compareMode: "dry_run" },
+  );
+
+  assert.equal(compare.profileMatch, false);
+  assert.equal(compare.profileDriftKind, "conservative_shadow");
+  assert.equal(compare.profileDriftTolerated, true);
+  assert.equal(compare.compareSummary, "interpretation_profile_tolerated");
+});
+
+test("compareInterpretationResults keeps aggressive shadow profile drift unsafe", () => {
+  const compare = compareInterpretationResults(
+    {
+      decision: "standard",
+      candidateTargetFiles: ["MainActivity.kt", "index.html"],
+      confidence: { score: 0.91 },
+    },
+    {
+      decision: "micro",
+      candidateTargetFiles: ["MainActivity.kt", "index.html"],
+      confidence: { score: 0.92 },
+    },
+    { compareMode: "dry_run" },
+  );
+
+  assert.equal(compare.profileMatch, false);
+  assert.equal(compare.profileDriftKind, "aggressive_shadow");
+  assert.equal(compare.profileDriftTolerated, false);
+  assert.equal(compare.compareSummary, "interpretation_profile_mismatch");
+});
+
 test("compareAskHumanResults computes body and structure drift", () => {
   const compare = compareAskHumanResults(
     {

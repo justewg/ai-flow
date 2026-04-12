@@ -40,6 +40,8 @@ shadow_provider="${PROVIDER_TELEMETRY_SHADOW_PROVIDER:-}"
 schema_valid_primary="${PROVIDER_TELEMETRY_SCHEMA_VALID_PRIMARY:-}"
 schema_valid_shadow="${PROVIDER_TELEMETRY_SCHEMA_VALID_SHADOW:-}"
 profile_match="${PROVIDER_TELEMETRY_PROFILE_MATCH:-}"
+profile_drift_kind="${PROVIDER_TELEMETRY_PROFILE_DRIFT_KIND:-}"
+profile_drift_tolerated="${PROVIDER_TELEMETRY_PROFILE_DRIFT_TOLERATED:-}"
 target_files_match="${PROVIDER_TELEMETRY_TARGET_FILES_MATCH:-}"
 target_files_drift_kind="${PROVIDER_TELEMETRY_TARGET_FILES_DRIFT_KIND:-}"
 target_files_drift_tolerated="${PROVIDER_TELEMETRY_TARGET_FILES_DRIFT_TOLERATED:-}"
@@ -89,6 +91,7 @@ jq -nc \
   --arg primaryProvider "$primary_provider" \
   --arg shadowProvider "$shadow_provider" \
   --arg compareSummary "$compare_summary" \
+  --arg profileDriftKind "$profile_drift_kind" \
   --arg targetFilesDriftKind "$target_files_drift_kind" \
   --arg errorClass "$error_class" \
   --arg errorMessage "$error_message" \
@@ -102,6 +105,7 @@ jq -nc \
   --argjson schemaValidPrimary "$(json_bool_or_null "$schema_valid_primary")" \
   --argjson schemaValidShadow "$(json_bool_or_null "$schema_valid_shadow")" \
   --argjson profileMatch "$(json_bool_or_null "$profile_match")" \
+  --argjson profileDriftTolerated "$(json_bool_or_null "$profile_drift_tolerated")" \
   --argjson targetFilesMatch "$(json_bool_or_null "$target_files_match")" \
   --argjson targetFilesDriftTolerated "$(json_bool_or_null "$target_files_drift_tolerated")" \
   --argjson humanNeededMatch "$(json_bool_or_null "$human_needed_match")" \
@@ -126,6 +130,8 @@ jq -nc \
     schemaValidPrimary:$schemaValidPrimary,
     schemaValidShadow:$schemaValidShadow,
     profileMatch:$profileMatch,
+    profileDriftKind:(if $profileDriftKind == "" then null else $profileDriftKind end),
+    profileDriftTolerated:$profileDriftTolerated,
     targetFilesMatch:$targetFilesMatch,
     targetFilesDriftKind:(if $targetFilesDriftKind == "" then null else $targetFilesDriftKind end),
     targetFilesDriftTolerated:$targetFilesDriftTolerated,

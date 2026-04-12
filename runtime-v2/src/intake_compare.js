@@ -70,6 +70,31 @@ function targetFilesDrift(primaryDecision, shadowDecision, primaryFiles, shadowF
   };
 }
 
+function profileDrift(primaryDecision, shadowDecision) {
+  if (primaryDecision === null || shadowDecision === null) {
+    return {
+      kind: null,
+      tolerated: false,
+    };
+  }
+  if (primaryDecision === shadowDecision) {
+    return {
+      kind: "match",
+      tolerated: true,
+    };
+  }
+  if (primaryDecision === "micro" && shadowDecision === "standard") {
+    return {
+      kind: "conservative_shadow",
+      tolerated: true,
+    };
+  }
+  return {
+    kind: "aggressive_shadow",
+    tolerated: false,
+  };
+}
+
 function hasExplanationText(text) {
   if (typeof text !== "string") {
     return false;
@@ -95,6 +120,7 @@ function compareInterpretationResults(primary, shadow, options = {}) {
   const profileMatch = primaryDecision !== null && shadowDecision !== null ? primaryDecision === shadowDecision : null;
   const targetFilesMatch =
     primaryDecision !== null && shadowDecision !== null ? JSON.stringify(primaryFiles) === JSON.stringify(shadowFiles) : null;
+  const profileDriftInfo = profileDrift(primaryDecision, shadowDecision);
   const targetFilesDriftInfo = targetFilesDrift(primaryDecision, shadowDecision, primaryFiles, shadowFiles);
   const humanNeededMatch =
     primaryDecision !== null && shadowDecision !== null
@@ -109,6 +135,8 @@ function compareInterpretationResults(primary, shadow, options = {}) {
     schemaValidPrimary,
     schemaValidShadow,
     profileMatch,
+    profileDriftKind: profileDriftInfo.kind,
+    profileDriftTolerated: profileMatch === false ? profileDriftInfo.tolerated : profileMatch === true,
     targetFilesMatch,
     targetFilesDriftKind: targetFilesDriftInfo.kind,
     targetFilesDriftTolerated: targetFilesMatch === false ? targetFilesDriftInfo.tolerated : targetFilesMatch === true,
@@ -122,6 +150,8 @@ function compareInterpretationResults(primary, shadow, options = {}) {
           ? `interpretation_shadow_invalid${shadowError?.errorClass ? `:${shadowError.errorClass}` : ""}`
         : profileMatch === true && targetFilesMatch === true
         ? "interpretation_match"
+        : profileMatch === false && profileDriftInfo.tolerated
+          ? "interpretation_profile_tolerated"
         : profileMatch === false
           ? "interpretation_profile_mismatch"
           : targetFilesMatch === false && targetFilesDriftInfo.tolerated

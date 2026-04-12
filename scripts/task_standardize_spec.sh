@@ -79,6 +79,8 @@ append_shadow_compare_telemetry() {
   PROVIDER_TELEMETRY_SCHEMA_VALID_PRIMARY="$schema_valid_primary" \
   PROVIDER_TELEMETRY_SCHEMA_VALID_SHADOW="$schema_valid_shadow" \
   PROVIDER_TELEMETRY_PROFILE_MATCH="$profile_match" \
+  PROVIDER_TELEMETRY_PROFILE_DRIFT_KIND="$(printf '%s' "$compare_artifact_json" | jq -r '.profileDriftKind // ""')" \
+  PROVIDER_TELEMETRY_PROFILE_DRIFT_TOLERATED="$(printf '%s' "$compare_artifact_json" | jq -r 'if .profileDriftTolerated == null then empty else .profileDriftTolerated end')" \
   PROVIDER_TELEMETRY_TARGET_FILES_MATCH="$target_files_match" \
   PROVIDER_TELEMETRY_TARGET_FILES_DRIFT_KIND="$(printf '%s' "$compare_artifact_json" | jq -r '.targetFilesDriftKind // ""')" \
   PROVIDER_TELEMETRY_TARGET_FILES_DRIFT_TOLERATED="$(printf '%s' "$compare_artifact_json" | jq -r 'if .targetFilesDriftTolerated == null then empty else .targetFilesDriftTolerated end')" \

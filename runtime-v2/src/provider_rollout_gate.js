@@ -99,6 +99,10 @@ function evaluateProviderRolloutGate(records, input = {}) {
   const schemaInvalidCount = countWhere(recentRecords, (record) => record.schemaValidShadow === false);
   const errorCount = countWhere(recentRecords, (record) => record.outcome !== "success");
   const profileMismatchCount = countWhere(recentRecords, (record) => record.profileMatch === false);
+  const unsafeProfileMismatchCount = countWhere(
+    recentRecords,
+    (record) => record.profileMatch === false && record.profileDriftTolerated !== true,
+  );
   const targetFilesMismatchCount = countWhere(recentRecords, (record) => record.targetFilesMatch === false);
   const unsafeTargetFilesMismatchCount = countWhere(
     recentRecords,
@@ -107,6 +111,7 @@ function evaluateProviderRolloutGate(records, input = {}) {
   const humanNeededMismatchCount = countWhere(recentRecords, (record) => record.humanNeededMatch === false);
 
   const profileMismatchRate = ratio(profileMismatchCount, sampleSize);
+  const unsafeProfileMismatchRate = ratio(unsafeProfileMismatchCount, sampleSize);
   const targetFilesMismatchRate = ratio(targetFilesMismatchCount, sampleSize);
   const unsafeTargetFilesMismatchRate = ratio(unsafeTargetFilesMismatchCount, sampleSize);
   const humanNeededMismatchRate = ratio(humanNeededMismatchCount, sampleSize);
@@ -121,8 +126,8 @@ function evaluateProviderRolloutGate(records, input = {}) {
   if (errorCount > options.maxErrorCount) {
     blockingReasons.push(`shadow_errors:${errorCount}`);
   }
-  if (profileMismatchRate !== null && profileMismatchRate > options.maxProfileMismatchRate) {
-    blockingReasons.push(`profile_mismatch_rate:${profileMismatchRate}`);
+  if (unsafeProfileMismatchRate !== null && unsafeProfileMismatchRate > options.maxProfileMismatchRate) {
+    blockingReasons.push(`unsafe_profile_mismatch_rate:${unsafeProfileMismatchRate}`);
   }
   if (unsafeTargetFilesMismatchRate !== null && unsafeTargetFilesMismatchRate > options.maxTargetFilesMismatchRate) {
     blockingReasons.push(`unsafe_target_files_mismatch_rate:${unsafeTargetFilesMismatchRate}`);
@@ -148,10 +153,12 @@ function evaluateProviderRolloutGate(records, input = {}) {
     schemaInvalidCount,
     errorCount,
     profileMismatchCount,
+    unsafeProfileMismatchCount,
     targetFilesMismatchCount,
     unsafeTargetFilesMismatchCount,
     humanNeededMismatchCount,
     profileMismatchRate,
+    unsafeProfileMismatchRate,
     targetFilesMismatchRate,
     unsafeTargetFilesMismatchRate,
     humanNeededMismatchRate,
@@ -165,6 +172,8 @@ function evaluateProviderRolloutGate(records, input = {}) {
       compareSummary: record.compareSummary,
       schemaValidShadow: record.schemaValidShadow,
       profileMatch: record.profileMatch,
+      profileDriftKind: record.profileDriftKind,
+      profileDriftTolerated: record.profileDriftTolerated,
       targetFilesMatch: record.targetFilesMatch,
       targetFilesDriftKind: record.targetFilesDriftKind,
       targetFilesDriftTolerated: record.targetFilesDriftTolerated,

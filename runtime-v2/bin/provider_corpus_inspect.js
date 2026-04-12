@@ -203,6 +203,7 @@ function inspectCorpus(args) {
     blockingReasons: gate?.blockingReasons || summary?.gate?.blockingReasons || [],
     telemetry: summary?.telemetry || null,
     gateTelemetry: summary?.gateTelemetry || null,
+    runIssues: Array.isArray(summary?.runIssues) ? summary.runIssues : [],
     mismatchCounts: items.reduce((acc, item) => {
       for (const reason of item.mismatchReasons) {
         acc[reason] = (acc[reason] || 0) + 1;

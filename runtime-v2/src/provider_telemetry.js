@@ -105,6 +105,8 @@ function normalizeProviderTelemetryRecord(input) {
     machineReadableMarkersShadow: optionalBoolean(input.machineReadableMarkersShadow),
     kindMatch: optionalBoolean(input.kindMatch),
     recommendedActionMatch: optionalBoolean(input.recommendedActionMatch),
+    recommendedActionDriftKind: optionalString(input.recommendedActionDriftKind),
+    recommendedActionDriftTolerated: optionalBoolean(input.recommendedActionDriftTolerated),
     optionsMatch: optionalBoolean(input.optionsMatch),
     bodyLengthDelta: optionalFiniteNumber(input.bodyLengthDelta, "bodyLengthDelta"),
     explanationCompletenessPrimary: optionalBoolean(input.explanationCompletenessPrimary),

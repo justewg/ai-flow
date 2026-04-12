@@ -119,7 +119,7 @@ function mismatchReasons(compare) {
     reasons.push("kind");
   }
   if (compare?.recommendedActionMatch === false) {
-    reasons.push("recommended_action");
+    reasons.push(compare.recommendedActionDriftTolerated === true ? "recommended_action_tolerated" : "recommended_action");
   }
   if (compare?.optionsMatch === false) {
     reasons.push("options");
@@ -196,6 +196,8 @@ function inspectCorpus(args) {
       humanNeededMatch: compare.humanNeededMatch ?? null,
       kindMatch: compare.kindMatch ?? null,
       recommendedActionMatch: compare.recommendedActionMatch ?? null,
+      recommendedActionDriftKind: compare.recommendedActionDriftKind ?? null,
+      recommendedActionDriftTolerated: compare.recommendedActionDriftTolerated ?? null,
       optionsMatch: compare.optionsMatch ?? null,
       machineReadableMarkersShadow: compare.machineReadableMarkersShadow ?? null,
       schemaValidShadow: compare.schemaValidShadow ?? null,

@@ -50,6 +50,8 @@ machine_readable_markers_primary="${PROVIDER_TELEMETRY_MACHINE_READABLE_MARKERS_
 machine_readable_markers_shadow="${PROVIDER_TELEMETRY_MACHINE_READABLE_MARKERS_SHADOW:-}"
 kind_match="${PROVIDER_TELEMETRY_KIND_MATCH:-}"
 recommended_action_match="${PROVIDER_TELEMETRY_RECOMMENDED_ACTION_MATCH:-}"
+recommended_action_drift_kind="${PROVIDER_TELEMETRY_RECOMMENDED_ACTION_DRIFT_KIND:-}"
+recommended_action_drift_tolerated="${PROVIDER_TELEMETRY_RECOMMENDED_ACTION_DRIFT_TOLERATED:-}"
 options_match="${PROVIDER_TELEMETRY_OPTIONS_MATCH:-}"
 body_length_delta="${PROVIDER_TELEMETRY_BODY_LENGTH_DELTA:-null}"
 explanation_completeness_primary="${PROVIDER_TELEMETRY_EXPLANATION_COMPLETENESS_PRIMARY:-}"
@@ -106,6 +108,7 @@ jq -nc \
   --arg compareSummary "$compare_summary" \
   --arg profileDriftKind "$profile_drift_kind" \
   --arg targetFilesDriftKind "$target_files_drift_kind" \
+  --arg recommendedActionDriftKind "$recommended_action_drift_kind" \
   --arg errorClass "$error_class" \
   --arg errorMessage "$error_message" \
   --argjson latencyMs "$latency_ms" \
@@ -127,6 +130,7 @@ jq -nc \
   --argjson machineReadableMarkersShadow "$(json_bool_or_null "$machine_readable_markers_shadow")" \
   --argjson kindMatch "$(json_bool_or_null "$kind_match")" \
   --argjson recommendedActionMatch "$(json_bool_or_null "$recommended_action_match")" \
+  --argjson recommendedActionDriftTolerated "$(json_bool_or_null "$recommended_action_drift_tolerated")" \
   --argjson optionsMatch "$(json_bool_or_null "$options_match")" \
   --argjson explanationCompletenessPrimary "$(json_bool_or_null "$explanation_completeness_primary")" \
   --argjson explanationCompletenessShadow "$(json_bool_or_null "$explanation_completeness_shadow")" \
@@ -163,6 +167,8 @@ jq -nc \
     machineReadableMarkersShadow:$machineReadableMarkersShadow,
     kindMatch:$kindMatch,
     recommendedActionMatch:$recommendedActionMatch,
+    recommendedActionDriftKind:(if $recommendedActionDriftKind == "" then null else $recommendedActionDriftKind end),
+    recommendedActionDriftTolerated:$recommendedActionDriftTolerated,
     optionsMatch:$optionsMatch,
     bodyLengthDelta:$bodyLengthDelta,
     explanationCompletenessPrimary:$explanationCompletenessPrimary,

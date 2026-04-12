@@ -15,6 +15,7 @@ Options:
   --retry-transient <n>        Retries for transient shadow errors. Default: 2.
   --retry-sleep-sec <n>        Base sleep before transient retry. Default: 5.
   --no-clear                   Do not clear state dir before run.
+  --rerun-transient-failed     With --no-clear, run only issues whose latest shadow result is transient.
 EOF
 }
 
@@ -32,6 +33,7 @@ min_samples=""
 clear_state="1"
 transient_retries="${PROVIDER_CORPUS_TRANSIENT_RETRIES:-2}"
 retry_sleep_sec="${PROVIDER_CORPUS_RETRY_SLEEP_SEC:-5}"
+rerun_transient_failed="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -79,6 +81,11 @@ while [[ $# -gt 0 ]]; do
       clear_state="0"
       shift
       ;;
+    --rerun-transient-failed)
+      rerun_transient_failed="1"
+      clear_state="0"
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -96,7 +103,11 @@ if [[ -n "$issues_file" ]]; then
   issues_raw="${issues_raw}"$'\n'"$(grep -Ev '^[[:space:]]*(#|$)' "$issues_file" || true)"
 fi
 
-mapfile -t issues < <(
+issues=()
+while IFS= read -r issue_number; do
+  [[ -n "$issue_number" ]] || continue
+  issues+=("$issue_number")
+done < <(
   printf '%s\n' "$issues_raw" \
     | tr ',;' '\n\n' \
     | tr ' ' '\n' \
@@ -122,6 +133,8 @@ fi
 if [[ -z "$min_samples" ]]; then
   min_samples="${#issues[@]}"
 fi
+corpus_issues=("${issues[@]}")
+run_issues=("${issues[@]}")
 
 if ! [[ "$min_samples" =~ ^[0-9]+$ ]] || (( min_samples < 1 )); then
   echo "Invalid --min-samples: $min_samples" >&2
@@ -144,16 +157,55 @@ mkdir -p "$state_dir"
 export CODEX_STATE_DIR="$state_dir"
 export FLOW_STATE_DIR="$state_dir"
 
+corpus_issue_filter_json="$(
+  printf '%s\n' "${corpus_issues[@]}" \
+    | jq -R 'select(test("^[0-9]+$")) | "ISSUE-" + .' \
+    | jq -s .
+)"
+
+if [[ "$rerun_transient_failed" == "1" ]]; then
+  telemetry_file_for_filter="${state_dir}/provider_telemetry.jsonl"
+  if [[ -f "$telemetry_file_for_filter" ]]; then
+    run_issues=()
+    while IFS= read -r issue_number; do
+      [[ -n "$issue_number" ]] || continue
+      run_issues+=("$issue_number")
+    done < <(
+      jq -c --argjson issues "$corpus_issue_filter_json" '
+        select(.taskId as $taskId | $issues | index($taskId))
+      ' "$telemetry_file_for_filter" \
+        | jq -s -r '
+          group_by(.taskId)[]
+          | sort_by(.ts // "")[-1]
+          | select((.errorClass // "") as $errorClass | ["provider_unavailable","provider_rate_limited","timeout"] | index($errorClass))
+          | .taskId
+          | capture("^ISSUE-(?<issueNumber>[0-9]+)$").issueNumber
+        '
+    )
+  else
+    run_issues=()
+  fi
+fi
+
 run_results_file="${state_dir}/provider_corpus_results.jsonl"
 gate_file="${state_dir}/provider_corpus_gate.json"
 summary_file="${state_dir}/provider_corpus_summary.json"
 gate_ledger_file="${state_dir}/provider_corpus_gate_telemetry.jsonl"
-: > "$run_results_file"
+if [[ "$clear_state" == "1" ]]; then
+  : > "$run_results_file"
+else
+  touch "$run_results_file"
+fi
 
 printf 'PROVIDER_CORPUS_STATE_DIR=%s\n' "$state_dir"
 printf 'PROVIDER_CORPUS_MODULE=%s\n' "$module"
 printf 'PROVIDER_CORPUS_SHADOW_PROVIDER=%s\n' "$shadow_provider"
-printf 'PROVIDER_CORPUS_ISSUES=%s\n' "$(IFS=,; printf '%s' "${issues[*]}")"
+printf 'PROVIDER_CORPUS_ISSUES=%s\n' "$(IFS=,; printf '%s' "${corpus_issues[*]}")"
+run_issues_csv=""
+if (( ${#run_issues[@]} > 0 )); then
+  run_issues_csv="$(IFS=,; printf '%s' "${run_issues[*]}")"
+fi
+printf 'PROVIDER_CORPUS_RUN_ISSUES=%s\n' "$run_issues_csv"
 printf 'PROVIDER_CORPUS_TRANSIENT_RETRIES=%s\n' "$transient_retries"
 printf 'PROVIDER_CORPUS_RETRY_SLEEP_SEC=%s\n' "$retry_sleep_sec"
 
@@ -190,58 +242,60 @@ is_transient_shadow_error() {
   esac
 }
 
-for issue_number in "${issues[@]}"; do
-  if ! [[ "$issue_number" =~ ^[0-9]+$ ]]; then
-    jq -nc \
-      --arg issueNumber "$issue_number" \
-      '{issueNumber:$issueNumber,status:"skipped",error:"invalid_issue_number"}' >> "$run_results_file"
-    continue
-  fi
-
-  task_id="ISSUE-${issue_number}"
-  attempt=0
-  while :; do
-    attempt=$((attempt + 1))
-    printf 'PROVIDER_CORPUS_RUN task=%s issue=%s attempt=%s\n' "$task_id" "$issue_number" "$attempt"
-    started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-    set +e
-    output="$(/bin/bash "${SCRIPT_DIR}/task_interpret.sh" "$task_id" "$issue_number" 2>&1)"
-    rc=$?
-    set -e
-    finished_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-    printf '%s\n' "$output"
-    shadow_error_class="$(shadow_error_class_for_attempt "$task_id" "$issue_number")"
-    compare_summary="$(compare_summary_for_attempt "$task_id" "$issue_number")"
-    jq -nc \
-      --arg taskId "$task_id" \
-      --argjson issueNumber "$issue_number" \
-      --argjson attempt "$attempt" \
-      --arg startedAt "$started_at" \
-      --arg finishedAt "$finished_at" \
-      --argjson rc "$rc" \
-      --arg shadowErrorClass "$shadow_error_class" \
-      --arg compareSummary "$compare_summary" \
-      --arg output "$output" \
-      '{taskId:$taskId,issueNumber:$issueNumber,attempt:$attempt,startedAt:$startedAt,finishedAt:$finishedAt,rc:$rc,status:(if $rc == 0 then "ok" else "error" end),shadowErrorClass:(if $shadowErrorClass == "" then null else $shadowErrorClass end),compareSummary:(if $compareSummary == "" then null else $compareSummary end),output:$output}' \
-      >> "$run_results_file"
-
-    if (( rc != 0 )) || ! is_transient_shadow_error "$shadow_error_class" || (( attempt > transient_retries )); then
-      break
+if (( ${#run_issues[@]} > 0 )); then
+  for issue_number in "${run_issues[@]}"; do
+    if ! [[ "$issue_number" =~ ^[0-9]+$ ]]; then
+      jq -nc \
+        --arg issueNumber "$issue_number" \
+        '{issueNumber:$issueNumber,status:"skipped",error:"invalid_issue_number"}' >> "$run_results_file"
+      continue
     fi
 
-    sleep_for=$(( retry_sleep_sec * attempt ))
-    printf 'PROVIDER_CORPUS_TRANSIENT_RETRY task=%s issue=%s attempt=%s error=%s sleepSec=%s\n' \
-      "$task_id" "$issue_number" "$attempt" "$shadow_error_class" "$sleep_for"
-    sleep "$sleep_for"
+    task_id="ISSUE-${issue_number}"
+    attempt=0
+    while :; do
+      attempt=$((attempt + 1))
+      printf 'PROVIDER_CORPUS_RUN task=%s issue=%s attempt=%s\n' "$task_id" "$issue_number" "$attempt"
+      started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+      set +e
+      output="$(/bin/bash "${SCRIPT_DIR}/task_interpret.sh" "$task_id" "$issue_number" 2>&1)"
+      rc=$?
+      set -e
+      finished_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+      printf '%s\n' "$output"
+      shadow_error_class="$(shadow_error_class_for_attempt "$task_id" "$issue_number")"
+      compare_summary="$(compare_summary_for_attempt "$task_id" "$issue_number")"
+      jq -nc \
+        --arg taskId "$task_id" \
+        --argjson issueNumber "$issue_number" \
+        --argjson attempt "$attempt" \
+        --arg startedAt "$started_at" \
+        --arg finishedAt "$finished_at" \
+        --argjson rc "$rc" \
+        --arg shadowErrorClass "$shadow_error_class" \
+        --arg compareSummary "$compare_summary" \
+        --arg output "$output" \
+        '{taskId:$taskId,issueNumber:$issueNumber,attempt:$attempt,startedAt:$startedAt,finishedAt:$finishedAt,rc:$rc,status:(if $rc == 0 then "ok" else "error" end),shadowErrorClass:(if $shadowErrorClass == "" then null else $shadowErrorClass end),compareSummary:(if $compareSummary == "" then null else $compareSummary end),output:$output}' \
+        >> "$run_results_file"
+
+      if (( rc != 0 )) || ! is_transient_shadow_error "$shadow_error_class" || (( attempt > transient_retries )); then
+        break
+      fi
+
+      sleep_for=$(( retry_sleep_sec * attempt ))
+      printf 'PROVIDER_CORPUS_TRANSIENT_RETRY task=%s issue=%s attempt=%s error=%s sleepSec=%s\n' \
+        "$task_id" "$issue_number" "$attempt" "$shadow_error_class" "$sleep_for"
+      sleep "$sleep_for"
+    done
   done
-done
+fi
 
 telemetry_file="${state_dir}/provider_telemetry.jsonl"
 if [[ ! -f "$telemetry_file" ]]; then
   : > "$telemetry_file"
 fi
 
-jq -nc --argjson issues "$(printf '%s\n' "${issues[@]}" | jq -R 'select(test("^[0-9]+$")) | "ISSUE-" + .' | jq -s .)" \
+jq -nc --argjson issues "$corpus_issue_filter_json" \
   '{issues:$issues}' > "${state_dir}/provider_corpus_issue_filter.json"
 
 jq -c --slurpfile filter "${state_dir}/provider_corpus_issue_filter.json" '
@@ -257,11 +311,18 @@ CODEX_STATE_DIR="$state_dir" FLOW_STATE_DIR="$state_dir" "$NODE_BIN" "${SCRIPT_D
   --shadow-provider "$shadow_provider" \
   --min-samples "$min_samples" > "$gate_file"
 
+corpus_issues_json="$(printf '%s\n' "${corpus_issues[@]}" | jq -R . | jq -s .)"
+run_issues_json="[]"
+if (( ${#run_issues[@]} > 0 )); then
+  run_issues_json="$(printf '%s\n' "${run_issues[@]}" | jq -R . | jq -s .)"
+fi
+
 jq -n \
   --arg stateDir "$state_dir" \
   --arg module "$module" \
   --arg shadowProvider "$shadow_provider" \
-  --argjson issues "$(printf '%s\n' "${issues[@]}" | jq -R . | jq -s .)" \
+  --argjson issues "$corpus_issues_json" \
+  --argjson runIssues "$run_issues_json" \
   --argjson taskRuns "$(jq -s . "$run_results_file")" \
   --argjson gate "$(cat "$gate_file")" \
   --slurpfile telemetry "$telemetry_file" \
@@ -271,6 +332,7 @@ jq -n \
     module:$module,
     shadowProvider:$shadowProvider,
     issues:$issues,
+    runIssues:$runIssues,
     taskRuns:$taskRuns,
     gate:$gate,
     telemetry:{

@@ -177,6 +177,16 @@ append_shadow_compare_telemetry() {
   PROVIDER_TELEMETRY_SHADOW_PROVIDER="$(printf '%s' "$compare_json" | jq -r '.shadowProvider // "claude"')" \
   PROVIDER_TELEMETRY_SCHEMA_VALID_PRIMARY="$schema_valid_primary" \
   PROVIDER_TELEMETRY_SCHEMA_VALID_SHADOW="$schema_valid_shadow" \
+  PROVIDER_TELEMETRY_MACHINE_READABLE_MARKERS_PRIMARY="$(printf '%s' "$compare_artifact_json" | jq -r 'if .machineReadableMarkersPrimary == null then empty else .machineReadableMarkersPrimary end')" \
+  PROVIDER_TELEMETRY_MACHINE_READABLE_MARKERS_SHADOW="$(printf '%s' "$compare_artifact_json" | jq -r 'if .machineReadableMarkersShadow == null then empty else .machineReadableMarkersShadow end')" \
+  PROVIDER_TELEMETRY_KIND_MATCH="$(printf '%s' "$compare_artifact_json" | jq -r 'if .kindMatch == null then empty else .kindMatch end')" \
+  PROVIDER_TELEMETRY_RECOMMENDED_ACTION_MATCH="$(printf '%s' "$compare_artifact_json" | jq -r 'if .recommendedActionMatch == null then empty else .recommendedActionMatch end')" \
+  PROVIDER_TELEMETRY_OPTIONS_MATCH="$(printf '%s' "$compare_artifact_json" | jq -r 'if .optionsMatch == null then empty else .optionsMatch end')" \
+  PROVIDER_TELEMETRY_BODY_LENGTH_DELTA="$(printf '%s' "$compare_artifact_json" | jq -r 'if .bodyLengthDelta == null then empty else .bodyLengthDelta end')" \
+  PROVIDER_TELEMETRY_EXPLANATION_COMPLETENESS_PRIMARY="$(printf '%s' "$compare_artifact_json" | jq -r 'if .explanationCompletenessPrimary == null then empty else .explanationCompletenessPrimary end')" \
+  PROVIDER_TELEMETRY_EXPLANATION_COMPLETENESS_SHADOW="$(printf '%s' "$compare_artifact_json" | jq -r 'if .explanationCompletenessShadow == null then empty else .explanationCompletenessShadow end')" \
+  PROVIDER_TELEMETRY_SPECIFICITY_QUESTION_PRIMARY="$(printf '%s' "$compare_artifact_json" | jq -r 'if .specificityQuestionPrimary == null then empty else .specificityQuestionPrimary end')" \
+  PROVIDER_TELEMETRY_SPECIFICITY_QUESTION_SHADOW="$(printf '%s' "$compare_artifact_json" | jq -r 'if .specificityQuestionShadow == null then empty else .specificityQuestionShadow end')" \
   PROVIDER_TELEMETRY_COMPARE_SUMMARY="$(printf '%s' "$compare_artifact_json" | jq -r '.compareSummary // ""')" \
   PROVIDER_TELEMETRY_PUBLISH_DECISION=0 \
   PROVIDER_TELEMETRY_DECISION_REASON="claude_shadow_compare" \

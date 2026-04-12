@@ -112,6 +112,11 @@ test("normalizeProviderTelemetryRecord accepts compare telemetry fields", () => 
     profileDriftTolerated: false,
     targetFilesMatch: false,
     humanNeededMatch: false,
+    kindMatch: true,
+    recommendedActionMatch: true,
+    optionsMatch: false,
+    bodyLengthDelta: 42,
+    machineReadableMarkersShadow: true,
     confidenceDelta: -0.4,
     compareSummary: "interpretation_profile_mismatch",
     publishDecision: false,
@@ -121,5 +126,9 @@ test("normalizeProviderTelemetryRecord accepts compare telemetry fields", () => 
   assert.equal(record.schemaValidShadow, false);
   assert.equal(record.profileDriftKind, "aggressive_shadow");
   assert.equal(record.profileDriftTolerated, false);
+  assert.equal(record.kindMatch, true);
+  assert.equal(record.optionsMatch, false);
+  assert.equal(record.bodyLengthDelta, 42);
+  assert.equal(record.machineReadableMarkersShadow, true);
   assert.equal(record.compareSummary, "interpretation_profile_mismatch");
 });

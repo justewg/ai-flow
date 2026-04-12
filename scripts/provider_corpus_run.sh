@@ -12,6 +12,10 @@ Options:
   --module <name>              Module to summarize. Default: intake.interpretation.
   --shadow-provider <name>     Shadow provider for rollout gate. Default: claude.
   --min-samples <n>            Gate minimum sample count. Default: number of issues.
+  --ask-kind <question|blocker> Default ask-human kind when no fixture overrides it.
+  --ask-message <text>         Default ask-human message when no fixture overrides it.
+  --ask-message-file <path>    File with default ask-human message.
+  --ask-fixtures-file <path>   JSON/JSONL records: {issueNumber,kind,message}.
   --retry-transient <n>        Retries for transient shadow errors. Default: 2.
   --retry-sleep-sec <n>        Base sleep before transient retry. Default: 5.
   --no-clear                   Do not clear state dir before run.
@@ -31,6 +35,10 @@ state_dir=""
 module="intake.interpretation"
 shadow_provider="claude"
 min_samples=""
+ask_kind="question"
+ask_message=""
+ask_message_file=""
+ask_fixtures_file=""
 clear_state="1"
 transient_retries="${PROVIDER_CORPUS_TRANSIENT_RETRIES:-2}"
 retry_sleep_sec="${PROVIDER_CORPUS_RETRY_SLEEP_SEC:-5}"
@@ -67,6 +75,26 @@ while [[ $# -gt 0 ]]; do
     --min-samples)
       [[ $# -ge 2 ]] || { echo "Missing value for --min-samples" >&2; exit 1; }
       min_samples="$2"
+      shift 2
+      ;;
+    --ask-kind)
+      [[ $# -ge 2 ]] || { echo "Missing value for --ask-kind" >&2; exit 1; }
+      ask_kind="$2"
+      shift 2
+      ;;
+    --ask-message)
+      [[ $# -ge 2 ]] || { echo "Missing value for --ask-message" >&2; exit 1; }
+      ask_message="$2"
+      shift 2
+      ;;
+    --ask-message-file)
+      [[ $# -ge 2 ]] || { echo "Missing value for --ask-message-file" >&2; exit 1; }
+      ask_message_file="$2"
+      shift 2
+      ;;
+    --ask-fixtures-file)
+      [[ $# -ge 2 ]] || { echo "Missing value for --ask-fixtures-file" >&2; exit 1; }
+      ask_fixtures_file="$2"
       shift 2
       ;;
     --retry-transient)
@@ -127,9 +155,22 @@ if (( ${#issues[@]} == 0 )); then
   exit 1
 fi
 
-if [[ "$module" != "intake.interpretation" ]]; then
+if [[ "$module" != "intake.interpretation" && "$module" != "intake.ask_human" ]]; then
   echo "Unsupported corpus module for this runner: $module" >&2
   exit 1
+fi
+
+ask_kind="$(printf '%s' "$ask_kind" | tr '[:upper:]' '[:lower:]')"
+if [[ "$ask_kind" != "question" && "$ask_kind" != "blocker" ]]; then
+  echo "Invalid --ask-kind: $ask_kind (expected question|blocker)" >&2
+  exit 1
+fi
+if [[ -n "$ask_message_file" ]]; then
+  [[ -r "$ask_message_file" ]] || { echo "Ask message file is not readable: $ask_message_file" >&2; exit 1; }
+  ask_message="$(<"$ask_message_file")"
+fi
+if [[ -n "$ask_fixtures_file" ]]; then
+  [[ -r "$ask_fixtures_file" ]] || { echo "Ask fixtures file is not readable: $ask_fixtures_file" >&2; exit 1; }
 fi
 
 if [[ -z "$state_dir" ]]; then
@@ -186,8 +227,9 @@ if [[ "$rerun_transient_failed" == "1" ]]; then
   telemetry_file_for_filter="${state_dir}/provider_telemetry.jsonl"
   if [[ -f "$telemetry_file_for_filter" ]]; then
     existing_corpus_records_count="$(
-      jq -c --argjson issues "$corpus_issue_filter_json" '
+      jq -c --argjson issues "$corpus_issue_filter_json" --arg module "$module" --arg shadowProvider "$shadow_provider" '
         select(.taskId as $taskId | $issues | index($taskId))
+        | select(.module == $module and .shadowProvider == $shadowProvider and (.compareMode == "dry_run" or .compareMode == "shadow"))
       ' "$telemetry_file_for_filter" | jq -s 'length'
     )"
     if (( existing_corpus_records_count == 0 )); then
@@ -200,8 +242,9 @@ if [[ "$rerun_transient_failed" == "1" ]]; then
       [[ -n "$issue_number" ]] || continue
       run_issues+=("$issue_number")
     done < <(
-      jq -c --argjson issues "$corpus_issue_filter_json" '
+      jq -c --argjson issues "$corpus_issue_filter_json" --arg module "$module" --arg shadowProvider "$shadow_provider" '
         select(.taskId as $taskId | $issues | index($taskId))
+        | select(.module == $module and .shadowProvider == $shadowProvider and (.compareMode == "dry_run" or .compareMode == "shadow"))
       ' "$telemetry_file_for_filter" \
         | jq -s -r '
           group_by(.taskId)[]
@@ -242,8 +285,12 @@ printf 'PROVIDER_CORPUS_RETRY_SLEEP_SEC=%s\n' "$retry_sleep_sec"
 find_compare_file() {
   local task_id="$1"
   local issue_number="$2"
+  local compare_name="intake_interpretation_compare.json"
+  if [[ "$module" == "intake.ask_human" ]]; then
+    compare_name="intake_ask_human_compare.json"
+  fi
   find "${state_dir}/task-worktrees" \
-    -path "*-${task_id}-issue-${issue_number}/meta/execution/intake_interpretation_compare.json" \
+    -path "*-${task_id}-issue-${issue_number}/meta/execution/${compare_name}" \
     -print 2>/dev/null | sort | tail -n 1
 }
 
@@ -272,6 +319,81 @@ is_transient_shadow_error() {
   esac
 }
 
+ask_fixture_json_for_issue() {
+  local issue_number="$1"
+  [[ -n "$ask_fixtures_file" ]] || return 0
+  jq -c --arg issueNumber "$issue_number" '
+    if type == "array" then .[] else . end
+    | select(
+        ((.issueNumber // "") | tostring) == $issueNumber
+        or ((.taskId // "") == ("ISSUE-" + $issueNumber))
+      )
+  ' "$ask_fixtures_file" | tail -n 1
+}
+
+ask_kind_for_issue() {
+  local issue_number="$1"
+  local fixture_json
+  local fixture_kind
+  fixture_json="$(ask_fixture_json_for_issue "$issue_number")"
+  if [[ -n "$fixture_json" ]]; then
+    fixture_kind="$(printf '%s' "$fixture_json" | jq -r '.kind // empty' | tr '[:upper:]' '[:lower:]')"
+    if [[ "$fixture_kind" == "question" || "$fixture_kind" == "blocker" ]]; then
+      printf '%s' "$fixture_kind"
+      return 0
+    fi
+  fi
+  printf '%s' "$ask_kind"
+}
+
+ask_message_for_issue() {
+  local task_id="$1"
+  local issue_number="$2"
+  local issue_kind="$3"
+  local fixture_json
+  local fixture_message
+  fixture_json="$(ask_fixture_json_for_issue "$issue_number")"
+  if [[ -n "$fixture_json" ]]; then
+    fixture_message="$(printf '%s' "$fixture_json" | jq -r '.message // empty')"
+    if [[ -n "$fixture_message" ]]; then
+      printf '%s' "$fixture_message"
+      return 0
+    fi
+  fi
+  if [[ -n "$ask_message" ]]; then
+    printf '%s' "$ask_message"
+    return 0
+  fi
+  if [[ "$issue_kind" == "blocker" ]]; then
+    printf 'Блокер: executor не может безопасно продолжить по %s без выбора следующего шага. Как действовать дальше?' "$task_id"
+    return 0
+  fi
+  printf 'ASK_QUESTION=Выбери следующий шаг для executor по %s: продолжать реализацию, финализировать или уточнить scope?' "$task_id"
+}
+
+run_issue_once() {
+  local task_id="$1"
+  local issue_number="$2"
+  local message_file
+  local issue_kind
+
+  if [[ "$module" == "intake.interpretation" ]]; then
+    /bin/bash "${SCRIPT_DIR}/task_interpret.sh" "$task_id" "$issue_number"
+    return $?
+  fi
+
+  printf '%s\n' "$task_id" > "${state_dir}/daemon_active_task.txt"
+  printf '%s\n' "$task_id" > "${state_dir}/project_task_id.txt"
+  printf '%s\n' "$issue_number" > "${state_dir}/daemon_active_issue_number.txt"
+  message_file="$(mktemp "${state_dir}/provider_corpus_ask_message.XXXXXX")"
+  issue_kind="$(ask_kind_for_issue "$issue_number")"
+  ask_message_for_issue "$task_id" "$issue_number" "$issue_kind" > "$message_file"
+  TASK_ASK_COMPARE_ONLY=1 /bin/bash "${SCRIPT_DIR}/task_ask.sh" "$issue_kind" "$message_file"
+  local rc=$?
+  rm -f "$message_file"
+  return "$rc"
+}
+
 if (( ${#run_issues[@]} > 0 )); then
   for issue_number in "${run_issues[@]}"; do
     if ! [[ "$issue_number" =~ ^[0-9]+$ ]]; then
@@ -288,7 +410,7 @@ if (( ${#run_issues[@]} > 0 )); then
       printf 'PROVIDER_CORPUS_RUN task=%s issue=%s attempt=%s\n' "$task_id" "$issue_number" "$attempt"
       started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
       set +e
-      output="$(/bin/bash "${SCRIPT_DIR}/task_interpret.sh" "$task_id" "$issue_number" 2>&1)"
+      output="$(run_issue_once "$task_id" "$issue_number" 2>&1)"
       rc=$?
       set -e
       finished_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -328,8 +450,9 @@ fi
 jq -nc --argjson issues "$corpus_issue_filter_json" \
   '{issues:$issues}' > "${state_dir}/provider_corpus_issue_filter.json"
 
-jq -c --slurpfile filter "${state_dir}/provider_corpus_issue_filter.json" '
+jq -c --slurpfile filter "${state_dir}/provider_corpus_issue_filter.json" --arg module "$module" --arg shadowProvider "$shadow_provider" '
   select(.taskId as $taskId | ($filter[0].issues // []) | index($taskId))
+  | select(.module == $module and .shadowProvider == $shadowProvider and (.compareMode == "dry_run" or .compareMode == "shadow"))
 ' "$telemetry_file" \
   | jq -s -c 'group_by(.taskId)[] | sort_by(.ts)[-1]' > "$gate_ledger_file"
 rm -f "${state_dir}/provider_corpus_issue_filter.json"

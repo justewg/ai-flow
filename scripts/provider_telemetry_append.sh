@@ -46,6 +46,16 @@ target_files_match="${PROVIDER_TELEMETRY_TARGET_FILES_MATCH:-}"
 target_files_drift_kind="${PROVIDER_TELEMETRY_TARGET_FILES_DRIFT_KIND:-}"
 target_files_drift_tolerated="${PROVIDER_TELEMETRY_TARGET_FILES_DRIFT_TOLERATED:-}"
 human_needed_match="${PROVIDER_TELEMETRY_HUMAN_NEEDED_MATCH:-}"
+machine_readable_markers_primary="${PROVIDER_TELEMETRY_MACHINE_READABLE_MARKERS_PRIMARY:-}"
+machine_readable_markers_shadow="${PROVIDER_TELEMETRY_MACHINE_READABLE_MARKERS_SHADOW:-}"
+kind_match="${PROVIDER_TELEMETRY_KIND_MATCH:-}"
+recommended_action_match="${PROVIDER_TELEMETRY_RECOMMENDED_ACTION_MATCH:-}"
+options_match="${PROVIDER_TELEMETRY_OPTIONS_MATCH:-}"
+body_length_delta="${PROVIDER_TELEMETRY_BODY_LENGTH_DELTA:-null}"
+explanation_completeness_primary="${PROVIDER_TELEMETRY_EXPLANATION_COMPLETENESS_PRIMARY:-}"
+explanation_completeness_shadow="${PROVIDER_TELEMETRY_EXPLANATION_COMPLETENESS_SHADOW:-}"
+specificity_question_primary="${PROVIDER_TELEMETRY_SPECIFICITY_QUESTION_PRIMARY:-}"
+specificity_question_shadow="${PROVIDER_TELEMETRY_SPECIFICITY_QUESTION_SHADOW:-}"
 confidence_delta="${PROVIDER_TELEMETRY_CONFIDENCE_DELTA:-null}"
 compare_summary="${PROVIDER_TELEMETRY_COMPARE_SUMMARY:-}"
 publish_decision="${PROVIDER_TELEMETRY_PUBLISH_DECISION:-0}"
@@ -64,6 +74,9 @@ if ! [[ "$timeout_ms" =~ ^[0-9]+$ ]]; then
 fi
 if ! [[ "$confidence_delta" =~ ^-?[0-9]+([.][0-9]+)?$ ]]; then
   confidence_delta="null"
+fi
+if ! [[ "$body_length_delta" =~ ^-?[0-9]+$ ]]; then
+  body_length_delta="null"
 fi
 
 json_bool_or_null() {
@@ -100,6 +113,7 @@ jq -nc \
   --argjson tokenUsage "$token_usage" \
   --argjson estimatedCost "$estimated_cost" \
   --argjson confidenceDelta "$confidence_delta" \
+  --argjson bodyLengthDelta "$body_length_delta" \
   --argjson fallbackUsed "$([[ "$fallback_used" == "1" ]] && printf 'true' || printf 'false')" \
   --argjson misroute "$([[ "$misroute" == "1" ]] && printf 'true' || printf 'false')" \
   --argjson schemaValidPrimary "$(json_bool_or_null "$schema_valid_primary")" \
@@ -109,6 +123,15 @@ jq -nc \
   --argjson targetFilesMatch "$(json_bool_or_null "$target_files_match")" \
   --argjson targetFilesDriftTolerated "$(json_bool_or_null "$target_files_drift_tolerated")" \
   --argjson humanNeededMatch "$(json_bool_or_null "$human_needed_match")" \
+  --argjson machineReadableMarkersPrimary "$(json_bool_or_null "$machine_readable_markers_primary")" \
+  --argjson machineReadableMarkersShadow "$(json_bool_or_null "$machine_readable_markers_shadow")" \
+  --argjson kindMatch "$(json_bool_or_null "$kind_match")" \
+  --argjson recommendedActionMatch "$(json_bool_or_null "$recommended_action_match")" \
+  --argjson optionsMatch "$(json_bool_or_null "$options_match")" \
+  --argjson explanationCompletenessPrimary "$(json_bool_or_null "$explanation_completeness_primary")" \
+  --argjson explanationCompletenessShadow "$(json_bool_or_null "$explanation_completeness_shadow")" \
+  --argjson specificityQuestionPrimary "$(json_bool_or_null "$specificity_question_primary")" \
+  --argjson specificityQuestionShadow "$(json_bool_or_null "$specificity_question_shadow")" \
   --argjson publishDecision "$(json_bool_or_null "$publish_decision")" \
   '{
     ts:$ts,
@@ -136,6 +159,16 @@ jq -nc \
     targetFilesDriftKind:(if $targetFilesDriftKind == "" then null else $targetFilesDriftKind end),
     targetFilesDriftTolerated:$targetFilesDriftTolerated,
     humanNeededMatch:$humanNeededMatch,
+    machineReadableMarkersPrimary:$machineReadableMarkersPrimary,
+    machineReadableMarkersShadow:$machineReadableMarkersShadow,
+    kindMatch:$kindMatch,
+    recommendedActionMatch:$recommendedActionMatch,
+    optionsMatch:$optionsMatch,
+    bodyLengthDelta:$bodyLengthDelta,
+    explanationCompletenessPrimary:$explanationCompletenessPrimary,
+    explanationCompletenessShadow:$explanationCompletenessShadow,
+    specificityQuestionPrimary:$specificityQuestionPrimary,
+    specificityQuestionShadow:$specificityQuestionShadow,
     confidenceDelta:$confidenceDelta,
     compareSummary:(if $compareSummary == "" then null else $compareSummary end),
     publishDecision:$publishDecision,

@@ -215,6 +215,87 @@ test("evaluateProviderRolloutGate blocks on unsafe target-file drift", () => {
   assert.match(summary.blockingReasons.join(","), /unsafe_target_files_mismatch_rate/);
 });
 
+test("evaluateProviderRolloutGate checks ask-human kind and action drift", () => {
+  const summary = evaluateProviderRolloutGate(
+    [
+      {
+        ts: "2026-04-03T00:00:00Z",
+        requestId: "1",
+        taskId: "ISSUE-1",
+        module: "intake.ask_human",
+        requestedProvider: "claude",
+        effectiveProvider: "claude",
+        outcome: "success",
+        compareMode: "dry_run",
+        primaryProvider: "local",
+        shadowProvider: "claude",
+        schemaValidShadow: true,
+        kindMatch: true,
+        recommendedActionMatch: true,
+        optionsMatch: false,
+        machineReadableMarkersShadow: true,
+        compareSummary: "ask_human_match",
+      },
+      {
+        ts: "2026-04-03T00:01:00Z",
+        requestId: "2",
+        taskId: "ISSUE-2",
+        module: "intake.ask_human",
+        requestedProvider: "claude",
+        effectiveProvider: "claude",
+        outcome: "success",
+        compareMode: "dry_run",
+        primaryProvider: "local",
+        shadowProvider: "claude",
+        schemaValidShadow: true,
+        kindMatch: false,
+        recommendedActionMatch: true,
+        optionsMatch: true,
+        machineReadableMarkersShadow: true,
+        compareSummary: "ask_human_kind_mismatch",
+      },
+    ],
+    { module: "intake.ask_human", minSamples: 2 },
+  );
+
+  assert.equal(summary.ready, false);
+  assert.equal(summary.askHumanKindMismatchCount, 1);
+  assert.equal(summary.askHumanKindMismatchRate, 0.5);
+  assert.equal(summary.askHumanActionMismatchCount, 0);
+  assert.match(summary.blockingReasons.join(","), /ask_human_kind_mismatch_rate/);
+  assert.equal(summary.lastRecords[0].kindMatch, true);
+});
+
+test("evaluateProviderRolloutGate blocks ask-human action drift", () => {
+  const summary = evaluateProviderRolloutGate(
+    [
+      {
+        ts: "2026-04-03T00:00:00Z",
+        requestId: "1",
+        taskId: "ISSUE-1",
+        module: "intake.ask_human",
+        requestedProvider: "claude",
+        effectiveProvider: "claude",
+        outcome: "success",
+        compareMode: "dry_run",
+        primaryProvider: "local",
+        shadowProvider: "claude",
+        schemaValidShadow: true,
+        kindMatch: true,
+        recommendedActionMatch: false,
+        optionsMatch: true,
+        machineReadableMarkersShadow: true,
+        compareSummary: "ask_human_action_mismatch",
+      },
+    ],
+    { module: "intake.ask_human", minSamples: 1 },
+  );
+
+  assert.equal(summary.ready, false);
+  assert.equal(summary.askHumanActionMismatchCount, 1);
+  assert.match(summary.blockingReasons.join(","), /ask_human_action_mismatch_rate/);
+});
+
 test("evaluateProviderRolloutGate blocks when provider health reports auth error", () => {
   const summary = evaluateProviderRolloutGate(
     [

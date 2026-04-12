@@ -16,6 +16,7 @@ Options:
   --retry-sleep-sec <n>        Base sleep before transient retry. Default: 5.
   --no-clear                   Do not clear state dir before run.
   --rerun-transient-failed     With --no-clear, run only issues whose latest shadow result is transient.
+  --allow-issue-set-rewrite    With --no-clear, allow replacing existing corpus issue set.
 EOF
 }
 
@@ -34,6 +35,7 @@ clear_state="1"
 transient_retries="${PROVIDER_CORPUS_TRANSIENT_RETRIES:-2}"
 retry_sleep_sec="${PROVIDER_CORPUS_RETRY_SLEEP_SEC:-5}"
 rerun_transient_failed="0"
+allow_issue_set_rewrite="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -84,6 +86,10 @@ while [[ $# -gt 0 ]]; do
     --rerun-transient-failed)
       rerun_transient_failed="1"
       clear_state="0"
+      shift
+      ;;
+    --allow-issue-set-rewrite)
+      allow_issue_set_rewrite="1"
       shift
       ;;
     -h|--help)
@@ -163,6 +169,19 @@ corpus_issue_filter_json="$(
     | jq -s .
 )"
 
+summary_file="${state_dir}/provider_corpus_summary.json"
+if [[ "$clear_state" == "0" && "$allow_issue_set_rewrite" != "1" && -f "$summary_file" ]]; then
+  existing_issues_json="$(jq -c '(.issues // []) | map(tostring | if startswith("ISSUE-") then . else "ISSUE-" + . end) | sort' "$summary_file")"
+  requested_issues_json="$(jq -c 'sort' <<<"$corpus_issue_filter_json")"
+  if [[ "$existing_issues_json" != "$requested_issues_json" ]]; then
+    printf 'PROVIDER_CORPUS_ISSUE_SET_MISMATCH=1\n' >&2
+    printf 'PROVIDER_CORPUS_EXISTING_ISSUES=%s\n' "$existing_issues_json" >&2
+    printf 'PROVIDER_CORPUS_REQUESTED_ISSUES=%s\n' "$requested_issues_json" >&2
+    printf 'PROVIDER_CORPUS_ERROR=refusing to rewrite existing corpus issue set; use a new --state-dir or --allow-issue-set-rewrite\n' >&2
+    exit 2
+  fi
+fi
+
 if [[ "$rerun_transient_failed" == "1" ]]; then
   telemetry_file_for_filter="${state_dir}/provider_telemetry.jsonl"
   if [[ -f "$telemetry_file_for_filter" ]]; then
@@ -201,7 +220,6 @@ fi
 
 run_results_file="${state_dir}/provider_corpus_results.jsonl"
 gate_file="${state_dir}/provider_corpus_gate.json"
-summary_file="${state_dir}/provider_corpus_summary.json"
 gate_ledger_file="${state_dir}/provider_corpus_gate_telemetry.jsonl"
 if [[ "$clear_state" == "1" ]]; then
   : > "$run_results_file"

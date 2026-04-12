@@ -64,6 +64,7 @@ Commands:
   task_standardize_spec
   task_interpret
   provider_corpus_run
+  provider_corpus_inspect
   micro_task_classifier
   context_builder
   canonical_diff
@@ -1024,6 +1025,11 @@ case "$cmd" in
   provider_corpus_run)
     shift 1
     /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/provider_corpus_run.sh" "$@"
+    ;;
+
+  provider_corpus_inspect)
+    shift 1
+    /bin/bash "${CODEX_SHARED_SCRIPTS_DIR}/provider_corpus_inspect.sh" "$@"
     ;;
 
   task_noop_probe)

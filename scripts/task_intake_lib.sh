@@ -305,6 +305,17 @@ task_intake_android_fallback_target_files() {
   fi
 }
 
+task_intake_flow_toolkit_fallback_target_files() {
+  local combined_text="${1:-}"
+  local root_dir="${2:-$ROOT_DIR}"
+  local combined_downcased
+
+  combined_downcased="$(printf '%s' "$combined_text" | tr '[:upper:]' '[:lower:]')"
+  if printf '%s' "$combined_downcased" | rg -q '(ai-flow|aiflow|\.flow/shared|submodule|toolkit|runtime-v2|runtime_v2)'; then
+    [[ -e "${root_dir}/.flow/shared" ]] && printf '%s\n' '.flow/shared'
+  fi
+}
+
 task_intake_profile_decision_json() {
   local combined_text="$1"
   local target_count="$2"

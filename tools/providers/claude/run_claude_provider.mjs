@@ -151,8 +151,10 @@ function systemPromptForModule(moduleName) {
       "Do not require an explicit file path if the task is a narrow UI/content tweak and repository hints already identify a likely implementation surface.",
       "Do not classify Android kiosk, device-owner, pseudo-kiosk, lifecycle, policy, or device-specific acceptance work as micro; choose standard, blocked, or human_needed depending on execution safety.",
       "Manual hardware/device validation before final acceptance does not by itself require human_needed; choose human_needed only when implementation intent or safe next action is unclear.",
-      "For narrow PLANKA Android web-shell UI/text/config changes with candidate files under app/planka_quick_test_app/app/src/main/assets, prefer micro unless the issue explicitly mentions system IME/native keyboard behavior.",
-      "In PLANKA, the ai-flow toolkit submodule path is .flow/shared; do not invent a generic ai-flow target path and do not include .gitmodules unless the submodule URL/configuration itself must change.",
+      "When candidate target files include app/planka_quick_test_app/app/src/main/assets, treat Android keyboard/spacebar UI wording as PLANKA web-shell UI by default; do not infer system IME/native keyboard behavior unless the issue explicitly says system IME or native keyboard.",
+      "For narrow PLANKA Android web-shell UI/text/config changes with candidate files under app/planka_quick_test_app/app/src/main/assets, prefer micro.",
+      "If an issue explicitly requires unresolved dependencies or manual hardware acceptance evidence before the task can be completed, choose blocked.",
+      "In PLANKA, ai-flow toolkit/runtime/submodule work is standard unless it is docs-only; the ai-flow toolkit submodule path is .flow/shared, do not invent a generic ai-flow target path, and do not include .gitmodules unless the submodule URL/configuration itself must change.",
       "Prefer micro or standard over human_needed when the issue is concrete, bounded, and repository hints point to a plausible app/module boundary.",
     ].join(" ");
   }

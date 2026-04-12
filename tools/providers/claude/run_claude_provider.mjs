@@ -187,6 +187,113 @@ function tokenUsageFromUsage(usage) {
   return found ? total : null;
 }
 
+function numberFromEnv(name) {
+  const raw = String(process.env[name] || "").trim();
+  if (!raw) {
+    return null;
+  }
+  const value = Number.parseFloat(raw);
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function anthropicPricingForModel(model) {
+  const normalized = String(model || "").toLowerCase();
+  const override = {
+    inputPerMTok: numberFromEnv("CLAUDE_PROVIDER_INPUT_COST_PER_MTOK"),
+    outputPerMTok: numberFromEnv("CLAUDE_PROVIDER_OUTPUT_COST_PER_MTOK"),
+    cacheWrite5mPerMTok: numberFromEnv("CLAUDE_PROVIDER_CACHE_WRITE_5M_COST_PER_MTOK"),
+    cacheWrite1hPerMTok: numberFromEnv("CLAUDE_PROVIDER_CACHE_WRITE_1H_COST_PER_MTOK"),
+    cacheReadPerMTok: numberFromEnv("CLAUDE_PROVIDER_CACHE_READ_COST_PER_MTOK"),
+  };
+  if (override.inputPerMTok !== null && override.outputPerMTok !== null) {
+    return {
+      inputPerMTok: override.inputPerMTok,
+      outputPerMTok: override.outputPerMTok,
+      cacheWrite5mPerMTok: override.cacheWrite5mPerMTok ?? override.inputPerMTok,
+      cacheWrite1hPerMTok: override.cacheWrite1hPerMTok ?? override.cacheWrite5mPerMTok ?? override.inputPerMTok,
+      cacheReadPerMTok: override.cacheReadPerMTok ?? override.inputPerMTok,
+      source: "env_override",
+    };
+  }
+
+  if (normalized.includes("haiku-4-5") || normalized.includes("haiku-4.5")) {
+    return {
+      inputPerMTok: 1,
+      outputPerMTok: 5,
+      cacheWrite5mPerMTok: 1.25,
+      cacheWrite1hPerMTok: 2,
+      cacheReadPerMTok: 0.1,
+      source: "anthropic_default",
+    };
+  }
+  if (normalized.includes("sonnet-4-5") || normalized.includes("sonnet-4.5") || normalized.includes("sonnet-4")) {
+    return {
+      inputPerMTok: 3,
+      outputPerMTok: 15,
+      cacheWrite5mPerMTok: 3.75,
+      cacheWrite1hPerMTok: 6,
+      cacheReadPerMTok: 0.3,
+      source: "anthropic_default",
+    };
+  }
+  if (normalized.includes("opus-4-6") || normalized.includes("opus-4.6") || normalized.includes("opus-4-5") || normalized.includes("opus-4.5")) {
+    return {
+      inputPerMTok: 5,
+      outputPerMTok: 25,
+      cacheWrite5mPerMTok: 6.25,
+      cacheWrite1hPerMTok: 10,
+      cacheReadPerMTok: 0.5,
+      source: "anthropic_default",
+    };
+  }
+  if (normalized.includes("opus-4-1") || normalized.includes("opus-4.1") || normalized.includes("opus-4")) {
+    return {
+      inputPerMTok: 15,
+      outputPerMTok: 75,
+      cacheWrite5mPerMTok: 18.75,
+      cacheWrite1hPerMTok: 30,
+      cacheReadPerMTok: 1.5,
+      source: "anthropic_default",
+    };
+  }
+  return null;
+}
+
+function anthropicUsageBreakdown(usage) {
+  if (!usage || typeof usage !== "object") {
+    return null;
+  }
+  const numeric = (value) => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0);
+  const cacheCreation = usage.cache_creation && typeof usage.cache_creation === "object" ? usage.cache_creation : {};
+  const nested5m = numeric(cacheCreation.ephemeral_5m_input_tokens);
+  const nested1h = numeric(cacheCreation.ephemeral_1h_input_tokens);
+  const legacyCacheWrite = nested5m === 0 && nested1h === 0 ? numeric(usage.cache_creation_input_tokens) : 0;
+
+  return {
+    inputTokens: numeric(usage.input_tokens),
+    outputTokens: numeric(usage.output_tokens),
+    cacheWrite5mTokens: nested5m + legacyCacheWrite,
+    cacheWrite1hTokens: nested1h,
+    cacheReadTokens: numeric(usage.cache_read_input_tokens),
+  };
+}
+
+function estimateAnthropicCostUsd(model, usage) {
+  const pricing = anthropicPricingForModel(model);
+  const breakdown = anthropicUsageBreakdown(usage);
+  if (!pricing || !breakdown) {
+    return null;
+  }
+  const total =
+    (breakdown.inputTokens * pricing.inputPerMTok +
+      breakdown.outputTokens * pricing.outputPerMTok +
+      breakdown.cacheWrite5mTokens * pricing.cacheWrite5mPerMTok +
+      breakdown.cacheWrite1hTokens * pricing.cacheWrite1hPerMTok +
+      breakdown.cacheReadTokens * pricing.cacheReadPerMTok) /
+    1_000_000;
+  return Number.isFinite(total) && total >= 0 ? Number(total.toFixed(8)) : null;
+}
+
 function buildErrorResult({
   requestId,
   taskId,
@@ -496,6 +603,7 @@ async function runAnthropicApi(args, request, normalizers, requestId) {
     transport: "anthropic_api",
     model,
     apiUrl,
+    costEstimateSource: anthropicPricingForModel(model)?.source || null,
   };
 
   if (!apiKey) {
@@ -591,6 +699,8 @@ async function runAnthropicApi(args, request, normalizers, requestId) {
   }
 
   const outputText = extractAnthropicText(json);
+  const tokenUsage = tokenUsageFromUsage(json.usage);
+  const estimatedCost = estimateAnthropicCostUsd(model, json.usage);
   if (!outputText) {
     return normalizers.normalizeProviderResult(
       buildErrorResult({
@@ -600,7 +710,8 @@ async function runAnthropicApi(args, request, normalizers, requestId) {
         errorClass: "empty_output",
         errorMessage: "Anthropic API returned no text content",
         latencyMs,
-        tokenUsage: tokenUsageFromUsage(json.usage),
+        tokenUsage,
+        estimatedCost,
         meta: buildRunnerMeta(metaBase, { statusCode: response.status }),
       }),
     );
@@ -618,7 +729,8 @@ async function runAnthropicApi(args, request, normalizers, requestId) {
         errorClass: "schema_invalid_output",
         errorMessage: `Anthropic API returned non-JSON structured output: ${error?.message || String(error)}`,
         latencyMs,
-        tokenUsage: tokenUsageFromUsage(json.usage),
+        tokenUsage,
+        estimatedCost,
         meta: buildRunnerMeta(metaBase, { statusCode: response.status }),
       }),
     );
@@ -636,7 +748,8 @@ async function runAnthropicApi(args, request, normalizers, requestId) {
         errorClass: "schema_invalid_output",
         errorMessage: error?.message || String(error),
         latencyMs,
-        tokenUsage: tokenUsageFromUsage(json.usage),
+        tokenUsage,
+        estimatedCost,
         meta: buildRunnerMeta(metaBase, { statusCode: response.status }),
       }),
     );
@@ -654,8 +767,8 @@ async function runAnthropicApi(args, request, normalizers, requestId) {
     errorClass: null,
     errorMessage: null,
     latencyMs,
-    tokenUsage: tokenUsageFromUsage(json.usage),
-    estimatedCost: null,
+    tokenUsage,
+    estimatedCost,
     fallbackFromProvider: null,
     meta: buildRunnerMeta(metaBase, { statusCode: response.status }),
   });
@@ -703,6 +816,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 }
 
 export {
+  anthropicPricingForModel,
+  estimateAnthropicCostUsd,
   classifyAnthropicHttpError,
   extractJsonObjectText,
   resolveTransport,

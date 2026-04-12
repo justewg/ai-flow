@@ -143,7 +143,7 @@ for issue_number in "${issues[@]}"; do
   printf 'PROVIDER_CORPUS_RUN task=%s issue=%s\n' "$task_id" "$issue_number"
   started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   set +e
-  output="$("${SCRIPT_DIR}/task_interpret.sh" "$task_id" "$issue_number" 2>&1)"
+  output="$(/bin/bash "${SCRIPT_DIR}/task_interpret.sh" "$task_id" "$issue_number" 2>&1)"
   rc=$?
   set -e
   finished_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -159,7 +159,7 @@ for issue_number in "${issues[@]}"; do
     >> "$run_results_file"
 done
 
-"${SCRIPT_DIR}/provider_rollout_gate.sh" \
+/bin/bash "${SCRIPT_DIR}/provider_rollout_gate.sh" \
   --module "$module" \
   --shadow-provider "$shadow_provider" \
   --min-samples "$min_samples" > "$gate_file"

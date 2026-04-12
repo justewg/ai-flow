@@ -88,6 +88,14 @@ function buildIntakeInterpretationRequest(input) {
       : null,
     Object.keys(repositoryContext).length > 0 ? `Repository context:\n${JSON.stringify(repositoryContext, null, 2)}` : null,
     [
+      "Classification rules:",
+      "- Do not classify Android kiosk, device-owner, pseudo-kiosk, lifecycle, policy, or device-specific acceptance work as micro.",
+      "- If manual hardware/device validation is required before acceptance, prefer blocked or human_needed when safe autonomous execution cannot be separated from that validation.",
+      "- In PLANKA, the ai-flow toolkit submodule path is .flow/shared; do not invent a generic ai-flow target path.",
+      "- Do not include .gitmodules unless the submodule URL/configuration itself must change.",
+      "- Candidate target files may include likely companion config files from the local intake hints, but avoid unrelated broad paths.",
+    ].join("\n"),
+    [
       "Return JSON only with fields:",
       "- decision: micro|standard|human_needed|blocked",
       "- decisionReason: string",

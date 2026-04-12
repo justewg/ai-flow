@@ -149,6 +149,9 @@ function systemPromptForModule(moduleName) {
       "If ambiguity is unsafe, choose human_needed instead of guessing.",
       "Do not widen file scope from weak hints.",
       "Do not require an explicit file path if the task is a narrow UI/content tweak and repository hints already identify a likely implementation surface.",
+      "Do not classify Android kiosk, device-owner, pseudo-kiosk, lifecycle, policy, or device-specific acceptance work as micro; choose standard, blocked, or human_needed depending on execution safety.",
+      "If the task requires manual hardware/device validation before acceptance, prefer blocked or human_needed when safe autonomous execution cannot be separated from that validation.",
+      "In PLANKA, the ai-flow toolkit submodule path is .flow/shared; do not invent a generic ai-flow target path and do not include .gitmodules unless the submodule URL/configuration itself must change.",
       "Prefer micro or standard over human_needed when the issue is concrete, bounded, and repository hints point to a plausible app/module boundary.",
     ].join(" ");
   }

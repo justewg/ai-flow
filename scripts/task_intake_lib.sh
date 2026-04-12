@@ -194,7 +194,7 @@ task_intake_extract_file_paths() {
 
 task_intake_small_change_signal() {
   local combined_text="$1"
-  printf '%s' "$combined_text" | tr '[:upper:]' '[:lower:]' | rg -q '(alias|readme|docs|documentation|help|label|usage|copy|rename|dispatch|aria-label|alt|role|subtitle|caption|подпись|кнопк|клавиатур|пробел|иконк|крестик|андроид)'
+  printf '%s' "$combined_text" | tr '[:upper:]' '[:lower:]' | rg -q '(alias|readme|docs|documentation|help|label|usage|copy|rename|dispatch|aria-label|alt|role|subtitle|caption|versionname|versioncode|версии сборки|верси[яю][[:space:]]+сборк|подпись|кнопк|клавиатур|пробел|иконк|крестик|андроид)'
 }
 
 task_intake_denied_execution_patterns() {
@@ -278,6 +278,7 @@ task_intake_android_fallback_target_files() {
   local root_dir="${2:-$ROOT_DIR}"
   local combined_downcased
   local keyboard_signal="false"
+  local version_display_signal="false"
 
   combined_downcased="$(printf '%s' "$combined_text" | tr '[:upper:]' '[:lower:]')"
   if ! printf '%s' "$combined_downcased" | rg -q '(андроид|android|клавиатур|keyboard|пробел|space|kiosk|lock task|device owner)'; then
@@ -300,17 +301,14 @@ task_intake_android_fallback_target_files() {
   fi
 
   if printf '%s' "$combined_downcased" | rg -q '(versionname|version name|versioncode|version code|версии сборки|верси[яю][[:space:]]+сборк)'; then
-    [[ -f "${root_dir}/app/planka_quick_test_app/app/build.gradle.kts" ]] \
-      && printf '%s\n' 'app/planka_quick_test_app/app/build.gradle.kts'
+    version_display_signal="true"
     [[ -f "${root_dir}/app/planka_quick_test_app/app/src/main/java/com/planka/quicktest/MainActivity.kt" ]] \
       && printf '%s\n' 'app/planka_quick_test_app/app/src/main/java/com/planka/quicktest/MainActivity.kt'
     [[ -f "${root_dir}/app/planka_quick_test_app/app/src/main/assets/index.html" ]] \
       && printf '%s\n' 'app/planka_quick_test_app/app/src/main/assets/index.html'
-    [[ -f "${root_dir}/app/planka_quick_test_app/app/src/main/AndroidManifest.xml" ]] \
-      && printf '%s\n' 'app/planka_quick_test_app/app/src/main/AndroidManifest.xml'
   fi
 
-  if [[ "$keyboard_signal" != "true" ]] && printf '%s' "$combined_downcased" | rg -q '(подпись|label|кнопк|button|строк|string|текст)'; then
+  if [[ "$keyboard_signal" != "true" && "$version_display_signal" != "true" ]] && printf '%s' "$combined_downcased" | rg -q '(подпись|label|кнопк|button|строк|string|текст)'; then
     [[ -f "${root_dir}/app/planka_quick_test_app/app/src/main/res/values/strings.xml" ]] \
       && printf '%s\n' 'app/planka_quick_test_app/app/src/main/res/values/strings.xml'
   fi

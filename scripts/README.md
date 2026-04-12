@@ -155,6 +155,8 @@ Linux-hosted bootstrap launchers:
   - optional `ANTHROPIC_API_URL` (default `https://api.anthropic.com/v1/messages`)
   - optional `ANTHROPIC_VERSION` (default `2023-06-01`)
   - optional `CLAUDE_PROVIDER_MAX_TOKENS` (default `1200`)
+  - optional cost override env для provider telemetry/corpus summaries:
+    `CLAUDE_PROVIDER_INPUT_COST_PER_MTOK`, `CLAUDE_PROVIDER_OUTPUT_COST_PER_MTOK`, `CLAUDE_PROVIDER_CACHE_WRITE_5M_COST_PER_MTOK`, `CLAUDE_PROVIDER_CACHE_WRITE_1H_COST_PER_MTOK`, `CLAUDE_PROVIDER_CACHE_READ_COST_PER_MTOK`
 - Compare mode включается через `AI_FLOW_PROVIDER_ROUTING_JSON`, например:
   - `{"compare":{"intake.interpretation":{"mode":"dry_run","shadowProvider":"claude","publishDecision":false},"intake.ask_human":{"mode":"dry_run","shadowProvider":"claude","publishDecision":false}}}`
 - При включённом compare mode task-worktree сохраняет раздельные artifacts:

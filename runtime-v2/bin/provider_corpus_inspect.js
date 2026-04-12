@@ -123,6 +123,11 @@ function issueNumberFromTaskId(taskId) {
   return match ? Number.parseInt(match[1], 10) : null;
 }
 
+function taskIdFromPath(filePath) {
+  const match = String(filePath || "").match(/(?:^|[/-])(ISSUE-\d+)(?:-|\/)/);
+  return match ? match[1] : null;
+}
+
 function inspectCorpus(args) {
   const stateDir = path.resolve(args.stateDir);
   const taskRoot = path.join(stateDir, "task-worktrees");
@@ -138,7 +143,11 @@ function inspectCorpus(args) {
     const compare = readJson(compareFile) || {};
     const local = readJson(path.join(executionDir, "intake_interpretation_response.local.json")) || {};
     const shadow = readJson(path.join(executionDir, `intake_interpretation_response.${args.shadowProvider}.json`)) || {};
-    const taskId = compareResponseField(local, "taskId") || compareResponseField(shadow, "taskId") || path.basename(path.dirname(path.dirname(executionDir)));
+    const taskId =
+      compareResponseField(local, "taskId") ||
+      compareResponseField(shadow, "taskId") ||
+      taskIdFromPath(compareFile) ||
+      path.basename(path.dirname(path.dirname(executionDir)));
     const record = telemetry.get(taskId) || null;
 
     return {
@@ -193,6 +202,7 @@ function inspectCorpus(args) {
     ready: gate?.ready ?? summary?.gate?.ready ?? null,
     blockingReasons: gate?.blockingReasons || summary?.gate?.blockingReasons || [],
     telemetry: summary?.telemetry || null,
+    gateTelemetry: summary?.gateTelemetry || null,
     mismatchCounts: items.reduce((acc, item) => {
       for (const reason of item.mismatchReasons) {
         acc[reason] = (acc[reason] || 0) + 1;

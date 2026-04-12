@@ -181,6 +181,8 @@ append_shadow_compare_telemetry() {
   PROVIDER_TELEMETRY_MACHINE_READABLE_MARKERS_SHADOW="$(printf '%s' "$compare_artifact_json" | jq -r 'if .machineReadableMarkersShadow == null then empty else .machineReadableMarkersShadow end')" \
   PROVIDER_TELEMETRY_KIND_MATCH="$(printf '%s' "$compare_artifact_json" | jq -r 'if .kindMatch == null then empty else .kindMatch end')" \
   PROVIDER_TELEMETRY_RECOMMENDED_ACTION_MATCH="$(printf '%s' "$compare_artifact_json" | jq -r 'if .recommendedActionMatch == null then empty else .recommendedActionMatch end')" \
+  PROVIDER_TELEMETRY_RECOMMENDED_ACTION_DRIFT_KIND="$(printf '%s' "$compare_artifact_json" | jq -r '.recommendedActionDriftKind // ""')" \
+  PROVIDER_TELEMETRY_RECOMMENDED_ACTION_DRIFT_TOLERATED="$(printf '%s' "$compare_artifact_json" | jq -r 'if .recommendedActionDriftTolerated == null then empty else .recommendedActionDriftTolerated end')" \
   PROVIDER_TELEMETRY_OPTIONS_MATCH="$(printf '%s' "$compare_artifact_json" | jq -r 'if .optionsMatch == null then empty else .optionsMatch end')" \
   PROVIDER_TELEMETRY_BODY_LENGTH_DELTA="$(printf '%s' "$compare_artifact_json" | jq -r 'if .bodyLengthDelta == null then empty else .bodyLengthDelta end')" \
   PROVIDER_TELEMETRY_EXPLANATION_COMPLETENESS_PRIMARY="$(printf '%s' "$compare_artifact_json" | jq -r 'if .explanationCompletenessPrimary == null then empty else .explanationCompletenessPrimary end')" \

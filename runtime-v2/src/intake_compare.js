@@ -191,6 +191,7 @@ function compareAskHumanResults(primary, shadow, options = {}) {
     typeof primary?.recommendedAction === "string" && typeof shadow?.recommendedAction === "string"
       ? primary.recommendedAction === shadow.recommendedAction
       : null;
+  const recommendedActionDriftInfo = classifyRecommendedActionDrift(primary, shadow, recommendedActionMatch);
 
   return {
     module: "intake.ask_human",
@@ -203,6 +204,8 @@ function compareAskHumanResults(primary, shadow, options = {}) {
     machineReadableMarkersShadow: typeof shadow?.kind === "string" && typeof shadow?.recommendedAction === "string",
     kindMatch,
     recommendedActionMatch,
+    recommendedActionDriftKind: recommendedActionDriftInfo.kind,
+    recommendedActionDriftTolerated: recommendedActionDriftInfo.tolerated,
     optionsMatch: JSON.stringify(primaryOptions) === JSON.stringify(shadowOptions),
     bodyLengthDelta: shadowBody.length - primaryBody.length,
     explanationCompletenessPrimary: hasExplanationText(primaryBody),
@@ -218,12 +221,34 @@ function compareAskHumanResults(primary, shadow, options = {}) {
         ? "ask_human_match"
         : kindMatch === false
           ? "ask_human_kind_mismatch"
+          : recommendedActionMatch === false && recommendedActionDriftInfo.tolerated
+            ? "ask_human_action_tolerated"
           : recommendedActionMatch === false
             ? "ask_human_action_mismatch"
             : "ask_human_inconclusive",
       publishDecision: false,
     shadowError,
   };
+}
+
+function classifyRecommendedActionDrift(primary, shadow, recommendedActionMatch) {
+  if (recommendedActionMatch === true) {
+    return { kind: "match", tolerated: true };
+  }
+  if (recommendedActionMatch !== false) {
+    return { kind: null, tolerated: false };
+  }
+
+  const primaryKind = typeof primary?.kind === "string" ? primary.kind.toUpperCase() : "";
+  const shadowKind = typeof shadow?.kind === "string" ? shadow.kind.toUpperCase() : "";
+  const primaryAction = typeof primary?.recommendedAction === "string" ? primary.recommendedAction : "";
+  const shadowAction = typeof shadow?.recommendedAction === "string" ? shadow.recommendedAction : "";
+
+  if (primaryKind === "QUESTION" && shadowKind === "QUESTION" && primaryAction === "continue" && shadowAction === "clarify") {
+    return { kind: "conservative_shadow", tolerated: true };
+  }
+
+  return { kind: "unsafe_action_drift", tolerated: false };
 }
 
 module.exports = {

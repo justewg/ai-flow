@@ -117,6 +117,10 @@ function evaluateProviderRolloutGate(records, input = {}) {
   const humanNeededMismatchCount = countWhere(recentRecords, (record) => record.humanNeededMatch === false);
   const askHumanKindMismatchCount = countWhere(recentRecords, (record) => record.kindMatch === false);
   const askHumanActionMismatchCount = countWhere(recentRecords, (record) => record.recommendedActionMatch === false);
+  const unsafeAskHumanActionMismatchCount = countWhere(
+    recentRecords,
+    (record) => record.recommendedActionMatch === false && record.recommendedActionDriftTolerated !== true,
+  );
   const askHumanOptionsMismatchCount = countWhere(recentRecords, (record) => record.optionsMatch === false);
 
   const profileMismatchRate = ratio(profileMismatchCount, sampleSize);
@@ -126,6 +130,7 @@ function evaluateProviderRolloutGate(records, input = {}) {
   const humanNeededMismatchRate = ratio(humanNeededMismatchCount, sampleSize);
   const askHumanKindMismatchRate = ratio(askHumanKindMismatchCount, sampleSize);
   const askHumanActionMismatchRate = ratio(askHumanActionMismatchCount, sampleSize);
+  const unsafeAskHumanActionMismatchRate = ratio(unsafeAskHumanActionMismatchCount, sampleSize);
   const askHumanOptionsMismatchRate = ratio(askHumanOptionsMismatchCount, sampleSize);
 
   const blockingReasons = [];
@@ -156,10 +161,10 @@ function evaluateProviderRolloutGate(records, input = {}) {
   }
   if (
     options.module === "intake.ask_human" &&
-    askHumanActionMismatchRate !== null &&
-    askHumanActionMismatchRate > options.maxAskHumanActionMismatchRate
+    unsafeAskHumanActionMismatchRate !== null &&
+    unsafeAskHumanActionMismatchRate > options.maxAskHumanActionMismatchRate
   ) {
-    blockingReasons.push(`ask_human_action_mismatch_rate:${askHumanActionMismatchRate}`);
+    blockingReasons.push(`unsafe_ask_human_action_mismatch_rate:${unsafeAskHumanActionMismatchRate}`);
   }
   if (
     options.providerHealth &&
@@ -185,6 +190,7 @@ function evaluateProviderRolloutGate(records, input = {}) {
     humanNeededMismatchCount,
     askHumanKindMismatchCount,
     askHumanActionMismatchCount,
+    unsafeAskHumanActionMismatchCount,
     askHumanOptionsMismatchCount,
     profileMismatchRate,
     unsafeProfileMismatchRate,
@@ -193,6 +199,7 @@ function evaluateProviderRolloutGate(records, input = {}) {
     humanNeededMismatchRate,
     askHumanKindMismatchRate,
     askHumanActionMismatchRate,
+    unsafeAskHumanActionMismatchRate,
     askHumanOptionsMismatchRate,
     providerHealth: options.providerHealth,
     blockingReasons,
@@ -212,6 +219,8 @@ function evaluateProviderRolloutGate(records, input = {}) {
       humanNeededMatch: record.humanNeededMatch,
       kindMatch: record.kindMatch,
       recommendedActionMatch: record.recommendedActionMatch,
+      recommendedActionDriftKind: record.recommendedActionDriftKind,
+      recommendedActionDriftTolerated: record.recommendedActionDriftTolerated,
       optionsMatch: record.optionsMatch,
       machineReadableMarkersShadow: record.machineReadableMarkersShadow,
     })),

@@ -293,7 +293,43 @@ test("evaluateProviderRolloutGate blocks ask-human action drift", () => {
 
   assert.equal(summary.ready, false);
   assert.equal(summary.askHumanActionMismatchCount, 1);
-  assert.match(summary.blockingReasons.join(","), /ask_human_action_mismatch_rate/);
+  assert.equal(summary.unsafeAskHumanActionMismatchCount, 1);
+  assert.match(summary.blockingReasons.join(","), /unsafe_ask_human_action_mismatch_rate/);
+});
+
+test("evaluateProviderRolloutGate tolerates conservative ask-human action drift", () => {
+  const summary = evaluateProviderRolloutGate(
+    [
+      {
+        ts: "2026-04-03T00:00:00Z",
+        requestId: "1",
+        taskId: "ISSUE-1",
+        module: "intake.ask_human",
+        requestedProvider: "claude",
+        effectiveProvider: "claude",
+        outcome: "success",
+        compareMode: "dry_run",
+        primaryProvider: "local",
+        shadowProvider: "claude",
+        schemaValidShadow: true,
+        kindMatch: true,
+        recommendedActionMatch: false,
+        recommendedActionDriftKind: "conservative_shadow",
+        recommendedActionDriftTolerated: true,
+        optionsMatch: false,
+        machineReadableMarkersShadow: true,
+        compareSummary: "ask_human_action_tolerated",
+      },
+    ],
+    { module: "intake.ask_human", minSamples: 1 },
+  );
+
+  assert.equal(summary.ready, true);
+  assert.equal(summary.askHumanActionMismatchCount, 1);
+  assert.equal(summary.unsafeAskHumanActionMismatchCount, 0);
+  assert.equal(summary.unsafeAskHumanActionMismatchRate, 0);
+  assert.deepEqual(summary.blockingReasons, []);
+  assert.equal(summary.lastRecords[0].recommendedActionDriftTolerated, true);
 });
 
 test("evaluateProviderRolloutGate blocks when provider health reports auth error", () => {

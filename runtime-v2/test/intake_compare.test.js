@@ -136,6 +136,30 @@ test("compareAskHumanResults computes body and structure drift", () => {
   assert.equal(compare.compareSummary, "ask_human_kind_mismatch");
 });
 
+test("compareAskHumanResults tolerates conservative ask-human action drift", () => {
+  const compare = compareAskHumanResults(
+    {
+      kind: "QUESTION",
+      recommendedAction: "continue",
+      body: "Continue implementation?",
+      options: ["Continue"],
+    },
+    {
+      kind: "QUESTION",
+      recommendedAction: "clarify",
+      body: "Clarify first?",
+      options: ["Clarify"],
+    },
+    { compareMode: "shadow" },
+  );
+
+  assert.equal(compare.kindMatch, true);
+  assert.equal(compare.recommendedActionMatch, false);
+  assert.equal(compare.recommendedActionDriftKind, "conservative_shadow");
+  assert.equal(compare.recommendedActionDriftTolerated, true);
+  assert.equal(compare.compareSummary, "ask_human_action_tolerated");
+});
+
 test("compareInterpretationResults tolerates shadow provider error artifact", () => {
   const compare = compareInterpretationResults(
     {

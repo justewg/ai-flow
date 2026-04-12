@@ -29,6 +29,48 @@ test("compareInterpretationResults computes decision and target file deltas", ()
   assert.equal(compare.compareSummary, "interpretation_profile_mismatch");
 });
 
+test("compareInterpretationResults marks same-profile subset target drift as tolerated", () => {
+  const compare = compareInterpretationResults(
+    {
+      decision: "standard",
+      candidateTargetFiles: ["AndroidManifest.xml", "MainActivity.kt"],
+      confidence: { score: 0.9 },
+    },
+    {
+      decision: "standard",
+      candidateTargetFiles: ["MainActivity.kt"],
+      confidence: { score: 0.8 },
+    },
+    { compareMode: "dry_run" },
+  );
+
+  assert.equal(compare.targetFilesMatch, false);
+  assert.equal(compare.targetFilesDriftKind, "shadow_subset");
+  assert.equal(compare.targetFilesDriftTolerated, true);
+  assert.equal(compare.compareSummary, "interpretation_target_files_tolerated");
+});
+
+test("compareInterpretationResults marks blocked target expansion as tolerated", () => {
+  const compare = compareInterpretationResults(
+    {
+      decision: "blocked",
+      candidateTargetFiles: ["status.md"],
+      confidence: { score: 0.9 },
+    },
+    {
+      decision: "blocked",
+      candidateTargetFiles: ["MainActivity.kt", "status.md"],
+      confidence: { score: 0.8 },
+    },
+    { compareMode: "dry_run" },
+  );
+
+  assert.equal(compare.targetFilesMatch, false);
+  assert.equal(compare.targetFilesDriftKind, "blocked_scope_drift");
+  assert.equal(compare.targetFilesDriftTolerated, true);
+  assert.equal(compare.compareSummary, "interpretation_target_files_tolerated");
+});
+
 test("compareAskHumanResults computes body and structure drift", () => {
   const compare = compareAskHumanResults(
     {

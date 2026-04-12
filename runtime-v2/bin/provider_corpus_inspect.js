@@ -110,7 +110,7 @@ function mismatchReasons(compare) {
     reasons.push("profile");
   }
   if (compare?.targetFilesMatch === false) {
-    reasons.push("target_files");
+    reasons.push(compare.targetFilesDriftTolerated === true ? "target_files_tolerated" : "target_files");
   }
   if (compare?.humanNeededMatch === false) {
     reasons.push("human_needed");
@@ -148,6 +148,8 @@ function inspectCorpus(args) {
       mismatchReasons: mismatchReasons(compare),
       profileMatch: compare.profileMatch ?? null,
       targetFilesMatch: compare.targetFilesMatch ?? null,
+      targetFilesDriftKind: compare.targetFilesDriftKind ?? null,
+      targetFilesDriftTolerated: compare.targetFilesDriftTolerated ?? null,
       humanNeededMatch: compare.humanNeededMatch ?? null,
       schemaValidShadow: compare.schemaValidShadow ?? null,
       local: {

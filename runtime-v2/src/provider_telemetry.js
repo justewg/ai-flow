@@ -96,6 +96,8 @@ function normalizeProviderTelemetryRecord(input) {
     schemaValidShadow: optionalBoolean(input.schemaValidShadow),
     profileMatch: optionalBoolean(input.profileMatch),
     targetFilesMatch: optionalBoolean(input.targetFilesMatch),
+    targetFilesDriftKind: optionalString(input.targetFilesDriftKind),
+    targetFilesDriftTolerated: optionalBoolean(input.targetFilesDriftTolerated),
     humanNeededMatch: optionalBoolean(input.humanNeededMatch),
     confidenceDelta: optionalFiniteNumber(input.confidenceDelta, "confidenceDelta"),
     compareSummary: optionalString(input.compareSummary),

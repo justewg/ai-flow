@@ -41,6 +41,8 @@ schema_valid_primary="${PROVIDER_TELEMETRY_SCHEMA_VALID_PRIMARY:-}"
 schema_valid_shadow="${PROVIDER_TELEMETRY_SCHEMA_VALID_SHADOW:-}"
 profile_match="${PROVIDER_TELEMETRY_PROFILE_MATCH:-}"
 target_files_match="${PROVIDER_TELEMETRY_TARGET_FILES_MATCH:-}"
+target_files_drift_kind="${PROVIDER_TELEMETRY_TARGET_FILES_DRIFT_KIND:-}"
+target_files_drift_tolerated="${PROVIDER_TELEMETRY_TARGET_FILES_DRIFT_TOLERATED:-}"
 human_needed_match="${PROVIDER_TELEMETRY_HUMAN_NEEDED_MATCH:-}"
 confidence_delta="${PROVIDER_TELEMETRY_CONFIDENCE_DELTA:-null}"
 compare_summary="${PROVIDER_TELEMETRY_COMPARE_SUMMARY:-}"
@@ -87,6 +89,7 @@ jq -nc \
   --arg primaryProvider "$primary_provider" \
   --arg shadowProvider "$shadow_provider" \
   --arg compareSummary "$compare_summary" \
+  --arg targetFilesDriftKind "$target_files_drift_kind" \
   --arg errorClass "$error_class" \
   --arg errorMessage "$error_message" \
   --argjson latencyMs "$latency_ms" \
@@ -100,6 +103,7 @@ jq -nc \
   --argjson schemaValidShadow "$(json_bool_or_null "$schema_valid_shadow")" \
   --argjson profileMatch "$(json_bool_or_null "$profile_match")" \
   --argjson targetFilesMatch "$(json_bool_or_null "$target_files_match")" \
+  --argjson targetFilesDriftTolerated "$(json_bool_or_null "$target_files_drift_tolerated")" \
   --argjson humanNeededMatch "$(json_bool_or_null "$human_needed_match")" \
   --argjson publishDecision "$(json_bool_or_null "$publish_decision")" \
   '{
@@ -123,6 +127,8 @@ jq -nc \
     schemaValidShadow:$schemaValidShadow,
     profileMatch:$profileMatch,
     targetFilesMatch:$targetFilesMatch,
+    targetFilesDriftKind:(if $targetFilesDriftKind == "" then null else $targetFilesDriftKind end),
+    targetFilesDriftTolerated:$targetFilesDriftTolerated,
     humanNeededMatch:$humanNeededMatch,
     confidenceDelta:$confidenceDelta,
     compareSummary:(if $compareSummary == "" then null else $compareSummary end),

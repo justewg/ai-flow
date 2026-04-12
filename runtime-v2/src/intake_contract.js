@@ -90,7 +90,8 @@ function buildIntakeInterpretationRequest(input) {
     [
       "Classification rules:",
       "- Do not classify Android kiosk, device-owner, pseudo-kiosk, lifecycle, policy, or device-specific acceptance work as micro.",
-      "- If manual hardware/device validation is required before acceptance, prefer blocked or human_needed when safe autonomous execution cannot be separated from that validation.",
+      "- Manual hardware/device validation before final acceptance does not by itself require human_needed; choose human_needed only when implementation intent or safe next action is unclear.",
+      "- For narrow PLANKA Android web-shell UI/text/config changes with candidate files under app/planka_quick_test_app/app/src/main/assets, prefer micro unless the issue explicitly mentions system IME/native keyboard behavior.",
       "- In PLANKA, the ai-flow toolkit submodule path is .flow/shared; do not invent a generic ai-flow target path.",
       "- Do not include .gitmodules unless the submodule URL/configuration itself must change.",
       "- Candidate target files may include likely companion config files from the local intake hints, but avoid unrelated broad paths.",

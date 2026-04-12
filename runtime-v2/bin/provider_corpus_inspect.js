@@ -4,7 +4,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const USAGE = "Usage: provider_corpus_inspect.js --state-dir <path> [--module intake.interpretation] [--shadow-provider claude]";
+const USAGE = "Usage: provider_corpus_inspect.js --state-dir <path> [--module intake.interpretation|intake.ask_human] [--shadow-provider claude]";
 
 function parseArgs(argv) {
   const args = {
@@ -115,6 +115,15 @@ function mismatchReasons(compare) {
   if (compare?.humanNeededMatch === false) {
     reasons.push("human_needed");
   }
+  if (compare?.kindMatch === false) {
+    reasons.push("kind");
+  }
+  if (compare?.recommendedActionMatch === false) {
+    reasons.push("recommended_action");
+  }
+  if (compare?.optionsMatch === false) {
+    reasons.push("options");
+  }
   return reasons;
 }
 
@@ -133,10 +142,22 @@ function inspectCorpus(args) {
   const taskRoot = path.join(stateDir, "task-worktrees");
   const summary = readJson(path.join(stateDir, "provider_corpus_summary.json"));
   const gate = readJson(path.join(stateDir, "provider_corpus_gate.json"));
+  const artifactNames =
+    args.module === "intake.ask_human"
+      ? {
+          compare: "intake_ask_human_compare.json",
+          local: "intake_ask_human_response.local.json",
+          shadow: `intake_ask_human_response.${args.shadowProvider}.json`,
+        }
+      : {
+          compare: "intake_interpretation_compare.json",
+          local: "intake_interpretation_response.local.json",
+          shadow: `intake_interpretation_response.${args.shadowProvider}.json`,
+        };
   const corpusTaskIds = Array.isArray(summary?.issues)
     ? new Set(summary.issues.map((issueNumber) => `ISSUE-${issueNumber}`))
     : null;
-  const compareFiles = findFiles(taskRoot, "intake_interpretation_compare.json").filter((compareFile) => {
+  const compareFiles = findFiles(taskRoot, artifactNames.compare).filter((compareFile) => {
     if (!corpusTaskIds) {
       return true;
     }
@@ -152,8 +173,8 @@ function inspectCorpus(args) {
   const items = compareFiles.map((compareFile) => {
     const executionDir = path.dirname(compareFile);
     const compare = readJson(compareFile) || {};
-    const local = readJson(path.join(executionDir, "intake_interpretation_response.local.json")) || {};
-    const shadow = readJson(path.join(executionDir, `intake_interpretation_response.${args.shadowProvider}.json`)) || {};
+    const local = readJson(path.join(executionDir, artifactNames.local)) || {};
+    const shadow = readJson(path.join(executionDir, artifactNames.shadow)) || {};
     const taskId =
       compareResponseField(local, "taskId") ||
       compareResponseField(shadow, "taskId") ||
@@ -173,17 +194,29 @@ function inspectCorpus(args) {
       targetFilesDriftKind: compare.targetFilesDriftKind ?? null,
       targetFilesDriftTolerated: compare.targetFilesDriftTolerated ?? null,
       humanNeededMatch: compare.humanNeededMatch ?? null,
+      kindMatch: compare.kindMatch ?? null,
+      recommendedActionMatch: compare.recommendedActionMatch ?? null,
+      optionsMatch: compare.optionsMatch ?? null,
+      machineReadableMarkersShadow: compare.machineReadableMarkersShadow ?? null,
       schemaValidShadow: compare.schemaValidShadow ?? null,
       local: {
         decision: compare.primaryDecision || local.decision || null,
+        kind: local.kind || null,
+        recommendedAction: local.recommendedAction || null,
         reason: local.decisionReason || null,
         files: compare.primaryTargetFiles || local.candidateTargetFiles || [],
+        options: local.options || [],
+        body: local.body || null,
         confidence: local.confidence || null,
       },
       shadow: {
         decision: compare.shadowDecision || shadow.decision || null,
+        kind: shadow.kind || null,
+        recommendedAction: shadow.recommendedAction || null,
         reason: shadow.decisionReason || null,
         files: compare.shadowTargetFiles || shadow.candidateTargetFiles || [],
+        options: shadow.options || [],
+        body: shadow.body || null,
         confidence: shadow.confidence || null,
         error: compare.shadowError || null,
       },

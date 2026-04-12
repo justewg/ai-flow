@@ -47,6 +47,12 @@ function normalizeGateOptions(input = {}) {
     maxProfileMismatchRate: optionalNumberInRange(options.maxProfileMismatchRate, "maxProfileMismatchRate", 0.2),
     maxTargetFilesMismatchRate: optionalNumberInRange(options.maxTargetFilesMismatchRate, "maxTargetFilesMismatchRate", 0.2),
     maxHumanNeededMismatchRate: optionalNumberInRange(options.maxHumanNeededMismatchRate, "maxHumanNeededMismatchRate", 0.1),
+    maxAskHumanKindMismatchRate: optionalNumberInRange(options.maxAskHumanKindMismatchRate, "maxAskHumanKindMismatchRate", 0),
+    maxAskHumanActionMismatchRate: optionalNumberInRange(
+      options.maxAskHumanActionMismatchRate,
+      "maxAskHumanActionMismatchRate",
+      0,
+    ),
     providerHealth:
       rawProviderHealth === null
         ? null
@@ -109,12 +115,18 @@ function evaluateProviderRolloutGate(records, input = {}) {
     (record) => record.targetFilesMatch === false && record.targetFilesDriftTolerated !== true,
   );
   const humanNeededMismatchCount = countWhere(recentRecords, (record) => record.humanNeededMatch === false);
+  const askHumanKindMismatchCount = countWhere(recentRecords, (record) => record.kindMatch === false);
+  const askHumanActionMismatchCount = countWhere(recentRecords, (record) => record.recommendedActionMatch === false);
+  const askHumanOptionsMismatchCount = countWhere(recentRecords, (record) => record.optionsMatch === false);
 
   const profileMismatchRate = ratio(profileMismatchCount, sampleSize);
   const unsafeProfileMismatchRate = ratio(unsafeProfileMismatchCount, sampleSize);
   const targetFilesMismatchRate = ratio(targetFilesMismatchCount, sampleSize);
   const unsafeTargetFilesMismatchRate = ratio(unsafeTargetFilesMismatchCount, sampleSize);
   const humanNeededMismatchRate = ratio(humanNeededMismatchCount, sampleSize);
+  const askHumanKindMismatchRate = ratio(askHumanKindMismatchCount, sampleSize);
+  const askHumanActionMismatchRate = ratio(askHumanActionMismatchCount, sampleSize);
+  const askHumanOptionsMismatchRate = ratio(askHumanOptionsMismatchCount, sampleSize);
 
   const blockingReasons = [];
   if (sampleSize < options.minSamples) {
@@ -134,6 +146,20 @@ function evaluateProviderRolloutGate(records, input = {}) {
   }
   if (humanNeededMismatchRate !== null && humanNeededMismatchRate > options.maxHumanNeededMismatchRate) {
     blockingReasons.push(`human_needed_mismatch_rate:${humanNeededMismatchRate}`);
+  }
+  if (
+    options.module === "intake.ask_human" &&
+    askHumanKindMismatchRate !== null &&
+    askHumanKindMismatchRate > options.maxAskHumanKindMismatchRate
+  ) {
+    blockingReasons.push(`ask_human_kind_mismatch_rate:${askHumanKindMismatchRate}`);
+  }
+  if (
+    options.module === "intake.ask_human" &&
+    askHumanActionMismatchRate !== null &&
+    askHumanActionMismatchRate > options.maxAskHumanActionMismatchRate
+  ) {
+    blockingReasons.push(`ask_human_action_mismatch_rate:${askHumanActionMismatchRate}`);
   }
   if (
     options.providerHealth &&
@@ -157,11 +183,17 @@ function evaluateProviderRolloutGate(records, input = {}) {
     targetFilesMismatchCount,
     unsafeTargetFilesMismatchCount,
     humanNeededMismatchCount,
+    askHumanKindMismatchCount,
+    askHumanActionMismatchCount,
+    askHumanOptionsMismatchCount,
     profileMismatchRate,
     unsafeProfileMismatchRate,
     targetFilesMismatchRate,
     unsafeTargetFilesMismatchRate,
     humanNeededMismatchRate,
+    askHumanKindMismatchRate,
+    askHumanActionMismatchRate,
+    askHumanOptionsMismatchRate,
     providerHealth: options.providerHealth,
     blockingReasons,
     lastRecords: recentRecords.map((record) => ({
@@ -178,6 +210,10 @@ function evaluateProviderRolloutGate(records, input = {}) {
       targetFilesDriftKind: record.targetFilesDriftKind,
       targetFilesDriftTolerated: record.targetFilesDriftTolerated,
       humanNeededMatch: record.humanNeededMatch,
+      kindMatch: record.kindMatch,
+      recommendedActionMatch: record.recommendedActionMatch,
+      optionsMatch: record.optionsMatch,
+      machineReadableMarkersShadow: record.machineReadableMarkersShadow,
     })),
   };
 }

@@ -18,6 +18,7 @@ Options:
   --ask-fixtures-file <path>   JSON/JSONL records: {issueNumber,kind,message}.
   --module execution.micro     Build execution prompt/route corpus only; no executor/LLM run.
   --module execution.standard  Build execution prompt/route corpus only; no executor/LLM run.
+  --execution-live-smoke       For execution.micro only: call Claude once with no tools/edits and record structured readiness.
   --retry-transient <n>        Retries for transient shadow errors. Default: 2.
   --retry-sleep-sec <n>        Base sleep before transient retry. Default: 5.
   --no-clear                   Do not clear state dir before run.
@@ -48,6 +49,7 @@ transient_retries="${PROVIDER_CORPUS_TRANSIENT_RETRIES:-2}"
 retry_sleep_sec="${PROVIDER_CORPUS_RETRY_SLEEP_SEC:-5}"
 rerun_transient_failed="0"
 allow_issue_set_rewrite="0"
+execution_live_smoke="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -124,6 +126,10 @@ while [[ $# -gt 0 ]]; do
       allow_issue_set_rewrite="1"
       shift
       ;;
+    --execution-live-smoke)
+      execution_live_smoke="1"
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -168,6 +174,14 @@ is_execution_plan_module() {
 
 if [[ "$module" != "intake.interpretation" && "$module" != "intake.ask_human" ]] && ! is_execution_plan_module "$module"; then
   echo "Unsupported corpus module for this runner: $module" >&2
+  exit 1
+fi
+if [[ "$execution_live_smoke" == "1" && "$module" != "execution.micro" ]]; then
+  echo "--execution-live-smoke is only supported for execution.micro" >&2
+  exit 1
+fi
+if [[ "$execution_live_smoke" == "1" && "$shadow_provider" != "claude" ]]; then
+  echo "--execution-live-smoke currently requires --shadow-provider claude" >&2
   exit 1
 fi
 
@@ -581,6 +595,158 @@ run_execution_plan_once() {
   printf 'EXECUTION_PLAN_PROVIDER=%s\n' "$effective_provider"
   printf 'EXECUTION_PLAN_PROMPT_FILE=%s\n' "$prompt_file"
   printf 'EXECUTION_PLAN_COMPARE_FILE=%s\n' "$compare_file"
+
+  if [[ "$execution_live_smoke" == "1" ]]; then
+    run_execution_micro_live_smoke \
+      "$task_id" \
+      "$issue_number" \
+      "$execution_dir" \
+      "$prompt_file" \
+      "$prompt_bytes" \
+      "$prompt_sha256" \
+      "$candidate_target_files_json" \
+      "$effective_provider" \
+      "$timeout_ms"
+  fi
+}
+
+run_execution_micro_live_smoke() {
+  local task_id="$1"
+  local issue_number="$2"
+  local execution_dir="$3"
+  local prompt_file="$4"
+  local prompt_bytes="$5"
+  local prompt_sha256="$6"
+  local candidate_target_files_json="$7"
+  local effective_provider="$8"
+  local timeout_ms="$9"
+  local request_file response_file result_file compare_file provider_result_json
+  local outcome error_class latency_ms token_usage estimated_cost request_id
+  local schema_valid_shadow live_compare_summary risk_level can_proceed needs_human
+
+  request_file="${execution_dir}/execution_micro_live_smoke_request.${effective_provider}.json"
+  response_file="${execution_dir}/execution_micro_live_smoke_response.${effective_provider}.json"
+  result_file="${execution_dir}/execution_micro_live_smoke_result.${effective_provider}.json"
+  compare_file="${execution_dir}/execution_plan_compare.json"
+
+  jq -n \
+    --arg taskId "$task_id" \
+    --argjson issueNumber "$issue_number" \
+    --arg promptText "$(cat "$prompt_file")" \
+    --arg promptSha256 "$prompt_sha256" \
+    --argjson promptBytes "$prompt_bytes" \
+    --argjson candidateTargetFiles "$candidate_target_files_json" \
+    '{
+      module:"execution.micro",
+      input:{
+        taskId:$taskId,
+        issueNumber:$issueNumber,
+        promptSha256:$promptSha256,
+        promptBytes:$promptBytes,
+        candidateTargetFiles:$candidateTargetFiles,
+        liveSmokeOnly:true,
+        sideEffectsAllowed:false
+      },
+      promptText:([
+        "This is an execution.micro live smoke. Do not edit files, do not use tools, do not run shell commands, do not create commits or PRs.",
+        "Inspect whether the executor prompt below is safe and actionable for a future micro execution.",
+        "Return JSON only with fields: canProceed boolean, summary string, plannedFiles string[], riskLevel low|medium|high, risks string[], verification string[], needsHuman string|null, notes string[].",
+        "Executor prompt SHA-256: " + $promptSha256,
+        "Executor prompt:",
+        $promptText
+      ] | join("\n\n"))
+    }' > "$request_file"
+
+  provider_result_json="$(
+    /bin/bash "${SCRIPT_DIR}/claude_provider_run.sh" \
+      --module "execution.micro" \
+      --request-file "$request_file" \
+      --response-file "$response_file" \
+      --task-id "$task_id" \
+      --issue-number "$issue_number" \
+      --timeout-ms "${timeout_ms:-120000}"
+  )"
+  printf '%s\n' "$provider_result_json" > "$result_file"
+
+  outcome="$(printf '%s' "$provider_result_json" | jq -r '.outcome // "error"')"
+  error_class="$(printf '%s' "$provider_result_json" | jq -r '.errorClass // empty')"
+  latency_ms="$(printf '%s' "$provider_result_json" | jq -r '.latencyMs // empty')"
+  token_usage="$(printf '%s' "$provider_result_json" | jq -r '.tokenUsage // empty')"
+  estimated_cost="$(printf '%s' "$provider_result_json" | jq -r '.estimatedCost // empty')"
+  request_id="$(printf '%s' "$provider_result_json" | jq -r '.requestId // empty')"
+  schema_valid_shadow="false"
+  live_compare_summary="execution_micro_live_smoke_error"
+  risk_level=""
+  can_proceed="false"
+  needs_human=""
+
+  if [[ "$outcome" == "success" && -s "$response_file" ]]; then
+    schema_valid_shadow="true"
+    risk_level="$(jq -r '.riskLevel // ""' "$response_file")"
+    can_proceed="$(jq -r '.canProceed // false' "$response_file")"
+    needs_human="$(jq -r '.needsHuman // empty' "$response_file")"
+    if [[ "$can_proceed" == "true" && "$risk_level" != "high" && -z "$needs_human" ]]; then
+      live_compare_summary="execution_micro_live_smoke_ready"
+    else
+      live_compare_summary="execution_micro_live_smoke_needs_attention"
+    fi
+  elif [[ -n "$error_class" ]]; then
+    live_compare_summary="execution_micro_live_smoke_error:${error_class}"
+  fi
+
+  jq -n \
+    --arg module "execution.micro" \
+    --arg primaryProvider "local" \
+    --arg shadowProvider "$effective_provider" \
+    --argjson schemaValidShadow "$schema_valid_shadow" \
+    --arg promptSha256 "$prompt_sha256" \
+    --argjson promptBytes "$prompt_bytes" \
+    --arg compareSummary "$live_compare_summary" \
+    --argjson response "$(if [[ -s "$response_file" ]]; then cat "$response_file"; else printf '{}'; fi)" \
+    --argjson shadowError "$(printf '%s' "$provider_result_json" | jq -c 'if .outcome == "success" then null else {errorClass:.errorClass,errorMessage:.errorMessage,requestId:.requestId,outcome:.outcome,latencyMs:.latencyMs,tokenUsage:.tokenUsage,estimatedCost:.estimatedCost} end')" \
+    '{
+      module:$module,
+      compareMode:"dry_run",
+      primaryProvider:$primaryProvider,
+      shadowProvider:$shadowProvider,
+      schemaValidPrimary:true,
+      schemaValidShadow:$schemaValidShadow,
+      executionPlanReady:true,
+      executionLiveSmoke:true,
+      promptBytes:$promptBytes,
+      promptSha256:$promptSha256,
+      shadowResponse:$response,
+      shadowError:$shadowError,
+      compareSummary:$compareSummary,
+      publishDecision:false
+    }' > "$compare_file"
+
+  PROVIDER_TELEMETRY_LATENCY_MS="$latency_ms" \
+  PROVIDER_TELEMETRY_TOKEN_USAGE="$token_usage" \
+  PROVIDER_TELEMETRY_ESTIMATED_COST="$estimated_cost" \
+  PROVIDER_TELEMETRY_COMPARE_MODE="dry_run" \
+  PROVIDER_TELEMETRY_PRIMARY_PROVIDER="local" \
+  PROVIDER_TELEMETRY_SHADOW_PROVIDER="$effective_provider" \
+  PROVIDER_TELEMETRY_SCHEMA_VALID_PRIMARY="true" \
+  PROVIDER_TELEMETRY_SCHEMA_VALID_SHADOW="$schema_valid_shadow" \
+  PROVIDER_TELEMETRY_COMPARE_SUMMARY="$live_compare_summary" \
+  PROVIDER_TELEMETRY_PUBLISH_DECISION=0 \
+  PROVIDER_TELEMETRY_DECISION_REASON="execution_micro_live_smoke" \
+  PROVIDER_TELEMETRY_ERROR_MESSAGE="$(printf '%s' "$provider_result_json" | jq -r '.errorMessage // ""')" \
+    /bin/bash "${SCRIPT_DIR}/provider_telemetry_append.sh" \
+      "$task_id" \
+      "$issue_number" \
+      "execution.micro" \
+      "$effective_provider" \
+      "$effective_provider" \
+      "$outcome" \
+      "${request_id:-execution_micro_live_smoke:${task_id}}" \
+      "$error_class" >/dev/null
+
+  printf 'EXECUTION_MICRO_LIVE_SMOKE_READY=%s\n' "$([[ "$live_compare_summary" == "execution_micro_live_smoke_ready" ]] && printf '1' || printf '0')"
+  printf 'EXECUTION_MICRO_LIVE_SMOKE_COMPARE_SUMMARY=%s\n' "$live_compare_summary"
+  printf 'EXECUTION_MICRO_LIVE_SMOKE_RESPONSE_FILE=%s\n' "$response_file"
+  printf 'EXECUTION_MICRO_LIVE_SMOKE_RESULT_FILE=%s\n' "$result_file"
 }
 
 if (( ${#run_issues[@]} > 0 )); then

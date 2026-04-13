@@ -137,6 +137,24 @@ function schemaForModule(moduleName) {
     };
   }
 
+  if (moduleName === "execution.micro") {
+    return {
+      type: "object",
+      additionalProperties: false,
+      required: ["canProceed", "summary", "plannedFiles", "riskLevel", "risks", "verification", "needsHuman", "notes"],
+      properties: {
+        canProceed: { type: "boolean" },
+        summary: { type: "string" },
+        plannedFiles: { type: "array", items: { type: "string" } },
+        riskLevel: { type: "string", enum: ["low", "medium", "high"] },
+        risks: { type: "array", items: { type: "string" } },
+        verification: { type: "array", items: { type: "string" } },
+        needsHuman: { anyOf: [{ type: "string" }, { type: "null" }] },
+        notes: { type: "array", items: { type: "string" } },
+      },
+    };
+  }
+
   throw new Error(`Unsupported Claude intake module: ${moduleName}`);
 }
 
@@ -166,6 +184,27 @@ function systemPromptForModule(moduleName) {
       "Do not use tools if a direct structured answer is possible.",
       "Keep machine-readable fields intact and ask the minimum clarifying question needed.",
       "Do not add prose outside JSON.",
+    ].join(" ");
+  }
+
+  if (moduleName === "execution.micro") {
+    return [
+      "You are a narrow AI Flow v2 execution.micro live-smoke worker.",
+      "Return exactly one JSON object matching the provided schema.",
+      "Do not use tools, do not edit files, do not propose shell commands that mutate state, and do not create commits or PRs.",
+      "Your task is only to inspect the provided executor prompt and decide whether a micro execution would be safe and actionable.",
+      "If implementation intent is unclear, set canProceed=false and explain the missing fact in needsHuman.",
+      "Keep plannedFiles limited to files explicitly present in the prompt.",
+      "Prefer low risk only for bounded text/config/UI micro changes with clear target files.",
+      "Do not add prose outside JSON.",
+    ].join(" ");
+  }
+
+  if (moduleName === "execution.standard") {
+    return [
+      "You are a narrow AI Flow v2 execution.standard planning worker.",
+      "Return exactly one JSON object matching the provided schema.",
+      "Do not use tools and do not edit files.",
     ].join(" ");
   }
 
@@ -402,9 +441,50 @@ function extractJsonObjectText(text) {
 }
 
 function normalizeModuleResponse(moduleName, structuredOutput, normalizers) {
-  return moduleName === "intake.interpretation"
-    ? normalizers.normalizeIntakeInterpretationResponse(structuredOutput)
-    : normalizers.normalizeAskHumanResponse(structuredOutput);
+  if (moduleName === "intake.interpretation") {
+    return normalizers.normalizeIntakeInterpretationResponse(structuredOutput);
+  }
+  if (moduleName === "intake.ask_human") {
+    return normalizers.normalizeAskHumanResponse(structuredOutput);
+  }
+  if (moduleName === "execution.micro") {
+    return normalizeExecutionMicroLiveSmokeResponse(structuredOutput);
+  }
+  throw new Error(`Unsupported Claude response module: ${moduleName}`);
+}
+
+function normalizeStringArray(value, fieldName) {
+  if (!Array.isArray(value)) {
+    throw new Error(`${fieldName} must be an array`);
+  }
+  return value.map((item) => String(item || "").trim()).filter(Boolean);
+}
+
+function normalizeExecutionMicroLiveSmokeResponse(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("execution.micro response must be an object");
+  }
+  const riskLevel = String(input.riskLevel || "").trim();
+  if (!["low", "medium", "high"].includes(riskLevel)) {
+    throw new Error("riskLevel must be one of: low, medium, high");
+  }
+  if (typeof input.canProceed !== "boolean") {
+    throw new Error("canProceed must be boolean");
+  }
+  const summary = String(input.summary || "").trim();
+  if (!summary) {
+    throw new Error("summary must be a non-empty string");
+  }
+  return {
+    canProceed: input.canProceed,
+    summary,
+    plannedFiles: normalizeStringArray(input.plannedFiles, "plannedFiles"),
+    riskLevel,
+    risks: normalizeStringArray(input.risks, "risks"),
+    verification: normalizeStringArray(input.verification, "verification"),
+    needsHuman: input.needsHuman === null || input.needsHuman === undefined ? null : String(input.needsHuman).trim() || null,
+    notes: normalizeStringArray(input.notes, "notes"),
+  };
 }
 
 function resolveTransport(args) {

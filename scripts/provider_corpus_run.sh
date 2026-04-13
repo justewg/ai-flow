@@ -16,6 +16,8 @@ Options:
   --ask-message <text>         Default ask-human message when no fixture overrides it.
   --ask-message-file <path>    File with default ask-human message.
   --ask-fixtures-file <path>   JSON/JSONL records: {issueNumber,kind,message}.
+  --module execution.micro     Build execution prompt/route corpus only; no executor/LLM run.
+  --module execution.standard  Build execution prompt/route corpus only; no executor/LLM run.
   --retry-transient <n>        Retries for transient shadow errors. Default: 2.
   --retry-sleep-sec <n>        Base sleep before transient retry. Default: 5.
   --no-clear                   Do not clear state dir before run.
@@ -27,6 +29,8 @@ EOF
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./env/bootstrap.sh
 source "${SCRIPT_DIR}/env/bootstrap.sh"
+# shellcheck source=./task_worktree_lib.sh
+source "${SCRIPT_DIR}/task_worktree_lib.sh"
 NODE_BIN="${NODE_BIN:-node}"
 
 issues_raw=""
@@ -155,7 +159,14 @@ if (( ${#issues[@]} == 0 )); then
   exit 1
 fi
 
-if [[ "$module" != "intake.interpretation" && "$module" != "intake.ask_human" ]]; then
+is_execution_plan_module() {
+  case "${1:-}" in
+    execution.micro|execution.standard) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+if [[ "$module" != "intake.interpretation" && "$module" != "intake.ask_human" ]] && ! is_execution_plan_module "$module"; then
   echo "Unsupported corpus module for this runner: $module" >&2
   exit 1
 fi
@@ -316,6 +327,8 @@ find_compare_file() {
   local compare_name="intake_interpretation_compare.json"
   if [[ "$module" == "intake.ask_human" ]]; then
     compare_name="intake_ask_human_compare.json"
+  elif is_execution_plan_module "$module"; then
+    compare_name="execution_plan_compare.json"
   fi
   find "${state_dir}/task-worktrees" \
     -path "*-${task_id}-issue-${issue_number}/meta/execution/${compare_name}" \
@@ -409,6 +422,10 @@ run_issue_once() {
     /bin/bash "${SCRIPT_DIR}/task_interpret.sh" "$task_id" "$issue_number"
     return $?
   fi
+  if is_execution_plan_module "$module"; then
+    run_execution_plan_once "$task_id" "$issue_number"
+    return $?
+  fi
 
   printf '%s\n' "$task_id" > "${state_dir}/daemon_active_task.txt"
   printf '%s\n' "$task_id" > "${state_dir}/project_task_id.txt"
@@ -420,6 +437,150 @@ run_issue_once() {
   local rc=$?
   rm -f "$message_file"
   return "$rc"
+}
+
+run_execution_plan_once() {
+  local task_id="$1"
+  local issue_number="$2"
+  local profile_name execution_dir prompt_file source_file spec_file intake_profile_file
+  local route_json route_file local_file shadow_file compare_file request_id
+  local profile_decision prompt_bytes prompt_sha256 started_epoch finished_epoch latency_ms
+  local requested_provider effective_provider timeout_ms budget_key decision_reason
+  local candidate_target_files_json
+
+  profile_name="$(codex_resolve_project_profile_name 2>/dev/null || printf '%s' "${PROJECT_PROFILE:-default}")"
+  execution_dir="$(task_worktree_execution_dir "$task_id" "$issue_number" "$state_dir" "$profile_name")"
+  source_file="$(task_worktree_source_definition_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
+  spec_file="$(task_worktree_standardized_spec_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
+  intake_profile_file="$(task_worktree_intake_profile_file "$task_id" "$issue_number" "$state_dir" "$profile_name")"
+  prompt_file="${execution_dir}/executor_prompt.plan.txt"
+  route_file="${execution_dir}/execution_plan_route.${shadow_provider}.json"
+  local_file="${execution_dir}/execution_plan.local.json"
+  shadow_file="${execution_dir}/execution_plan.${shadow_provider}.json"
+  compare_file="${execution_dir}/execution_plan_compare.json"
+  request_id="execution.plan:${module}:${task_id}:$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+  mkdir -p "$execution_dir"
+  started_epoch="$(date +%s)"
+
+  if [[ ! -f "$spec_file" || ! -f "$source_file" || ! -f "$intake_profile_file" ]]; then
+    if ! /bin/bash "${SCRIPT_DIR}/task_interpret.sh" "$task_id" "$issue_number" >/dev/null; then
+      echo "EXECUTION_PLAN_TASK_INTERPRET_FAILED=1" >&2
+      return 1
+    fi
+  fi
+  if ! /bin/bash "${SCRIPT_DIR}/executor_build_prompt.sh" "$task_id" "$issue_number" "$prompt_file" >/dev/null; then
+    echo "EXECUTION_PLAN_BUILD_PROMPT_FAILED=1" >&2
+    return 1
+  fi
+  if [[ ! -s "$prompt_file" ]]; then
+    echo "EXECUTION_PLAN_PROMPT_MISSING=1" >&2
+    echo "EXECUTION_PLAN_PROMPT_FILE=${prompt_file}" >&2
+    return 1
+  fi
+
+  prompt_bytes="$(wc -c < "$prompt_file" | tr -d '[:space:]')"
+  prompt_sha256="$(shasum -a 256 "$prompt_file" | awk '{print $1}')"
+  profile_decision="$(jq -r '.profileDecision // .profile // "standard"' "$intake_profile_file" 2>/dev/null || printf 'standard')"
+  candidate_target_files_json="$(jq -c '.candidateTargetFiles // []' "$spec_file" 2>/dev/null || printf '[]')"
+
+  if ! route_json="$(
+    /bin/bash "${SCRIPT_DIR}/provider_route_resolve.sh" \
+      --module "$module" \
+      --task-id "$task_id" \
+      --issue-number "$issue_number" \
+      --preferred-provider "$shadow_provider"
+  )"; then
+    echo "EXECUTION_PLAN_ROUTE_RESOLVE_FAILED=1" >&2
+    return 1
+  fi
+  printf '%s\n' "$route_json" > "$route_file"
+  requested_provider="$(printf '%s' "$route_json" | jq -r '.requestedProvider')"
+  effective_provider="$(printf '%s' "$route_json" | jq -r '.effectiveProvider')"
+  timeout_ms="$(printf '%s' "$route_json" | jq -r '.timeoutMs // empty')"
+  budget_key="$(printf '%s' "$route_json" | jq -r '.budgetKey // empty')"
+  decision_reason="$(printf '%s' "$route_json" | jq -r '.decisionReason // "configured_provider"')"
+
+  jq -n \
+    --arg taskId "$task_id" \
+    --argjson issueNumber "$issue_number" \
+    --arg module "$module" \
+    --arg provider "local" \
+    --arg promptFile "$prompt_file" \
+    --argjson promptBytes "$prompt_bytes" \
+    --arg promptSha256 "$prompt_sha256" \
+    --arg profileDecision "$profile_decision" \
+    --argjson candidateTargetFiles "$candidate_target_files_json" \
+    '{kind:"execution_plan",taskId:$taskId,issueNumber:$issueNumber,module:$module,provider:$provider,promptFile:$promptFile,promptBytes:$promptBytes,promptSha256:$promptSha256,profileDecision:$profileDecision,candidateTargetFiles:$candidateTargetFiles}' \
+    > "$local_file"
+
+  jq -n \
+    --arg taskId "$task_id" \
+    --argjson issueNumber "$issue_number" \
+    --arg module "$module" \
+    --arg provider "$effective_provider" \
+    --arg promptFile "$prompt_file" \
+    --argjson promptBytes "$prompt_bytes" \
+    --arg promptSha256 "$prompt_sha256" \
+    --arg profileDecision "$profile_decision" \
+    --argjson candidateTargetFiles "$candidate_target_files_json" \
+    --argjson route "$route_json" \
+    '{kind:"execution_plan",taskId:$taskId,issueNumber:$issueNumber,module:$module,provider:$provider,promptFile:$promptFile,promptBytes:$promptBytes,promptSha256:$promptSha256,profileDecision:$profileDecision,candidateTargetFiles:$candidateTargetFiles,route:$route}' \
+    > "$shadow_file"
+
+  jq -n \
+    --arg module "$module" \
+    --arg primaryProvider "local" \
+    --arg shadowProvider "$effective_provider" \
+    --arg profileDecision "$profile_decision" \
+    --arg promptSha256 "$prompt_sha256" \
+    --argjson promptBytes "$prompt_bytes" \
+    --argjson route "$route_json" \
+    '{
+      module:$module,
+      compareMode:"dry_run",
+      primaryProvider:$primaryProvider,
+      shadowProvider:$shadowProvider,
+      schemaValidPrimary:true,
+      schemaValidShadow:true,
+      executionPlanReady:true,
+      profileDecision:$profileDecision,
+      promptBytes:$promptBytes,
+      promptSha256:$promptSha256,
+      route:$route,
+      compareSummary:"execution_plan_ready",
+      publishDecision:false
+    }' > "$compare_file"
+
+  finished_epoch="$(date +%s)"
+  latency_ms="$(( (finished_epoch - started_epoch) * 1000 ))"
+  PROVIDER_TELEMETRY_LATENCY_MS="$latency_ms" \
+  PROVIDER_TELEMETRY_COMPARE_MODE="dry_run" \
+  PROVIDER_TELEMETRY_PRIMARY_PROVIDER="local" \
+  PROVIDER_TELEMETRY_SHADOW_PROVIDER="$effective_provider" \
+  PROVIDER_TELEMETRY_SCHEMA_VALID_PRIMARY="true" \
+  PROVIDER_TELEMETRY_SCHEMA_VALID_SHADOW="true" \
+  PROVIDER_TELEMETRY_COMPARE_SUMMARY="execution_plan_ready" \
+  PROVIDER_TELEMETRY_PUBLISH_DECISION=0 \
+  PROVIDER_TELEMETRY_DECISION_REASON="$decision_reason" \
+  PROVIDER_TELEMETRY_TIMEOUT_MS="$timeout_ms" \
+  PROVIDER_TELEMETRY_BUDGET_KEY="$budget_key" \
+    /bin/bash "${SCRIPT_DIR}/provider_telemetry_append.sh" \
+      "$task_id" \
+      "$issue_number" \
+      "$module" \
+      "$requested_provider" \
+      "$effective_provider" \
+      "success" \
+      "$request_id" >/dev/null
+
+  printf 'EXECUTION_PLAN_READY=1\n'
+  printf 'TASK_ID=%s\n' "$task_id"
+  printf 'ISSUE_NUMBER=%s\n' "$issue_number"
+  printf 'EXECUTION_PLAN_MODULE=%s\n' "$module"
+  printf 'EXECUTION_PLAN_PROVIDER=%s\n' "$effective_provider"
+  printf 'EXECUTION_PLAN_PROMPT_FILE=%s\n' "$prompt_file"
+  printf 'EXECUTION_PLAN_COMPARE_FILE=%s\n' "$compare_file"
 }
 
 if (( ${#run_issues[@]} > 0 )); then

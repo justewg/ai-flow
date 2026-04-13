@@ -4,7 +4,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const USAGE = "Usage: provider_corpus_inspect.js --state-dir <path> [--module intake.interpretation|intake.ask_human] [--shadow-provider claude]";
+const USAGE = "Usage: provider_corpus_inspect.js --state-dir <path> [--module intake.interpretation|intake.ask_human|execution.micro|execution.standard] [--shadow-provider claude]";
 
 function parseArgs(argv) {
   const args = {
@@ -149,6 +149,12 @@ function inspectCorpus(args) {
           local: "intake_ask_human_response.local.json",
           shadow: `intake_ask_human_response.${args.shadowProvider}.json`,
         }
+      : args.module === "execution.micro" || args.module === "execution.standard"
+        ? {
+            compare: "execution_plan_compare.json",
+            local: "execution_plan.local.json",
+            shadow: `execution_plan.${args.shadowProvider}.json`,
+          }
       : {
           compare: "intake_interpretation_compare.json",
           local: "intake_interpretation_response.local.json",
@@ -203,6 +209,10 @@ function inspectCorpus(args) {
       schemaValidShadow: compare.schemaValidShadow ?? null,
       local: {
         decision: compare.primaryDecision || local.decision || null,
+        executionPlanReady: local.kind === "execution_plan" ? true : null,
+        promptBytes: local.promptBytes ?? null,
+        promptSha256: local.promptSha256 || null,
+        profileDecision: local.profileDecision || null,
         kind: local.kind || null,
         recommendedAction: local.recommendedAction || null,
         reason: local.decisionReason || null,
@@ -213,6 +223,12 @@ function inspectCorpus(args) {
       },
       shadow: {
         decision: compare.shadowDecision || shadow.decision || null,
+        executionPlanReady: shadow.kind === "execution_plan" ? true : null,
+        provider: shadow.provider || null,
+        promptBytes: shadow.promptBytes ?? null,
+        promptSha256: shadow.promptSha256 || null,
+        profileDecision: shadow.profileDecision || null,
+        route: shadow.route || null,
         kind: shadow.kind || null,
         recommendedAction: shadow.recommendedAction || null,
         reason: shadow.decisionReason || null,
